@@ -32,6 +32,17 @@ header{grid-area:hd;display:flex;align-items:center;gap:0;height:56px;padding:0 
 .asw .ici .ic-svg{width:20px;height:20px;display:block}
 .asw-lb{overflow:hidden;text-overflow:ellipsis}
 .asw-bottom{margin-top:auto}
+/* Рельс разделов можно спрятать. Кнопка одна и всегда в шапке, слева от поля
+   поиска: открыт рельс или спрятан, она на одном и том же месте относительно
+   поиска и не пропадает. */
+.rail-tabs{display:flex;flex-direction:column;gap:4px;flex:1;min-height:0}
+.hd-railtg{display:grid;place-items:center;width:32px;height:32px;flex:none;margin-left:var(--gut);padding:0;border:1px solid transparent;border-radius:8px;background:0;color:var(--mu);transition:color .12s,background .12s}
+.hd-railtg:hover{color:var(--tx);background:var(--p2)}
+.hd-railtg:focus-visible{outline:2px solid #3b82f6;outline-offset:1px}
+.hd-railtg[aria-expanded="true"]{color:#9fb3cc}
+.ws.norail>#rail{display:none}
+/* Во весь экран рельс и так спрятан — кнопке там делать нечего. */
+.ws.full .hd-railtg{display:none}
 .asw:hover:not(.on){color:var(--tx);background:#172234}
 .asw.on{color:#fff;font-weight:600;background:#1a2d4d}
 .asw.on .ici{opacity:1}
@@ -94,6 +105,16 @@ aside,main{min-height:0;overflow:hidden}aside{background:#0b1018;border-right:1p
 .ph-cnt{flex:none;font-size:10px;font-weight:600;color:#8fa4bf;background:#16233a;border-radius:4px;padding:1px 5px}
 .ph-chev{flex:none;padding-left:2px;color:#7f92ab;font-size:9px}
 .ph-grp{font-weight:600;color:#dbe4f2;max-width:none}
+/* Комбобоксы и кнопка фильтра — одна строка, без переноса: не хватает места —
+   сжимаются подписи (статус первым), а не переезжает кнопка на новую строку. */
+.ph-row{display:flex;align-items:center;gap:4px;flex:0 0 100%;min-width:0}
+.ph-row>#sliceBtn,.ph-row>#viewBtn{flex-shrink:0}
+/* На узкой панели статус сжимается до цветной точки — цвет и подсказка его называют. */
+.ph-st{min-width:40px;font-weight:600;color:#dbe4f2;max-width:none}
+.st-dot{flex:none;display:inline-block;width:8px;height:8px;margin:0 3px;border-radius:50%;background:#8fa4bf}
+.st-dot.st-all{background:transparent;box-shadow:inset 0 0 0 1.5px #8fa4bf}
+.st-dot.st-run{background:#3ecf8e}.st-dot.st-nosignal{background:#ff6b73}
+.st-dot.st-off{background:#6b7a90}.st-dot.st-license{background:#e6c86a}
 .ph-grp .ph-nm{font-size:12px}
 /* Фильтр дерева занимает всю ширину панели и стоит отдельной строкой: так его
    края совпадают с краями глобального поиска сверху и списка снизу. */
@@ -817,7 +838,7 @@ html[data-theme="light"] .dev-bulk-badge{background:#d6e4f8;color:#2f5fad}
 /* Строка перехода: одна точка навигации по всему конфигуратору */
 /* Поиск стоит ровно над фильтром дерева: та же левая вертикаль, та же ширина,
    поэтому он «держит» колонку, а не висит сам по себе. */
-.gojump{position:relative;flex:none;width:calc(var(--aw,360px) - var(--gut)*2 - 1px);min-width:240px;margin-left:var(--gut);display:flex;align-items:center;gap:4px;height:var(--ctrl-h);padding:0 10px 0 var(--ctrl-lead);background:var(--p2);border:1px solid var(--ln);border-radius:8px}
+.gojump{position:relative;flex:none;width:calc(var(--aw,360px) - var(--gut)*3 - 33px);min-width:200px;margin-left:var(--gut);display:flex;align-items:center;gap:4px;height:var(--ctrl-h);padding:0 10px 0 var(--ctrl-lead);background:var(--p2);border:1px solid var(--ln);border-radius:8px}
 .gojump:focus-within{border-color:#4a7ab8;box-shadow:0 0 0 1px #2a4a7855}
 .gojump-lead{display:inline-flex;justify-content:center;width:var(--ic);line-height:0;color:var(--mu)}.gojump-lead svg{width:16px;height:16px}
 .gojump input{flex:1;min-width:0;height:100%;padding:0;background:0;border:0;outline:0;font-size:13px}
@@ -838,8 +859,9 @@ html[data-theme="light"] .dev-bulk-badge{background:#d6e4f8;color:#2f5fad}
 </head>
 <body>
 <div class="app">
-<div class="ws" id="ws"><nav class="rail" id="rail" role="tablist" aria-label="Разделы"></nav><aside id="aside"></aside><div class="rsz" id="rsz"></div>
+<div class="ws" id="ws"><nav class="rail" id="rail" aria-label="Разделы"></nav><aside id="aside"></aside><div class="rsz" id="rsz"></div>
 <header>
+  <button type="button" class="hd-railtg" id="hdRailTg" data-i18n-title="Скрыть разделы" title="Скрыть разделы" aria-expanded="true" aria-controls="rail" onclick="toggleRail()"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M6 3.5v9" stroke="currentColor" stroke-width="1.5"/></svg></button>
   <div class="gojump" id="gojump">
     <span class="gojump-lead" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none"><circle cx="6.8" cy="6.8" r="4" stroke="currentColor" stroke-width="1.6"/><path d="m9.8 9.8 3.4 3.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>
     <input id="gq" autocomplete="off" data-i18n-placeholder="Найти объект, раздел или настройку" placeholder="Найти объект, раздел или настройку"
@@ -2401,7 +2423,7 @@ const ESC_LAYERS=[
   {is:()=>document.getElementById("jump")?.classList.contains("open"),off:closeJump},
   {is:()=>document.getElementById("tctx")?.classList.contains("open"),off:closeTreeCtx},
   {is:()=>document.getElementById("upop")?.classList.contains("open"),off:closeUserMenu},
-  {is:()=>slicePop||viewPop,off:closePhPops},
+  {is:()=>slicePop||viewPop||statPop,off:closePhPops},
   {is:()=>filtPop,off:()=>closeFiltPop()},
   {is:()=>document.getElementById("gopop")?.classList.contains("open"),
    off(){goClose();document.getElementById("gq")?.blur()}},
@@ -2689,7 +2711,7 @@ function cancelTreeRename(){
   if(!treeRenameId)return;
   treeRenameId=null;treeRenameField="name";renderTree();
 }
-function hasMenuFilters(){return!!typeFilts.size||!!searchFields.size||!!statusFilts.size}
+function hasMenuFilters(){return!!typeFilts.size||!!searchFields.size}
 // Когда действует запрос или фильтр, ветки с попаданиями раскрываются сами:
 // иначе результат поиска приходится искать второй раз, уже мышкой.
 function autoExpand(){return!!qval()||!!typeFilts.size||!!statusFilts.size}
@@ -2703,7 +2725,6 @@ function filterTags(){
   const tags=[];
   [...typeFilts].forEach(id=>{const lab=(TYPE_FILTERS[slice].find(x=>x[0]===id)||[])[1]||id;tags.push({id:"type:"+id,label:i18n(lab)})});
   [...searchFields].forEach(id=>tags.push({id:"field:"+id,label:i18n(FIELD_LABELS[id]||id)}));
-  [...statusFilts].forEach(id=>{const lab=(STATUS_FILTERS.find(x=>x[0]===id)||[])[1]||id;tags.push({id:"st:"+id,label:i18n(lab)})});
   return tags;
 }
 function tagsHtml(){return filterTags().map(tag=>`<span class="ftag"><span title="${tag.label}">${tag.label}</span><button type="button" onclick="event.stopPropagation();clearFilterTag('${tag.id}')" title="${i18n("Снять")}">✕</button></span>`).join("")}
@@ -2845,31 +2866,6 @@ function toggleTreeTag(id,e){
   if(treeTags.has(id))treeTags.delete(id);else treeTags.add(id);
   updateFiltChrome();renderTree();refreshFiltPop(true);
 }
-function toggleStatusFilt(id,e){
-  if(e)e.stopPropagation();
-  if(statusFilts.has(id))statusFilts.delete(id);
-  else{
-    if(!statusFiltAllowed(id))return;
-    if(id==="on"){
-      statusFilts.delete("off");
-      typeFilts.delete("server");
-    }
-    if(id==="off"){
-      statusFilts.delete("on");
-      statusFilts.delete("nosignal");
-      statusFilts.delete("license");
-      typeFilts.delete("server");
-    }
-    if(id==="nosignal")statusFilts.delete("off");
-    if(id==="license"){
-      statusFilts.delete("off");
-      typeFilts.delete("server");
-    }
-    statusFilts.add(id);
-    pruneStatusFilts();
-  }
-  applyFiltersFromState();refreshFiltPop(true);
-}
 function resetAllFilters(){
   clearGearFilters();filtPop=false;applyFiltersFromState();aside();
 }
@@ -2964,15 +2960,6 @@ function filtPopHtml(){
         </div>
         ${more&&!typesExpanded?`<button type="button" class="filt-more" onclick="toggleTypesMore(event)">${i18n("Показать все")} (${hidden}) <span class="chev">▾</span></button>`:""}
       </div>
-      <div class="filt-sec status chips">
-        <div class="sec">${i18n("Статус")}</div>
-        <div class="filt-status">
-          ${STATUS_FILTERS.map(([id,l])=>{
-            const on=statusFilts.has(id),ok=statusFiltAllowed(id);
-            return`<button type="button" class="stchip ${on?"on on-"+id:""}" aria-pressed="${on}" ${ok?"":"disabled"} onclick="toggleStatusFilt('${id}',event)"><span class="stchip-lab">${i18n(l)}</span></button>`;
-          }).join("")}
-        </div>
-      </div>
       <div class="filt-sec extra">
         <div class="filt-foot">
           <button type="button" class="mi" onclick="resetAllFilters()" ${hasActiveFilters()?"":"disabled"} style="${hasActiveFilters()?"":"opacity:.45"}"><span class="lbl" style="padding:3px 0">${i18n("Сбросить всё")}</span></button>
@@ -2986,9 +2973,26 @@ function appSwitchHtml(){
     `<button type="button" class="asw ${app===a.id?"on":""}${a.bottom?" asw-bottom":""}" data-a="${a.id}" role="tab" aria-selected="${app===a.id?"true":"false"}" title="${i18n(a.label)}" onclick="goApp('${a.id}')">${ic(a.ic)}<span class="asw-lb">${i18n(a.label)}</span></button>`
   ).join("");
 }
+// Рельс можно спрятать — место уходит дереву и рабочей области. Выбор помнится
+// в этом браузере.
+const RAIL_KEY="cfg.railHidden";
+let railHidden=(()=>{try{return localStorage.getItem(RAIL_KEY)==="1"}catch(e){return false}})();
 function renderRail(){
   const el=document.getElementById("rail");
-  if(el)el.innerHTML=appSwitchHtml();
+  if(el)el.innerHTML=`<div class="rail-tabs" role="tablist" aria-label="${i18n("Разделы")}">${appSwitchHtml()}</div>`;
+  syncRail();
+}
+function syncRail(){
+  document.getElementById("ws")?.classList.toggle("norail",railHidden);
+  const b=document.getElementById("hdRailTg");if(!b)return;
+  const lb=railHidden?"Показать разделы":"Скрыть разделы";
+  b.setAttribute("data-i18n-title",lb);b.title=i18n(lb);
+  b.setAttribute("aria-expanded",railHidden?"false":"true");
+}
+function toggleRail(){
+  railHidden=!railHidden;
+  try{localStorage.setItem(RAIL_KEY,railHidden?"1":"0")}catch(e){}
+  syncRail();
 }
 function aside(){
   document.removeEventListener("mousedown",onFiltOutside);
@@ -3218,7 +3222,22 @@ function renderTree(){const treeEl=document.getElementById("tree");if(!treeEl)re
 // Шапка панели: что показываем — выпадающим списком (в нём видно полное имя
 // среза и сколько в нём объектов), а как разложено — кнопкой рядом: вопрос
 // второй и задают его редко.
-let slicePop=false,viewPop=false;
+let slicePop=false,viewPop=false,statPop=false;
+// Статус — выбор одного значения: «Все статусы» или один из них. Хранится в том
+// же statusFilts, по которому фильтрует дерево, поэтому остальное не меняется.
+function curStatus(){return statusFilts.size?[...statusFilts][0]:""}
+function statusLabel(id){return id?i18n((STATUS_FILTERS.find(x=>x[0]===id)||[])[1]||id):i18n("Все статусы")}
+function statusCount(id){
+  let n=0;
+  walkAll(x=>{if(!inSlice(x))return;if(!id){n++;return}try{if(statusOf(x)===id)n++}catch(e){}});
+  return n;
+}
+function toggleStatPop(e){e&&e.stopPropagation();statPop=!statPop;slicePop=viewPop=false;aside();bindPhOutside()}
+function pickStatus(id){
+  statPop=false;
+  statusFilts.clear();if(id)statusFilts.add(id);
+  aside();applyFiltersFromState();
+}
 // Сколько объектов в срезе — тем же правилом, по которому дерево решает,
 // показывать объект или нет.
 // Сколько веток верхнего уровня даёт раскладка: папки домена или серверы.
@@ -3233,21 +3252,27 @@ function sliceCount(id){
 }
 function panelHeadHtml(){
   const gs=sliceGroups();
-  return`<div class="ph">
+  const st=curStatus();
+  return`<div class="ph"><div class="ph-row">
     <button type="button" class="ph-sel ${slicePop?"on":""}" id="sliceBtn" aria-haspopup="listbox" aria-expanded="${slicePop}" title="${SLICE[slice]}" onclick="toggleSlicePop(event)">
       ${ic(SLICE_IC[slice])}<span class="ph-nm">${SLICE_SW[slice]}</span><span class="ph-cnt">${sliceCount(slice)}</span><span class="ph-chev" aria-hidden="true">▾</span></button>
     ${gs.length>1?`<button type="button" class="ph-sel ph-grp ${viewPop?"on":""}" id="viewBtn" aria-haspopup="listbox" aria-expanded="${viewPop}" title="${i18n("Группировка")}: ${GROUP_HINT[group()]}" onclick="toggleViewPop(event)">
       ${ic(GROUP_IC[group()])}<span class="ph-nm">${GROUP[group()]}</span><span class="ph-chev" aria-hidden="true">▾</span></button>`:""}
+    <button type="button" class="ph-sel ph-st ${statPop?"on":""}" id="statBtn" aria-haspopup="listbox" aria-expanded="${statPop}" title="${i18n("Статус")}: ${statusLabel(st)}" onclick="toggleStatPop(event)">
+      <span class="st-dot st-${st||"all"}" aria-hidden="true"></span><span class="ph-nm">${statusLabel(st)}</span><span class="ph-chev" aria-hidden="true">▾</span></button>
+    <button type="button" class="ph-ib ${filtPop?"on":""} ${hasMenuFilters()?"hot":""}" id="filtBtn" aria-haspopup="menu" aria-expanded="${filtPop}" aria-label="${i18n("Фильтры поиска")}" title="${i18n("Фильтры поиска")}" onclick="toggleFiltPop(event)"><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 3.5H14L9.5 9.5V13.5H6.5V9.5L2 3.5Z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    </div>
     <div class="sq ph-sq">
       <span class="sq-lead" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none"><path d="M2 3.5H14L9.5 9.5V13.5H6.5V9.5L2 3.5Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
       <input id="q" placeholder="${i18n("Фильтр по имени, IP…")}" title="${i18n("Поиск по названию, короткому имени, ID, IP, производителю и модели")}" value="${treeQ.replace(/"/g,"&quot;")}" oninput="setTreeQ(this.value)" autocomplete="off">
       <button type="button" class="sq-clear ${treeQ.trim()?"":"hide"}" id="sqClear" title="${i18n("Очистить")}" onclick="clearTreeQ(event)">✕</button>
     </div>
-    <button type="button" class="ph-ib ${filtPop?"on":""} ${hasMenuFilters()?"hot":""}" id="filtBtn" aria-haspopup="menu" aria-expanded="${filtPop}" aria-label="${i18n("Фильтры поиска")}" title="${i18n("Фильтры поиска")}" onclick="toggleFiltPop(event)"><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 3.5H14L9.5 9.5V13.5H6.5V9.5L2 3.5Z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     ${slicePop?`<div class="ph-pop sl" id="slicePop" role="listbox" aria-label="${i18n("Срез дерева")}">${
       Object.keys(SLICE_SW).map(id=>`<button type="button" class="ph-mi ${slice===id?"on":""}" role="option" aria-selected="${slice===id}" title="${SLICE[id]}" onclick="pickSlice('${id}')">${ic(SLICE_IC[id])}<span class="lbl">${SLICE[id]}</span><span class="cnt">${sliceCount(id)}</span>${slice===id?`<span class="tick" aria-hidden="true">✓</span>`:""}</button>`).join("")}</div>`:""}
     ${viewPop?`<div class="ph-pop vw" id="viewPop" role="listbox" aria-label="${i18n("Группировка")}">${
       gs.map(g=>`<button type="button" class="ph-mi ${group()===g?"on":""}" role="option" aria-selected="${group()===g}" title="${GROUP_HINT[g]}" onclick="pickGroupBy('${g}')">${ic(GROUP_IC[g])}<span class="lbl">${GROUP[g]}</span><span class="cnt">${groupCount(g)}</span>${group()===g?`<span class="tick" aria-hidden="true">✓</span>`:""}</button>`).join("")}</div>`:""}
+    ${statPop?`<div class="ph-pop ph-pop-status" id="statPop" role="listbox" aria-label="${i18n("Статус")}">${
+      ["",...STATUS_FILTERS.map(x=>x[0])].map(id=>`<button type="button" class="ph-mi ${st===id?"on":""}" role="option" aria-selected="${st===id}" onclick="pickStatus('${id}')"><span class="st-dot st-${id||"all"}" aria-hidden="true"></span><span class="lbl">${statusLabel(id)}</span><span class="cnt">${statusCount(id)}</span>${st===id?`<span class="tick" aria-hidden="true">✓</span>`:""}</button>`).join("")}</div>`:""}
   </div>`;
 }
 // Список встаёт под своей кнопкой и не вылезает за панель — иначе при переносе
@@ -3256,7 +3281,7 @@ function placePhPop(){
   const ph=document.querySelector("#aside .ph");if(!ph)return;
   if(!ph._phResize){ph._phResize=true;window.addEventListener("resize",placePhPop)}
   const pop=ph.querySelector(".ph-pop");if(!pop)return;
-  const btn=ph.querySelector(pop.id==="slicePop"?"#sliceBtn":"#viewBtn");if(!btn)return;
+  const btn=ph.querySelector({slicePop:"#sliceBtn",viewPop:"#viewBtn",statPop:"#statBtn"}[pop.id]);if(!btn)return;
   const pr=ph.getBoundingClientRect(),br=btn.getBoundingClientRect();
   const w=pop.offsetWidth||212;
   let left=br.left-pr.left;
@@ -3264,13 +3289,13 @@ function placePhPop(){
   pop.style.left=left+"px";
   pop.style.top=Math.round(br.bottom-pr.top+4)+"px";
 }
-function toggleSlicePop(e){e&&e.stopPropagation();slicePop=!slicePop;viewPop=false;aside();bindPhOutside()}
-function toggleViewPop(e){e&&e.stopPropagation();viewPop=!viewPop;slicePop=false;aside();bindPhOutside()}
-function closePhPops(){if(!slicePop&&!viewPop)return false;slicePop=viewPop=false;aside();return true}
+function toggleSlicePop(e){e&&e.stopPropagation();slicePop=!slicePop;viewPop=statPop=false;aside();bindPhOutside()}
+function toggleViewPop(e){e&&e.stopPropagation();viewPop=!viewPop;slicePop=statPop=false;aside();bindPhOutside()}
+function closePhPops(){if(!slicePop&&!viewPop&&!statPop)return false;slicePop=viewPop=statPop=false;aside();return true}
 function onPhOutside(e){if(!e.target?.closest?.(".ph"))closePhPops()}
 function bindPhOutside(){
   document.removeEventListener("mousedown",onPhOutside);
-  if(slicePop||viewPop)document.addEventListener("mousedown",onPhOutside);
+  if(slicePop||viewPop||statPop)document.addEventListener("mousedown",onPhOutside);
 }
 function pickSlice(id){slicePop=false;if(id===slice)aside();else setSlice(id)}
 function pickGroupBy(g){viewPop=false;if(g===group())aside();else setGroup(g)}

@@ -350,5 +350,7 @@ window.I18N_EN={
 "Устройство появится в этой папке.":"The device will appear in this folder.",
 "Устройство начнёт писать в этот архив.":"The device will start recording into this archive.",
 "добавлено":"added",
-"Развернуть панель на весь экран":"Expand panel to full screen","Свернуть панель":"Collapse panel"
+"Развернуть панель на весь экран":"Expand panel to full screen","Свернуть панель":"Collapse panel",
+"Скрыть разделы":"Hide sections","Показать разделы":"Show sections",
+"Все статусы":"All statuses"
 };
