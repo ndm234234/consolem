@@ -108,9 +108,18 @@ aside,main{min-height:0;overflow:hidden}aside{background:#0b1018;border-right:1p
 /* Комбобоксы и кнопка фильтра — одна строка, без переноса: не хватает места —
    сжимаются подписи (статус первым), а не переезжает кнопка на новую строку. */
 .ph-row{display:flex;align-items:center;gap:4px;flex:0 0 100%;min-width:0}
-.ph-row>#sliceBtn,.ph-row>#viewBtn{flex-shrink:0}
+/* Не хватает ширины — срез держит подпись целиком, раскладка сжимается, статус
+   сжимается быстрее всех, до цветной точки. Нижние пределы не дают строке
+   вылезти за край панели даже на самой узкой ширине. */
+.ph-row>#sliceBtn{flex-shrink:0}
+.ph-row>#viewBtn{flex-shrink:2;min-width:40px}
+/* Строка фильтра повторяет шапку: слева кнопка 32×32, через 8px поле — поэтому
+   поле фильтра дерева стоит ровно под полем поиска в шапке. */
+.ph-row-q{gap:var(--gut)}
+.ph-row-q .ph-sq{order:0;flex:1 1 auto}
+.ph-row-q .ph-ib{margin-left:0;width:32px;height:32px}
 /* На узкой панели статус сжимается до цветной точки — цвет и подсказка его называют. */
-.ph-st{min-width:40px;font-weight:600;color:#dbe4f2;max-width:none}
+.ph-st{flex-shrink:4;min-width:40px;font-weight:600;color:#dbe4f2;max-width:none}
 .st-dot{flex:none;display:inline-block;width:8px;height:8px;margin:0 3px;border-radius:50%;background:#8fa4bf}
 .st-dot.st-all{background:transparent;box-shadow:inset 0 0 0 1.5px #8fa4bf}
 .st-dot.st-run{background:#3ecf8e}.st-dot.st-nosignal{background:#ff6b73}
@@ -3260,13 +3269,14 @@ function panelHeadHtml(){
       ${ic(GROUP_IC[group()])}<span class="ph-nm">${GROUP[group()]}</span><span class="ph-chev" aria-hidden="true">▾</span></button>`:""}
     <button type="button" class="ph-sel ph-st ${statPop?"on":""}" id="statBtn" aria-haspopup="listbox" aria-expanded="${statPop}" title="${i18n("Статус")}: ${statusLabel(st)}" onclick="toggleStatPop(event)">
       <span class="st-dot st-${st||"all"}" aria-hidden="true"></span><span class="ph-nm">${statusLabel(st)}</span><span class="ph-chev" aria-hidden="true">▾</span></button>
-    <button type="button" class="ph-ib ${filtPop?"on":""} ${hasMenuFilters()?"hot":""}" id="filtBtn" aria-haspopup="menu" aria-expanded="${filtPop}" aria-label="${i18n("Фильтры поиска")}" title="${i18n("Фильтры поиска")}" onclick="toggleFiltPop(event)"><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 3.5H14L9.5 9.5V13.5H6.5V9.5L2 3.5Z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     </div>
+    <div class="ph-row ph-row-q">
+    <button type="button" class="ph-ib ${filtPop?"on":""} ${hasMenuFilters()?"hot":""}" id="filtBtn" aria-haspopup="menu" aria-expanded="${filtPop}" aria-label="${i18n("Фильтры поиска")}" title="${i18n("Фильтры поиска")}" onclick="toggleFiltPop(event)"><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 3.5H14L9.5 9.5V13.5H6.5V9.5L2 3.5Z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     <div class="sq ph-sq">
       <span class="sq-lead" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none"><path d="M2 3.5H14L9.5 9.5V13.5H6.5V9.5L2 3.5Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
       <input id="q" placeholder="${i18n("Фильтр по имени, IP…")}" title="${i18n("Поиск по названию, короткому имени, ID, IP, производителю и модели")}" value="${treeQ.replace(/"/g,"&quot;")}" oninput="setTreeQ(this.value)" autocomplete="off">
       <button type="button" class="sq-clear ${treeQ.trim()?"":"hide"}" id="sqClear" title="${i18n("Очистить")}" onclick="clearTreeQ(event)">✕</button>
-    </div>
+    </div></div>
     ${slicePop?`<div class="ph-pop sl" id="slicePop" role="listbox" aria-label="${i18n("Срез дерева")}">${
       Object.keys(SLICE_SW).map(id=>`<button type="button" class="ph-mi ${slice===id?"on":""}" role="option" aria-selected="${slice===id}" title="${SLICE[id]}" onclick="pickSlice('${id}')">${ic(SLICE_IC[id])}<span class="lbl">${SLICE[id]}</span><span class="cnt">${sliceCount(id)}</span>${slice===id?`<span class="tick" aria-hidden="true">✓</span>`:""}</button>`).join("")}</div>`:""}
     ${viewPop?`<div class="ph-pop vw" id="viewPop" role="listbox" aria-label="${i18n("Группировка")}">${
