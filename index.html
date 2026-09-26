@@ -19,13 +19,10 @@ html[data-theme="light"]{--bg:#eef2f7;--p:#ffffff;--p2:#f3f6fb;--ln:#d5dde8;--tx
 *::-webkit-scrollbar-thumb{background:#243548;border-radius:99px}
 *::-webkit-scrollbar-thumb:hover{background:#334860}
 button,input,select{font:inherit;color:var(--tx)}button{cursor:pointer}
-.app{height:100vh;display:grid;grid-template-rows:56px 1fr 48px;grid-template-columns:minmax(0,1fr)}
-header{display:flex;align-items:center;gap:0;padding:0 24px 0 0;background:var(--p);border-bottom:1px solid var(--ln);min-width:0}
-/* Логотип живёт в колонке рельса: его ось совпадает с осью иконок разделов,
-   а правый край колонки продолжает границу рельса. Отсюда растут вертикали,
-   по которым выстроено всё остальное. */
-.logo{width:var(--rail-w);flex:none;display:flex;align-items:center;justify-content:center;font-weight:700}.logo b{width:32px;height:32px;display:grid;place-items:center;background:transparent}
-.logo b svg,.logo b img{display:block;width:32px;height:32px}
+.app{height:100vh;display:grid;grid-template-rows:minmax(0,1fr) 48px;grid-template-columns:minmax(0,1fr)}
+/* До верха окна идёт только рельс разделов; шапка с поиском стоит над деревом
+   и рабочей областью, и поле поиска встаёт ровно над деревом. */
+header{grid-area:hd;display:flex;align-items:center;gap:0;height:56px;padding:0 24px 0 0;background:var(--p);border-bottom:1px solid var(--ln);min-width:0}
 /* Разделы живут в левой панели, над срезами: наверху остаётся то, что
    относится ко всему окну — поиск и учётная запись. */
 /* Высота пункта равна высоте шапки: рельс попадает в тот же вертикальный ритм,
@@ -73,9 +70,12 @@ html[data-theme="light"] .usign:hover{background:#fdecee}
 .upop label select{margin-top:4px}
 .usign{margin-top:2px;width:100%;border:1px solid #7a3a42;background:transparent;color:#ff9ca1;border-radius:8px;padding:8px 10px}
 .usign:hover{background:#3a1d25}
-.ws{min-height:0;display:grid;grid-template-columns:max-content var(--aw,360px) 4px 1fr}.ws.one{grid-template-columns:max-content 1fr}.ws.one .rsz{display:none}
+.ws{min-height:0;display:grid;grid-template-columns:max-content var(--aw,360px) 4px minmax(0,1fr);grid-template-rows:56px minmax(0,1fr);
+  grid-template-areas:"rail hd hd hd" "rail aside rsz main"}
+#rail{grid-area:rail}#aside{grid-area:aside}.rsz{grid-area:rsz}#main{grid-area:main}
+.ws.one{grid-template-columns:max-content minmax(0,1fr);grid-template-areas:"rail hd" "rail main"}.ws.one .rsz,.ws.one #aside{display:none}
 /* Во весь экран: дерево и рельс уходят, панель занимает всё окно. */
-.ws.full{grid-template-columns:1fr}.ws.full>#rail,.ws.full>#aside,.ws.full>.rsz{display:none}
+.ws.full{grid-template-columns:minmax(0,1fr);grid-template-areas:"hd" "main"}.ws.full>#rail,.ws.full>#aside,.ws.full>.rsz{display:none}
 .rail{width:var(--rail-w);flex:none;display:flex;flex-direction:column;gap:4px;padding:var(--gut);background:var(--p);border-right:1px solid var(--ln);overflow:auto;scrollbar-width:none}
 .rail::-webkit-scrollbar{display:none}
 aside,main{min-height:0;overflow:hidden}aside{background:#0b1018;border-right:1px solid var(--ln);display:flex;flex-direction:column}
@@ -838,8 +838,8 @@ html[data-theme="light"] .dev-bulk-badge{background:#d6e4f8;color:#2f5fad}
 </head>
 <body>
 <div class="app">
+<div class="ws" id="ws"><nav class="rail" id="rail" role="tablist" aria-label="Разделы"></nav><aside id="aside"></aside><div class="rsz" id="rsz"></div>
 <header>
-  <div class="logo"><b aria-hidden="true"><img src="assets/logo-configurator.png" width="32" height="32" alt="" draggable="false"></b></div>
   <div class="gojump" id="gojump">
     <span class="gojump-lead" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none"><circle cx="6.8" cy="6.8" r="4" stroke="currentColor" stroke-width="1.6"/><path d="m9.8 9.8 3.4 3.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>
     <input id="gq" autocomplete="off" data-i18n-placeholder="Найти объект, раздел или настройку" placeholder="Найти объект, раздел или настройку"
@@ -873,7 +873,7 @@ html[data-theme="light"] .dev-bulk-badge{background:#d6e4f8;color:#2f5fad}
     </div>
   </div>
 </header>
-<div class="ws" id="ws"><nav class="rail" id="rail" role="tablist" aria-label="Разделы"></nav><aside id="aside"></aside><div class="rsz" id="rsz"></div><main id="main"></main></div>
+<main id="main"></main></div>
 </div>
 <div class="jump" id="jump" onclick="if(event.target===this)closeJump()">
   <div class="jbox" onclick="event.stopPropagation()">
@@ -3002,11 +3002,19 @@ function aside(){
   const srvScope="";
   // В журнале поле поиска ничего не фильтровало — там его нет.
   const gearHead=(app!=="hw"&&app!=="log")?`<div class="srch"><input id="q" placeholder="${i18n("Поиск…")}" value="${(document.getElementById("q")||{}).value||""}" oninput="renderTree()"></div>`:"";
-  document.getElementById("aside").innerHTML=(app==="hw"
+  // Дерево и избранное наполняются после перестройки панели, поэтому и
+  // прокрутку возвращаем после них: пустому блоку её ставить некуда.
+  const host=document.getElementById("aside"),akey=`${app}|${slice}|${group()}`;
+  const ast=akey===asideSeen.key?viewState(host):null;
+  const ahtml=(app==="hw"
     ?`${gearScope}${gearBody}<div class="fav-wrap" id="favWrap"></div>`
     :`${srvScope}<div class="box">${gearHead}${asideAdd()}</div><div class="tree" id="tree"></div>`);
+  const askip=akey===asideSeen.key&&ahtml===asideSeen.html;
+  if(!askip){host.innerHTML=ahtml;asideSeen.key=akey;asideSeen.html=ahtml}
   document.documentElement.style.setProperty("--aw",asideW+"px");
-  renderTree();renderFavs();placePhPop();
+  renderTree();renderFavs();
+  if(!askip)restoreView(host,ast);
+  placePhPop();
   const treeEl=document.getElementById("tree");
   if(treeEl&&!treeEl._ctxScroll){treeEl._ctxScroll=true;treeEl.addEventListener("scroll",closeTreeCtx,{passive:true})}
   bindTreeDbl();
@@ -3103,8 +3111,7 @@ function favStarHtml(id,ctx){
 // Панель живёт в своей обёртке: избранное меняется чаще, чем перерисовывается
 // вся боковая панель, и дёргать её целиком из-за одной звезды незачем.
 function renderFavs(){
-  const el=document.getElementById("favWrap");
-  if(el)el.innerHTML=favPanelHtml();
+  paintInto(document.getElementById("favWrap"),favPanelHtml(),app,favSeen);
 }
 function favPanelHtml(){
   if(!favs.length)return"";
@@ -3136,9 +3143,73 @@ function goFav(i){
   const n=find(f.id)?.n;
   if(f.tab&&f.tab!=="gen"&&n&&tabsFor(n).some(([id])=>id===f.tab)){tab=f.tab;gear()}
 }
+// Перерисовка — дело служебное: человек сам прокрутил список и сам поставил
+// курсор в поле, и терять это из-за того, что обновилась соседняя строка,
+// он не должен. Положение ищем по устойчивым признакам (селектор прокручиваемого
+// блока и его номер), а не по узлам — узлы после перерисовки уже другие.
+const VIEW_SCROLLERS=[".sc",".tree",".fav-panel-list",".lan-wrap",".gtbl",".dev-results-scroll",".dev-wrap-scroll"];
+function focusSelector(el){
+  if(!el||!/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))return null;
+  if(el.id)return"#"+el.id;
+  for(const a of["data-tf","data-f","name"]){
+    const v=el.getAttribute(a);
+    if(v)return`[${a}="${v.replace(/"/g,'\\"')}"]`;
+  }
+  return null;
+}
+function viewState(host){
+  if(!host)return null;
+  const pos=[];
+  if(host.scrollTop||host.scrollLeft)pos.push(["",0,host.scrollTop,host.scrollLeft]);
+  VIEW_SCROLLERS.forEach(sel=>host.querySelectorAll(sel).forEach((el,i)=>{
+    if(el.scrollTop||el.scrollLeft)pos.push([sel,i,el.scrollTop,el.scrollLeft]);
+  }));
+  // У полей формы нет ни id, ни имени, поэтому для них запоминаем номер в
+  // общем ряду: при перерисовке того же вида порядок полей тот же.
+  const a=document.activeElement,inField=a&&host.contains(a)&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName);
+  const fs=inField?focusSelector(a):null;
+  const fi=inField&&!fs?[...host.querySelectorAll("input,textarea,select")].indexOf(a):-1;
+  let s=null,e=null;
+  if(inField)try{s=a.selectionStart;e=a.selectionEnd}catch(err){}
+  return{pos,fs,fi,s,e};
+}
+function restoreView(host,st){
+  if(!host||!st)return;
+  st.pos.forEach(([sel,i,top,left])=>{
+    const el=sel?host.querySelectorAll(sel)[i]:host;
+    if(!el)return;
+    if(top)el.scrollTop=top;
+    if(left)el.scrollLeft=left;
+  });
+  if(!st.fs&&!(st.fi>=0))return;
+  const el=st.fs?host.querySelector(st.fs):host.querySelectorAll("input,textarea,select")[st.fi];
+  if(!el||el===document.activeElement&&st.s==null)return;
+  try{el.focus({preventScroll:true});if(st.s!=null&&el.setSelectionRange)el.setSelectionRange(st.s,st.e)}catch(err){}
+}
+// Восстанавливаем, только если на месте остаётся то же самое: при переходе к
+// другому объекту прокрутка предыдущего — чужая.
+function paintInto(host,html,key,seen){
+  if(!host)return;
+  const same=key!=null&&key===seen.key;
+  // Разметка та же — не трогаем её вовсе. Перестройка одного и того же дёргает
+  // прокрутку и мигает даже тогда, когда положение возвращают обратно.
+  // Сравниваем не только разметку: блок могли построить заново (пустым), и
+  // тогда пропуск оставил бы его пустым.
+  if(same&&html===seen.html&&seen.el===host)return;
+  const st=same&&seen.el===host?viewState(host):null;
+  host.innerHTML=html;
+  seen.key=key;seen.html=html;seen.el=host;
+  if(st)restoreView(host,st);
+}
+const mainSeen={key:null},asideSeen={key:null},treeSeen={key:null},favSeen={key:null};
+function mainKey(){return`${app}|${sel}|${tab}`}
+function paintMain(html){
+  const host=document.getElementById("main");
+  if(host)paintInto(host,html,mainKey(),mainSeen);
+}
 function renderTree(){const treeEl=document.getElementById("tree");if(!treeEl)return;
   const fn={hw:treeHw,dev:treeDev,srvs:treeServers,rules:treeRules,acc:treeRoles,sys:treeOpts,log:treeLog}[app];
-  treeEl.innerHTML=fn?fn():"";
+  paintInto(treeEl,fn?fn():"",`${app}|${slice}|${group()}`,treeSeen);
   if(treeRenameId)requestAnimationFrame(()=>{const el=treeEl.querySelector(".nm-inp");if(el){el.focus();el.select()}});
 }
 // Переключатель группировки показываем только там, где выбор настоящий:
@@ -4151,7 +4222,7 @@ function tabsFor(n){
   return[["gen","Основные"]];
 }
 function gear(){
-  const f=find(sel);if(!f){document.getElementById("main").innerHTML=`<div class='sc'>${i18n("Выберите объект в дереве")}</div>`;syncDomAct();return}
+  const f=find(sel);if(!f){paintMain(`<div class='sc'>${i18n("Выберите объект в дереве")}</div>`);syncDomAct();return}
   const n=f.n,tabs=tabsFor(n);
   if(tabs.length&&!tabs.some(([id])=>id===tab))tab=tabs[0][0];
   const tabsH=tabs.map(([id,x])=>`<button class="tab ${tab===id?"on":""}" onclick="tab='${id}';gear()">${i18n(x)}</button>`).join("");
@@ -4159,7 +4230,7 @@ function gear(){
   // собственные действия объекта, а звезда последней и без подписи.
   const addBtn=lanFoundBtn(n)+lanHeadBtns(n)+inspectorAddBtn(n)+favCardBtn(n)+fullCardBtn();
   const scClass=n.type==="unalloc"?"sc sc-unalloc":"sc";
-  document.getElementById("main").innerHTML=mainHd(crumbsHtml(sel),objectTitle(n),"",tabsH,addBtn,true)+`<div class="${scClass}">${hiddenByFilterNoteHtml()}${objectStatusNotesHtml(n)}${form(n)}</div>`;
+  paintMain(mainHd(crumbsHtml(sel),objectTitle(n),"",tabsH,addBtn,true)+`<div class="${scClass}">${hiddenByFilterNoteHtml()}${objectStatusNotesHtml(n)}${form(n)}</div>`);
   if(n.type==="found")renderDeviceWizard();  // панель живёт в разметке, которую только что вставили
   syncDomAct();
 }
@@ -4614,10 +4685,22 @@ function lanSearch(){
     // таблицу пустой до первой посторонней перерисовки. Раздел проверяем тоже:
     // поиск идёт секунды, и уход в «Автоматизацию» посреди него иначе получал
     // поверх своей страницы найденное в сети.
-    if(app==="hw"&&sel===owner&&lanTabOpen(find(owner)?.n))gear();
+    if(app==="hw"&&sel===owner&&lanTabOpen(find(owner)?.n))lanRepaint();
   };
   tick();
   if(lan.state==="searching")lanTimer=setInterval(tick,140);
+}
+// Пока идёт опрос, меняется одна карточка: перерисовывать из-за неё всю панель
+// значит каждые 140 мс сбрасывать прокрутку и курсор в поле.
+const lanSeen={html:null,el:null};
+function lanRepaint(){
+  const card=document.getElementById("lanCard"),n=find(lan.owner)?.n;
+  if(!card||!n){gear();return}
+  const html=lanCardHtml(n);
+  if(html===lanSeen.html&&lanSeen.el===card)return;
+  const host=document.getElementById("main"),st=viewState(host);
+  card.outerHTML=html;lanSeen.html=html;lanSeen.el=document.getElementById("lanCard");
+  restoreView(host,st);
 }
 function lanRefresh(){lan.sel.clear();lanSearch();gear()}
 // Строка из сети показывается, только если в системе нет устройства с таким
@@ -4929,7 +5012,7 @@ function lanCardHtml(n){
   </div>`;
   // Заголовка у карточки нет: закладка уже названа, а «запись в этот архив»
   // написано на кнопках в строке под ней.
-  return`<div class="card"><div class="cb">${head}${table}</div></div>`;
+  return`<div class="card" id="lanCard"><div class="cb">${head}${table}</div></div>`;
 }
 function camsTableHtml(server){
   const filt=tblFilt.cams;
@@ -5653,7 +5736,7 @@ function actionRowHtml(a,i){
 }
 function rulesUI(){
   const r=curRule();
-  if(!r){document.getElementById("main").innerHTML=`<div class='sc'>${i18n("Выберите сценарий")}</div>`;return}
+  if(!r){paintMain(`<div class='sc'>${i18n("Выберите сценарий")}</div>`);return}
   const bad=ruleProblem(r);
   const fires=ruleFires[r.id]||[];
   const whenBody=`${r.when.map((t,i)=>triggerRowHtml(t,i,i===0?i18n("Если"):i18n("и"))).join("")}
@@ -5666,7 +5749,7 @@ function rulesUI(){
   const thenBody=`${r.then.map(actionRowHtml).join("")}
     <div class="rl-foot"><button type="button" class="btn s" onclick="addAction()">${i18n("Добавить действие")}</button></div>
     <p class="sub">${i18n("Список действий — это то, под что написан исполнитель: сценарий подаёт заявку, а выполняет её тот, кто держит устройство.")}</p>`;
-  document.getElementById("main").innerHTML=
+  paintMain(
     mainHd(i18n("Автоматизация"),`${r.on?"●":"○"} ${escHtml(r.name)}`,ruleSummary(r))+
     `<div class="sc">
       ${bad?`<div class="nt err" role="status">${i18n(bad)}</div>`:""}
@@ -5688,10 +5771,10 @@ function rulesUI(){
         ph:"Время, событие или действие…",
         unit:"срабатывание|срабатывания|срабатываний"
       })}
-    </div>`;
+    </div>`);
 }
 function accUI(){const r=roles.find(x=>x.id===role)||roles[0];
-  document.getElementById("main").innerHTML=mainHd("Пользователи",`👤 ${r.n}`,`${r.users.length} учётных записей`)+
+  paintMain(mainHd("Пользователи",`👤 ${r.n}`,`${r.users.length} учётных записей`)+
     `<div class="sc">${card("Права роли",["Конфигуратор","Архив","PTZ","Экспорт"].map(x=>`<div class="ln"><div>${x}</div><div class="sw ${x!=="Экспорт"?"on":""}" onclick="this.classList.toggle('on');setD(true)"></div></div>`).join(""))}
       ${listCard({
         key:"users:"+r.id,
@@ -5703,7 +5786,7 @@ function accUI(){const r=roles.find(x=>x.id===role)||roles[0];
         empty:"В роли нет учётных записей",
         ph:"Логин…",
         unit:"запись|записи|записей"
-      })}</div>`}
+      })}</div>`)}
 // Настройки описаны списком, а не разметкой: то же описание рисует страницу
 // и даёт поиску цели, поэтому найденная настройка не может разойтись с той,
 // что на экране.
@@ -5730,7 +5813,7 @@ function sysUI(){
   let body=Object.entries(cards).map(([title,list])=>card(title,`<div class="g">${list.map(settingFieldHtml).join("")}</div>`)).join("");
   if(o.id==="mail")body+=`<p class="sub">${i18n("Глобальные настройки. Оповещатели сервера — в разделе «Оборудование», срез «Службы».")}</p>`;
   if(o.id==="lic")body=card("Лицензии",`<div class="mx"><div class="mc"><span>${i18n("Камеры")}</span><b>48/64</b></div><div class="mc"><span>ACFA</span><b>3/10</b></div></div>`);
-  document.getElementById("main").innerHTML=mainHd("Опции",`${o.i} ${o.n}`,"Параметры кластера")+`<div class="sc">${body}</div>`;
+  paintMain(mainHd("Опции",`${o.i} ${o.n}`,"Параметры кластера")+`<div class="sc">${body}</div>`);
   flashSetting();
 }
 // Найденная настройка подсвечивается на открывшейся странице: иначе переход
@@ -5767,7 +5850,7 @@ const LOG_BY_CAT={all:LOG_ROWS,audit:LOG_ROWS.filter(r=>r[1]==="Аудит"),
   alarm:LOG_ROWS.filter(r=>r[1]==="Тревога"),info:LOG_ROWS.filter(r=>r[1]==="Инфо")};
 function logUI(){const cat=logCats.find(x=>x.id===logFilt)||logCats[0];
   const rows=LOG_BY_CAT[cat.id]||LOG_ROWS;
-  document.getElementById("main").innerHTML=mainHd("Журнал",`≡ ${cat.n}`,"Диагностика и аудит")+
+  paintMain(mainHd("Журнал",`≡ ${cat.n}`,"Диагностика и аудит")+
     `<div class="sc">${listCard({
       key:"log:"+cat.id,
       title:"События",
@@ -5778,7 +5861,7 @@ function logUI(){const cat=logCats.find(x=>x.id===logFilt)||logCats[0];
       empty:"Событий нет",
       ph:"Время, тип или описание…",
       unit:"событие|события|событий"
-    })}</div>`}
+    })}</div>`)}
 
 let ws=1,wizd={};
 // Устройство попадает в общий пул и в выбранную папку расположения
@@ -6973,7 +7056,9 @@ function wizardInlineHost(){
 }
 function renderDeviceWizardInline(host){
   const body=wizd.deviceTab==="manual"?deviceManualHtml():wizd.deviceTab==="csv"?deviceCsvHtml():deviceSearchHtml();
+  const st=viewState(host);
   host.innerHTML=`<div class="dev-wrap${wizd.deviceTab==="search"?"":" dev-wrap-scroll"}">${body}</div>`;
+  restoreView(host,st);
   const allCb=document.getElementById("devSelectAll");
   if(allCb){
     const selectable=selectableDeviceResults();
@@ -7000,19 +7085,14 @@ function renderDeviceWizard(){
   const inline=wizardInlineHost();
   if(inline){renderDeviceWizardInline(inline);return}
   const target=deviceTarget();
-  const searchFlow=wizd.deviceTab==="search";
-  const scrollEl=searchFlow?document.querySelector(".dev-results-scroll"):null;
-  const scrollTop=scrollEl?scrollEl.scrollTop:0;
+  const wbd=document.getElementById("wbd"),wst=viewState(wbd);
   document.getElementById("wizT").textContent=deviceWizardTitle();
   document.getElementById("wst").style.display="none";
   document.getElementById("wizDr").classList.add("device-wizard");
   document.getElementById("wizDr").classList.remove("server-list");
   const body=wizd.deviceTab==="manual"?deviceManualHtml():wizd.deviceTab==="csv"?deviceCsvHtml():deviceSearchHtml();
-  document.getElementById("wbd").innerHTML=`<div class="dev-wrap${wizd.deviceTab==="search"?"":" dev-wrap-scroll"}">${!target?`<div class="csv-error">Нет папок для размещения устройств</div>`:""}${body}</div>`;
-  if(searchFlow){
-    const listScroll=document.querySelector(".dev-results-scroll");
-    if(listScroll)listScroll.scrollTop=scrollTop;
-  }
+  wbd.innerHTML=`<div class="dev-wrap${wizd.deviceTab==="search"?"":" dev-wrap-scroll"}">${!target?`<div class="csv-error">Нет папок для размещения устройств</div>`:""}${body}</div>`;
+  restoreView(wbd,wst);
   const allCb=document.getElementById("devSelectAll");
   if(allCb){
     const selectable=selectableDeviceResults();
