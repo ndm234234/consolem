@@ -268,7 +268,10 @@ html[data-theme="light"] .sq-focus.on:hover,html[data-theme="light"] .sq-focus.h
 .n-empty{padding-left:21px;height:var(--row-h);color:var(--mu);font-size:11px;font-style:italic;cursor:default}
 .n-empty:hover{background:transparent}
 .n-add.srv{font-weight:600;font-size:12px}
-.tctx{display:none;position:fixed;z-index:45;min-width:220px;max-height:min(70vh,420px);overflow:auto;background:var(--p);border:1px solid var(--ln);border-radius:8px;box-shadow:0 10px 28px #000a;padding:4px 0;scrollbar-width:thin;scrollbar-color:#2f3f55 transparent}
+/* Высота — по окну, а не жёсткие 420px: у домена пунктов много, и последние
+   («Создать домен», «Открыть в новой вкладке») прятались под прокрутку меню.
+   За край экрана меню не выходит и так — его ставит openTreeCtx. */
+.tctx{display:none;position:fixed;z-index:45;min-width:220px;max-height:calc(100vh - 16px);overflow:auto;background:var(--p);border:1px solid var(--ln);border-radius:8px;box-shadow:0 10px 28px #000a;padding:4px 0;scrollbar-width:thin;scrollbar-color:#2f3f55 transparent}
 .tctx.open{display:block}
 .tctx button{display:flex;align-items:center;gap:8px;width:100%;border:0;background:0;color:var(--tx);padding:7px 10px 7px 8px;font-size:12px;text-align:left;cursor:pointer}
 .tctx button:hover{background:#172a46}
@@ -3858,17 +3861,24 @@ function openTreeCtx(n,xy){
       addItems.push(tctxItem(i18n("Добавить найденные"),`closeTreeCtx();lanShowFound('${n.id}')`,tctxPlusIcon()));
       addItems.push(tctxItem(i18n("Добавить вручную"),`closeTreeCtx();lanOpenWizard('manual')`,tctxPlusIcon()));
       addItems.push(tctxItem(i18n("Добавить из файла"),`closeTreeCtx();lanOpenWizard('csv')`,tctxPlusIcon()));
+    }else if(n.type==="domain"){
+      // Всё, что заводит карточка домена: устройства — тремя путями, как у
+      // архива, дальше то, из чего домен состоит. Раскладка больше не решает,
+      // что здесь показать, — в карточке это есть всегда, и меню не должно
+      // прятать половину только потому, что дерево разложено по папкам.
+      addItems.push(tctxItem(i18n("Добавить найденные"),`closeTreeCtx();lanShowFound('${n.id}')`,tctxPlusIcon()));
+      addItems.push(tctxItem(i18n("Добавить вручную"),`closeTreeCtx();lanOpenWizard('manual')`,tctxPlusIcon()));
+      addItems.push(tctxItem(i18n("Добавить из файла"),`closeTreeCtx();lanOpenWizard('csv')`,tctxPlusIcon()));
+      addItems.push(tctxSep());
+      addItems.push(tctxItem(i18n("Добавить сервер"),`closeTreeCtx();openW('server')`,tctxPlusIcon()));
+      addItems.push(tctxItem(i18n("Добавить серверы по IP"),`closeTreeCtx();openFindServerByIp('${n.id}')`,tctxPlusIcon()));
+      addItems.push(tctxItem(i18n("Создать папку"),`addSubfolder(null,'${n.id}')`,tctxPlusIcon()));
+      addItems.push(tctxItem(i18n("Создать сетевой архив"),`closeTreeCtx();addArchive('${n.id}')`,tctxPlusIcon()));
     }else if(canTreeCtxAdd(n)){
-      // У домена в «Устройствах» добавляют папку, в «Серверах» — сервер: один
-      // и тот же узел, но раздел решает, что здесь вообще заводят.
-      if(n.type==="domain"&&group()!=="server"){
-        addItems.push(tctxItem(i18n("Создать папку"),`addSubfolder(null,'${n.id}')`,tctxPlusIcon()));
-      }else{
-        const lb=addTreeLabel(n);
-        const act=n.type==="domain"?`closeTreeCtx();openW('server')`:(n.type==="server"?`closeTreeCtx();openW('svc')`:"closeTreeCtx();openW()");
-        addItems.push(tctxItem(lb,act,tctxPlusIcon()));
-        if(n.type==="folder")addItems.push(tctxItem(i18n("Создать подпапку"),`addSubfolder('${n.id}')`,tctxPlusIcon()));
-      }
+      const lb=addTreeLabel(n);
+      const act=n.type==="server"?`closeTreeCtx();openW('svc')`:"closeTreeCtx();openW()";
+      addItems.push(tctxItem(lb,act,tctxPlusIcon()));
+      if(n.type==="folder")addItems.push(tctxItem(i18n("Создать подпапку"),`addSubfolder('${n.id}')`,tctxPlusIcon()));
     }
     const rest=[];
     if(n.type==="server"&&isUnallocated(n.id)){
