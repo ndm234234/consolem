@@ -10,7 +10,7 @@
    Колонка рельса задаёт первую вертикаль, отбивка --gut — вторую (левый край
    содержимого панелей), а --ctrl-lead доводит иконку внутри рамки контрола до
    той же вертикали, на которой стоят иконки дерева. */
-:root{--rail-w:112px;--rail-item-h:56px;--gut:8px;--ind:16px;--row-h:28px;--ic:16px;--tw:12px;--ctrl-lead:15px;--pad:24px;--guide:#1b2739}
+:root{--rail-w:112px;--rail-item-h:56px;--gut:8px;--ind:16px;--row-h:28px;--ic:16px;--tw:12px;--ctrl-lead:15px;--pad:24px}
 html[data-theme="light"]{--bg:#eef2f7;--p:#ffffff;--p2:#f3f6fb;--ln:#d5dde8;--tx:#1a2332;--mu:#5d6f86;--bl:#2f6fed;--gn:#1fa05a;--rd:#d6454f;--pu:#6f56d6}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.45 Inter,"Segoe UI",sans-serif;overflow:hidden}
 *{scrollbar-width:thin;scrollbar-color:#243548 transparent}
@@ -228,13 +228,10 @@ html[data-theme="light"] .status-pop .mi.on{background:#e8f0ff;color:#1a3a7a}
 .tree::-webkit-scrollbar-track{background:transparent}
 .tree::-webkit-scrollbar-thumb{background:#2f3f55;border-radius:99px}
 .tree::-webkit-scrollbar-thumb:hover{background:#3d536e}
-/* Лесенка живёт в --l: CSS сам считает по уровню и отступ, и направляющие.
+/* Лесенка живёт в --l: CSS сам считает отступ по уровню вложенности.
    Отступ 5px плюс полоса выделения 3px дают ту же вертикаль (--gut), на
    которой стоят поиск и переключатель среза. */
 .n{position:relative;display:flex;align-items:center;flex-wrap:nowrap;gap:4px;height:var(--row-h);padding:0 var(--gut) 0 calc(5px + var(--l,0)*var(--ind));border-left:3px solid transparent;cursor:pointer;color:#c7d1e0;font-size:12px;user-select:none;min-width:0}
-/* Направляющие ветвей: по одной на каждый пройденный уровень, через центр
-   колонки раскрывателя родителя. */
-.n::before{content:"";position:absolute;left:10px;top:0;bottom:0;width:calc(var(--l,0)*var(--ind));pointer-events:none;background:repeating-linear-gradient(to right,var(--guide) 0 1px,transparent 1px var(--ind))}
 .n .tw{display:inline-flex;align-items:center;justify-content:center;width:var(--tw);flex:none;cursor:pointer;user-select:none}
 .n>.ici{width:var(--ic);justify-content:center}
 .n:hover{background:#142033}.n.on{background:#152232;border-left-color:var(--bl);color:#e8eef8}.n.mark{background:#15263c;border-left-color:#3d6a9e;color:#e8eef8}.n.on.mark{background:#182a3a;border-left-color:var(--bl);color:#fff}
@@ -2802,10 +2799,12 @@ function applyFiltersFromState(){
 function updateFiltChrome(){
   const btn=document.getElementById("filtBtn"),tags=document.getElementById("filtTags"),hint=document.getElementById("filtHint");
   if(btn){
+    const st=curStatus();
     btn.classList.toggle("on",filtPop||!!statusFilts.size);
     btn.setAttribute("aria-expanded",String(filtPop));
-    btn.title=statusLabel(curStatus());
-    const label=btn.querySelector(".ph-status-label");if(label)label.textContent=statusLabel(curStatus());
+    btn.title=statusLabel(st);
+    const dot=btn.querySelector(".st-dot");if(dot)dot.className=`st-dot st-${st||"all"}`;
+    const label=btn.querySelector(".ph-status-label");if(label)label.textContent=statusLabel(st);
   }
   document.querySelectorAll("#aside [data-slice] .ph-cnt").forEach(el=>{
     el.textContent=sliceCount(el.closest("[data-slice]").dataset.slice);
@@ -3291,7 +3290,7 @@ function panelHeadHtml(){
   return`<div class="ph"><div class="ph-row" role="group" aria-label="${i18n("Срез дерева")}">
     ${Object.keys(SLICE).map(id=>`<button type="button" class="ph-choice ${slice===id?"on":""}" data-slice="${id}" aria-pressed="${slice===id}" onclick="setSlice('${id}')"><span>${SLICE[id]}</span><span class="ph-cnt">${sliceCount(id)}</span></button>`).join("")}
     <button type="button" class="ph-choice ph-folders ${foldersOn?"on":""}" id="viewBtn" aria-pressed="${foldersOn}" title="${i18n("Группировка")}: ${GROUP_HINT[group()]}" onclick="toggleFolders()">${i18n("Папки")}</button>
-    <button type="button" class="ph-choice ph-status ${filtPop||st?"on":""}" id="filtBtn" aria-haspopup="menu" aria-controls="filtPop" aria-expanded="${filtPop}" title="${statusLabel(st)}" onclick="toggleFiltPop(event)"><span class="ph-status-label">${statusLabel(st)}</span><span class="ph-chevron" aria-hidden="true">▾</span></button>
+    <button type="button" class="ph-choice ph-status ${filtPop||st?"on":""}" id="filtBtn" aria-haspopup="menu" aria-controls="filtPop" aria-expanded="${filtPop}" title="${statusLabel(st)}" onclick="toggleFiltPop(event)"><span class="st-dot st-${st||"all"}" aria-hidden="true"></span><span class="ph-status-label">${statusLabel(st)}</span><span class="ph-chevron" aria-hidden="true">▾</span></button>
   </div></div>`;
 }
 function toggleFolders(){
@@ -4230,7 +4229,8 @@ function treeDetectors(){
 function gpurow(sv,l){
   const q=qval(),node=gpuNode(sv),ctx="gpu:"+sv.id;
   const list=gpuCameras(sv.id);
-  const children=list.map(x=>gcamrow(x.cam,x.dets,l+1,ctx)).join("");
+  // В срезе «Серверы» GPU показан строкой состава, без камер и детекторов.
+  const children=slice==="srv"?"":list.map(x=>gcamrow(x.cam,x.dets,l+1,ctx)).join("");
   const selfHit=matchesStatus(node)&&matchesText(q,locName(node),"gpu");
   if(!selfHit&&!children)return"";
   const hasKids=!!children;
