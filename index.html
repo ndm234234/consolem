@@ -4314,16 +4314,18 @@ function gpurow(sv,l){
 }
 // Локальный архив — строка описи; его камеры показаны под сервером.
 function arowFlat(a,l){
+  if(slice==="cam"||slice==="acfa")return"";
   const q=qval(),cams=archCameras(a.id);
   if(!matchesStatus(a)||!matchesSearch(a,q))return"";
-  const context=slice==="cam"||slice==="acfa";
-  return`<div class="n srv ${sel===a.id?"on":""}${context?sliceParentClass(a.id):""}${treeRenameId===a.id?" renaming":""}" style="--l:${l}"${treeRowPick(a.id)}${treeCtxAttr(a.id)}>
+  return`<div class="n srv ${sel===a.id?"on":""}${treeRenameId===a.id?" renaming":""}" style="--l:${l}"${treeRowPick(a.id)}${treeCtxAttr(a.id)}>
     <span class="tw"></span>${ic("storage")}${treeRenameId===a.id?treeNameCell(a,q):`<span class="nm">${hlText(locName(a),q)}</span>`}
-    ${treeTail({tags:`<span class="tag">${archIsNetwork(a)?i18n("сетевой"):i18n("локальный")}</span>`,cnt:treeCntHtml(context?sliceParentCount(a.id):cams.length),acts:a.id})}</div>`;
+    ${treeTail({tags:`<span class="tag">${archIsNetwork(a)?i18n("сетевой"):i18n("локальный")}</span>`,cnt:treeCntHtml(cams.length),acts:a.id})}</div>`;
 }
 function arow(a,l){
+  if(slice==="acfa")return"";
   const q=qval();
   const allCams=archCameras(a.id),cams=allCams.filter(selfInView);
+  if(slice==="cam")return recordedCameraRows(allCams,l,"arch:"+a.id);
   const children=recordedCameraRows(allCams,l+1,"arch:"+a.id);
   const selfHit=matchesStatus(a)&&matchesSearch(a,q);
   if(!selfHit&&!children)return"";
