@@ -2097,7 +2097,7 @@ function toggleNodeEnabled(id,el){
   f.n.enabled=on;
   el.title=on?i18n("Выключить"):i18n("Включить");
   setD(true);
-  renderTree();gear();
+  applyFiltersFromState();
 }
 function objectStatusNotesHtml(n){
   if(!n||n.type!=="camera")return"";
@@ -2212,7 +2212,10 @@ function expandTo(id,ctx){
 }
 function pushRecent(id){recent=recent.filter(x=>x!==id);recent.unshift(id);if(recent.length>8)recent.pop()}
 function setFocus(id,keepSel){if(!keepSel){const s=servers.find(x=>x.id===id);sel=s?.devices?.find(d=>treeKind(d)===tview)?.id||id}expandTo(sel);paint()}
-function clearGearFilters(){typeFilts.clear();searchFields.clear();statusFilts.clear();treeQ=""}
+function clearGearFilters(keepSearch=false){
+  typeFilts.clear();statusFilts.clear();
+  if(!keepSearch){searchFields.clear();treeQ=""}
+}
 // В быстром поиске показываем папку объекта (для доменов/серверов — сам узел)
 function jumpScope(n){
   if(!n)return null;
@@ -2772,7 +2775,7 @@ function filterTags(){
   const tags=[];
   [...typeFilts].forEach(id=>{const lab=(TYPE_FILTERS[slice].find(x=>x[0]===id)||[])[1]||id;tags.push({id:"type:"+id,label:i18n(lab)})});
   [...searchFields].forEach(id=>tags.push({id:"field:"+id,label:i18n(FIELD_LABELS[id]||id)}));
-  [...statusFilts].forEach(id=>tags.push({id:"st:"+id,label:statusLabel(id)}));
+  // Выбранный статус уже подписан на основной кнопке.
   return tags;
 }
 function tagsHtml(){return filterTags().map(tag=>`<span class="ftag"><span title="${tag.label}">${tag.label}</span><button type="button" onclick="event.stopPropagation();clearFilterTag('${tag.id}')" title="${i18n("Снять")}">✕</button></span>`).join("")}
@@ -2806,6 +2809,9 @@ function updateFiltChrome(){
     btn.title=statusLabel(curStatus());
     const label=btn.querySelector(".ph-status-label");if(label)label.textContent=statusLabel(curStatus());
   }
+  document.querySelectorAll("#aside [data-slice] .ph-cnt").forEach(el=>{
+    el.textContent=sliceCount(el.closest("[data-slice]").dataset.slice);
+  });
   syncGoInput();
   if(tags)tags.innerHTML=tagsHtml();
   if(hint)hint.textContent=hasActiveFilters()?`${i18n("Найдено:")} ${countFiltered()}`:"";
@@ -2830,7 +2836,6 @@ function clearTreeQ(e){
 function clearFilterTag(id){
   if(id.startsWith("type:"))typeFilts.delete(id.slice(5));
   else if(id.startsWith("field:"))searchFields.delete(id.slice(6));
-  else if(id.startsWith("st:"))statusFilts.delete(id.slice(3));
   applyFiltersFromState();
   if(filtPop)refreshFiltPop(true);
 }
@@ -3260,8 +3265,8 @@ function renderTree(){const treeEl=document.getElementById("tree");if(!treeEl)re
 function curStatus(){return statusFilts.size?[...statusFilts][0]:""}
 function statusLabel(id){return id?i18n((STATUS_FILTERS.find(x=>x[0]===id)||[])[1]||id):i18n("Все статусы")}
 function statusCount(id){
-  let n=0;
-  walkSliceObjects(x=>{if(!inSlice(x))return;if(!id){n++;return}try{if(statusOf(x)===id)n++}catch(e){}});
+  const q=qval();let n=0;
+  walkSliceObjects(x=>{if(inSlice(x)&&matchesType(x)&&matchesSearch(x,q)&&(!id||statusOf(x)===id))n++});
   return n;
 }
 function pickStatus(id){
@@ -3270,10 +3275,10 @@ function pickStatus(id){
   applyFiltersFromState();aside();
   document.getElementById("filtBtn")?.focus({preventScroll:true});
 }
-// Счётчики используют те же правила принадлежности срезу, что и дерево.
+// Счётчики всех срезов учитывают текст поиска, даже если срез не выбран.
 function sliceCount(id){
-  const prev=slice;slice=id;let n=0;
-  try{walkSliceObjects(x=>{if(inSlice(x))n++})}finally{slice=prev}
+  const prev=slice,q=qval();slice=id;let n=0;
+  try{walkSliceObjects(x=>{if(inSlice(x)&&matchesSearch(x,q))n++})}finally{slice=prev}
   return n;
 }
 function panelHeadHtml(){
@@ -3298,7 +3303,8 @@ function setSlice(v){
   v=normSlice(v);
   if(!SLICE_GROUPS[v]||slice===v)return;
   slice=v;syncViews();
-  clearGearFilters();filtPop=false;typesExpanded=false;tab="gen";
+  // При смене среза сохраняем запрос и поля, по которым он ищется.
+  clearGearFilters(true);filtPop=false;typesExpanded=false;tab="gen";
   treeMatchCache.clear();searchMatchCache.clear();treeSel.clear();treeAnchor=null;
   keepSelectionInSlice();
   aside();gear();
@@ -3896,14 +3902,14 @@ function nrow(n,l,ctx){
   return h}
 function svcrow(n,l){
   const q=qval();
-  if(q&&!matchesSearch(n,q))return"";
+  if(!selfInView(n)||!matchesSearch(n,q))return"";
   return `<div class="n ${sel===n.id?"on":""}${treeRenameId===n.id?" renaming":""}" style="--l:${l}"${treeRowPick(n.id)}${treeCtxAttr(n.id)}>
     <span class="tw"></span>${treeIconHtml(n)}<span class="nm">${treeNameCell(n,q)}</span>${treeTail({tags:treeAttrTags(n,q),status:treeStatusSlot(n),acts:n.id})}</div>`;
 }
 function srow(s,l=1,bare=false){
   const q=qval();
   if(bare){
-    if(q&&!matchesSearch(s,q))return"";
+    if(!matchesStatus(s)||!matchesSearch(s,q))return"";
     // Нераспределённые ещё не подключены к домену — всегда серым
     let h=`<div class="n srv ${sel===s.id?"on":""} off${treeRenameId===s.id?" renaming":""}" style="--l:${l}"${treeRowPick(s.id)}${treeCtxAttr(s.id)}>
       <span class="tw"></span>
@@ -3911,12 +3917,12 @@ function srow(s,l=1,bare=false){
     return h;
   }
   const offline=hasNoSignal(s);
-  const srvHit=!q||matchesSearch(s,q);
+  const srvHit=matchesStatus(s)&&matchesSearch(s,q);
   const srvSlice=slice==="srv";        // опись сервера: архивы, GPU, службы
   // Нет сигнала — дочерние в дереве не показываем
   const archs=offline?[]:serverArchives(s.id);
   const devs=offline?[]:(s.devices||[]).filter(d=>d.type!=="det");
-  const gpu=offline?null:serverGpu(s);
+  const gpu=offline||slice==="acfa"?null:serverGpu(s);
   const svcHtml=devs.filter(d=>!q||matchesSearch(d,q)).map(d=>svcrow(d,l+1)).join("");
   const kidsHtml=srvSlice
     // В описи архив — строка, а не ветка: камеры смотрят в срезе «Все», и
@@ -3925,7 +3931,7 @@ function srow(s,l=1,bare=false){
     : archs.map(a=>arow(a,l+1)).filter(Boolean).join("")+(gpu?gpurow(s,l+1):"")+svcHtml;
   if(!srvHit&&!kidsHtml)return"";
   const cnt=srvSlice?devs.length:archs.reduce((n,a)=>n+archCameras(a.id).length,0);
-  const hasKids=!offline;
+  const hasKids=!!kidsHtml;
   const op=hasKids&&(open.has(s.id)||autoExpand());
   let h=`<div class="n srv ${sel===s.id?"on":""}${treeRenameId===s.id?" renaming":""}" style="--l:${l}"${treeRowPick(s.id)}${treeCtxAttr(s.id)}${treeExpandMeta(s.id,"srv",hasKids)}>
     ${treeChevron(s.id,"srv",hasKids,op)}
@@ -3935,15 +3941,15 @@ function srow(s,l=1,bare=false){
 function drow(d){
   const q=qval();
   const offline=hasNoSignal(d);
-  const selfHit=!q||matchesSearch(d,q);
+  const selfHit=matchesStatus(d)&&matchesSearch(d,q);
   const netHtml=offline?"":(slice==="srv"
     ?domainArchives(d.id).map(a=>arowFlat(a,1)).join("")
     :domainArchives(d.id).map(a=>arow(a,1)).filter(Boolean).join(""));
   const childHtml=(offline?"":d.servers.map(s=>srow(s,1)).filter(Boolean).join(""))+netHtml;
   const uaHtml=offline?"":(slice==="srv"?urow(1,d):urow(1,d)+norow(d,1)+fndrow(d,1));
   if(!selfHit&&!childHtml&&!uaHtml)return"";
-  const hasKids=!offline;
-  const op=!offline&&(open.has(d.id)||!!(q&&(selfHit||childHtml||uaHtml)));
+  const hasKids=!!(childHtml||uaHtml);
+  const op=hasKids&&(open.has(d.id)||autoExpand());
   let h=`<div class="n srv ${sel===d.id?"on":""}${treeRenameId===d.id?" renaming":""}"${treeRowPick(d.id)}${treeCtxAttr(d.id)}${treeExpandMeta(d.id,"dom",hasKids)}>
     ${treeChevron(d.id,"dom",hasKids,op)}
     ${treeIconHtml(d)}<span class="nm">${treeNameCell(d,q)}</span>${treeRowMeta(d,q,domainServerCount(d),op)}</div>`;
@@ -3956,8 +3962,9 @@ function urow(l,domain){
   const q=qval(),ua=unallocNode(domain),list=domain.unallocServers;
   const selfHit=!q||matchesSearch(ua,q);
   const childHtml=list.map(s=>srow(s,l+1,true)).filter(Boolean).join("");
+  if(statusFilts.size&&!childHtml)return"";
   if(!selfHit&&!childHtml&&q)return"";
-  const op=open.has(ua.id)||!!(q&&(selfHit||childHtml));
+  const op=open.has(ua.id)||autoExpand();
   let h=`<div class="n srv ${sel===ua.id?"on":""}" style="--l:${l}" data-pick="${ua.id}"${treeCtxAttr(ua.id)}${treeExpandMeta(ua.id,"dom",true)}>
     ${treeChevron(ua.id,"dom",true,op)}
     ${ic("unalloc")}<span class="nm">${displayNameHtml(ua,q)}</span>${treeTail({cnt:treeCntHtml(list.length)})}</div>`;
@@ -3989,6 +3996,7 @@ function frow(f,l){
   if(!folderHasTreeIn(f)&&!(q&&selfHit))return"";
   const subs=(f.folders||[]).map(x=>frow(x,l+1)).filter(Boolean).join("");
   const devs=folderDeviceNodes(f).filter(d=>hasTreeIn(d)&&(!q||vis(d,q)));
+  if(statusFilts.size&&!subs&&!devs.length)return"";
   if(!selfHit&&!subs&&!devs.length)return"";
   const hasKids=!!subs||!!devs.length;
   const op=hasKids&&(open.has(f.id)||(autoExpand()&&(!!subs||!!devs.length)));
@@ -4049,6 +4057,7 @@ function foundDeviceMatches(r,q){
 // в виде ACFA, где её всё равно не добавить как ACFA-устройство.
 function foundInView(r){return(r.type==="acfa"?"acfa":"cam")===tview}
 function fndrow(d,l){
+  if(statusFilts.size)return""; // У ещё не добавленных устройств нет рабочего статуса.
   const q=qval(),node=foundNode(d.id);
   const all=foundPending(d.id).filter(foundInView);
   const vis=all.filter(r=>foundDeviceMatches(r,q));
@@ -4089,7 +4098,7 @@ function domainTreeDeviceCount(did){
 }
 function dfrow(d){
   const q=qval();
-  const selfHit=!q||matchesSearch(d,q);
+  const selfHit=matchesStatus(d)&&matchesSearch(d,q);
   const kidsHtml=domainFolders(d.id).map(f=>frow(f,1)).filter(Boolean).join("")+nfrow(d,1)+fndrow(d,1);
   if(!selfHit&&!kidsHtml)return"";
   // У домена всегда есть «Без папки» и строка создания папки
@@ -4122,7 +4131,7 @@ function treeHw(){
 // Режим «Службы»: домен → сервер → службы сервера.
 function scamrow(n,l,ctx){
   const q=qval();
-  if(q&&!matchesSearch(n,q))return"";
+  if(!selfInView(n)||!matchesSearch(n,q))return"";
   return `<div class="n ${rowOn(n.id,ctx)}" style="--l:${l}"${treeRowPick(n.id,ctx)}>
     <span class="tw"></span>${treeIconHtml(n)}<span class="nm">${displayNameHtml(n,q)}</span>${treeRowMeta(n,q,0,false,ctx)}</div>`;
 }
@@ -4140,29 +4149,30 @@ function groupCamsByIpsrv(cams){
 }
 function nvrrow(owner,cams,l,ctx){
   const q=qval();
-  const vis=cams.filter(c=>!q||matchesSearch(c,q));
-  const selfHit=!q||matchesSearch(owner,q);
+  cams=cams.filter(selfInView);
+  const vis=cams.filter(c=>matchesSearch(c,q));
+  const selfHit=selfInView(owner)&&matchesSearch(owner,q);
   if(!selfHit&&!vis.length)return"";
-  const op=open.has(owner.id)||autoExpand();
+  const hasKids=!!vis.length,op=hasKids&&(open.has(owner.id)||autoExpand());
   const edge=edgeStorage(owner);
-  let h=`<div class="n srv ${rowOn(owner.id,ctx)}" style="--l:${l}"${treeRowPick(owner.id,ctx)}${treeExpandMeta(owner.id,"srv",true)}>
-    ${treeChevron(owner.id,"srv",true,op)}
+  let h=`<div class="n srv ${rowOn(owner.id,ctx)}" style="--l:${l}"${treeRowPick(owner.id,ctx)}${treeExpandMeta(owner.id,"srv",hasKids)}>
+    ${treeChevron(owner.id,"srv",hasKids,op)}
     ${treeIconHtml(owner)}<span class="nm">${displayNameHtml(owner,q)}</span>${treeTail({tags:edge?`<span class="n-tail"><span class="cnt" title="${i18n("Встроенное хранилище")}">${ic("storage")}</span></span>`:"",cnt:treeCntHtml(cams.length),acts:owner.id,ctx})}</div>`;
   if(op)h+=(q?vis:cams).map(c=>scamrow(c,l+1,ctx)).join("");
   return h;
 }
 function gdetrow(d,l,ctx){
   const q=qval();
-  const hit=matchesText(q,locName(d));
+  const hit=matchesStatus(d)&&matchesSearch(d,q);
   if(!hit)return"";
   return `<div class="n ${rowOn(d.id,ctx)}" style="--l:${l}"${treeRowPick(d.id,ctx)}>
     <span class="tw"></span>${ic("det")}<span class="nm">${hlText(locName(d),q)}</span>${treeTail({tags:`<span class="tag">${escHtml(i18n(d.kind||DET_TYPES[0]))}</span>`,status:treeStatusSlot(d)})}</div>`;
 }
 function gcamrow(cam,dets,l,ctx){
-  const q=qval(),detSlice=slice==="det";
-  const available=detSlice?dets.filter(matchesStatus):dets;
-  const vis=available.filter(d=>matchesText(q,locName(d)));
-  const selfHit=(!detSlice||matchesStatus(cam))&&(!q||matchesSearch(cam,q));
+  const q=qval();
+  const available=dets.filter(matchesStatus);
+  const vis=available.filter(d=>matchesSearch(d,q));
+  const selfHit=matchesStatus(cam)&&matchesSearch(cam,q);
   if(!selfHit&&!vis.length)return"";
   const hasKids=!!available.length;
   const op=hasKids&&(open.has(cam.id)||autoExpand());
@@ -4219,46 +4229,45 @@ function treeDetectors(){
 function gpurow(sv,l){
   const q=qval(),node=gpuNode(sv),ctx="gpu:"+sv.id;
   const list=gpuCameras(sv.id);
-  const vis=list.filter(x=>!q||matchesSearch(x.cam,q));
-  const selfHit=matchesText(q,locName(node),"gpu");
-  if(!selfHit&&!vis.length)return"";
-  const hasKids=!!list.length;
+  const children=list.map(x=>gcamrow(x.cam,x.dets,l+1,ctx)).join("");
+  const selfHit=matchesStatus(node)&&matchesText(q,locName(node),"gpu");
+  if(!selfHit&&!children)return"";
+  const hasKids=!!children;
   const op=hasKids&&(open.has(node.id)||autoExpand());
   let h=`<div class="n srv gpu ${sel===node.id?"on":""}" style="--l:${l}"${treeRowPick(node.id)}${treeExpandMeta(node.id,"srv",hasKids)}>
     ${treeChevron(node.id,"srv",hasKids,op)}
     ${ic("gpu")}<span class="nm">${hlText(locName(node),selfHit?q:"")}</span>${treeTail({cnt:treeCntHtml(list.length)})}</div>`;
-  if(op)h+=(q?vis:list).map(x=>gcamrow(x.cam,x.dets,l+1,ctx)).join("");
+  if(op)h+=children;
   return h;
 }
 // Архив строкой описи: в срезе «Серверы» его камеры не разворачиваются.
 function arowFlat(a,l){
   const q=qval(),cams=archCameras(a.id);
-  if(!matchesText(q,locName(a)))return"";
+  if(!matchesStatus(a)||!matchesSearch(a,q))return"";
   return`<div class="n srv ${sel===a.id?"on":""}${treeRenameId===a.id?" renaming":""}" style="--l:${l}"${treeRowPick(a.id)}${treeCtxAttr(a.id)}>
     <span class="tw"></span>${ic("storage")}${treeRenameId===a.id?treeNameCell(a,q):`<span class="nm">${hlText(locName(a),q)}</span>`}
     ${treeTail({tags:`<span class="tag">${archIsNetwork(a)?i18n("сетевой"):i18n("локальный")}</span>`,cnt:treeCntHtml(cams.length),acts:a.id})}</div>`;
 }
 function arow(a,l){
   const q=qval();
-  const cams=archCameras(a.id),vis=cams.filter(c=>!q||matchesSearch(c,q));
-  const selfHit=matchesText(q,locName(a));
-  if(!selfHit&&!vis.length)return"";
-  const hasKids=!!cams.length;
+  const allCams=archCameras(a.id),cams=allCams.filter(selfInView);
+  const{groups,loose}=groupCamsByIpsrv(allCams),ctx="arch:"+a.id;
+  const children=groups.map(g=>nvrrow(g.owner,g.cams,l+1,ctx)).join("")+loose.map(c=>scamrow(c,l+1,ctx)).join("");
+  const selfHit=matchesStatus(a)&&matchesSearch(a,q);
+  if(!selfHit&&!children)return"";
+  const hasKids=!!children;
   const op=hasKids&&(open.has(a.id)||autoExpand());
   let h=`<div class="n srv ${sel===a.id?"on":""}${treeRenameId===a.id?" renaming":""}" style="--l:${l}"${treeRowPick(a.id)}${treeCtxAttr(a.id)}${treeExpandMeta(a.id,"srv",hasKids)}>
     ${treeChevron(a.id,"srv",hasKids,op)}
     ${ic("storage")}${treeRenameId===a.id?treeNameCell(a,q):`<span class="nm">${hlText(locName(a),selfHit?q:"")}</span>`}${treeTail({cnt:treeCntHtml(cams.length),acts:a.id})}</div>`;
-  if(op){
-    const{groups,loose}=groupCamsByIpsrv(cams),ctx="arch:"+a.id;
-    h+=groups.map(g=>nvrrow(g.owner,g.cams,l+1,ctx)).filter(Boolean).join("");
-    h+=loose.filter(c=>!q||matchesSearch(c,q)).map(c=>scamrow(c,l+1,ctx)).join("");
-  }
+  if(op)h+=children;
   return h;
 }
 // Камеры, для которых запись не настроена: сервера у них нет вовсе
 function norow(d,l){
-  const q=qval(),cams=norecList(d.id),vis=cams.filter(c=>!q||matchesSearch(c,q));
+  const q=qval(),cams=norecList(d.id).filter(selfInView),vis=cams.filter(c=>matchesSearch(c,q));
   const n=norecNode(d.id);
+  if(statusFilts.size&&!cams.length)return"";
   const selfHit=matchesText(q,locName(n));
   if(!selfHit&&!vis.length)return"";
   const hasKids=!!cams.length;
