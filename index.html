@@ -1095,12 +1095,12 @@ function sliceGroups(){return SLICE_GROUPS[slice]||["folder"]}
 function group(){const g=groupBy[slice];return sliceGroups().includes(g)?g:sliceGroups()[0]}
 // Старые оси остаются производными: их читает половина кода, и переписывать
 // её ради переименования значило бы менять работающее без причины.
-// Четверть окна — разумная доля для дерева; границы не дают ему выродиться в
-// полоску или съесть инспектор. Перетащенная ширина запоминается.
+// По умолчанию дерево занимает 30% окна. Границы ограничивают ширину панели,
+// а размер, выбранный перетаскиванием, запоминается.
 function asideWidthClamp(w){return Math.max(280,Math.min(Math.round(window.innerWidth/2),Math.round(w)))}
 function asideWidthDefault(){
   try{const saved=parseInt(localStorage.getItem("cfg.asideW"),10);if(saved)return asideWidthClamp(saved)}catch(e){}
-  return asideWidthClamp(window.innerWidth/4);
+  return asideWidthClamp(window.innerWidth*.3);
 }
 // Ширина живёт на корне, а не на .ws: по ней равняется ещё и поиск в шапке,
 // который лежит в другой ветке разметки.
@@ -3951,7 +3951,7 @@ function drow(d){
     ?domainArchives(d.id).map(a=>arowFlat(a,1)).join("")
     :domainArchives(d.id).map(a=>arow(a,1)).filter(Boolean).join(""));
   const childHtml=(offline?"":d.servers.map(s=>srow(s,1)).filter(Boolean).join(""))+netHtml;
-  const uaHtml=offline?"":(slice==="srv"?urow(1,d):urow(1,d)+norow(d,1)+fndrow(d,1));
+  const uaHtml=offline?"":(slice==="srv"?urow(1,d):urow(1,d)+norow(d,1));
   if(!selfHit&&!childHtml&&!uaHtml)return"";
   const hasKids=!!(childHtml||uaHtml);
   const op=hasKids&&(open.has(d.id)||autoExpand());
@@ -4104,7 +4104,7 @@ function domainTreeDeviceCount(did){
 function dfrow(d){
   const q=qval();
   const selfHit=matchesStatus(d)&&matchesSearch(d,q);
-  const kidsHtml=domainFolders(d.id).map(f=>frow(f,1)).filter(Boolean).join("")+nfrow(d,1)+fndrow(d,1);
+  const kidsHtml=domainFolders(d.id).map(f=>frow(f,1)).filter(Boolean).join("")+nfrow(d,1);
   if(!selfHit&&!kidsHtml)return"";
   // У домена всегда есть «Без папки» и строка создания папки
   const hasKids=true;
@@ -4119,11 +4119,7 @@ function addFolderRow(level,domainId){
   return `<div class="n n-add" style="--l:${level}" onclick="event.stopPropagation();addSubfolder(null,'${domainId}')" title="${i18n("Добавить папку")}">
     <span class="tw"></span><span class="nm">＋ ${i18n("Папка")}</span></div>`;
 }
-function addDomainRow(){
-  return`<div class="n n-add n-add-dom" onclick="event.stopPropagation();addDomain()" title="${i18n("Создать домен")}">
-    <span class="tw"></span><span class="nm">＋ ${i18n("Домен")}</span></div>`;
-}
-function treeDev(){return domains.map(d=>dfrow(d)).join("")+addDomainRow()}
+function treeDev(){return domains.map(d=>dfrow(d)).join("")}
 // Одно дерево на весь раздел: срез решает, что показать, группировка — как
 // разложить. Домены — верхний уровень в обеих раскладках.
 function treeHw(){
@@ -4283,7 +4279,7 @@ function norow(d,l){
   if(op)h+=vis.map(c=>scamrow(c,l+1,"norec:"+d.id)).join("");
   return h;
 }
-function treeServers(){return domains.map(d=>drow(d)).join("")+addDomainRow()}
+function treeServers(){return domains.map(d=>drow(d)).join("")}
 function treeRules(){const q=qval();return rules.filter(r=>matchesText(q,r.name)).map(r=>
   `<div class="n ${rule===r.id?"on":""}" data-go="rule:${r.id}" onclick="rule='${r.id}';tab='gen';paint()" title="${escHtml(ruleSummary(r))}"><span class="tw"></span><span class="ici">${r.on?"●":"○"}</span><span class="nm">${hlText(r.name,q)}</span>${treeTail({cnt:treeCntHtml(r.then.length)})}</div>`).join("")}
 // Строка списка говорит то же, что карточка, одним предложением: сколько
