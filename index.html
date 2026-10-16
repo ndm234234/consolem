@@ -23,19 +23,19 @@ button,input,select{font:inherit;color:var(--tx)}button{cursor:pointer}
 /* До верха окна идёт только рельс разделов; шапка с поиском стоит над деревом
    и рабочей областью, и поле поиска встаёт ровно над деревом. */
 header{grid-area:hd;display:flex;align-items:center;gap:0;height:56px;padding:0 24px 0 0;background:var(--p);border-bottom:1px solid var(--ln);min-width:0}
-/* Разделы живут в левой панели, над срезами: наверху остаётся то, что
-   относится ко всему окну — поиск и учётная запись. */
+/* Разделы собраны сверху на рельсе, учётная запись закреплена снизу.
+   В шапке остаётся общий поиск. */
 /* Высота пункта равна высоте шапки: рельс попадает в тот же вертикальный ритм,
    что и остальное окно, а подписи перестают растягивать строку произвольно. */
 .asw{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;width:100%;height:var(--rail-item-h);flex:none;border:0;background:0;color:var(--mu);padding:0 2px;border-radius:8px;white-space:nowrap;font-size:11.5px;font-weight:500;line-height:1.15;text-align:center;transition:color .12s,background .12s}
 .asw .ici{flex:none;line-height:0;opacity:.9}
 .asw .ici .ic-svg{width:20px;height:20px;display:block}
 .asw-lb{overflow:hidden;text-overflow:ellipsis}
-.asw-bottom{margin-top:auto}
 /* Рельс разделов можно спрятать. Кнопка одна и всегда в шапке, слева от поля
    поиска: открыт рельс или спрятан, она на одном и том же месте относительно
    поиска и не пропадает. */
-.rail-tabs{display:flex;flex-direction:column;gap:4px;flex:1;min-height:0}
+.rail-tabs{display:flex;flex-direction:column;gap:4px;flex:1;min-height:0;overflow-y:auto;scrollbar-width:none}
+.rail-tabs::-webkit-scrollbar{display:none}
 .hd-railtg{display:grid;place-items:center;width:32px;height:32px;flex:none;margin-left:var(--gut);padding:0;border:1px solid transparent;border-radius:8px;background:0;color:var(--mu);transition:color .12s,background .12s}
 .hd-railtg:hover{color:var(--tx);background:var(--p2)}
 .hd-railtg:focus-visible{outline:2px solid #3b82f6;outline-offset:1px}
@@ -47,7 +47,6 @@ header{grid-area:hd;display:flex;align-items:center;gap:0;height:56px;padding:0 
 .asw.on{color:#fff;font-weight:600;background:#1a2d4d}
 .asw.on .ici{opacity:1}
 html[data-theme="light"] .asw.on{color:#1a3a7a;background:#e8f0ff}
-.hr-tools{display:flex;align-items:center;gap:8px;flex:none;margin-left:auto}
 .hchip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--ln);background:var(--p2);border-radius:8px;padding:6px 11px;color:var(--tx);font-size:12px;font-weight:600;white-space:nowrap;line-height:1}
 .hchip .hic{display:inline-flex;opacity:.95;line-height:0}
 .hchip:hover{border-color:#3f6fac;background:#162945}
@@ -66,13 +65,14 @@ html[data-theme="light"] .ubtn:hover,html[data-theme="light"] .ubtn.on{backgroun
 html[data-theme="light"] .uav{background:#dce6f5;color:#3a4d66}
 html[data-theme="light"] .usign{border-color:#e0a0a6;color:#b33a44}
 html[data-theme="light"] .usign:hover{background:#fdecee}
-.umenu{position:relative;flex:none}
-.ubtn{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--ln);background:var(--p2);border-radius:999px;padding:4px 10px 4px 4px;color:var(--tx);cursor:pointer}
+.umenu{position:relative;flex:none;margin-top:8px}
+.ubtn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:36px;border:1px solid var(--ln);background:var(--p2);border-radius:999px;padding:4px;color:var(--tx);cursor:pointer}
+.ubtn:focus-visible{outline:2px solid var(--bl);outline-offset:2px}
 .ubtn:hover,.ubtn.on{border-color:#3f6fac;background:#162945}
 .uav{width:26px;height:26px;border-radius:50%;background:#2a3b55;display:grid;place-items:center;font-size:13px;flex:none;color:#c5d4ea}
 .uname{font-size:13px;font-weight:600;max-width:120px;overflow:hidden;text-overflow:ellipsis}
 .uchev{font-size:10px;color:var(--mu)}
-.upop{display:none;position:absolute;right:0;top:calc(100% + 8px);z-index:50;width:240px;background:var(--p);border:1px solid var(--ln);border-radius:12px;box-shadow:0 14px 36px #000a;padding:12px;flex-direction:column;gap:10px}
+.upop{display:none;position:fixed;z-index:50;width:240px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow-y:auto;background:var(--p);border:1px solid var(--ln);border-radius:12px;box-shadow:0 14px 36px #000a;padding:12px;flex-direction:column;gap:10px}
 .upop.open{display:flex}
 .uhead{display:flex;align-items:center;gap:10px;padding-bottom:8px;border-bottom:1px solid var(--ln)}
 .uhead .uav{width:34px;height:34px;font-size:15px}
@@ -87,8 +87,7 @@ html[data-theme="light"] .usign:hover{background:#fdecee}
 .ws.one{grid-template-columns:max-content minmax(0,1fr);grid-template-areas:"rail hd" "rail main"}.ws.one .rsz,.ws.one #aside{display:none}
 /* Во весь экран: дерево и рельс уходят, панель занимает всё окно. */
 .ws.full{grid-template-columns:minmax(0,1fr);grid-template-areas:"hd" "main"}.ws.full>#rail,.ws.full>#aside,.ws.full>.rsz{display:none}
-.rail{width:var(--rail-w);flex:none;display:flex;flex-direction:column;gap:4px;padding:var(--gut);background:var(--p);border-right:1px solid var(--ln);overflow:auto;scrollbar-width:none}
-.rail::-webkit-scrollbar{display:none}
+.rail{width:var(--rail-w);min-height:0;flex:none;display:flex;flex-direction:column;gap:4px;padding:var(--gut);background:var(--p);border-right:1px solid var(--ln);overflow:hidden}
 aside,main{min-height:0;overflow:hidden}aside{background:#0b1018;border-right:1px solid var(--ln);display:flex;flex-direction:column}
 .rsz{width:4px;cursor:col-resize;background:transparent;position:relative;z-index:2}
 .rsz:hover,.rsz.on{background:var(--bl)}
@@ -372,6 +371,7 @@ h1{margin:4px 0 10px;font-size:20px;display:flex;align-items:center;gap:10px}
 .sc::-webkit-scrollbar-track{background:transparent}
 .sc::-webkit-scrollbar-thumb{background:#2f3f55;border-radius:99px}
 .sc::-webkit-scrollbar-thumb:hover{background:#3d536e}
+.main-actions{display:flex;justify-content:flex-end;flex:none;gap:8px;padding:12px var(--pad);border-top:1px solid var(--ln)}
 .sc-unalloc{display:flex;flex-direction:column;overflow:hidden;padding-bottom:16px}
 .sc-unalloc .card{flex:1;min-height:0;display:flex;flex-direction:column;margin-bottom:0}
 .sc-unalloc .cb{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;padding-bottom:14px}
@@ -800,7 +800,7 @@ html[data-theme="light"] .dev-bulk-badge{background:#d6e4f8;color:#2f5fad}
 .jbox input{width:100%;border:0;border-bottom:1px solid var(--ln);border-radius:0;padding:14px 16px;font-size:15px;height:auto;background:transparent}
 .cnt{color:var(--mu);font-size:11px;line-height:1;font-variant-numeric:tabular-nums;font-feature-settings:"tnum";text-align:center}
 @media(max-width:860px){.split,.g,.mx{grid-template-columns:1fr}.ws{grid-template-columns:max-content 1fr}.ws .rsz,.ws main{display:none}
-  .rail{width:52px;padding:8px 6px}.asw{padding:9px 4px}.asw-lb{display:none}}
+  .rail{width:52px;padding:8px 6px}.asw{padding:9px 4px}.asw-lb,.ubtn .uname,.ubtn .uchev{display:none}}
 
 /* Действия панели найденных стоят ДО списка: список длинный, и листать до
    кнопки «Добавить выбранные» пришлось бы каждый раз. */
@@ -850,7 +850,32 @@ html[data-theme="light"] .dev-bulk-badge{background:#d6e4f8;color:#2f5fad}
 </head>
 <body>
 <div class="app">
-<div class="ws" id="ws"><nav class="rail" id="rail" aria-label="Разделы"></nav><aside id="aside"></aside><div class="rsz" id="rsz"></div>
+<div class="ws" id="ws"><nav class="rail" id="rail" aria-label="Разделы">
+  <div class="rail-tabs" role="tablist" aria-label="Разделы"></div>
+  <div class="umenu" id="umenu">
+    <button type="button" class="ubtn" id="ubtn" onclick="toggleUserMenu(event)" title="root" aria-label="root" aria-haspopup="menu" aria-controls="upop" aria-expanded="false">
+      <span class="uav" aria-hidden="true">👤</span>
+      <span class="uname">root</span>
+      <span class="uchev" aria-hidden="true">▴</span>
+    </button>
+    <div class="upop" id="upop" role="menu">
+      <div class="uhead"><span class="uav" aria-hidden="true">👤</span><b>root</b></div>
+      <label><span data-i18n="Язык">Язык</span>
+        <select id="langSel" onchange="setUiLang(this.value)">
+          <option value="ru">Русский</option>
+          <option value="en">English</option>
+        </select>
+      </label>
+      <label><span data-i18n="Тема">Тема</span>
+        <select id="themeSel" onchange="setTheme(this.value)">
+          <option value="dark" data-i18n="Тёмная">Тёмная</option>
+          <option value="light" data-i18n="Светлая">Светлая</option>
+        </select>
+      </label>
+      <button type="button" class="usign" data-i18n="Выйти" onclick="toast('Выход (прототип)')">Выйти</button>
+    </div>
+  </div>
+</nav><aside id="aside"></aside><div class="rsz" id="rsz"></div>
 <header>
   <button type="button" class="hd-railtg" id="hdRailTg" data-i18n-title="Скрыть разделы" title="Скрыть разделы" aria-expanded="true" aria-controls="rail" onclick="toggleRail()"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M6 3.5v9" stroke="currentColor" stroke-width="1.5"/></svg></button>
   <div class="gojump" id="gojump">
@@ -863,37 +888,11 @@ html[data-theme="light"] .dev-bulk-badge{background:#d6e4f8;color:#2f5fad}
     <span class="gojump-hint" aria-hidden="true">Ctrl K</span>
     <div class="gopop" id="gopop"></div>
   </div>
-  <div class="hr-tools">
-    <div class="umenu" id="umenu">
-      <button type="button" class="ubtn" id="ubtn" onclick="toggleUserMenu(event)" aria-haspopup="true" aria-expanded="false">
-        <span class="uav" aria-hidden="true">👤</span>
-        <span class="uname">root</span>
-        <span class="uchev">▾</span>
-      </button>
-      <div class="upop" id="upop" role="menu">
-        <div class="uhead"><span class="uav" aria-hidden="true">👤</span><b>root</b></div>
-        <label><span data-i18n="Язык">Язык</span>
-          <select id="langSel" onchange="setUiLang(this.value)">
-            <option value="ru">Русский</option>
-            <option value="en">English</option>
-          </select>
-        </label>
-        <label><span data-i18n="Тема">Тема</span>
-          <select id="themeSel" onchange="setTheme(this.value)">
-            <option value="dark" data-i18n="Тёмная">Тёмная</option>
-            <option value="light" data-i18n="Светлая">Светлая</option>
-          </select>
-        </label>
-        <button type="button" class="usign" data-i18n="Выйти" onclick="toast('Выход (прототип)')">Выйти</button>
-      </div>
-    </div>
-  </div>
 </header>
 <main id="main"></main></div>
 <footer>
   <span id="hint" data-i18n="Сохраняется только выбранный объект">Сохраняется только выбранный объект</span>
   <div class="sv">
-    <span id="domAct"></span>
     <button class="btn s" id="cbtn" disabled onclick="cancelEdits()" data-i18n="Отменить">Отменить</button>
     <button class="btn pri s" id="sbtn" disabled onclick="saveEdits()" data-i18n="Сохранить">Сохранить</button>
   </div>
@@ -1094,10 +1093,9 @@ function isDefaultDeviceName(v){return!v||v==="Авто"||v==="По умолча
 function defaultDevViewMode(){return"standard"}
 let deviceSearchTimer=null,deviceSearchInterval=null;
 let app="hw",_lastApp=null,sel="d1",tab="gen",dirty=false,rule="r1",role="adm",sys="ntp",tview="cam";
-// Журнал внизу ленты: он для просмотра, а не для настройки.
 const APPS_LIST=[{id:"hw",label:"Оборудование",ic:"sec_hw"},{id:"rules",label:"Автоматизация",ic:"sec_rules"},
   {id:"acc",label:"Права",ic:"sec_acc"},{id:"sys",label:"Опции",ic:"sec_sys"},
-  {id:"log",label:"Журнал",ic:"sec_log",bottom:true}];
+  {id:"log",label:"Журнал",ic:"sec_log"}];
 let slice="all";
 // Группировка запоминается для каждого среза отдельно: у камер оператор
 // смотрит то по папкам, то по серверам, и переключать её заново каждый раз —
@@ -2550,12 +2548,24 @@ function toggleUserMenu(e){
   const pop=document.getElementById("upop"),btn=document.getElementById("ubtn");
   const open=!pop.classList.contains("open");
   pop.classList.toggle("open",open);btn.classList.toggle("on",open);btn.setAttribute("aria-expanded",open?"true":"false");
-  if(open)document.addEventListener("mousedown",onUserOutside);else document.removeEventListener("mousedown",onUserOutside);
+  if(open){
+    placeUserMenu();
+    document.addEventListener("mousedown",onUserOutside);
+    window.addEventListener("resize",placeUserMenu);
+  }else closeUserMenu();
+}
+function placeUserMenu(){
+  const pop=document.getElementById("upop"),btn=document.getElementById("ubtn");
+  if(!pop?.classList.contains("open")||!btn)return;
+  const r=btn.getBoundingClientRect(),pad=8;
+  pop.style.left=Math.max(pad,Math.min(r.left,window.innerWidth-pop.offsetWidth-pad))+"px";
+  pop.style.top=Math.max(pad,r.top-pop.offsetHeight-pad)+"px";
 }
 function closeUserMenu(){
   const pop=document.getElementById("upop"),btn=document.getElementById("ubtn");
   if(!pop)return;pop.classList.remove("open");btn?.classList.remove("on");btn?.setAttribute("aria-expanded","false");
   document.removeEventListener("mousedown",onUserOutside);
+  window.removeEventListener("resize",placeUserMenu);
 }
 function onUserOutside(e){if(!document.getElementById("umenu")?.contains(e.target))closeUserMenu()}
 function setTheme(v){
@@ -3016,7 +3026,7 @@ function filtPopHtml(){
 }
 function appSwitchHtml(){
   return APPS_LIST.map(a=>
-    `<button type="button" class="asw ${app===a.id?"on":""}${a.bottom?" asw-bottom":""}" data-a="${a.id}" role="tab" aria-selected="${app===a.id?"true":"false"}" title="${i18n(a.label)}" onclick="goApp('${a.id}')">${ic(a.ic)}<span class="asw-lb">${i18n(a.label)}</span></button>`
+    `<button type="button" class="asw ${app===a.id?"on":""}" data-a="${a.id}" role="tab" aria-selected="${app===a.id?"true":"false"}" title="${i18n(a.label)}" onclick="goApp('${a.id}')">${ic(a.ic)}<span class="asw-lb">${i18n(a.label)}</span></button>`
   ).join("");
 }
 // Рельс можно спрятать — место уходит дереву и рабочей области. Выбор помнится
@@ -3025,8 +3035,14 @@ const RAIL_KEY="cfg.railHidden";
 let railHidden=(()=>{try{return localStorage.getItem(RAIL_KEY)==="1"}catch(e){return false}})();
 function renderRail(){
   const el=document.getElementById("rail");
-  if(el)el.innerHTML=`<div class="rail-tabs" role="tablist" aria-label="${i18n("Разделы")}">${appSwitchHtml()}</div>`;
+  const tabs=el?.querySelector(".rail-tabs");
+  if(tabs){
+    el.setAttribute("aria-label",i18n("Разделы"));
+    tabs.setAttribute("aria-label",i18n("Разделы"));
+    tabs.innerHTML=appSwitchHtml();
+  }
   syncRail();
+  placeUserMenu();
 }
 function syncRail(){
   document.getElementById("ws")?.classList.toggle("norail",railHidden);
@@ -3036,6 +3052,7 @@ function syncRail(){
   b.setAttribute("aria-expanded",railHidden?"false":"true");
 }
 function toggleRail(){
+  closeUserMenu();
   railHidden=!railHidden;
   try{localStorage.setItem(RAIL_KEY,railHidden?"1":"0")}catch(e){}
   syncRail();
@@ -4319,7 +4336,7 @@ function tabsFor(n){
   return[["gen","Основные"]];
 }
 function gear(){
-  const f=find(sel);if(!f){paintMain(`<div class='sc'>${i18n("Выберите объект в дереве")}</div>`);syncDomAct();return}
+  const f=find(sel);if(!f){paintMain(`<div class='sc'>${i18n("Выберите объект в дереве")}</div>`);return}
   const n=f.n,tabs=tabsFor(n);
   if(tabs.length&&!tabs.some(([id])=>id===tab))tab=tabs[0][0];
   const tabsH=tabs.map(([id,x])=>`<button class="tab ${tab===id?"on":""}" onclick="tab='${id}';gear()">${i18n(x)}</button>`).join("");
@@ -4327,17 +4344,12 @@ function gear(){
   // собственные действия объекта, а звезда последней и без подписи.
   const addBtn=lanFoundBtn(n)+lanHeadBtns(n)+inspectorAddBtn(n)+favCardBtn(n)+fullCardBtn();
   const scClass=n.type==="unalloc"?"sc sc-unalloc":"sc";
-  paintMain(mainHd(crumbsHtml(sel),objectTitle(n),"",tabsH,addBtn,true)+`<div class="${scClass}">${hiddenByFilterNoteHtml()}${objectStatusNotesHtml(n)}${form(n)}</div>`);
+  paintMain(mainHd(crumbsHtml(sel),objectTitle(n),"",tabsH,addBtn,true)+`<div class="${scClass}">${hiddenByFilterNoteHtml()}${objectStatusNotesHtml(n)}${form(n)}</div>`+domainActionsHtml(n));
   if(n.type==="found")renderDeviceWizard();  // панель живёт в разметке, которую только что вставили
-  syncDomAct();
 }
-function syncDomAct(){
-  const el=document.getElementById("domAct");if(!el)return;
-  if(app!=="hw"){el.innerHTML="";return}
-  const f=find(sel);
-  if(f?.n.type==="server"&&domainOf(f.n.id)){
-    el.innerHTML=`<button type="button" class="btn s" onclick="excludeFromDomain('${f.n.id}')">${i18n("Исключить из домена")}</button>`;
-  }else el.innerHTML="";
+function domainActionsHtml(n){
+  if(app!=="hw"||n.type!=="server"||!domainOf(n.id))return"";
+  return`<div class="main-actions" id="domAct"><button type="button" class="btn s" onclick="excludeFromDomain('${n.id}')">${i18n("Исключить из домена")}</button></div>`;
 }
 // Таблица строится по папке (раздел «Устройства») либо по серверу (службы)
 function tableNode(){
@@ -7490,7 +7502,6 @@ function wnx(){
 function paint(){renderRail();syncGoInput();if(_lastApp!==app){aside();_lastApp=app}else renderTree();renderFavs();
   const ui={hw:gear,dev:gear,srvs:gear,rules:rulesUI,acc:accUI,sys:sysUI,log:logUI};
   (ui[app]||gear)();
-  if(app!=="hw")syncDomAct();
   syncHeaderLoad();
 }
 function upd(){paint()}
