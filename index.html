@@ -19,7 +19,7 @@ html[data-theme="light"]{--bg:#eef2f7;--p:#ffffff;--p2:#f3f6fb;--ln:#d5dde8;--tx
 *::-webkit-scrollbar-thumb{background:#243548;border-radius:99px}
 *::-webkit-scrollbar-thumb:hover{background:#334860}
 button,input,select{font:inherit;color:var(--tx)}button{cursor:pointer}
-.app{height:100vh;display:grid;grid-template-rows:minmax(0,1fr) 48px;grid-template-columns:minmax(0,1fr)}
+.app{height:100vh;display:grid;grid-template-rows:minmax(0,1fr);grid-template-columns:minmax(0,1fr)}
 /* До верха окна идёт только рельс разделов; шапка с поиском стоит над деревом
    и рабочей областью, и поле поиска встаёт ровно над деревом. */
 header{grid-area:hd;display:flex;align-items:center;gap:0;height:56px;padding:0 24px 0 0;background:var(--p);border-bottom:1px solid var(--ln);min-width:0}
@@ -321,8 +321,7 @@ html[data-theme="light"] .status-pop .mi.on{background:#e8f0ff;color:#1a3a7a}
 .tag.hit{background:#243652;color:#9ec8ff;border:1px solid #345a82}
 .hdacts{display:flex;gap:8px;margin-left:auto;align-items:center}
 .btn{border:1px solid var(--ln);background:var(--p2);border-radius:7px;padding:8px 12px}.btn:hover{border-color:#476180}
-/* Недоступная кнопка должна и выглядеть недоступной: в подвале «Сохранить»
-   стоит всегда, и без этого она звала нажать себя при пустых правках. */
+/* Недоступные действия визуально приглушены. */
 .btn:disabled{opacity:.45;cursor:default}.btn:disabled:hover{border-color:var(--ln)}
 .pri{background:var(--bl);border-color:var(--bl)}.w{width:100%}.s{padding:6px 9px;font-size:12px}
 main{display:flex;flex-direction:column}
@@ -569,8 +568,6 @@ html[data-theme="light"] .lst-sq:focus-within{border-color:#7ea6e0;box-shadow:0 
 .rl-win{color:var(--mu);font-size:12px;display:inline-flex;align-items:center;gap:6px}
 .rl-win input{width:72px}
 .flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.chip{background:#1a2a40;border:1px solid #345;padding:8px 12px;border-radius:8px}
-footer{display:flex;align-items:center;padding:0 16px;background:var(--p);border-top:1px solid var(--ln);font-size:12px;color:var(--mu)}
-.sv{margin-left:auto;display:flex;gap:8px;align-items:center}
 .mask{display:none;position:fixed;inset:0;background:#0009;z-index:20}.mask.open{display:block}
 .dr{position:absolute;right:0;top:0;bottom:0;width:min(520px,96vw);background:var(--p);display:flex;flex-direction:column;border-left:1px solid var(--ln);border-radius:0;box-shadow:-12px 0 40px #0008;overflow:hidden}
 .dr.device-wizard{
@@ -890,13 +887,6 @@ html[data-theme="light"] .dev-bulk-badge{background:#d6e4f8;color:#2f5fad}
   </div>
 </header>
 <main id="main"></main></div>
-<footer>
-  <span id="hint" data-i18n="Сохраняется только выбранный объект">Сохраняется только выбранный объект</span>
-  <div class="sv">
-    <button class="btn s" id="cbtn" disabled onclick="cancelEdits()" data-i18n="Отменить">Отменить</button>
-    <button class="btn pri s" id="sbtn" disabled onclick="saveEdits()" data-i18n="Сохранить">Сохранить</button>
-  </div>
-</footer>
 </div>
 <div class="jump" id="jump" onclick="if(event.target===this)closeJump()">
   <div class="jbox" onclick="event.stopPropagation()">
@@ -1895,7 +1885,6 @@ function onEditInput(el,id,f){
   const note=el.parentElement?.querySelector(".fld-err");
   if(note)note.textContent=err;
   setD(true);
-  const sb=document.getElementById("sbtn");if(sb)sb.disabled=!!editErrors().length;
 }
 function fldEdit(label,id,f,cur,tp="text"){
   const v=editVal(id,f,cur),err=editError(id,f,v);
@@ -2485,7 +2474,7 @@ function jumpList(){const q=(document.getElementById("jq")||{value:""}).value.to
     return `<div class="res" onclick="jumpTo('${n.id}')"><span>${ic(n.type)}</span><div style="flex:1;min-width:0"><div>${n.type!=="server"&&n.short!=null&&n.short!==""?`${n.short}. `:""}${n.name}</div><div class="pth">${n.type==="domain"||n.type==="unalloc"?LB[n.type]:`${top.name}${p?" / "+p:""} · ${LB[n.type]}`}</div></div></div>`}).join("")}
 function searchAll(q){if(q.length<2)return[];const r=[];walkAll(n=>{if(n.type==="det")return;const hay=[n.short,n.name,n.ip,n.vendor,n.model,LB[n.type],n.subtype&&IPSUB[n.subtype]].filter(Boolean).join(" ").toLowerCase();if(hay.includes(q))r.push(n)});return r}
 function toast(msg){const o=document.getElementById("tt");if(o)o.remove();const e=document.createElement("div");e.id="tt";e.textContent=i18n(msg);
-  e.style.cssText="position:fixed;left:50%;bottom:58px;transform:translateX(-50%);background:#1d2a3d;border:1px solid #3b506e;padding:12px 16px;border-radius:8px;z-index:60;max-width:min(420px,calc(100vw - 32px));box-shadow:0 12px 40px #000a;text-align:center";document.body.appendChild(e);setTimeout(()=>e.remove(),2000)}
+  e.style.cssText="position:fixed;left:50%;bottom:16px;transform:translateX(-50%);background:#1d2a3d;border:1px solid #3b506e;padding:12px 16px;border-radius:8px;z-index:60;max-width:min(420px,calc(100vw - 32px));box-shadow:0 12px 40px #000a;text-align:center";document.body.appendChild(e);setTimeout(()=>e.remove(),2000)}
 let confirmOkCb=null;
 function closeConfirm(){
   confirmOkCb=null;
@@ -2530,8 +2519,7 @@ function runConfirmOk(){
   closeConfirm();
   if(cb)cb();
 }
-function setD(v){dirty=v;document.getElementById("sbtn").disabled=!v;document.getElementById("cbtn").disabled=!v;
-  document.getElementById("hint").textContent=v?i18n("Несохранённые изменения выбранного объекта"):i18n("Сохраняется только выбранный объект")}
+function setD(v){dirty=v}
 const appSel={dev:null,srvs:"d1"};
 function setApp(a){
   if(a==="dev"||a==="srvs"){                 // старые адреса разделов
