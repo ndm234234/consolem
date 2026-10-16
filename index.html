@@ -279,6 +279,9 @@ html[data-theme="light"] .status-pop .mi.on{background:#e8f0ff;color:#1a3a7a}
 .n-cnt{flex:0 0 24px;width:24px;min-width:24px;height:16px;display:inline-flex;align-items:center;justify-content:flex-end;font-size:11px;line-height:1;color:var(--mu);font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
 .n-menu{flex:none;border:0;background:0;color:#41526b;font-size:13px;line-height:1;padding:0 1px;width:16px;opacity:0;cursor:pointer;transition:color .12s}
 .n:hover .n-menu,.n-menu:focus-visible{opacity:1}
+/* Пустые для выбранного среза родители остаются на своих местах. */
+.n-slice-empty>*{opacity:.38;transition:opacity .12s}
+.n-slice-empty:hover>*,.n-slice-empty.on>*,.n-slice-empty:focus-within>*{opacity:1}
 .n-menu:hover{color:var(--tx)}
 /* Высотой распоряжается обёртка — она флекс-ребёнок боковой панели. Проценты
    на самой панели считались от обёртки и резали список вдвое. */
@@ -2105,6 +2108,7 @@ function matchesStatus(n){
   return statusFilts.has(statusOf(n));                          // ИЛИ по выбранным
 }
 function treeCountVal(n,shownLen){
+  if(hasSliceContext()&&["server","domain","ipsrv"].includes(n.type))return sliceParentCount(n.id);
   if(n.type==="server")return hasNoSignal(n)?0:(shownLen||serverDeviceCount(n));
   if(n.type==="domain")return hasNoSignal(n)?0:(shownLen||domainServerCount(n));
   if(n.type==="ipsrv")return shownLen||serverDeviceCount(n);
@@ -2159,6 +2163,43 @@ function hasTreeIn(n){
 }
 function treeKids(n){return(n.devices||[]).filter(d=>d.type!=="det"&&hasTreeIn(d))}
 function hasTreeKids(n){return treeKids(n).length>0}
+// Число объектов среза под каждым родителем, независимо от раскрытия ветвей.
+// Set не даёт считать объект дважды при нескольких вхождениях в папки.
+const sliceBranchCounts=new Map();
+function hasSliceContext(){return["cam","acfa","arch","det"].includes(slice)}
+function sliceParentCount(id){return sliceBranchCounts.get(id)?.size||0}
+function sliceParentClass(id){return hasSliceContext()&&!sliceParentCount(id)?" n-slice-empty":""}
+function retainEmptySliceParents(){return hasSliceContext()&&!qval()&&!typeFilts.size&&!statusFilts.size}
+function detSliceHit(n,p,q){return n.type==="det"&&(matchesSearch(n,q)||(p?.type==="camera"&&matchesSearch(p,q)))}
+function prepareSliceBranches(){
+  sliceBranchCounts.clear();
+  if(!hasSliceContext())return;
+  const q=qval();
+  const add=(id,target)=>{if(!id)return;if(!sliceBranchCounts.has(id))sliceBranchCounts.set(id,new Set());sliceBranchCounts.get(id).add(target)};
+  walkSliceObjects((n,p)=>{
+    if(slice==="arch"){
+      if(n.type!=="archive"||!matchesStatus(n)||!matchesSearch(n,q))return;
+      add(archDomainId(n),n.id);add(n.server,n.id);return;
+    }
+    if(["domain","server","unalloc","folder"].includes(n.type))return;
+    if(slice==="det"?!matchesStatus(n)||!detSliceHit(n,p,q):!selfInView(n)||!matchesSearch(n,q))return;
+    const ancestry=path(n.id),camera=ancestry.find(x=>x.type==="camera"),sv=srv(n.id);
+    add(deviceDomain(n.id)||domainOf(sv?.id)?.id,n.id);add(sv?.id,n.id);
+    ancestry.slice(0,-1).forEach(parent=>add(parent.id,n.id));
+    const own=foldersOfDevice(n.id);
+    own.forEach(f=>folderPath(f.id).forEach(parent=>add(parent.id,n.id)));
+    if(!own.length)add(nofolderId(deviceDomain(n.id)),n.id);
+    if(camera){if(isRecording(camera))add(camera.arch,n.id);else add(norecId(deviceDomain(camera.id)),n.id)}
+  });
+  if(slice==="cam")servers.forEach(s=>gpuCameras(s.id).forEach(({cam})=>{
+    if(selfInView(cam)&&matchesSearch(cam,q))add(gpuId(s.id),cam.id);
+  }));
+}
+function expandSliceBranches(){
+  if(!hasSliceContext())return;
+  prepareSliceBranches();
+  sliceBranchCounts.forEach((targets,id)=>{if(targets.size)open.add(id)});
+}
 function addCtx(){return srv(sel)}
 function expandTo(id,ctx){
   let f=find(id);if(!f)return;
@@ -2763,7 +2804,8 @@ function hasActiveFilters(){return!!typeFilts.size||!!searchFields.size||!!statu
 function walkSliceObjects(fn){walkAll(fn);if(slice==="arch")arch.forEach(n=>fn(n,archOwner(n)))}
 function countFiltered(){
   const q=qval();let n=0;
-  walkSliceObjects(node=>{if((node.type==="det"&&slice!=="det")||node.type==="domain"||node.type==="unalloc")return;if(selfInView(node)&&matchesSearch(node,q))n++});
+  walkSliceObjects((node,p)=>{if(slice==="det"){if(matchesStatus(node)&&detSliceHit(node,p,q))n++;return}
+    if(node.type==="det"||node.type==="domain"||node.type==="unalloc")return;if(selfInView(node)&&matchesSearch(node,q))n++});
   return n;
 }
 function filterTags(){
@@ -3270,7 +3312,7 @@ function curStatus(){return statusFilts.size?[...statusFilts][0]:""}
 function statusLabel(id){return id?i18n((STATUS_FILTERS.find(x=>x[0]===id)||[])[1]||id):i18n("Все статусы")}
 function statusCount(id){
   const q=qval();let n=0;
-  walkSliceObjects(x=>{if(inSlice(x)&&matchesType(x)&&matchesSearch(x,q)&&(!id||statusOf(x)===id))n++});
+  walkSliceObjects((x,p)=>{if((slice==="det"?detSliceHit(x,p,q):inSlice(x)&&matchesSearch(x,q))&&matchesType(x)&&(!id||statusOf(x)===id))n++});
   return n;
 }
 function pickStatus(id){
@@ -3282,13 +3324,13 @@ function pickStatus(id){
 // Счётчики всех срезов учитывают текст поиска, даже если срез не выбран.
 function sliceCount(id){
   const prev=slice,q=qval();slice=id;let n=0;
-  try{walkSliceObjects(x=>{if(inSlice(x)&&matchesSearch(x,q))n++})}finally{slice=prev}
+  try{walkSliceObjects((x,p)=>{if(id==="det"?detSliceHit(x,p,q):inSlice(x)&&matchesSearch(x,q))n++})}finally{slice=prev}
   return n;
 }
 function panelHeadHtml(){
   const foldersOn=group()==="folder",st=curStatus();
   return`<div class="ph"><div class="ph-row" role="group" aria-label="${i18n("Срез дерева")}">
-    ${Object.keys(SLICE).filter(id=>id!=="arch").map(id=>`<button type="button" class="ph-choice ${slice===id?"on":""}" data-slice="${id}" aria-pressed="${slice===id}" onclick="setSlice('${id}')"><span>${SLICE[id]}</span><span class="ph-cnt">${sliceCount(id)}</span></button>`).join("")}
+    ${Object.keys(SLICE).map(id=>`<button type="button" class="ph-choice ${slice===id?"on":""}" data-slice="${id}" aria-pressed="${slice===id}" onclick="setSlice('${id}')"><span>${SLICE[id]}</span><span class="ph-cnt">${sliceCount(id)}</span></button>`).join("")}
     <button type="button" class="ph-choice ph-folders ${foldersOn?"on":""}" id="viewBtn" aria-pressed="${foldersOn}" title="${i18n("Группировка")}: ${GROUP_HINT[group()]}" onclick="toggleFolders()">${i18n("Папки")}</button>
     <button type="button" class="ph-choice ph-status ${filtPop||st?"on":""}" id="filtBtn" aria-haspopup="menu" aria-controls="filtPop" aria-expanded="${filtPop}" title="${statusLabel(st)}" onclick="toggleFiltPop(event)"><span class="st-dot st-${st||"all"}" aria-hidden="true"></span><span class="ph-status-label">${statusLabel(st)}</span><span class="ph-chevron" aria-hidden="true">▾</span></button>
   </div></div>`;
@@ -3310,6 +3352,7 @@ function setSlice(v){
   // При смене среза сохраняем запрос и поля, по которым он ищется.
   clearGearFilters(true);filtPop=false;typesExpanded=false;tab="gen";
   treeMatchCache.clear();searchMatchCache.clear();treeSel.clear();treeAnchor=null;
+  expandSliceBranches();
   keepSelectionInSlice();
   aside();gear();
 }
@@ -3317,6 +3360,7 @@ function setGroup(g){
   if(!sliceGroups().includes(g)||group()===g)return;
   groupBy[slice]=g;
   treeMatchCache.clear();searchMatchCache.clear();
+  expandSliceBranches();
   keepSelectionInSlice();
   aside();gear();
 }
@@ -3899,7 +3943,7 @@ function nrow(n,l,ctx){
   const shown=k.filter(d=>hasTreeIn(d)&&(!q||vis(d,q)));
   const st=nodeStatus(n);
   const childOff=canToggleEnabled(n)&&st.off;
-  let h=`<div class="n ${treeRowHi(n.id,ctx)} ${childOff?"off":""}${treeRenameId===n.id?" renaming":""}" style="--l:${l}"${treeRowPick(n.id,ctx)}${treeCtxAttr(n.id)}${treeExpandMeta(n.id,"node",hasKids)}>
+  let h=`<div class="n ${treeRowHi(n.id,ctx)} ${childOff?"off":""}${n.type==="ipsrv"?sliceParentClass(n.id):""}${treeRenameId===n.id?" renaming":""}" style="--l:${l}"${treeRowPick(n.id,ctx)}${treeCtxAttr(n.id)}${treeExpandMeta(n.id,"node",hasKids)}>
     ${treeChevron(n.id,"node",hasKids,op)}
     ${treeIconHtml(n)}<span class="nm">${treeNameCell(n,q)}</span>${treeRowMeta(n,q,shown.length,op,ctx)}</div>`;
   if(op)h+=shown.map(x=>nrow(x,l+1,ctx)).join("");
@@ -3915,7 +3959,7 @@ function srow(s,l=1,bare=false){
   if(bare){
     if(!matchesStatus(s)||!matchesSearch(s,q))return"";
     // Нераспределённые ещё не подключены к домену — всегда серым
-    let h=`<div class="n srv ${sel===s.id?"on":""} off${treeRenameId===s.id?" renaming":""}" style="--l:${l}"${treeRowPick(s.id)}${treeCtxAttr(s.id)}>
+    let h=`<div class="n srv ${sel===s.id?"on":""} off${sliceParentClass(s.id)}${treeRenameId===s.id?" renaming":""}" style="--l:${l}"${treeRowPick(s.id)}${treeCtxAttr(s.id)}>
       <span class="tw"></span>
       ${treeIconHtml(s)}<span class="nm">${treeNameCell(s,q)}</span>${treeTail({tags:treeAttrTags(s,q),acts:s.id})}</div>`;
     return h;
@@ -3937,7 +3981,7 @@ function srow(s,l=1,bare=false){
   const cnt=srvSlice?devs.length:archs.reduce((n,a)=>n+archCameras(a.id).length,0);
   const hasKids=!!kidsHtml;
   const op=hasKids&&(open.has(s.id)||autoExpand());
-  let h=`<div class="n srv ${sel===s.id?"on":""}${treeRenameId===s.id?" renaming":""}" style="--l:${l}"${treeRowPick(s.id)}${treeCtxAttr(s.id)}${treeExpandMeta(s.id,"srv",hasKids)}>
+  let h=`<div class="n srv ${sel===s.id?"on":""}${sliceParentClass(s.id)}${treeRenameId===s.id?" renaming":""}" style="--l:${l}"${treeRowPick(s.id)}${treeCtxAttr(s.id)}${treeExpandMeta(s.id,"srv",hasKids)}>
     ${treeChevron(s.id,"srv",hasKids,op)}
     ${treeIconHtml(s)}<span class="nm">${treeNameCell(s,q)}</span>${treeRowMeta(s,q,cnt,op)}</div>`;
   if(op)h+=kidsHtml;
@@ -3950,11 +3994,13 @@ function drow(d){
     ?domainArchives(d.id).map(a=>arowFlat(a,1)).join("")
     :domainArchives(d.id).map(a=>arow(a,1)).filter(Boolean).join(""));
   const childHtml=(offline?"":d.servers.map(s=>srow(s,1)).filter(Boolean).join(""))+netHtml;
-  const uaHtml=offline?"":(slice==="srv"?urow(1,d):urow(1,d)+norow(d,1));
+  // ОПС/СКД не записываются в архив: без сервера они остаются под доменом.
+  const acfaHtml=slice==="acfa"&&!offline?devicePool.filter(n=>deviceDomain(n.id)===d.id&&!srv(n.id)&&hasTreeIn(n)&&(!q||vis(n,q))).map(n=>nrow(n,1)).join(""):"";
+  const uaHtml=offline?"":(slice==="srv"?urow(1,d):urow(1,d)+norow(d,1)+acfaHtml);
   if(!selfHit&&!childHtml&&!uaHtml)return"";
   const hasKids=!!(childHtml||uaHtml);
   const op=hasKids&&(open.has(d.id)||autoExpand());
-  let h=`<div class="n srv ${sel===d.id?"on":""}${treeRenameId===d.id?" renaming":""}"${treeRowPick(d.id)}${treeCtxAttr(d.id)}${treeExpandMeta(d.id,"dom",hasKids)}>
+  let h=`<div class="n srv ${sel===d.id?"on":""}${sliceParentClass(d.id)}${treeRenameId===d.id?" renaming":""}"${treeRowPick(d.id)}${treeCtxAttr(d.id)}${treeExpandMeta(d.id,"dom",hasKids)}>
     ${treeChevron(d.id,"dom",hasKids,op)}
     ${treeIconHtml(d)}<span class="nm">${treeNameCell(d,q)}</span>${treeRowMeta(d,q,domainServerCount(d),op)}</div>`;
   if(op){
@@ -3969,9 +4015,9 @@ function urow(l,domain){
   if(statusFilts.size&&!childHtml)return"";
   if(!selfHit&&!childHtml&&q)return"";
   const op=open.has(ua.id)||autoExpand();
-  let h=`<div class="n srv ${sel===ua.id?"on":""}" style="--l:${l}" data-pick="${ua.id}"${treeCtxAttr(ua.id)}${treeExpandMeta(ua.id,"dom",true)}>
+  let h=`<div class="n srv ${sel===ua.id?"on":""}${sliceParentClass(ua.id)}" style="--l:${l}" data-pick="${ua.id}"${treeCtxAttr(ua.id)}${treeExpandMeta(ua.id,"dom",true)}>
     ${treeChevron(ua.id,"dom",true,op)}
-    ${ic("unalloc")}<span class="nm">${displayNameHtml(ua,q)}</span>${treeTail({cnt:treeCntHtml(list.length)})}</div>`;
+    ${ic("unalloc")}<span class="nm">${displayNameHtml(ua,q)}</span>${treeTail({cnt:treeCntHtml(hasSliceContext()?sliceParentCount(ua.id):list.length)})}</div>`;
   if(op)h+=childHtml;
   return h}
 // ── Дерево «Устройства»: папки физического расположения ────────────────────
@@ -3995,18 +4041,17 @@ function folderHasTreeIn(f){
 function frow(f,l){
   const q=qval();
   const selfHit=matchesText(q,locName(f));
-  // Ветки, пустые для текущего вида (Камеры/ACFA), не показываем;
-  // папка остаётся видимой, если её имя нашли поиском
-  if(!folderHasTreeIn(f)&&!(q&&selfHit))return"";
+  // Без дополнительных фильтров сохраняем и пустые для среза папки.
+  if(!retainEmptySliceParents()&&!folderHasTreeIn(f)&&!(q&&selfHit))return"";
   const subs=(f.folders||[]).map(x=>frow(x,l+1)).filter(Boolean).join("");
   const devs=folderDeviceNodes(f).filter(d=>hasTreeIn(d)&&(!q||vis(d,q)));
   if(statusFilts.size&&!subs&&!devs.length)return"";
   if(!selfHit&&!subs&&!devs.length)return"";
   const hasKids=!!subs||!!devs.length;
   const op=hasKids&&(open.has(f.id)||(autoExpand()&&(!!subs||!!devs.length)));
-  let h=`<div class="n srv fld ${sel===f.id?"on":""}${treeRenameId===f.id?" renaming":""}" style="--l:${l}"${treeRowPick(f.id)}${treeCtxAttr(f.id)}${treeExpandMeta(f.id,"dom",hasKids)}>
+  let h=`<div class="n srv fld ${sel===f.id?"on":""}${sliceParentClass(f.id)}${treeRenameId===f.id?" renaming":""}" style="--l:${l}"${treeRowPick(f.id)}${treeCtxAttr(f.id)}${treeExpandMeta(f.id,"dom",hasKids)}>
     ${treeChevron(f.id,"dom",hasKids,op)}
-    ${ic(op?"folderOpen":"folder")}<span class="nm">${treeNameCell(f,q)}</span>${treeTail({cnt:treeCntHtml(folderCount(f)),acts:f.id})}</div>`;
+    ${ic(op?"folderOpen":"folder")}<span class="nm">${treeNameCell(f,q)}</span>${treeTail({cnt:treeCntHtml(hasSliceContext()?sliceParentCount(f.id):folderCount(f)),acts:f.id})}</div>`;
   if(op){
     h+=subs;
     h+=devs.map(d=>nrow(d,l+1,"f:"+f.id)).join("");
@@ -4020,14 +4065,14 @@ function nfrow(d,l){
   const all=unfolderedDevices(d.id).filter(hasTreeIn);
   // Пустая «Без папки» — не структура, а шум: узел появляется, только когда
   // объект действительно остался без папки.
-  if(!all.length)return"";
+  if(!all.length&&!(retainEmptySliceParents()&&unfolderedDevices(d.id).length))return"";
   const selfHit=matchesText(q,locName(node));
   if(!devs.length&&!selfHit)return"";
   const hasKids=!!all.length;
   const op=hasKids&&(open.has(node.id)||(autoExpand()&&!!devs.length));
-  let h=`<div class="n srv fld ${sel===node.id?"on":""}" style="--l:${l}"${treeRowPick(node.id)}${treeExpandMeta(node.id,"dom",hasKids)}>
+  let h=`<div class="n srv fld ${sel===node.id?"on":""}${sliceParentClass(node.id)}" style="--l:${l}"${treeRowPick(node.id)}${treeExpandMeta(node.id,"dom",hasKids)}>
     ${treeChevron(node.id,"dom",hasKids,op)}
-    ${ic("unalloc")}<span class="nm">${locName(node)}</span>${treeTail({cnt:treeCntHtml(all.length)})}</div>`;
+    ${ic("unalloc")}<span class="nm">${locName(node)}</span>${treeTail({cnt:treeCntHtml(hasSliceContext()?sliceParentCount(node.id):all.length)})}</div>`;
   if(op)h+=devs.map(x=>nrow(x,l+1,"nf:"+d.id)).join("");
   return h;
 }
@@ -4108,9 +4153,9 @@ function dfrow(d){
   // У домена всегда есть «Без папки» и строка создания папки
   const hasKids=true;
   const op=open.has(d.id)||autoExpand();
-  let h=`<div class="n srv ${sel===d.id?"on":""}${treeRenameId===d.id?" renaming":""}"${treeRowPick(d.id)}${treeCtxAttr(d.id)}${treeExpandMeta(d.id,"dom",hasKids)}>
+  let h=`<div class="n srv ${sel===d.id?"on":""}${sliceParentClass(d.id)}${treeRenameId===d.id?" renaming":""}"${treeRowPick(d.id)}${treeCtxAttr(d.id)}${treeExpandMeta(d.id,"dom",hasKids)}>
     ${treeChevron(d.id,"dom",hasKids,op)}
-    ${treeIconHtml(d)}<span class="nm">${treeNameCell(d,q)}</span>${treeTail({cnt:treeCntHtml(domainTreeDeviceCount(d.id)),acts:d.id})}</div>`;
+    ${treeIconHtml(d)}<span class="nm">${treeNameCell(d,q)}</span>${treeTail({cnt:treeCntHtml(hasSliceContext()?sliceParentCount(d.id):domainTreeDeviceCount(d.id)),acts:d.id})}</div>`;
   if(op)h+=kidsHtml;
   return h;
 }
@@ -4122,6 +4167,7 @@ function treeDev(){return domains.map(d=>dfrow(d)).join("")}
 // Одно дерево на весь раздел: срез решает, что показать, группировка — как
 // разложить. Домены — верхний уровень в обеих раскладках.
 function treeHw(){
+  prepareSliceBranches();
   if(slice==="arch")return treeArchives();
   if(slice==="det")return treeDetectors();
   return group()==="server"?treeServers():treeDev();
@@ -4155,38 +4201,40 @@ function nvrrow(owner,cams,l,ctx){
   if(!selfHit&&!vis.length)return"";
   const hasKids=!!vis.length,op=hasKids&&(open.has(owner.id)||autoExpand());
   const edge=edgeStorage(owner);
-  let h=`<div class="n srv ${rowOn(owner.id,ctx)}" style="--l:${l}"${treeRowPick(owner.id,ctx)}${treeExpandMeta(owner.id,"srv",hasKids)}>
+  let h=`<div class="n srv ${rowOn(owner.id,ctx)}${sliceParentClass(owner.id)}" style="--l:${l}"${treeRowPick(owner.id,ctx)}${treeExpandMeta(owner.id,"srv",hasKids)}>
     ${treeChevron(owner.id,"srv",hasKids,op)}
-    ${treeIconHtml(owner)}<span class="nm">${displayNameHtml(owner,q)}</span>${treeTail({tags:edge?`<span class="n-tail"><span class="cnt" title="${i18n("Встроенное хранилище")}">${ic("storage")}</span></span>`:"",cnt:treeCntHtml(cams.length),acts:owner.id,ctx})}</div>`;
+    ${treeIconHtml(owner)}<span class="nm">${displayNameHtml(owner,q)}</span>${treeTail({tags:edge?`<span class="n-tail"><span class="cnt" title="${i18n("Встроенное хранилище")}">${ic("storage")}</span></span>`:"",cnt:treeCntHtml(hasSliceContext()?sliceParentCount(owner.id):cams.length),acts:owner.id,ctx})}</div>`;
   if(op)h+=(q?vis:cams).map(c=>scamrow(c,l+1,ctx)).join("");
   return h;
 }
-function gdetrow(d,l,ctx){
+function gdetrow(d,l,ctx,parentHit=false){
   const q=qval();
-  const hit=matchesStatus(d)&&matchesSearch(d,q);
+  const hit=matchesStatus(d)&&(parentHit||matchesSearch(d,q));
   if(!hit)return"";
   return `<div class="n ${rowOn(d.id,ctx)}" style="--l:${l}"${treeRowPick(d.id,ctx)}>
     <span class="tw"></span>${ic("det")}<span class="nm">${hlText(locName(d),q)}</span>${treeTail({tags:`<span class="tag">${escHtml(i18n(d.kind||DET_TYPES[0]))}</span>`,status:treeStatusSlot(d)})}</div>`;
 }
 function gcamrow(cam,dets,l,ctx){
   const q=qval();
-  const available=dets.filter(matchesStatus);
+  const available=slice==="cam"?[]:dets.filter(matchesStatus);
   const vis=available.filter(d=>matchesSearch(d,q));
-  const selfHit=matchesStatus(cam)&&matchesSearch(cam,q);
-  if(!selfHit&&!vis.length)return"";
-  const hasKids=!!available.length;
+  const parentHit=matchesSearch(cam,q);
+  const selfHit=(slice==="cam"?selfInView(cam):matchesStatus(cam))&&parentHit;
+  const shown=parentHit?available:vis;
+  if(!selfHit&&!shown.length)return"";
+  const hasKids=!!shown.length;
   const op=hasKids&&(open.has(cam.id)||autoExpand());
-  let h=`<div class="n ${rowOn(cam.id,ctx)}" style="--l:${l}"${treeRowPick(cam.id,ctx)}${treeCtxAttr(cam.id)}${treeExpandMeta(cam.id,"node",hasKids)}>
+  let h=`<div class="n ${rowOn(cam.id,ctx)}${slice==="det"?sliceParentClass(cam.id):""}" style="--l:${l}"${treeRowPick(cam.id,ctx)}${treeCtxAttr(cam.id)}${treeExpandMeta(cam.id,"node",hasKids)}>
     ${treeChevron(cam.id,"node",hasKids,op)}
-    ${treeIconHtml(cam)}<span class="nm">${displayNameHtml(cam,q)}</span>${treeTail({cnt:treeCntHtml(available.length),acts:cam.id,ctx})}</div>`;
-  if(op)h+=(selfHit?available:vis).map(d=>gdetrow(d,l+1,ctx)).join("");
+    ${treeIconHtml(cam)}<span class="nm">${displayNameHtml(cam,q)}</span>${treeTail({cnt:treeCntHtml(slice==="det"?sliceParentCount(cam.id):available.length),acts:cam.id,ctx})}</div>`;
+  if(op)h+=shown.map(d=>gdetrow(d,l+1,ctx,parentHit)).join("");
   return h;
 }
 // Узкие срезы сохраняют домены и выбранную группировку, исключая остальные
 // устройства, службы, GPU и промежуточные IP-серверы.
 function sliceBranchRow(n,l,children,count,ctx){
   const hasKids=!!children,op=hasKids&&(open.has(n.id)||autoExpand());
-  return`<div class="n srv ${rowOn(n.id,ctx)}" style="--l:${l}"${treeRowPick(n.id,ctx)}${treeCtxAttr(n.id)}${treeExpandMeta(n.id,"dom",hasKids)}>
+  return`<div class="n srv ${rowOn(n.id,ctx)}${sliceParentClass(n.id)}" style="--l:${l}"${treeRowPick(n.id,ctx)}${treeCtxAttr(n.id)}${treeExpandMeta(n.id,"dom",hasKids)}>
     ${treeChevron(n.id,"dom",hasKids,op)}${treeIconHtml(n)}<span class="nm">${treeNameCell(n,qval())}</span>${treeTail({cnt:treeCntHtml(count),acts:n.id,ctx})}</div>${op?children:""}`;
 }
 function treeArchives(){
@@ -4196,20 +4244,21 @@ function treeArchives(){
       const list=serverArchives(s.id).filter(matchesStatus);
       const children=list.map(a=>arowFlat(a,2)).join("");
       if(!children&&!(matchesStatus(s)&&matchesSearch(s,q)))return"";
-      return sliceBranchRow(s,1,children,list.length);
+      return sliceBranchRow(s,1,children,sliceParentCount(s.id));
     }).join("");
     const network=domainArchives(d.id).filter(matchesStatus).map(a=>arowFlat(a,1)).join("");
     const children=serverRows+network;
-    return children?sliceBranchRow(d,0,children,d.servers.length):"";
+    return children||retainEmptySliceParents()||(matchesStatus(d)&&matchesSearch(d,q))?sliceBranchRow(d,0,children,sliceParentCount(d.id)):"";
   }).join("");
 }
 function treeDetectors(){
   const cameras=[];walkAll(n=>{if(n.type==="camera")cameras.push(n)});
   const rows=(list,l,ctx)=>list.map(c=>gcamrow(c,camDetectors(c),l,ctx)).join("");
+  const branch=(n,l,children)=>children||retainEmptySliceParents()||(qval()&&matchesSearch(n,qval())&&matchesStatus(n))?sliceBranchRow(n,l,children,sliceParentCount(n.id)):"";
   function folderRow(f,l){
     const direct=[];walk(n=>{if(n.type==="camera")direct.push(n)},folderDeviceNodes(f));
     const children=(f.folders||[]).map(x=>folderRow(x,l+1)).join("")+rows(direct,l+1,"f:"+f.id);
-    return children?sliceBranchRow(f,l,children,direct.length):"";
+    return branch(f,l,children);
   }
   return domains.map(d=>{
     let children="";
@@ -4219,11 +4268,11 @@ function treeDetectors(){
     }else{
       children=d.servers.map(s=>{
         const list=cameras.filter(c=>srv(c.id)?.id===s.id),body=rows(list,2);
-        return body?sliceBranchRow(s,1,body,list.length):"";
+        return branch(s,1,body);
       }).join("");
       children+=rows(cameras.filter(c=>!srv(c.id)&&deviceDomain(c.id)===d.id),1);
     }
-    return children?sliceBranchRow(d,0,children,0):"";
+    return branch(d,0,children);
   }).join("");
 }
 function gpurow(sv,l){
@@ -4235,9 +4284,9 @@ function gpurow(sv,l){
   if(!selfHit&&!children)return"";
   const hasKids=!!children;
   const op=hasKids&&(open.has(node.id)||autoExpand());
-  let h=`<div class="n srv gpu ${sel===node.id?"on":""}" style="--l:${l}"${treeRowPick(node.id)}${treeExpandMeta(node.id,"srv",hasKids)}>
+  let h=`<div class="n srv gpu ${sel===node.id?"on":""}${sliceParentClass(node.id)}" style="--l:${l}"${treeRowPick(node.id)}${treeExpandMeta(node.id,"srv",hasKids)}>
     ${treeChevron(node.id,"srv",hasKids,op)}
-    ${ic("gpu")}<span class="nm">${hlText(locName(node),selfHit?q:"")}</span>${treeTail({cnt:treeCntHtml(list.length)})}</div>`;
+    ${ic("gpu")}<span class="nm">${hlText(locName(node),selfHit?q:"")}</span>${treeTail({cnt:treeCntHtml(hasSliceContext()?sliceParentCount(node.id):list.length)})}</div>`;
   if(op)h+=children;
   return h;
 }
@@ -4258,9 +4307,9 @@ function arow(a,l){
   if(!selfHit&&!children)return"";
   const hasKids=!!children;
   const op=hasKids&&(open.has(a.id)||autoExpand());
-  let h=`<div class="n srv ${sel===a.id?"on":""}${treeRenameId===a.id?" renaming":""}" style="--l:${l}"${treeRowPick(a.id)}${treeCtxAttr(a.id)}${treeExpandMeta(a.id,"srv",hasKids)}>
+  let h=`<div class="n srv ${sel===a.id?"on":""}${sliceParentClass(a.id)}${treeRenameId===a.id?" renaming":""}" style="--l:${l}"${treeRowPick(a.id)}${treeCtxAttr(a.id)}${treeExpandMeta(a.id,"srv",hasKids)}>
     ${treeChevron(a.id,"srv",hasKids,op)}
-    ${ic("storage")}${treeRenameId===a.id?treeNameCell(a,q):`<span class="nm">${hlText(locName(a),selfHit?q:"")}</span>`}${treeTail({cnt:treeCntHtml(cams.length),acts:a.id})}</div>`;
+    ${ic("storage")}${treeRenameId===a.id?treeNameCell(a,q):`<span class="nm">${hlText(locName(a),selfHit?q:"")}</span>`}${treeTail({cnt:treeCntHtml(hasSliceContext()?sliceParentCount(a.id):cams.length),acts:a.id})}</div>`;
   if(op)h+=children;
   return h;
 }
@@ -4273,9 +4322,9 @@ function norow(d,l){
   if(!selfHit&&!vis.length)return"";
   const hasKids=!!cams.length;
   const op=hasKids&&(open.has(n.id)||(autoExpand()&&!!vis.length));
-  let h=`<div class="n srv norec ${sel===n.id?"on":""}" style="--l:${l}"${treeRowPick(n.id)}${treeExpandMeta(n.id,"dom",hasKids)}>
+  let h=`<div class="n srv norec ${sel===n.id?"on":""}${sliceParentClass(n.id)}" style="--l:${l}"${treeRowPick(n.id)}${treeExpandMeta(n.id,"dom",hasKids)}>
     ${treeChevron(n.id,"dom",hasKids,op)}
-    ${ic("unalloc")}<span class="nm">${locName(n)}</span>${treeTail({cnt:treeCntHtml(cams.length)})}</div>`;
+    ${ic("unalloc")}<span class="nm">${locName(n)}</span>${treeTail({cnt:treeCntHtml(hasSliceContext()?sliceParentCount(n.id):cams.length)})}</div>`;
   if(op)h+=vis.map(c=>scamrow(c,l+1,"norec:"+d.id)).join("");
   return h;
 }
@@ -5378,7 +5427,8 @@ function addDetector(camId){
   const d={id:"det"+Date.now(),type:"det",name:i18n("Новый детектор"),kind:DET_TYPES[0],sens:"12",online:true,devices:[]};
   (f.n.devices||(f.n.devices=[])).push(d);
   detSel=d.id;tab="det";setD(true);
-  toast(i18n("Детектор добавлен"));gear();
+  if(slice==="det")open.add(camId);
+  toast(i18n("Детектор добавлен"));applyFiltersFromState();
 }
 function deleteDetector(camId,detId){
   const f=find(camId);if(!f)return;
@@ -5386,7 +5436,7 @@ function deleteDetector(camId,detId){
   askConfirm("Удалить детектор?",`${i18n("Будет удалён")} «${escHtml(locName(d))}».`,i18n("Это действие нельзя отменить."),i18n("Удалить"),()=>{
     f.n.devices=f.n.devices.filter(x=>x.id!==detId);
     if(detSel===detId)detSel=null;
-    setD(true);toast(i18n("Детектор удалён"));gear();
+    setD(true);toast(i18n("Детектор удалён"));applyFiltersFromState();
   });
 }
 // Зона детектора рисуется прямо на карточке, без отдельной вкладки
