@@ -1000,8 +1000,8 @@ const GROUP_RU={folder:"По папкам",server:"По серверам"};
 const GROUP_EN={folder:"By folder",server:"By server"};
 const GROUP={...GROUP_RU};
 const GROUP_IC={folder:"folder",server:"server"};
-const GROUP_HINT_RU={folder:"Домен → папки → объекты",server:"Домен → серверы → архивы и службы"};
-const GROUP_HINT_EN={folder:"Domain → folders → objects",server:"Domain → servers → archives and services"};
+const GROUP_HINT_RU={folder:"Домен → папки → объекты",server:"Домен → серверы → камеры, архивы и службы"};
+const GROUP_HINT_EN={folder:"Domain → folders → objects",server:"Domain → servers → cameras, archives and services"};
 const GROUP_HINT={...GROUP_HINT_RU};
 const TVIEW_RU={cam:"Камеры и видеоустройства",acfa:"ACFA-устройства"};
 const TVIEW_EN={cam:"Cameras and video devices",acfa:"ACFA devices"};
@@ -1645,6 +1645,12 @@ function srv(id){
   return null;
 }
 function srvName(id){return srv(id)?.name||i18n("не записывается")}
+// У NVR связь с сервером задаётся архивами его камер.
+function cameraTreeServer(id){
+  const s=srv(id);if(s)return s;
+  const n=find(id)?.n;
+  return n?.type==="ipsrv"?ipsrvCameras(n).map(c=>srv(c.id)).find(Boolean)||null:null;
+}
 function kids(n){
   if(n.type==="folder")return[...(n.folders||[]),...folderDeviceNodes(n)];
   if(n.type==="domain")return n.servers||[];
@@ -2183,7 +2189,7 @@ function prepareSliceBranches(){
     }
     if(["domain","server","unalloc","folder"].includes(n.type))return;
     if(slice==="det"?!matchesStatus(n)||!detSliceHit(n,p,q):!selfInView(n)||!matchesSearch(n,q))return;
-    const ancestry=path(n.id),camera=ancestry.find(x=>x.type==="camera"),sv=srv(n.id);
+    const ancestry=path(n.id),camera=ancestry.find(x=>x.type==="camera"),sv=cameraTreeServer(n.id);
     add(deviceDomain(n.id)||domainOf(sv?.id)?.id,n.id);add(sv?.id,n.id);
     ancestry.slice(0,-1).forEach(parent=>add(parent.id,n.id));
     const own=foldersOfDevice(n.id);
@@ -2209,6 +2215,7 @@ function expandTo(id,ctx){
   if(ctx){
     const[kind,key]=[ctx.slice(0,ctx.indexOf(":")),ctx.slice(ctx.indexOf(":")+1)];
     if(kind==="gpu"){const sv=servers.find(x=>x.id===key);if(sv){const dm=domainOf(sv.id);if(dm)open.add(dm.id);open.add(sv.id);open.add(gpuId(sv.id))}return}
+    if(kind==="srv"){const sv=servers.find(x=>x.id===key);if(sv){const dm=domainOf(sv.id);if(dm)open.add(dm.id);open.add(sv.id)}return}
     if(kind==="arch"){const a=archById(key),ow=archOwner(a);if(ow){const dm=ow.type==="domain"?ow:domainOf(ow.id);if(dm)open.add(dm.id);open.add(ow.id);open.add(key)}return}
     if(kind==="norec"){open.add(key);open.add(norecId(key));return}
     if(kind==="nf"){open.add(key);open.add(nofolderId(key));return}
@@ -2222,11 +2229,11 @@ function expandTo(id,ctx){
   const own=foldersOfDevice(id);
   own.forEach(fd=>folderPath(fd.id).forEach(x=>open.add(x.id)));
   if(!own.length&&did)open.add(nofolderId(did));
-  const sv=srv(id);
+  const sv=cameraTreeServer(id);
   if(sv){open.add(sv.id);const dom=domainOf(sv.id);if(dom)open.add(dom.id)}
   else if(did)open.add(norecId(did));
   let node=find(id)?.n;
-  if(node&&node.type==="camera"&&node.arch)open.add(node.arch);
+  if(node&&node.type==="camera"&&node.arch&&!archServer(archById(node.arch)))open.add(node.arch);
   // Детектор виден в ветке GPU того сервера, где он считается
   if(node&&node.type==="det"){
     const cam=find(id)?.p,sid=cam?detServerId(cam,node):null;
@@ -2253,6 +2260,7 @@ function jumpTo(id){
 }
 function openNode(id,opts={}){
   const f=find(id);if(!f)return;
+  selCtx=null;
   app=opts.app||app||"hw";
   tab=opts.tab||"gen";
   if(opts.view)tview=opts.view;
@@ -2362,7 +2370,7 @@ function jumpToNode(n){
   if(n.type==="server"&&group()!=="server")groupBy[slice]=sliceGroups().includes("server")?"server":group();
   if(n.type==="folder"&&group()!=="folder")groupBy[slice]=sliceGroups().includes("folder")?"folder":group();
   treeMatchCache.clear();searchMatchCache.clear();
-  sel=n.id;tab="gen";setD(false);expandTo(n.id);
+  sel=n.id;selCtx=null;tab="gen";setD(false);expandTo(n.id);
   // Найденный контейнер раскрывается со всем содержимым: искали его целиком.
   expandSubtree(n);
   pushRecent(n.id);paint();
@@ -2706,11 +2714,20 @@ function displayNameHtml(n,q){
   return hlText(nm,qName);
 }
 // Один и тот же объект попадает в дерево несколько раз (разные папки,
-// архив и GPU одного сервера). Контекст строки различает эти вхождения,
+// сервер и его GPU). Контекст строки различает эти вхождения,
 // чтобы подсвечивалась и раскрывалась именно та ветка, по которой кликнули.
 let selCtx=null;
 function treeRowPick(id,ctx){return ` data-pick="${id}"`+(ctx?` data-ctx="${ctx}"`:"")}
-function sameCtx(ctx){return(selCtx||"")===(ctx||"")}
+function normalizeTreeCtx(ctx){
+  // Старое избранное вело к камере через локальный архив.
+  if(ctx?.startsWith("arch:")){const s=archServer(archById(ctx.slice(5)));if(s)return"srv:"+s.id}
+  return ctx||null;
+}
+function sameCtx(ctx){
+  const chosen=normalizeTreeCtx(selCtx);
+  if(!chosen&&ctx?.startsWith("srv:"))return cameraTreeServer(sel)?.id===ctx.slice(4);
+  return(chosen||"")===(normalizeTreeCtx(ctx)||"");
+}
 function rowOn(id,ctx){return sel===id&&sameCtx(ctx)?"on":""}
 function canMultiPick(n){
   return n&&n.type!=="domain"&&n.type!=="server"&&n.type!=="unalloc"&&n.type!=="det"&&n.type!=="folder"&&treeKind(n)===tview;
@@ -3410,7 +3427,7 @@ function pick(id,opts){
     else treeSel.add(id);
     treeAnchor=id;
   }else resetTreeSel(id);
-  selCtx=opts?.ctx||null;
+  selCtx=normalizeTreeCtx(opts?.ctx);
   if(selCtx&&selCtx.startsWith("f:"))selFolder=selCtx.slice(2);
   if(f.n.type==="folder")selFolder=id;
   else{const own=foldersOfDevice(path(id)[0].id);if(own.length&&!own.some(x=>x.id===selFolder))selFolder=own[0].id}
@@ -3972,13 +3989,14 @@ function srow(s,l=1,bare=false){
   const devs=offline?[]:(s.devices||[]).filter(d=>d.type!=="det");
   const gpu=offline||slice==="acfa"?null:serverGpu(s);
   const svcHtml=devs.filter(d=>!q||matchesSearch(d,q)).map(d=>svcrow(d,l+1)).join("");
-  const kidsHtml=srvSlice
-    // В описи архив — строка, а не ветка: камеры смотрят в срезе «Все», и
-    // разворачивать их здесь второй раз незачем.
-    ? archs.map(a=>arowFlat(a,l+1)).join("")+(gpu?gpurow(s,l+1):"")+svcHtml
-    : archs.map(a=>arow(a,l+1)).filter(Boolean).join("")+(gpu?gpurow(s,l+1):"")+svcHtml;
+  // Архивы, NVR и отдельные камеры — соседи под сервером. Собираем камеры
+  // всех его архивов до группировки, чтобы один NVR не повторялся по томам.
+  const cams=archs.flatMap(a=>archCameras(a.id));
+  const kidsHtml=(srvSlice?"":recordedCameraRows(cams,l+1,"srv:"+s.id))
+    +archs.map(a=>arowFlat(a,l+1)).join("")
+    +(gpu?gpurow(s,l+1):"")+svcHtml;
   if(!srvHit&&!kidsHtml)return"";
-  const cnt=srvSlice?devs.length:archs.reduce((n,a)=>n+archCameras(a.id).length,0);
+  const cnt=srvSlice?devs.length:cams.length;
   const hasKids=!!kidsHtml;
   const op=hasKids&&(open.has(s.id)||autoExpand());
   let h=`<div class="n srv ${sel===s.id?"on":""}${sliceParentClass(s.id)}${treeRenameId===s.id?" renaming":""}" style="--l:${l}"${treeRowPick(s.id)}${treeCtxAttr(s.id)}${treeExpandMeta(s.id,"srv",hasKids)}>
@@ -4173,7 +4191,7 @@ function treeHw(){
   return group()==="server"?treeServers():treeDev();
 }
 // ── Дерево «Сервера» ──────────────────────────────────────────────────────
-// Режим «Камеры»: домен → сервер → архив → камеры, которые на него пишутся.
+// Режим «Камеры»: домен → сервер → NVR / камеры, которые на него пишутся.
 // Режим «Службы»: домен → сервер → службы сервера.
 function scamrow(n,l,ctx){
   const q=qval();
@@ -4192,6 +4210,10 @@ function groupCamsByIpsrv(cams){
     byId.get(owner.id).cams.push(c);
   });
   return{groups,loose};
+}
+function recordedCameraRows(cams,l,ctx){
+  const{groups,loose}=groupCamsByIpsrv(cams);
+  return groups.map(g=>nvrrow(g.owner,g.cams,l,ctx)).join("")+loose.map(c=>scamrow(c,l,ctx)).join("");
 }
 function nvrrow(owner,cams,l,ctx){
   const q=qval();
@@ -4290,19 +4312,19 @@ function gpurow(sv,l){
   if(op)h+=children;
   return h;
 }
-// Архив строкой описи: в срезе «Серверы» его камеры не разворачиваются.
+// Локальный архив — строка описи; его камеры показаны под сервером.
 function arowFlat(a,l){
   const q=qval(),cams=archCameras(a.id);
   if(!matchesStatus(a)||!matchesSearch(a,q))return"";
-  return`<div class="n srv ${sel===a.id?"on":""}${treeRenameId===a.id?" renaming":""}" style="--l:${l}"${treeRowPick(a.id)}${treeCtxAttr(a.id)}>
+  const context=slice==="cam"||slice==="acfa";
+  return`<div class="n srv ${sel===a.id?"on":""}${context?sliceParentClass(a.id):""}${treeRenameId===a.id?" renaming":""}" style="--l:${l}"${treeRowPick(a.id)}${treeCtxAttr(a.id)}>
     <span class="tw"></span>${ic("storage")}${treeRenameId===a.id?treeNameCell(a,q):`<span class="nm">${hlText(locName(a),q)}</span>`}
-    ${treeTail({tags:`<span class="tag">${archIsNetwork(a)?i18n("сетевой"):i18n("локальный")}</span>`,cnt:treeCntHtml(cams.length),acts:a.id})}</div>`;
+    ${treeTail({tags:`<span class="tag">${archIsNetwork(a)?i18n("сетевой"):i18n("локальный")}</span>`,cnt:treeCntHtml(context?sliceParentCount(a.id):cams.length),acts:a.id})}</div>`;
 }
 function arow(a,l){
   const q=qval();
   const allCams=archCameras(a.id),cams=allCams.filter(selfInView);
-  const{groups,loose}=groupCamsByIpsrv(allCams),ctx="arch:"+a.id;
-  const children=groups.map(g=>nvrrow(g.owner,g.cams,l+1,ctx)).join("")+loose.map(c=>scamrow(c,l+1,ctx)).join("");
+  const children=recordedCameraRows(allCams,l+1,"arch:"+a.id);
   const selfHit=matchesStatus(a)&&matchesSearch(a,q);
   if(!selfHit&&!children)return"";
   const hasKids=!!children;
