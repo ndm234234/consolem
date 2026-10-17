@@ -307,6 +307,7 @@ window.I18N_EN={
 "учётных записей":"accounts","Объект":"Object","Сетевой том":"Network volume","Инфраструктура":"Infrastructure",
 "Разделы":"Sections","Ничего не найдено":"Nothing found","сетевой":"network","локальный":"local",
 "Фильтры сброшены, чтобы показать найденное":"Filters were reset to show the match",
+"Фильтр строго по id":"Filter by exact ID",
 "Глобальные настройки. Оповещатели сервера — в разделе «Оборудование», срез «Службы».":"Global settings. Server notifiers live under Equipment, the Services slice."
 ,
 // Подсказки мастера и диалогов, до которых перевод не доходил

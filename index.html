@@ -1113,7 +1113,7 @@ function syncViews(){
   tview=slice==="acfa"?"acfa":"cam";
   sview="cam";
 }
-let detSel=null,sview="cam",selFolder=null,logFilt="all",asideW=asideWidthDefault(),recent=[],treeQ="",filtPop=false,typesExpanded=false,treeRenameId=null,treeRenameField="name";
+let detSel=null,sview="cam",selFolder=null,logFilt="all",asideW=asideWidthDefault(),recent=[],treeQ="",strictIdSearch=false,filtPop=false,typesExpanded=false,treeRenameId=null,treeRenameField="name";
 const treeSel=new Set();
 let treeAnchor=null;
 const statusFilts=new Set();
@@ -2160,7 +2160,7 @@ function selfInView(n){
   if(n.type==="domain"||n.type==="unalloc"||n.type==="folder")return false;
   return inSlice(n)&&matchesType(n)&&matchesStatus(n);
 }
-function filtKey(){return[...typeFilts].sort().join(",")+"|"+[...searchFields].sort().join(",")+"|"+[...statusFilts].sort().join(",")}
+function filtKey(){return[...typeFilts].sort().join(",")+"|"+[...searchFields].sort().join(",")+"|"+[...statusFilts].sort().join(",")+"|"+strictIdSearch}
 function hasTreeIn(n){
   const key=slice+"|"+group()+"|"+filtKey()+"|"+n.id;if(treeMatchCache.has(key))return treeMatchCache.get(key);
   if(n.type==="det"&&slice!=="det")return false;
@@ -2246,7 +2246,7 @@ function pushRecent(id){recent=recent.filter(x=>x!==id);recent.unshift(id);if(re
 function setFocus(id,keepSel){if(!keepSel){const s=servers.find(x=>x.id===id);sel=s?.devices?.find(d=>treeKind(d)===tview)?.id||id}expandTo(sel);paint()}
 function clearGearFilters(keepSearch=false){
   typeFilts.clear();statusFilts.clear();
-  if(!keepSearch){searchFields.clear();treeQ=""}
+  if(!keepSearch){searchFields.clear();treeQ="";strictIdSearch=false}
 }
 // В быстром поиске показываем папку объекта (для доменов/серверов — сам узел)
 function jumpScope(n){
@@ -2422,11 +2422,16 @@ function goSearch(v){
     pop.classList.add("open");return;
   }
   const shown=mainFull?new Set():treeShownKeys();
-  goHits=goTargets().filter(t=>{
+  const idFilter=/^\d+$/.test(q)&&!strictIdSearch?[{
+    kind:"Фильтр",title:i18n("Фильтр строго по id"),sub:`ID = ${q}`,icon:"search",keepQuery:true,
+    go(){applyStrictIdFilter(q)}
+  }]:[];
+  const targets=goTargets().filter(t=>{
     if(t.goId&&shown.has(t.goId))return false;   // это уже стоит в дереве
     const fields=[t.title,t.sub,t.skipKind?"":t.kind,t.extra].filter(Boolean);
     return queryWords(q).some(words=>matchWords(words,fields));
   }).slice(0,40);
+  goHits=[...idFilter,...targets];
   // Во весь экран дерева нет, и отчитываться за него нечем: там список — всё,
   // что у запроса есть.
   const inTree=mainFull?0:(app==="hw"?countFiltered():shown.size);
@@ -2434,9 +2439,9 @@ function goSearch(v){
   // то, ради чего запрос набирали.
   if(!goHits.length&&inTree){goClose();return}
   const head=inTree?`<div class="gohead gohead-tree"><span>${i18n("В дереве:")} ${inTree}</span><span class="gonote">${i18n("Enter — остаться в дереве")}</span></div>`:"";
-  pop.innerHTML=goHits.length
-    ?head+`<div class="gohead">${i18n("Не в дереве:")} ${goHits.length}</div>`+goHits.map((t,i)=>goRowHtml(t,i,q)).join("")
-    :head+`<div class="gohead">${i18n("Ничего не найдено")}</div>`;
+  pop.innerHTML=idFilter.map((t,i)=>goRowHtml(t,i,"")).join("")+head+(targets.length
+    ?`<div class="gohead">${i18n("Не в дереве:")} ${targets.length}</div>`+targets.map((t,i)=>goRowHtml(t,i+idFilter.length,q)).join("")
+    :inTree?"":`<div class="gohead">${i18n("Ничего не найдено")}</div>`);
   pop.classList.add("open");
 }
 function goRowHtml(t,i,q){
@@ -2449,8 +2454,10 @@ function goPick(i){
   goClose();
   // Переход запрос исчерпал: оставленный фильтр сузил бы дерево там, куда
   // только что пришли.
-  treeQ="";searchMatchCache.clear();
-  const inp=document.getElementById("gq");if(inp)inp.value="";
+  if(!t.keepQuery){
+    treeQ="";strictIdSearch=false;searchMatchCache.clear();
+    const inp=document.getElementById("gq");if(inp)inp.value="";
+  }
   t.go();
   updateFiltChrome();
 }
@@ -2460,8 +2467,8 @@ function goKey(e){
   if(e.key==="ArrowDown"||e.key==="ArrowUp"){
     if(!open_)return;                             // список закрыт — стрелки ведут по дереву
     e.preventDefault();
+    goSel=goNav?Math.max(0,Math.min(goHits.length-1,goSel+(e.key==="ArrowDown"?1:-1))):0;
     goNav=true;
-    goSel=Math.max(0,Math.min(goHits.length-1,goSel+(e.key==="ArrowDown"?1:-1)));
     [...pop.querySelectorAll(".gores")].forEach(el=>el.classList.toggle("on",+el.dataset.i===goSel));
     pop.querySelector(".gores.on")?.scrollIntoView({block:"nearest"});
     return;
@@ -2638,7 +2645,7 @@ function fieldText(n,fieldId){
   if(fieldId==="model")return n.model||"";
   return"";
 }
-function searchScopeFields(){return searchFields.size?[...searchFields]:SEARCH_FIELDS.map(([id])=>id)}
+function searchScopeFields(){return strictIdSearch?["id"]:searchFields.size?[...searchFields]:SEARCH_FIELDS.map(([id])=>id)}
 // Один движок на дерево, списки, таблицы и строку в шапке. Три вещи, которые
 // оператор делает не задумываясь, и каждая ломала прежний поиск: пишет в
 // другом регистре, путает ё и е, набирает слова не в том порядке и из разных
@@ -2674,6 +2681,7 @@ function matchesText(q,...fields){
 }
 function searchHitFields(n,q){
   if(!q)return[];
+  if(strictIdSearch)return String(fieldText(n,"id")).trim()===String(q).trim()?["id"]:[];
   const scope=searchScopeFields();
   const vals=scope.map(f=>fieldText(n,f));
   for(const words of queryWords(q)){
@@ -2708,7 +2716,7 @@ function hlText(text,q){
   return out+escHtml(src.slice(pos));
 }
 function displayNameHtml(n,q){
-  const qName=q&&(!searchFields.size||searchFields.has("name")||searchFields.has("short"))?q:"";
+  const qName=q&&!strictIdSearch&&(!searchFields.size||searchFields.has("name")||searchFields.has("short"))?q:"";
   const nm=locName(n);
   if(n.type!=="server"&&n.short!=null&&n.short!=="")return `${hlText(String(n.short),qName)}. ${hlText(nm,qName)}`;
   return hlText(nm,qName);
@@ -2775,7 +2783,7 @@ function treeAttrTags(n,q){
     const val=fieldText(n,f);if(!val)return"";
     // IP не режем — иначе «съедается» слева; остальное можно укоротить
     const trunc=f!=="ip"&&val.length>16;const shown=trunc?val.slice(0,14):val;
-    const inScope=!searchFields.size||searchFields.has(f);
+    const inScope=searchScopeFields().includes(f);
     const hit=!!q&&inScope&&val.toLowerCase().includes(q);
     const body=hit?hlText(shown,q)+(trunc?"…":""):escHtml(shown)+(trunc?"…":"");
     return`<span class="tag${f==="ip"?" tag-ip":""}${hit?" hit":""}" title="${escHtml(FIELD_LABELS[f])}: ${escHtml(val)}">${body}</span>`;
@@ -2828,7 +2836,8 @@ function countFiltered(){
 function filterTags(){
   const tags=[];
   [...typeFilts].forEach(id=>{const lab=(TYPE_FILTERS[slice].find(x=>x[0]===id)||[])[1]||id;tags.push({id:"type:"+id,label:i18n(lab)})});
-  [...searchFields].forEach(id=>tags.push({id:"field:"+id,label:i18n(FIELD_LABELS[id]||id)}));
+  if(strictIdSearch)tags.push({id:"strict-id",label:i18n("Фильтр строго по id")});
+  else [...searchFields].forEach(id=>tags.push({id:"field:"+id,label:i18n(FIELD_LABELS[id]||id)}));
   // Выбранный статус уже подписан на основной кнопке.
   return tags;
 }
@@ -2880,17 +2889,26 @@ function syncGoInput(){
   const clr=document.getElementById("goClear");
   if(clr)clr.classList.toggle("hide",!treeQ.trim());
 }
-function setTreeQ(v){treeQ=v;searchMatchCache.clear();updateFiltChrome();renderTree()}
+function applyStrictIdFilter(q){
+  if(!/^\d+$/.test(q))return;
+  treeQ=q;strictIdSearch=true;
+  treeMatchCache.clear();searchMatchCache.clear();
+  if(app!=="hw")goApp("hw");
+  setMainFull(false);
+  applyFiltersFromState();
+}
+function setTreeQ(v){treeQ=v;if(!/^\d+$/.test(v.trim()))strictIdSearch=false;searchMatchCache.clear();updateFiltChrome();renderTree()}
 function clearTreeQ(e){
   e&&e.stopPropagation();
-  treeQ="";
+  treeQ="";strictIdSearch=false;
   searchMatchCache.clear();updateFiltChrome();renderTree();
   goClose();
   const inp=document.getElementById("gq");
   if(inp&&e)inp.focus();
 }
 function clearFilterTag(id){
-  if(id.startsWith("type:"))typeFilts.delete(id.slice(5));
+  if(id==="strict-id")strictIdSearch=false;
+  else if(id.startsWith("type:"))typeFilts.delete(id.slice(5));
   else if(id.startsWith("field:"))searchFields.delete(id.slice(6));
   applyFiltersFromState();
   if(filtPop)refreshFiltPop(true);
