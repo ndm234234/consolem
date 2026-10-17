@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>w2c Platform — Serverless VMS на камерах и сетевых хранилищах</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --bg-card: #131b33;
+      --bg-card-alt: #172240;
+      --border: #26355d;
+      --accent-cyan: #38bdf8;
+      --accent-emerald: #34d399;
+      --accent-indigo: #818cf8;
+      --accent-amber: #fbbf24;
+      --accent-rose: #fb7185;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background: #060913;
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 24px;
+    }
+    .slide {
+      width: 1600px;
+      height: 900px;
+      background: radial-gradient(circle at 18% 18%, rgba(52, 211, 153, 0.10), transparent 45%),
+                  radial-gradient(circle at 82% 82%, rgba(129, 140, 248, 0.10), transparent 45%),
+                  var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 42px 54px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      box-shadow: 0 25px 70px rgba(0, 0, 0, 0.65);
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 18px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(52, 211, 153, 0.12);
+      border: 1px solid rgba(52, 211, 153, 0.35);
+      color: var(--accent-emerald);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 5px 12px;
+      border-radius: 999px;
+      margin-bottom: 10px;
+    }
+    .title {
+      font-size: 33px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+    }
+    .subtitle {
+      font-size: 16.5px;
+      color: var(--text-muted);
+      margin-top: 6px;
+    }
+    .key-metric-box {
+      display: flex;
+      gap: 14px;
+    }
+    .metric {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 11px 16px;
+      text-align: right;
+      min-width: 145px;
+    }
+    .metric-val {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--accent-cyan);
+    }
+    .metric-val.emerald {
+      color: var(--accent-emerald);
+    }
+    .metric-val.amber {
+      color: var(--accent-amber);
+    }
+    .metric-lbl {
+      font-size: 11.5px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* Topology Diagram Strip */
+    .topology {
+      background: linear-gradient(90deg, rgba(19,27,51,0.95), rgba(23,34,64,0.95));
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 18px 24px;
+      display: grid;
+      grid-template-columns: 1.25fr 0.7fr 1.2fr 0.7fr 1.25fr;
+      align-items: center;
+      gap: 12px;
+    }
+    .topo-box {
+      background: rgba(11, 16, 32, 0.78);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+    }
+    .topo-box.holder {
+      border-color: rgba(52, 211, 153, 0.55);
+    }
+    .topo-box.fleet {
+      border-color: rgba(129, 140, 248, 0.55);
+    }
+    .topo-box.storage {
+      border-color: rgba(56, 189, 248, 0.55);
+    }
+    .topo-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 14.5px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .topo-pill {
+      font-size: 10.5px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 99px;
+      text-transform: uppercase;
+    }
+    .pill-green {
+      background: rgba(52, 211, 153, 0.16);
+      color: var(--accent-emerald);
+    }
+    .pill-indigo {
+      background: rgba(129, 140, 248, 0.16);
+      color: var(--accent-indigo);
+    }
+    .pill-cyan {
+      background: rgba(56, 189, 248, 0.16);
+      color: var(--accent-cyan);
+    }
+    .topo-list {
+      list-style: none;
+      font-size: 12.2px;
+      color: var(--text-muted);
+      line-height: 1.45;
+    }
+    .topo-list li::before {
+      content: "▸ ";
+      color: var(--accent-cyan);
+    }
+    .topo-link {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 5px;
+    }
+    .topo-line {
+      width: 100%;
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent-emerald), var(--accent-indigo), var(--accent-cyan));
+      border-radius: 2px;
+      position: relative;
+    }
+    .topo-link-title {
+      font-size: 11.5px;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+    .topo-link-sub {
+      font-size: 10.8px;
+      color: var(--text-muted);
+      line-height: 1.3;
+    }
+    .no-raft-badge {
+      font-size: 10.5px;
+      font-weight: 700;
+      color: var(--accent-amber);
+      background: rgba(251, 191, 36, 0.12);
+      border: 1px solid rgba(251, 191, 36, 0.35);
+      padding: 2px 8px;
+      border-radius: 6px;
+    }
+
+    /* 6 Pillars Grid */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+    }
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 19px 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+    }
+    .card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .card-num {
+      font-size: 11.5px;
+      font-weight: 800;
+      padding: 4px 9px;
+      border-radius: 6px;
+      background: rgba(52, 211, 153, 0.14);
+      color: var(--accent-emerald);
+      letter-spacing: 0.04em;
+    }
+    .card-scope {
+      font-size: 11px;
+      color: var(--text-dim);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .card-title {
+      font-size: 16.8px;
+      font-weight: 700;
+      color: var(--text-main);
+      line-height: 1.25;
+    }
+    .card-body {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.48;
+    }
+    .card-body strong {
+      color: #e2e8f0;
+      font-weight: 600;
+    }
+    .code-pill {
+      font-family: "JetBrains Mono", "SFMono-Regular", Menlo, monospace;
+      font-size: 11.2px;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      color: var(--accent-amber);
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+
+    /* Footer */
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-top: 1px solid var(--border);
+      padding-top: 14px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .footer-highlight {
+      color: var(--accent-cyan);
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="slide">
+    <!-- HEADER -->
+    <div class="header">
+      <div>
+        <div class="badge">Serverless VMS • Архитектура распределённого края</div>
+        <div class="title">Камера w2c как самодостаточная VMS в сети сотен устройств и хранилищ</div>
+        <div class="subtitle">Тот же код платформы на камере, без выделенного сервера управления и без хрупкого консенсуса поперёк сети</div>
+      </div>
+      <div class="key-metric-box">
+        <div class="metric">
+          <div class="metric-val emerald">≤ 40 МиБ</div>
+          <div class="metric-lbl">бюджет памяти камеры (33,7 МиБ на 10 Мбит/с)</div>
+        </div>
+        <div class="metric">
+          <div class="metric-val">1,4 сек</div>
+          <div class="metric-lbl">опрос 300 камер (даже когда 30 выключены)</div>
+        </div>
+        <div class="metric">
+          <div class="metric-val amber">0 серверов</div>
+          <div class="metric-lbl">домен живёт прямо на камере со сменой срока</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TOPOLOGY STRIP -->
+    <div class="topology">
+      <div class="topo-box holder">
+        <div class="topo-head">
+          <span>Камера — Держатель домена</span>
+          <span class="topo-pill pill-green">Domain Holder</span>
+        </div>
+        <ul class="topo-list">
+          <li>Ведёт единый каталог, права, <span class="code-pill">shared</span>-настройки и тревоги</li>
+          <li>Выпускает токены (<span class="code-pill">w2c-domain</span>) и считает книги маршрутов</li>
+          <li>Раздаёт подписанный бэкап <span class="code-pill">keepers</span> на 2 камеры-хранителя</li>
+          <li>При отказе/краже домен переносится на любую камеру (<span class="code-pill">term+1</span>)</li>
+        </ul>
+      </div>
+
+      <div class="topo-link">
+        <div class="topo-link-title">Федерация без Raft</div>
+        <div class="topo-line"></div>
+        <div class="topo-link-sub">Дельта-отчёты ~600 Б<br/>Книги и отложенные правки</div>
+        <div class="no-raft-badge">Без консенсуса по PoE/WAN</div>
+      </div>
+
+      <div class="topo-box fleet">
+        <div class="topo-head">
+          <span>Сотни камер («Кластер из 1»)</span>
+          <span class="topo-pill pill-indigo">300+ Edge Nodes</span>
+        </div>
+        <ul class="topo-list">
+          <li>Каждая камера — свой <span class="code-pill">DeviceCluster</span> (1 флеш = 1 писатель)</li>
+          <li>Публикует только 2 объекта: <span class="code-pill">heartbeats</span> и <span class="code-pill">snapshot</span></li>
+          <li>Пишет кольцевой буфер и сегменты на SD-карту без движка БД</li>
+          <li>Бережёт Flash: пульсы и свежесть в RAM, 0 записей в тишине</li>
+        </ul>
+      </div>
+
+      <div class="topo-link">
+        <div class="topo-link-title">Сверка покрытий</div>
+        <div class="topo-line"></div>
+        <div class="topo-link-sub">Прямая запись + Backfill дыр<br/>По готовности аплинка</div>
+        <div class="no-raft-badge">desired − actual = gaps</div>
+      </div>
+
+      <div class="topo-box storage">
+        <div class="topo-head">
+          <span>Сетевые хранилища / NAS / S3 / NVR</span>
+          <span class="topo-pill pill-cyan">Elastic Archive</span>
+        </div>
+        <ul class="topo-list">
+          <li>Тома архива на сетевых дисках, NVR или в облаке (<span class="code-pill">s3://</span>)</li>
+          <li>Камера сама толкает поток на доступный приёмник хранилища</li>
+          <li>После обрыва сети хранилище забирает с SD <strong>только дыру</strong></li>
+          <li>Единый таймлайн: <span class="code-pill">&lt;rec&gt;/e&lt;n&gt;</span> и <span class="code-pill">…/backfill</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- 6 PILLARS GRID -->
+    <div class="grid">
+      <div class="card">
+        <div class="card-head">
+          <span class="card-num">01 • CLUSTER OF ONE</span>
+          <span class="card-scope">Архитектура узла</span>
+        </div>
+        <div class="card-title">Камера — полноценный кластер из одного, а не «тупой поток»</div>
+        <div class="card-body">
+          На камере работает тот же код платформы, что и в серверной: своя консоль, эпоха, проверка грантов и локальный буфер. Консенсус внутри камеры достаётся даром (<strong>один флеш — один писатель</strong>), поэтому не нужен распределённый Raft между камерами поверх ненадёжного PoE или радиоканала.
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-num">02 • ZERO-SERVER DOMAIN</span>
+          <span class="card-scope">Отказоустойчивое управление</span>
+        </div>
+        <div class="card-title">Держатель домена на камере и мгновенный переезд по сроку</div>
+        <div class="card-body">
+          Службы домена живут прямо на одной из камер площадки, а подписанная и зашифрованная резервная копия (<span class="code-pill">domain/backup-taken</span>) автоматически разносится агентами на камеры-хранители. Если «главную» камеру сняли или выключили, домен поднимается на соседней со сроком <span class="code-pill">term + 1</span> — <strong>без потери настроек, прав и очередей</strong>.
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-num">03 • EDGE + NETWORK STORAGE</span>
+          <span class="card-scope">Гибридный архив</span>
+        </div>
+        <div class="card-title">Сетевые хранилища и SD-карты как единый самовосстанавливающийся том</div>
+        <div class="card-body">
+          Камера пишет в локальное кольцо (32 МиБ RAM) и сегменты SD-карты, одновременно отдавая поток в сетевое хранилище. При падении сети или диска запись не прерывается: после возврата связи цикл сверки (<span class="code-pill">desired − actual</span>) <strong>выкачивает с камеры ровно пропущенные интервалы</strong> по готовности канала.
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-num">04 • SCALE TO HUNDREDS</span>
+          <span class="card-scope">Масштабируемость</span>
+        </div>
+        <div class="card-title">Сотни камер и десятки выключенных узлов без деградации</div>
+        <div class="card-body">
+          Контракт камеры с доменом — всего <strong>~600 байт</strong> (<span class="code-pill">heartbeats</span> + <span class="code-pill">snapshot</span>). Параллельные полосы опроса (<span class="code-pill">lanes=16</span>), поиск <span class="code-pill">ReadView.where</span> из памяти за <strong>0 сетевых вызовов</strong> и экспоненциальное отступление молчащих камер укладывают обход 300 кластеров (30 в офлайне) в <strong>1,4 секунды</strong>.
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-num">05 • FLASH &amp; RAM DISCIPLINE</span>
+          <span class="card-scope">Ресурсы встроенного Linux</span>
+        </div>
+        <div class="card-title">Жёсткий потолок 40 МиБ RAM и нулевой износ Flash-памяти</div>
+        <div class="card-body">
+          На камере нет тяжёлой СУБД: память под кадры строго поделена (32 МиБ кольцо, 6 МиБ очередь карты, 2×1 МиБ куски отдачи — <strong>33,7 МиБ в пике догона</strong>). Пульсы и отметки свежести держатся в RAM; ключи потоков перевыпускаются на полусроке (раз в 12 ч), а неизменный бэкап не пишет на флеш вообще.
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-num">06 • OFFLINE EDITS &amp; HONEST VIEW</span>
+          <span class="card-scope">Эксплуатация в поле</span>
+        </div>
+        <div class="card-title">Отложенные правки для выключенных камер и честный каталог</div>
+        <div class="card-body">
+          Оператор меняет настройки или права даже тогда, когда часть камер обесточена: домен сохраняет правку в <span class="code-pill">domain/pending/&lt;член&gt;</span>, и агент камеры сам забирает и применяет её после включения. Каталог никогда не путает «нет данных» с «устройство недоступно», явно показывая возраст последнего отчёта.
+        </div>
+      </div>
+    </div>
+
+    <!-- FOOTER -->
+    <div class="footer">
+      <div><strong>Экономика развёртывания:</strong> от 1 автономной камеры с SD-картой до распределённой сети из сотен камер, ретрансляторов и сетевых томов — без единого выделенного сервера VMS.</div>
+      <div class="footer-highlight">w2c Platform • Serverless Edge &amp; Distributed Storage (М10B / М12A / М12B)</div>
+    </div>
+  </div>
+</body>
+</html>

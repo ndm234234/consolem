@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>w2c — Бесперебойность записи (Edge + Backup + Zero-Gap Continuity)</title>
+  <style>
+    :root {
+      --bg: #080d19;
+      --bg-card: #10192d;
+      --bg-card-alt: #13203a;
+      --border: #213459;
+      --border-accent: #f59e0b;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --cyan: #38bdf8;
+      --emerald: #34d399;
+      --indigo: #818cf8;
+      --amber: #fbbf24;
+      --rose: #fb7185;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: #04070e;
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .slide {
+      width: 1600px;
+      height: 900px;
+      background:
+        radial-gradient(circle at 86% 14%, rgba(251, 191, 36, 0.10), transparent 36%),
+        radial-gradient(circle at 14% 88%, rgba(52, 211, 153, 0.10), transparent 38%),
+        linear-gradient(155deg, #070b14 0%, #0c1425 60%, #09101f 100%);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 38px 48px 30px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      box-shadow: 0 30px 90px rgba(0, 0, 0, 0.78);
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 24px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+      padding-bottom: 16px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--amber);
+      background: rgba(251, 191, 36, 0.11);
+      border: 1px solid rgba(251, 191, 36, 0.34);
+      padding: 5px 12px;
+      border-radius: 999px;
+      margin-bottom: 8px;
+    }
+
+    h1 {
+      font-size: 33px;
+      line-height: 1.15;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    h1 span {
+      background: linear-gradient(90deg, #fbbf24, #34d399, #38bdf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .subtitle {
+      font-size: 15px;
+      color: var(--text-muted);
+      margin-top: 5px;
+      max-width: 960px;
+    }
+
+    .hero-pill {
+      background: linear-gradient(135deg, rgba(251, 191, 36, 0.13), rgba(52, 211, 153, 0.12));
+      border: 1px solid rgba(251, 191, 36, 0.42);
+      border-radius: 16px;
+      padding: 12px 18px;
+      min-width: 390px;
+      text-align: right;
+    }
+
+    .hero-pill .title {
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--amber);
+      letter-spacing: 0.01em;
+    }
+
+    .hero-pill .desc {
+      font-size: 12.5px;
+      color: #cbd5e1;
+      margin-top: 4px;
+      line-height: 1.35;
+    }
+
+    /* Continuity Pipeline Banner */
+    .pipeline-banner {
+      background: rgba(16, 25, 45, 0.88);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 13px 20px;
+      display: grid;
+      grid-template-columns: 1fr auto 1fr auto 1fr auto 1fr;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .stage {
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid #29406b;
+      border-radius: 12px;
+      padding: 9px 13px;
+    }
+
+    .stage.edge {
+      border-color: rgba(56, 189, 248, 0.45);
+      background: rgba(56, 189, 248, 0.08);
+    }
+
+    .stage.backup {
+      border-color: rgba(251, 191, 36, 0.48);
+      background: rgba(251, 191, 36, 0.08);
+    }
+
+    .stage.backfill {
+      border-color: rgba(52, 211, 153, 0.48);
+      background: rgba(52, 211, 153, 0.08);
+    }
+
+    .stage.lease {
+      border-color: rgba(129, 140, 248, 0.48);
+      background: rgba(129, 140, 248, 0.08);
+    }
+
+    .stage-label {
+      font-size: 10.5px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 3px;
+    }
+
+    .stage.edge .stage-label { color: var(--cyan); }
+    .stage.backup .stage-label { color: var(--amber); }
+    .stage.backfill .stage-label { color: var(--emerald); }
+    .stage.lease .stage-label { color: var(--indigo); }
+
+    .stage-title {
+      font-size: 13.5px;
+      font-weight: 700;
+      color: #f8fafc;
+    }
+
+    .stage-sub {
+      font-size: 11.5px;
+      color: var(--text-muted);
+      margin-top: 2px;
+      line-height: 1.3;
+    }
+
+    .stage-arrow {
+      font-size: 18px;
+      font-weight: 800;
+      color: #64748b;
+      padding: 0 2px;
+    }
+
+    /* 6-card Grid */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(2, 1fr);
+      gap: 15px;
+      flex: 1;
+      margin: 14px 0;
+    }
+
+    .card {
+      background: linear-gradient(180deg, rgba(19, 32, 58, 0.78) 0%, rgba(13, 21, 38, 0.92) 100%);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 17px 19px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+    }
+
+    .card.highlight {
+      border-color: rgba(251, 191, 36, 0.46);
+      box-shadow: inset 0 0 24px rgba(251, 191, 36, 0.05);
+    }
+
+    .card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .card-tag {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      padding: 3px 9px;
+      border-radius: 6px;
+    }
+
+    .tag-amber { color: var(--amber); background: rgba(251, 191, 36, 0.14); }
+    .tag-cyan { color: var(--cyan); background: rgba(56, 189, 248, 0.14); }
+    .tag-emerald { color: var(--emerald); background: rgba(52, 211, 153, 0.14); }
+    .tag-indigo { color: var(--indigo); background: rgba(129, 140, 248, 0.15); }
+    .tag-rose { color: var(--rose); background: rgba(251, 113, 133, 0.14); }
+
+    .card-num {
+      font-size: 12px;
+      font-weight: 700;
+      color: #64748b;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    .card h3 {
+      font-size: 17px;
+      font-weight: 750;
+      color: #f1f5f9;
+      margin-bottom: 7px;
+      line-height: 1.25;
+    }
+
+    .card ul {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 5.5px;
+    }
+
+    .card li {
+      font-size: 13px;
+      line-height: 1.37;
+      color: #cbd5e1;
+      padding-left: 14px;
+      position: relative;
+    }
+
+    .card li::before {
+      content: "•";
+      position: absolute;
+      left: 0;
+      color: var(--amber);
+      font-weight: 900;
+    }
+
+    .card li strong {
+      color: #ffffff;
+      font-weight: 650;
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 11.5px;
+      color: #fde68a;
+      background: rgba(15, 23, 42, 0.78);
+      padding: 1px 5px;
+      border-radius: 4px;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+    }
+
+    .card-footer {
+      margin-top: 9px;
+      padding-top: 7px;
+      border-top: 1px dashed rgba(148, 163, 184, 0.16);
+      font-size: 11.5px;
+      color: #94a3b8;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .card-footer span.benefit {
+      color: var(--emerald);
+      font-weight: 600;
+    }
+
+    /* Footer */
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(15, 23, 42, 0.92);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 11px 20px;
+    }
+
+    .footer-summary {
+      font-size: 13.5px;
+      color: #e2e8f0;
+    }
+
+    .footer-summary strong {
+      color: var(--amber);
+    }
+
+    .metrics {
+      display: flex;
+      gap: 20px;
+    }
+
+    .metric {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .metric b {
+      font-size: 14px;
+      color: #f8fafc;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      padding: 2px 8px;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div class="slide">
+    <!-- HEADER -->
+    <div class="header">
+      <div>
+        <div class="eyebrow">w2c Recording Continuity • Zero-Gap Archive Architecture</div>
+        <h1>Бесперебойность записи: <span>Edge + Backup + Защита каждой секунды</span></h1>
+        <p class="subtitle">
+          Кадр не теряется ни при обрыве канала, ни при падении сервера записи, ни при потере кворума кластера, ни при сбросе часов камеры
+        </p>
+      </div>
+      <div class="hero-pill">
+        <div class="title">Ни одной «слепой секунды» на переключении</div>
+        <div class="desc">
+          Предзапись из RAM-кольца закрывает окно детектирования отказа,<br />
+          а умная дозапись сшивает архив из Edge и Backup без дублей
+        </div>
+      </div>
+    </div>
+
+    <!-- CONTINUITY PIPELINE BANNER -->
+    <div class="pipeline-banner">
+      <div class="stage edge">
+        <div class="stage-label">Эшелон 1 • На борту камеры</div>
+        <div class="stage-title">CamRing (RAM) + Edge SD-карта</div>
+        <div class="stage-sub">Неблокирующая запись на карту + приоритет ещё не доставленных серверу секунд (<code>owed</code>)</div>
+      </div>
+      <div class="stage-arrow">⇄</div>
+      <div class="stage backup">
+        <div class="stage-label">Эшелон 2 • На другом узле / в облаке</div>
+        <div class="stage-title">Backup-архив (<code>always</code> / <code>when: offline</code>)</div>
+        <div class="stage-sub">Разнесение по физическим узлам (<code>spread_by: cam</code>) + предзапись из памяти до момента сбоя</div>
+      </div>
+      <div class="stage-arrow">⇄</div>
+      <div class="stage backfill">
+        <div class="stage-label">Эшелон 3 • Авто-сшивка архива</div>
+        <div class="stage-title">Точечный Backfill (<code>desired − actual</code>)</div>
+        <div class="stage-sub">Подкачка только реальных дыр с ключевого кадра в отдельный поток <code>e&lt;n&gt;/backfill</code></div>
+      </div>
+      <div class="stage-arrow">⇄</div>
+      <div class="stage lease">
+        <div class="stage-label">Эшелон 4 • Живучесть узла и диска</div>
+        <div class="stage-title">Автономная запись + Тома <code>incidents</code></div>
+        <div class="stage-sub">Запись при потере кворума (<code>may_write</code>), <code>Drain</code> без обрыва хвостов и защита <code>keeps</code></div>
+      </div>
+    </div>
+
+    <!-- 6 PILLARS GRID -->
+    <div class="grid">
+      <!-- Card 1 -->
+      <div class="card highlight">
+        <div>
+          <div class="card-top">
+            <span class="card-tag tag-amber">Backup • Zero Blind-Spot</span>
+            <span class="card-num">01 / BACKUP &amp; PRE-ROLL</span>
+          </div>
+          <h3>Резервная запись с предзаписью ДО момента сбоя</h3>
+          <ul>
+            <li><strong>Два режима резерва:</strong> параллельно на втором сервере (<code>always</code>, анти-аффинность <code>spread_by: cam</code>) или экономно только при аварии основного (<code>when: offline</code>).</li>
+            <li><strong>Никакой дыры на время обнаружения отказа:</strong> резерв держит хвост в RAM-кольце и при аварии основного регистратора <strong>сбрасывает на диск секунды с ключевого кадра ДО падения</strong>.</li>
+            <li><strong>Живучий воркер камеры:</strong> размещается рядом с резервом (<code>prefer: backup</code>), чтобы смерть основного сервера не оборвала приём потока.</li>
+          </ul>
+        </div>
+        <div class="card-footer">
+          <span>Отличает аварию от штатного <code>enabled: false</code></span>
+          <span class="benefit">✓ 0 секунд потери на failover</span>
+        </div>
+      </div>
+
+      <!-- Card 2 -->
+      <div class="card highlight">
+        <div>
+          <div class="card-top">
+            <span class="card-tag tag-cyan">Edge • Smart Eviction</span>
+            <span class="card-num">02 / EDGE SD &amp; OWED SPANS</span>
+          </div>
+          <h3>Умная SD-карта: бережёт то, что сервер ещё не получил</h3>
+          <ul>
+            <li><strong>Приоритет недоставленного (<code>CardBuffer.owed</code>):</strong> при нехватке места карта удаляет старейшие <strong>уже подтверждённые сервером</strong> сегменты (<code>delivered.json</code>), сохраняя недокачанные дыры до последнего.</li>
+            <li><strong>Изоляция от медленного флеша:</strong> изношенная SD-карта никогда не блокирует живой поток и <code>CamRing</code> — переполнение очереди режет только запись карты до следующего keyframe.</li>
+          </ul>
+        </div>
+        <div class="card-footer">
+          <span>Фоновая проверка <code>health: ok | degraded | failed</code></span>
+          <span class="benefit">✓ Спасение дыр при долгом обрыве</span>
+        </div>
+      </div>
+
+      <!-- Card 3 -->
+      <div class="card">
+        <div>
+          <div class="card-top">
+            <span class="card-tag tag-emerald">Backfill • Gap Healing</span>
+            <span class="card-num">03 / DELTA BACKFILL</span>
+          </div>
+          <h3>Точечная дозапись дыр из Edge и Backup</h3>
+          <ul>
+            <li><strong>Математика покрытий (<code>desired − actual = gaps</code>):</strong> основная запись сверяет свой индекс с картой покрытия (<code>coverage</code>) в пульсе камеры или резервного сервера.</li>
+            <li><strong>Докачка только недостающего:</strong> никаких полных копирований — запрашиваются только пропущенные интервалы с границы ключевого кадра.</li>
+            <li><strong>Чистое разделение потоков:</strong> дозапись идёт в <code>&lt;rec&gt;/e&lt;n&gt;/backfill</code>, не мешая живому потоку <code>live</code>, а при чтении прозрачно склеивается.</li>
+          </ul>
+        </div>
+        <div class="card-footer">
+          <span>Коалесцирование соседних дыр (<code>COALESCE_GAP</code>)</span>
+          <span class="benefit">✓ Бережёт узкий WAN-аплинк</span>
+        </div>
+      </div>
+
+      <!-- Card 4 -->
+      <div class="card">
+        <div>
+          <div class="card-top">
+            <span class="card-tag tag-indigo">Control-Plane Survival</span>
+            <span class="card-num">04 / UNCONFIRMED LEASE</span>
+          </div>
+          <h3>Запись не останавливается при падении кворума</h3>
+          <ul>
+            <li><strong>Разделение <code>may_write</code> и <code>may_act</code>:</strong> если управляющее хранилище (Raft / <code>configstore</code>) недоступно, аренда переходит в <em>неподтверждённую</em> — внешние действия заблокированы, но <strong>запись видео в том продолжается</strong>.</li>
+            <li><strong>Бесконфликтные эпохи (<code>e&lt;n&gt;</code>, <code>e&lt;n+1&gt;</code>):</strong> даже если другой узел перехватил камеру в новой эпохе, оба тома хранят свои потоки без порчи данных и сшиваются на таймлайне.</li>
+          </ul>
+        </div>
+        <div class="card-footer">
+          <span>Автономная работа до <code>unconfirmed_max</code></span>
+          <span class="benefit">✓ Падение контроллера ≠ потеря архива</span>
+        </div>
+      </div>
+
+      <!-- Card 5 -->
+      <div class="card">
+        <div>
+          <div class="card-top">
+            <span class="card-tag tag-rose">Clock Immunity</span>
+            <span class="card-num">05 / CAMLINE TIME ANCHOR</span>
+          </div>
+          <h3>Иммунитет к сбросу часов (1970 год) и скачкам NTP</h3>
+          <ul>
+            <li><strong>Монотонная линия времени (<code>CamLine</code> + <code>line.json</code>):</strong> камера без батарейки RTC после потери питания сразу пишет видео по внутреннему монотонному счётчику (<code>boot_id</code>).</li>
+            <li><strong>Мгновенное переякоривание без перезаписи видео:</strong> когда появляется интернет и NTP, сегменты на карте получают реальное время атомарным переименованием <code>&lt;start&gt;@&lt;offset&gt;.smpl</code>.</li>
+          </ul>
+        </div>
+        <div class="card-footer">
+          <span>Защита от прыжков часов вперёд/назад</span>
+          <span class="benefit">✓ Архив никогда не «улетает в 1970-й»</span>
+        </div>
+      </div>
+
+      <!-- Card 6 -->
+      <div class="card">
+        <div>
+          <div class="card-top">
+            <span class="card-tag tag-emerald">Storage &amp; Drain Safety</span>
+            <span class="card-num">06 / DRAIN, RING &amp; KEEPS</span>
+          </div>
+          <h3>Безопасный Drain, предформатированное кольцо и Keeps</h3>
+          <ul>
+            <li><strong>Drain ждёт сброса всех буферов:</strong> при выводе сервера на обслуживание статус <code>safe</code> наступает только при <code>units == 0</code> <strong>и</strong> <code>pending_writes == 0</code> — хвосты дозаписи не обрываются.</li>
+            <li><strong>Кольцевой <code>ObjectStorage</code> + тома <code>incidents</code>:</strong> предформатированный по квоте том не переполняет диск и меняет размер на лету, а важные события копируются в неприкосновенный том <code>incidents</code> (<code>keeps</code> с крипто-дайджестом).</li>
+          </ul>
+        </div>
+        <div class="card-footer">
+          <span>Детерминированное вытеснение без фонового GC</span>
+          <span class="benefit">✓ 0 потерь при обновлениях и ротации</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- FOOTER -->
+    <div class="footer">
+      <div class="footer-summary">
+        <strong>Главный аргумент:</strong> в обычных VMS резервирование — это «второй сервер или SD-карта». В <strong>w2c</strong> — это сквозной конвейер без слепых зон: от RAM-предзаписи и умного вытеснения на карте до записи без кворума и защиты от сбитых часов.
+      </div>
+      <div class="metrics">
+        <div class="metric">Слепая зона failover <b>0 сек</b></div>
+        <div class="metric">Вытеснение на SD <b>Delivered First</b></div>
+        <div class="metric">Без кворума <b>may_write = true</b></div>
+        <div class="metric">Обслуживание <b>pending_writes = 0</b></div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

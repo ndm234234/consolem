@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>w2c Platform — Cybersecurity в камере и NVR</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --bg-card: #131b33;
+      --bg-card-alt: #172240;
+      --border: #26355d;
+      --accent-cyan: #38bdf8;
+      --accent-emerald: #34d399;
+      --accent-indigo: #818cf8;
+      --accent-amber: #fbbf24;
+      --accent-rose: #fb7185;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background: #060913;
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 24px;
+    }
+    .slide {
+      width: 1600px;
+      height: 900px;
+      background: radial-gradient(circle at 85% 15%, rgba(56, 189, 248, 0.10), transparent 45%),
+                  radial-gradient(circle at 15% 85%, rgba(52, 211, 153, 0.08), transparent 45%),
+                  var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 44px 56px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      box-shadow: 0 25px 70px rgba(0, 0, 0, 0.65);
+      position: relative;
+      overflow: hidden;
+    }
+    /* Header */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 20px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      color: var(--accent-cyan);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 5px 12px;
+      border-radius: 999px;
+      margin-bottom: 10px;
+    }
+    .title {
+      font-size: 34px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+    }
+    .subtitle {
+      font-size: 17px;
+      color: var(--text-muted);
+      margin-top: 6px;
+    }
+    .key-metric-box {
+      display: flex;
+      gap: 16px;
+    }
+    .metric {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 18px;
+      text-align: right;
+    }
+    .metric-val {
+      font-size: 24px;
+      font-weight: 800;
+      color: var(--accent-emerald);
+    }
+    .metric-lbl {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* Architecture Flow Strip */
+    .flow-strip {
+      background: linear-gradient(90deg, rgba(19,27,51,0.95), rgba(23,34,64,0.95));
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 18px 28px;
+      display: grid;
+      grid-template-columns: 1.15fr 0.9fr 1fr 0.9fr 1.25fr;
+      align-items: center;
+      gap: 12px;
+    }
+    .node {
+      background: rgba(11, 16, 32, 0.75);
+      border: 1px solid rgba(129, 140, 248, 0.35);
+      border-radius: 12px;
+      padding: 14px 16px;
+    }
+    .node-cam {
+      border-color: rgba(52, 211, 153, 0.5);
+    }
+    .node-nvr {
+      border-color: rgba(56, 189, 248, 0.5);
+    }
+    .node-title {
+      font-size: 15px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    .node-tag {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 99px;
+      background: rgba(52, 211, 153, 0.15);
+      color: var(--accent-emerald);
+      font-weight: 600;
+    }
+    .node-nvr .node-tag {
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--accent-cyan);
+    }
+    .node-list {
+      font-size: 12.5px;
+      color: var(--text-muted);
+      line-height: 1.45;
+      list-style: none;
+    }
+    .node-list li::before {
+      content: "• ";
+      color: var(--accent-cyan);
+    }
+    .arrow-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 4px;
+    }
+    .arrow-line {
+      width: 100%;
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent-emerald), var(--accent-cyan));
+      position: relative;
+      border-radius: 2px;
+    }
+    .arrow-line::after {
+      content: "►";
+      position: absolute;
+      right: -6px;
+      top: -9px;
+      color: var(--accent-cyan);
+      font-size: 14px;
+    }
+    .arrow-label {
+      font-size: 11.5px;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+    .arrow-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .arrow-block {
+      font-size: 11px;
+      color: var(--accent-rose);
+      font-weight: 600;
+      background: rgba(251, 113, 133, 0.12);
+      border: 1px solid rgba(251, 113, 133, 0.3);
+      padding: 2px 8px;
+      border-radius: 6px;
+      margin-top: 2px;
+    }
+
+    /* 6 Cards Grid */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+    }
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      position: relative;
+    }
+    .card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .card-num {
+      font-size: 12px;
+      font-weight: 800;
+      padding: 4px 9px;
+      border-radius: 6px;
+      background: rgba(56, 189, 248, 0.14);
+      color: var(--accent-cyan);
+      letter-spacing: 0.04em;
+    }
+    .card-scope {
+      font-size: 11px;
+      color: var(--text-dim);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .card-title {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--text-main);
+      line-height: 1.25;
+    }
+    .card-body {
+      font-size: 13.2px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+    .card-body strong {
+      color: #e2e8f0;
+      font-weight: 600;
+    }
+    .code-pill {
+      font-family: "JetBrains Mono", "SFMono-Regular", Menlo, monospace;
+      font-size: 11.5px;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      color: var(--accent-amber);
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+
+    /* Footer */
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-top: 1px solid var(--border);
+      padding-top: 14px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .footer-highlight {
+      color: var(--accent-emerald);
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="slide">
+    <!-- HEADER -->
+    <div class="header">
+      <div>
+        <div class="badge">Кибербезопасность архитектуры w2c • Edge-to-Core</div>
+        <div class="title">Единая модель Zero-Trust: от камеры («кластер из одного») до NVR и домена</div>
+        <div class="subtitle">Безопасность встроена в механизмы платформы, а не наложена внешним периметром или VPN</div>
+      </div>
+      <div class="key-metric-box">
+        <div class="metric">
+          <div class="metric-val">0 портов</div>
+          <div class="metric-lbl">на вход у камеры за NAT / LTE</div>
+        </div>
+        <div class="metric">
+          <div class="metric-val">0 паролей</div>
+          <div class="metric-lbl">в образе прошивки и в RTSP/HTTP URL</div>
+        </div>
+        <div class="metric">
+          <div class="metric-val">E2E Seal</div>
+          <div class="metric-lbl">на флеше, в базе, в дороге и бэкапе</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ARCHITECTURE STRIP -->
+    <div class="flow-strip">
+      <div class="node node-cam">
+        <div class="node-title">
+          <span>Камера w2c (Кластер из 1)</span>
+          <span class="node-tag">Edge</span>
+        </div>
+        <ul class="node-list">
+          <li>Входящие двери закрыты снаружи</li>
+          <li>Ключ члена Ed25519 / X25519 + LDevID</li>
+          <li>Секреты на флеше под <span class="code-pill">enc:v1</span> + AAD</li>
+          <li>Локальный буфер SD без потери при обрыве</li>
+        </ul>
+      </div>
+
+      <div class="arrow-box">
+        <div class="arrow-label">Камера стучится сама</div>
+        <div class="arrow-line"></div>
+        <div class="arrow-sub">Исходящий mTLS / подпись агента<br/>Long-poll команд + SRT push медиа</div>
+        <div class="arrow-block">✕ Входящие снаружи невозможны</div>
+      </div>
+
+      <div class="node">
+        <div class="node-title">
+          <span>Ретранслятор (Relay)</span>
+          <span class="node-tag" style="background:rgba(129,140,248,0.15);color:#818cf8;">Zero-Knowledge</span>
+        </div>
+        <ul class="node-list">
+          <li>Только в RAM, без локальной копии базы</li>
+          <li>Несёт запечатанные книги <span class="code-pill">x25519:v1</span></li>
+          <li><strong>Не может вскрыть</strong> <span class="code-pill">token_secret</span> камеры</li>
+          <li>Проверяет подпись и топологию дорог</li>
+        </ul>
+      </div>
+
+      <div class="arrow-box">
+        <div class="arrow-label">Один поток и отчёты</div>
+        <div class="arrow-line"></div>
+        <div class="arrow-sub">Дельта-отчёты JCS с ревизией<br/>Суточный токен <span class="code-pill">stream</span> (aud + ref)</div>
+      </div>
+
+      <div class="node node-nvr">
+        <div class="node-title">
+          <span>NVR / Кластер и Домен w2c</span>
+          <span class="node-tag">Core / NVR</span>
+        </div>
+        <ul class="node-list">
+          <li>Приёмник (<span class="code-pill">ingest</span>) раздаёт запись и live</li>
+          <li>Изоляция ролей по Unix-сокетам и спеке</li>
+          <li>Ключи домена только в процессе <span class="code-pill">signer</span></li>
+          <li>Офлайн-проверка грантов и <span class="code-pill">revoked</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- 6 SECURITY PILLARS -->
+    <div class="grid">
+      <div class="card">
+        <div class="card-head">
+          <span class="card-num">01 • ZERO INBOUND</span>
+          <span class="card-scope">Камера + NVR за NAT</span>
+        </div>
+        <div class="card-title">Камера и площадка стучатся сами — снаружи не взломать</div>
+        <div class="card-body">
+          Все соединения (отчёты агента, <strong>long-poll</strong> желаний зрителя/архива, <strong>push</strong> видеопотока и дозаписи с SD-карты на приёмник NVR) открывает сама камера. Снаружи нет открытых RTSP/HTTP-портов; <strong>VPN в сеть камеры не нужен</strong> — по каналу ходят только типизированные команды, а не произвольный сетевой трафик.
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-num">02 • BRSKI &amp; mTLS</span>
+          <span class="card-scope">Аутентификация узлов</span>
+        </div>
+        <div class="card-title">Вступление без паролей (RFC 8995) и взаимный TLS</div>
+        <div class="card-body">
+          Образ прошивки одинаков побайтово — <strong>общих секретов в прошивке нет</strong>. Устройство вступает в домен по заводскому <span class="code-pill">IDevID</span> / TPM 2.0 и подписанному <span class="code-pill">voucher</span> (или с одобрения в консоли), получает доменный <span class="code-pill">LDevID</span> от УЦ заказчика и <strong>стирает временные учётные данные</strong>. Все межсерверные вызовы идут по mTLS с проверкой ролей.
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-num">03 • E2E SEALING</span>
+          <span class="card-scope">Хранение + пересылка</span>
+        </div>
+        <div class="card-title">Сквозное запечатывание секретов и слепой ретранслятор</div>
+        <div class="card-body">
+          Любое поле <span class="code-pill">*_secret</span> на флеше камеры и диске NVR запечатано кольцом (<span class="code-pill">enc:v1</span>) с привязкой <strong>AAD к полному пути строки и JSON Pointer</strong> (перенос шифртекста в соседнюю строку не откроется). В дороге книги запечатаны к ключу <span class="code-pill">X25519</span> получателя — <strong>ретранслятор и чужие узлы не могут прочитать токен потока</strong>.
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-num">04 • URL &amp; CREDENTIAL HYGIENE</span>
+          <span class="card-scope">Защита от утечек</span>
+        </div>
+        <div class="card-title">Архитектурный запрет паролей в адресах и логах</div>
+        <div class="card-body">
+          Двери NVR и камеры <strong>отвергают на входе (400)</strong> любые URL со встроенным логином, паролем или секретным параметром (<span class="code-pill">rtsp://user:pass@…</span>, <span class="code-pill">?token=…</span>) ещё до сохранения в базу или отложенную правку. Снимки состояния (<span class="code-pill">snapshot</span>), API и логи автоматически вычищают <span class="code-pill">*_secret</span> и маскируют параметры.
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-num">05 • LEAST PRIVILEGE BY SPEC</span>
+          <span class="card-scope">Внутри NVR и сервера</span>
+        </div>
+        <div class="card-title">Изоляция процессов, Unix-сокеты ролей и ключи в Signer</div>
+        <div class="card-body">
+          Права хранилища (<span class="code-pill">configstore-rights.json</span>) генерируются из декларативной спеки: каждый сервис идёт через свой Unix-сокet роли и видит только свои префиксы. Закрытые ключи домена живут <strong>только в процессе <span class="code-pill">w2c-domain (signer)</span></strong> — ни консоль, ни воркеры VMS ключей не видят и просят узкие суточные токены (<span class="code-pill">stream</span>/<span class="code-pill">ask</span>) через сокет.
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-num">06 • OFFLINE REVOCATION &amp; SURVIVAL</span>
+          <span class="card-scope">Устойчивость и аудит</span>
+        </div>
+        <div class="card-title">Отзыв прав без связи с центром и работа в изоляции</div>
+        <div class="card-body">
+          Токены называют только субъект и срок, а права проверяются локально по доставленным грантам и списку <span class="code-pill">domain/revoked</span>; короткие сроки жизни гарантируют <strong>предсказуемое окно отзыва даже в офлайне</strong>. При потере связи с доменом NVR и камеры продолжают запись, проверку прав и локальный аудит.
+        </div>
+      </div>
+    </div>
+
+    <!-- FOOTER -->
+    <div class="footer">
+      <div><strong>Ключевое отличие w2c:</strong> камера и NVR работают на одном и том же коде платформы — без устаревших ONVIF/RTSP-паролей, открытых портов и общих ключей в прошивке.</div>
+      <div class="footer-highlight">w2c Platform • Архитектура безопасности М10–М12</div>
+    </div>
+  </div>
+</body>
+</html>
