@@ -20,9 +20,9 @@ html[data-theme="light"]{--bg:#eef2f7;--p:#ffffff;--p2:#f3f6fb;--ln:#d5dde8;--tx
 *::-webkit-scrollbar-thumb:hover{background:#334860}
 button,input,select{font:inherit;color:var(--tx)}button{cursor:pointer}
 .app{height:100vh;display:grid;grid-template-rows:minmax(0,1fr);grid-template-columns:minmax(0,1fr)}
-/* До верха окна идёт только рельс разделов; шапка с поиском стоит над деревом
-   и рабочей областью, и поле поиска встаёт ровно над деревом. */
-header{grid-area:hd;display:flex;align-items:center;gap:0;height:56px;padding:0 24px 0 0;background:var(--p);border-bottom:1px solid var(--ln);min-width:0}
+/* Рельс и дерево занимают всю высоту; поиск стоит справа от дерева,
+   над рабочей областью. */
+header{grid-area:hd;display:flex;align-items:center;gap:var(--gut);height:56px;padding:0 var(--gut);background:var(--p);border-bottom:1px solid var(--ln);min-width:0}
 /* Разделы собраны сверху на рельсе, учётная запись закреплена снизу.
    В шапке остаётся общий поиск. */
 /* Высота пункта равна высоте шапки: рельс попадает в тот же вертикальный ритм,
@@ -31,12 +31,12 @@ header{grid-area:hd;display:flex;align-items:center;gap:0;height:56px;padding:0 
 .asw .ici{flex:none;line-height:0;opacity:.9}
 .asw .ici .ic-svg{width:20px;height:20px;display:block}
 .asw-lb{overflow:hidden;text-overflow:ellipsis}
-/* Рельс разделов можно спрятать. Кнопка одна и всегда в шапке, слева от поля
+/* Рельс разделов можно спрятать. Кнопка одна и всегда в шапке, справа от поля
    поиска: открыт рельс или спрятан, она на одном и том же месте относительно
    поиска и не пропадает. */
 .rail-tabs{display:flex;flex-direction:column;gap:4px;flex:1;min-height:0;overflow-y:auto;scrollbar-width:none}
 .rail-tabs::-webkit-scrollbar{display:none}
-.hd-railtg{display:grid;place-items:center;width:32px;height:32px;flex:none;margin-left:var(--gut);padding:0;border:1px solid transparent;border-radius:8px;background:0;color:var(--mu);transition:color .12s,background .12s}
+.hd-railtg{display:grid;place-items:center;width:32px;height:32px;flex:none;padding:0;border:1px solid transparent;border-radius:8px;background:0;color:var(--mu);transition:color .12s,background .12s}
 .hd-railtg:hover{color:var(--tx);background:var(--p2)}
 .hd-railtg:focus-visible{outline:2px solid #3b82f6;outline-offset:1px}
 .hd-railtg[aria-expanded="true"]{color:#9fb3cc}
@@ -82,7 +82,7 @@ html[data-theme="light"] .usign:hover{background:#fdecee}
 .usign{margin-top:2px;width:100%;border:1px solid #7a3a42;background:transparent;color:#ff9ca1;border-radius:8px;padding:8px 10px}
 .usign:hover{background:#3a1d25}
 .ws{min-height:0;display:grid;grid-template-columns:max-content var(--aw,360px) 4px minmax(0,1fr);grid-template-rows:56px minmax(0,1fr);
-  grid-template-areas:"rail hd hd hd" "rail aside rsz main"}
+  grid-template-areas:"rail aside rsz hd" "rail aside rsz main"}
 #rail{grid-area:rail}#aside{grid-area:aside}.rsz{grid-area:rsz}#main{grid-area:main}
 .ws.one{grid-template-columns:max-content minmax(0,1fr);grid-template-areas:"rail hd" "rail main"}.ws.one .rsz,.ws.one #aside{display:none}
 /* Во весь экран: дерево и рельс уходят, панель занимает всё окно. */
@@ -796,7 +796,8 @@ html[data-theme="light"] .dev-bulk-badge{background:#d6e4f8;color:#2f5fad}
 :where(input:not([type="checkbox"]):not([type="radio"]),select){width:100%;height:var(--ctrl-h);padding:0 10px;background:var(--p2);border:1px solid var(--ln);border-radius:7px;outline:0;box-sizing:border-box;font-size:13px;line-height:1.2}
 .jbox input{width:100%;border:0;border-bottom:1px solid var(--ln);border-radius:0;padding:14px 16px;font-size:15px;height:auto;background:transparent}
 .cnt{color:var(--mu);font-size:11px;line-height:1;font-variant-numeric:tabular-nums;font-feature-settings:"tnum";text-align:center}
-@media(max-width:860px){.split,.g,.mx{grid-template-columns:1fr}.ws{grid-template-columns:max-content 1fr}.ws .rsz,.ws main{display:none}
+@media(max-width:860px){.split,.g,.mx{grid-template-columns:1fr}.ws{grid-template-columns:max-content minmax(0,1fr);grid-template-areas:"rail hd" "rail aside"}.ws .rsz,.ws main{display:none}
+  .ws.one{grid-template-areas:"rail hd" "rail main"}.ws.one main,.ws.full main{display:flex}
   .rail{width:52px;padding:8px 6px}.asw{padding:9px 4px}.asw-lb,.ubtn .uname,.ubtn .uchev{display:none}}
 
 /* Действия панели найденных стоят ДО списка: список длинный, и листать до
@@ -816,9 +817,9 @@ html[data-theme="light"] .dev-bulk-badge{background:#d6e4f8;color:#2f5fad}
 .stchip.on .stchip-cnt{background:#0d2748;color:#cfe2ff}
 
 /* Строка перехода: одна точка навигации по всему конфигуратору */
-/* Поиск стоит ровно над фильтром дерева: та же левая вертикаль, та же ширина,
-   поэтому он «держит» колонку, а не висит сам по себе. */
-.gojump{position:relative;flex:none;width:calc(var(--aw,360px) - var(--gut)*3 - 33px);min-width:200px;margin-left:var(--gut);display:flex;align-items:center;gap:4px;height:var(--ctrl-h);padding:0 10px 0 var(--ctrl-lead);background:var(--p2);border:1px solid var(--ln);border-radius:8px}
+/* Поле начинается сразу за разделителем дерева и сжимается вместе
+   с рабочей областью, сохраняя место кнопке рельса. */
+.gojump{position:relative;flex:0 1 auto;width:calc(var(--aw,360px) - var(--gut)*3 - 33px);min-width:0;display:flex;align-items:center;gap:4px;height:var(--ctrl-h);padding:0 10px 0 var(--ctrl-lead);background:var(--p2);border:1px solid var(--ln);border-radius:8px}
 .gojump:focus-within{border-color:#4a7ab8;box-shadow:0 0 0 1px #2a4a7855}
 .gojump-lead{display:inline-flex;justify-content:center;width:var(--ic);line-height:0;color:var(--mu)}.gojump-lead svg{width:16px;height:16px}
 .gojump input{flex:1;min-width:0;height:100%;padding:0;background:0;border:0;outline:0;font-size:13px}
@@ -826,9 +827,7 @@ html[data-theme="light"] .dev-bulk-badge{background:#d6e4f8;color:#2f5fad}
 .gojump-clear:hover{color:var(--tx);background:var(--p2)}
 .gojump-clear.hide{display:none}
 .gojump-hint{flex:none;font-size:10px;color:var(--mu);border:1px solid var(--ln);border-radius:4px;padding:1px 5px;letter-spacing:.04em}
-.gopop{display:none;position:absolute;left:calc(100% + 8px);top:-1px;width:100%;max-width:calc(100vw - var(--aw,360px) - var(--rail-w) - 8px);z-index:60;max-height:min(60vh,520px);overflow:auto;background:var(--p);border:1px solid var(--ln);border-radius:10px;box-shadow:0 16px 44px #000a;padding:6px}
-.ws.norail .gopop,.ws.full .gopop{max-width:calc(100vw - var(--aw,360px) - 8px)}
-@media(max-width:860px){.gopop,.ws.norail .gopop,.ws.full .gopop{left:-1px;top:calc(100% + 6px);max-width:none}}
+.gopop{display:none;position:absolute;left:-1px;right:-1px;top:calc(100% + 6px);z-index:60;max-height:min(60vh,520px);overflow:auto;background:var(--p);border:1px solid var(--ln);border-radius:10px;box-shadow:0 16px 44px #000a;padding:6px}
 .gopop.open{display:block}
 .gores{display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:7px;cursor:pointer;border-left:3px solid transparent}
 .gores:hover,.gores.on{background:#172a46;border-left-color:var(--bl)}
@@ -876,7 +875,6 @@ html[data-theme="light"] .dev-bulk-badge{background:#d6e4f8;color:#2f5fad}
   </div>
 </nav><aside id="aside"></aside><div class="rsz" id="rsz"></div>
 <header>
-  <button type="button" class="hd-railtg" id="hdRailTg" data-i18n-title="Скрыть разделы" title="Скрыть разделы" aria-expanded="true" aria-controls="rail" onclick="toggleRail()"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M6 3.5v9" stroke="currentColor" stroke-width="1.5"/></svg></button>
   <div class="gojump" id="gojump">
     <span class="gojump-lead" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none"><circle cx="6.8" cy="6.8" r="4" stroke="currentColor" stroke-width="1.6"/><path d="m9.8 9.8 3.4 3.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>
     <input id="gq" autocomplete="off" data-i18n-placeholder="Имя, IP, раздел, настройка…" placeholder="Имя, IP, раздел, настройка…"
@@ -887,6 +885,7 @@ html[data-theme="light"] .dev-bulk-badge{background:#d6e4f8;color:#2f5fad}
     <span class="gojump-hint" aria-hidden="true">Ctrl K</span>
     <div class="gopop" id="gopop"></div>
   </div>
+  <button type="button" class="hd-railtg" id="hdRailTg" data-i18n-title="Скрыть разделы" title="Скрыть разделы" aria-expanded="true" aria-controls="rail" onclick="toggleRail()"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M6 3.5v9" stroke="currentColor" stroke-width="1.5"/></svg></button>
 </header>
 <main id="main"></main></div>
 </div>
