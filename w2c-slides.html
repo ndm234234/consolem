@@ -132,6 +132,8 @@
     let language = "ru";
     let current = 0;
     let loadedKey = "";
+    let loadingKey = "";
+    let frameLoading = false;
     try { if (localStorage.getItem("w2c.slides.language") === "en") language = "en"; } catch (_) {}
 
     function readLocation() {
@@ -166,6 +168,23 @@
       event.preventDefault();
       navigate(destination);
     }
+    function loadSlide() {
+      const slide = slides[current];
+      const key = slide.id + ":" + language;
+      if (loadedKey === key && !frameLoading) {
+        viewport.classList.add("ready");
+        viewport.setAttribute("aria-busy", "false");
+        return;
+      }
+      viewport.classList.remove("ready");
+      viewport.setAttribute("aria-busy", "true");
+      // Finish the current frame load before showing the latest selection.
+      if (frameLoading) return;
+      frameLoading = true;
+      loadingKey = key;
+      const embedStyle = `<meta name="w2c-slide" content="${key}"><style>html,body{margin:0;padding:0;width:${canvas.width}px;height:${canvas.height}px;min-height:${canvas.height}px;overflow:hidden}body{display:block}.slide{width:${canvas.width}px;height:${canvas.height}px;flex-shrink:0}</style>`;
+      frame.srcdoc = slide.html[language].replace("</head>", embedStyle + "</head>");
+    }
     function render() {
       const text = labels[language];
       const slide = slides[current];
@@ -193,23 +212,17 @@
         else button.removeAttribute("aria-current");
       });
       frame.title = slide.title[language];
-      const key = slide.id + ":" + language;
-      if (loadedKey !== key) {
-        loadedKey = key;
-        viewport.classList.remove("ready");
-        viewport.setAttribute("aria-busy", "true");
-        const embedStyle = `<meta name="w2c-slide" content="${key}"><style>html,body{margin:0;padding:0;width:${canvas.width}px;height:${canvas.height}px;min-height:${canvas.height}px;overflow:hidden}body{display:block}.slide{width:${canvas.width}px;height:${canvas.height}px;flex-shrink:0}</style>`;
-        frame.srcdoc = slide.html[language].replace("</head>", embedStyle + "</head>");
-      }
+      loadSlide();
       saveLocation();
       fitSlide();
     }
     frame.addEventListener("load", () => {
       const doc = frame.contentDocument;
-      if (doc?.querySelector('meta[name="w2c-slide"]')?.content !== loadedKey) return;
+      if (!frameLoading || doc?.querySelector('meta[name="w2c-slide"]')?.content !== loadingKey) return;
+      loadedKey = loadingKey;
+      frameLoading = false;
       doc.addEventListener("keydown", handleKey);
-      viewport.classList.add("ready");
-      viewport.setAttribute("aria-busy", "false");
+      requestAnimationFrame(loadSlide);
     });
     previous.addEventListener("click", () => navigate(current - 1));
     next.addEventListener("click", () => navigate(current + 1));
