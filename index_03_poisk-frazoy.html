@@ -2370,7 +2370,7 @@ function jumpNodeTarget(n){
   // Путь папки остаётся подписью для найденного объекта, но его не используем
   // для отдельной подсказки: расположение уже фильтрует дерево.
   const pathSub=!["archive","domain","server","unalloc"].includes(n.type);
-  return{kind,title:locName(n),sub,icon:n.type,goId:n.id,skipKind:true,skipSub:pathSub,extra:[n.short,n.ip,n.vendor,n.model].filter(Boolean).join(" "),
+  return{kind,title:locName(n),sub,icon:n.type,goId:n.id,skipKind:true,skipSub:pathSub,folderTitleOnly:n.type==="folder",extra:[n.short,n.ip,n.vendor,n.model].filter(Boolean).join(" "),
     keepQuery:n.type==="folder",
     go(){n.type==="folder"?showFolderInTree(n):jumpToNode(n)}};
 }
@@ -2460,7 +2460,7 @@ function goSearch(v){
   }]:[];
   const targets=goTargets().filter(t=>{
     if(t.goId&&shown.has(t.goId))return false;   // это уже стоит в дереве
-    const fields=[t.title,t.skipSub?"":t.sub,t.skipKind?"":t.kind,t.extra].filter(Boolean);
+    const fields=t.folderTitleOnly?[t.title]:[t.title,t.skipSub?"":t.sub,t.skipKind?"":t.kind,t.extra].filter(Boolean);
     return treeSearchMode==="phrase"
       ?queryVariants(q).some(phrase=>fields.some(f=>normText(f).replace(/\s+/g," ").includes(phrase.replace(/\s+/g," ").trim())))
       :queryWords(q).some(words=>matchWords(words,fields));
