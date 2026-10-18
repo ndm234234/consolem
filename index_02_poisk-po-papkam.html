@@ -1025,8 +1025,8 @@ const TYPE_FILTERS={
   all:[...TF_CAM,...TF_SVC.filter(([t])=>t!=="spk")],
   cam:TF_CAM,acfa:TF_ACFA,srv:[],arch:[],det:[]
 };
-const FIELD_LABELS={name:"Название",short:"Короткое имя",id:"ID",ip:"IP",vendor:"Производитель",model:"Модель"};
-const SEARCH_FIELDS=[["name","Название"],["short","Короткое имя"],["ip","IP"],["vendor","Производитель"],["model","Модель"],["id","ID"]];
+const FIELD_LABELS={name:"Название",short:"Короткое имя",id:"ID",ip:"IP",vendor:"Производитель",model:"Модель",folder:"Расположение"};
+const SEARCH_FIELDS=[["name","Название"],["short","Короткое имя"],["ip","IP"],["vendor","Производитель"],["model","Модель"],["id","ID"],["folder","Расположение"]];
 const TREE_TAGABLE=new Set(["id","ip","vendor","model"]);
 const TREE_TAG_ORDER=["vendor","model","id","ip"];
 const WIZ={
@@ -1457,10 +1457,12 @@ function folderDeviceNodes(f){return(f.items||[]).map(id=>find(id)?.n).filter(Bo
 function folderRemoveDevice(ids){
   const gone=ids instanceof Set?ids:new Set([ids]);
   walkFolders(f=>{f.items=f.items.filter(x=>!gone.has(x))});
+  resetLocationIndex();
 }
 function folderAddDevice(fid,deviceId){
   const f=folderById(fid);if(!f||!deviceId)return;
   if(!f.items.includes(deviceId))f.items.push(deviceId);
+  resetLocationIndex();
   if(!DEVICE_DOMAIN[deviceId])DEVICE_DOMAIN[deviceId]=folderDomain(fid);
 }
 // Псевдоузлы дерева: собственные у каждого домена
@@ -2352,7 +2354,11 @@ function jumpNodeTarget(n){
     :(foldersOfDevice(n.id)[0]?folderPathName(foldersOfDevice(n.id)[0].id):i18n("Без папки"));
   // Тип в сопоставление не идёт: дерево по нему не ищет, и слово «камера»
   // высыпало бы в список все камеры разом — рядом с деревом, где они и стоят.
-  return{kind,title:locName(n),sub,icon:n.type,goId:n.id,skipKind:true,extra:[n.short,n.ip,n.vendor,n.model].filter(Boolean).join(" "),
+  // Путь папки в подписи — для глаз, не для сопоставления: по расположению
+  // ищет само дерево, а иначе «Тверская» вываливала бы в список всё, что лежит
+  // под ней, — и устройства, и каждую вложенную папку.
+  const pathSub=!["archive","domain","server","unalloc"].includes(n.type);
+  return{kind,title:locName(n),sub,icon:n.type,goId:n.id,skipKind:true,skipSub:pathSub,extra:[n.short,n.ip,n.vendor,n.model].filter(Boolean).join(" "),
     go(){jumpToNode(n)}};
 }
 // Переход из поиска сбрасывает фильтры: иначе цель, ради которой сюда шли,
@@ -2428,7 +2434,7 @@ function goSearch(v){
   }]:[];
   const targets=goTargets().filter(t=>{
     if(t.goId&&shown.has(t.goId))return false;   // это уже стоит в дереве
-    const fields=[t.title,t.sub,t.skipKind?"":t.kind,t.extra].filter(Boolean);
+    const fields=[t.title,t.skipSub?"":t.sub,t.skipKind?"":t.kind,t.extra].filter(Boolean);
     return queryWords(q).some(words=>matchWords(words,fields));
   }).slice(0,40);
   goHits=[...idFilter,...targets];
@@ -2643,7 +2649,33 @@ function fieldText(n,fieldId){
   if(fieldId==="ip")return n.ip||"";
   if(fieldId==="vendor")return n.vendor||"";
   if(fieldId==="model")return n.model||"";
+  if(fieldId==="folder")return deviceLocationText(n.id);
   return"";
+}
+// Расположение — такое же поле объекта, как имя или IP: в карточке оно стоит
+// блоком «Расположение», и «Офис на Тверской» в поиске должен дать устройства
+// офиса — в дереве, в счётчиках срезов и типов, а не только в списке подсказок.
+// Пути папок считаем разом на всё дерево и держим до конца такта: поиск зовёт
+// fieldText тысячи раз за перерисовку, а папки между перерисовками меняются.
+let _locIdx=null;
+function locationIndex(){
+  if(_locIdx)return _locIdx;
+  const own=new Map(),up=new Map();
+  (function w(list,pre){(list||[]).forEach(f=>{
+    const p=pre?pre+" / "+locName(f):locName(f);
+    (f.items||[]).forEach(id=>{if(!own.has(id))own.set(id,[]);own.get(id).push(p)});
+    w(f.folders,p);
+  })})(folders,"");
+  walkAll((n,p)=>{if(p)up.set(n.id,p.id)});
+  _locIdx={own,up};queueMicrotask(()=>{_locIdx=null});
+  return _locIdx;
+}
+function resetLocationIndex(){_locIdx=null}
+// Дочерний объект лежит там же, где его родитель: микрофон панели — у входа.
+function deviceLocationText(id){
+  const{own,up}=locationIndex(),out=[];
+  for(let x=id;x;x=up.get(x))(own.get(x)||[]).forEach(p=>out.push(p));
+  return out.join("; ");
 }
 function searchScopeFields(){return strictIdSearch?["id"]:searchFields.size?[...searchFields]:SEARCH_FIELDS.map(([id])=>id)}
 // Один движок на дерево, списки, таблицы и строку в шапке. Три вещи, которые
