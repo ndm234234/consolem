@@ -1038,8 +1038,8 @@ const TYPE_FILTERS={
   all:[...TF_CAM,...TF_SVC.filter(([t])=>t!=="spk")],
   cam:TF_CAM,acfa:TF_ACFA,srv:[],arch:[],det:[]
 };
-const FIELD_LABELS={name:"Название",short:"Короткое имя",id:"ID",ip:"IP",vendor:"Производитель",model:"Модель"};
-const SEARCH_FIELDS=[["name","Название"],["short","Короткое имя"],["ip","IP"],["vendor","Производитель"],["model","Модель"],["id","ID"]];
+const FIELD_LABELS={name:"Название",short:"Короткое имя",id:"ID",ip:"IP",vendor:"Производитель",model:"Модель",folder:"Расположение"};
+const SEARCH_FIELDS=[["name","Название"],["short","Короткое имя"],["ip","IP"],["vendor","Производитель"],["model","Модель"],["id","ID"],["folder","Расположение"]];
 const TREE_TAGABLE=new Set(["id","ip","vendor","model"]);
 const TREE_TAG_ORDER=["vendor","model","id","ip"];
 const WIZ={
@@ -1470,10 +1470,12 @@ function folderDeviceNodes(f){return(f.items||[]).map(id=>find(id)?.n).filter(Bo
 function folderRemoveDevice(ids){
   const gone=ids instanceof Set?ids:new Set([ids]);
   walkFolders(f=>{f.items=f.items.filter(x=>!gone.has(x))});
+  resetLocationIndex();
 }
 function folderAddDevice(fid,deviceId){
   const f=folderById(fid);if(!f||!deviceId)return;
   if(!f.items.includes(deviceId))f.items.push(deviceId);
+  resetLocationIndex();
   if(!DEVICE_DOMAIN[deviceId])DEVICE_DOMAIN[deviceId]=folderDomain(fid);
 }
 // Псевдоузлы дерева: собственные у каждого домена
@@ -2365,8 +2367,25 @@ function jumpNodeTarget(n){
     :(foldersOfDevice(n.id)[0]?folderPathName(foldersOfDevice(n.id)[0].id):i18n("Без папки"));
   // Тип в сопоставление не идёт: дерево по нему не ищет, и слово «камера»
   // высыпало бы в список все камеры разом — рядом с деревом, где они и стоят.
-  return{kind,title:locName(n),sub,icon:n.type,goId:n.id,skipKind:true,extra:[n.short,n.ip,n.vendor,n.model].filter(Boolean).join(" "),
-    go(){jumpToNode(n)}};
+  // Путь папки остаётся подписью для найденного объекта, но его не используем
+  // для отдельной подсказки: расположение уже фильтрует дерево.
+  const pathSub=!["archive","domain","server","unalloc","folder"].includes(n.type);
+  return{kind,title:locName(n),sub,icon:n.type,goId:n.id,skipKind:true,skipSub:pathSub,extra:[n.short,n.ip,n.vendor,n.model].filter(Boolean).join(" "),
+    keepQuery:n.type==="folder",
+    go(){n.type==="folder"?showFolderInTree(n):jumpToNode(n)}};
+}
+// Папка остаётся в запросе, который её нашёл. Переключаем дерево на показ
+// папок и оставляем открытой найденную ветку вместе с подходящим содержимым.
+function showFolderInTree(f){
+  goApp("hw");
+  if(group()!=="folder"){
+    if(sliceGroups().includes("folder"))setGroup("folder");
+    else{groupBy.all="folder";setSlice("all")}
+  }
+  treeMatchCache.clear();searchMatchCache.clear();
+  sel=f.id;selCtx=null;tab="gen";setD(false);expandTo(f.id);
+  expandSubtree(f);
+  pushRecent(f.id);paint();
 }
 // Переход из поиска сбрасывает фильтры: иначе цель, ради которой сюда шли,
 // молча не покажется. О сбросе говорим, а не делаем втихую.
@@ -2441,7 +2460,7 @@ function goSearch(v){
   }]:[];
   const targets=goTargets().filter(t=>{
     if(t.goId&&shown.has(t.goId))return false;   // это уже стоит в дереве
-    const fields=[t.title,t.sub,t.skipKind?"":t.kind,t.extra].filter(Boolean);
+    const fields=[t.title,t.skipSub?"":t.sub,t.skipKind?"":t.kind,t.extra].filter(Boolean);
     return treeSearchMode==="phrase"
       ?queryVariants(q).some(phrase=>fields.some(f=>normText(f).replace(/\s+/g," ").includes(phrase.replace(/\s+/g," ").trim())))
       :queryWords(q).some(words=>matchWords(words,fields));
@@ -2658,7 +2677,30 @@ function fieldText(n,fieldId){
   if(fieldId==="ip")return n.ip||"";
   if(fieldId==="vendor")return n.vendor||"";
   if(fieldId==="model")return n.model||"";
+  if(fieldId==="folder")return deviceLocationText(n.id);
   return"";
+}
+// Расположение — поисковое поле устройства. Индекс путей собираем разом и
+// сбрасываем, когда меняется состав папок.
+let _locIdx=null;
+function locationIndex(){
+  if(_locIdx)return _locIdx;
+  const own=new Map(),up=new Map();
+  (function w(list,pre){(list||[]).forEach(f=>{
+    const p=pre?pre+" / "+locName(f):locName(f);
+    (f.items||[]).forEach(id=>{if(!own.has(id))own.set(id,[]);own.get(id).push(p)});
+    w(f.folders,p);
+  })})(folders,"");
+  walkAll((n,p)=>{if(p)up.set(n.id,p.id)});
+  _locIdx={own,up};queueMicrotask(()=>{_locIdx=null});
+  return _locIdx;
+}
+function resetLocationIndex(){_locIdx=null}
+// Дочерний объект лежит там же, где его родитель.
+function deviceLocationText(id){
+  const{own,up}=locationIndex(),out=[];
+  for(let x=id;x;x=up.get(x))(own.get(x)||[]).forEach(p=>out.push(p));
+  return out.join("; ");
 }
 function searchScopeFields(){return strictIdSearch?["id"]:searchFields.size?[...searchFields]:SEARCH_FIELDS.map(([id])=>id)}
 // Один движок на дерево, списки, таблицы и строку в шапке. Три вещи, которые
