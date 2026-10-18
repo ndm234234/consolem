@@ -2739,7 +2739,10 @@ function matchesText(q,...fields){
 function searchHitFields(n,q){
   if(!q)return[];
   if(strictIdSearch)return String(fieldText(n,"id")).trim()===String(q).trim()?["id"]:[];
-  const scope=searchScopeFields();
+  // В режиме фразы ищем в собственных полях объекта. Путь родительской
+  // папки не должен превращать все её устройства в совпадения; включить его
+  // можно явным выбором поля «Расположение».
+  const scope=searchScopeFields().filter(f=>treeSearchMode!=="phrase"||f!=="folder"||searchFields.has("folder"));
   const vals=scope.map(f=>fieldText(n,f));
   if(treeSearchMode==="phrase"){
     for(const phrase of queryVariants(q).map(v=>v.replace(/\s+/g," ").trim()).filter(Boolean)){
