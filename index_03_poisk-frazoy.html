@@ -825,14 +825,6 @@ html[data-theme="light"] .dev-bulk-badge{background:#d6e4f8;color:#2f5fad}
 .gojump-clear{flex:none;display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border:0;border-radius:5px;background:transparent;color:var(--mu);padding:0;font-size:13px;line-height:1}
 .gojump-clear:hover{color:var(--tx);background:var(--p2)}
 .gojump-clear.hide{display:none}
-.go-mode{position:relative;display:inline-flex;align-items:center;flex:none;padding:2px;border:1px solid var(--ln);border-radius:6px;background:var(--bg)}
-.go-mode-thumb{position:absolute;z-index:1;left:2px;top:2px;bottom:2px;width:52px;border:1px solid #8bb3ff;border-radius:4px;background:#4f8cff;box-shadow:0 1px 5px #0008;pointer-events:none;transition:transform .22s cubic-bezier(.2,.8,.2,1)}
-.go-mode[data-mode="words"] .go-mode-thumb{transform:translateX(52px)}
-.go-mode button{position:relative;z-index:2;width:52px;height:22px;padding:0 5px;border:0;border-radius:4px;background:transparent;color:var(--mu);font-size:11px;white-space:nowrap;transition:color .16s}
-.go-mode button:hover{color:var(--tx)}
-.go-mode button.on{color:#fff}
-.go-mode button:focus-visible{outline:2px solid var(--bl);outline-offset:1px}
-@media(prefers-reduced-motion:reduce){.go-mode-thumb,.go-mode button{transition:none}}
 .gojump-hint{flex:none;font-size:10px;color:var(--mu);border:1px solid var(--ln);border-radius:4px;padding:1px 5px;letter-spacing:.04em}
 .gopop{display:none;position:absolute;left:-1px;right:-1px;top:calc(100% + 6px);z-index:60;max-height:min(60vh,520px);overflow:auto;background:var(--p);border:1px solid var(--ln);border-radius:10px;box-shadow:0 16px 44px #000a;padding:6px}
 .gopop.open{display:block}
@@ -885,16 +877,11 @@ html[data-theme="light"] .dev-bulk-badge{background:#d6e4f8;color:#2f5fad}
   <button type="button" class="hd-railtg" id="hdRailTg" data-i18n-title="Скрыть разделы" title="Скрыть разделы" aria-expanded="true" aria-controls="rail" onclick="toggleRail()"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M6 3.5v9" stroke="currentColor" stroke-width="1.5"/></svg></button>
   <div class="gojump" id="gojump">
     <span class="gojump-lead" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none"><circle cx="6.8" cy="6.8" r="4" stroke="currentColor" stroke-width="1.6"/><path d="m9.8 9.8 3.4 3.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>
-    <input id="gq" autocomplete="off" data-i18n-placeholder="Имя, IP, раздел, настройка…" placeholder="Имя, IP, раздел, настройка…"
-      data-i18n-title="Сужает дерево по имени, IP, ID, производителю и модели; разделы, настройки и объекты вне среза предлагает списком"
-      title="Сужает дерево по имени, IP, ID, производителю и модели; разделы, настройки и объекты вне среза предлагает списком"
+    <input id="gq" autocomplete="off" data-i18n-placeholder="Имя, IP, раздел… слова через +" placeholder="Имя, IP, раздел… слова через +"
+      data-i18n-title="Ищет фразу целиком; отдельные слова — через +, например «офис+вход». Сужает дерево по имени, IP, ID, производителю и модели; разделы, настройки и объекты вне среза предлагает списком"
+      title="Ищет фразу целиком; отдельные слова — через +, например «офис+вход». Сужает дерево по имени, IP, ID, производителю и модели; разделы, настройки и объекты вне среза предлагает списком"
       oninput="goInput(this.value)" onfocus="goSearch(this.value)" onkeydown="goKey(event)">
     <button type="button" class="gojump-clear hide" id="goClear" data-i18n-title="Очистить" title="Очистить" onclick="clearTreeQ(event)">✕</button>
-    <div class="go-mode" id="goModeSwitch" data-mode="phrase" role="group" aria-label="Режим поиска" title="Слово целиком или отдельные слова">
-      <span class="go-mode-thumb" aria-hidden="true"></span>
-      <button type="button" id="goModePhrase" class="on" aria-pressed="true" onclick="setTreeSearchMode('phrase')">Фраза</button>
-      <button type="button" id="goModeWords" aria-pressed="false" onclick="setTreeSearchMode('words')">Слова</button>
-    </div>
     <span class="gojump-hint" aria-hidden="true">Ctrl K</span>
     <div class="gopop" id="gopop"></div>
   </div>
@@ -1126,7 +1113,7 @@ function syncViews(){
   tview=slice==="acfa"?"acfa":"cam";
   sview="cam";
 }
-let detSel=null,sview="cam",selFolder=null,logFilt="all",asideW=asideWidthDefault(),recent=[],treeQ="",treeSearchMode="phrase",strictIdSearch=false,filtPop=false,typesExpanded=false,treeRenameId=null,treeRenameField="name";
+let detSel=null,sview="cam",selFolder=null,logFilt="all",asideW=asideWidthDefault(),recent=[],treeQ="",strictIdSearch=false,filtPop=false,typesExpanded=false,treeRenameId=null,treeRenameField="name";
 const treeSel=new Set();
 let treeAnchor=null;
 const statusFilts=new Set();
@@ -2461,9 +2448,7 @@ function goSearch(v){
   const targets=goTargets().filter(t=>{
     if(t.goId&&shown.has(t.goId))return false;   // это уже стоит в дереве
     const fields=t.folderTitleOnly?[t.title]:[t.title,t.skipSub?"":t.sub,t.skipKind?"":t.kind,t.extra].filter(Boolean);
-    return treeSearchMode==="phrase"
-      ?queryVariants(q).some(phrase=>fields.some(f=>normText(f).replace(/\s+/g," ").includes(phrase.replace(/\s+/g," ").trim())))
-      :queryWords(q).some(words=>matchWords(words,fields));
+    return queryWords(q).some(words=>matchWords(words,fields));
   }).slice(0,40);
   goHits=[...idFilter,...targets];
   // Во весь экран дерева нет, и отчитываться за него нечем: там список — всё,
@@ -2723,11 +2708,15 @@ function queryVariants(q){
   const alt=fromWrongLayout(base);
   return alt&&alt!==base?[base,alt]:[base];
 }
-function queryWords(q){return queryVariants(q).map(v=>v.split(/\s+/).filter(Boolean))}
-// Слово найдено, если попало хоть в одно поле; запрос найден, когда каждое
-// слово нашлось — пусть и в разных полях.
+// Запрос — фраза целиком: «камера вход» не найдёт «Вход, камера 2». Отдельные
+// слова, которые могут стоять в любом порядке и в разных полях, пишут через
+// плюс: «офис+вход». Каждая часть между плюсами — тоже фраза.
+function queryWords(q){return queryVariants(q).map(v=>v.split("+").map(w=>w.replace(/\s+/g," ").trim()).filter(Boolean))}
+function isWordsQuery(q){return queryWords(q).some(words=>words.length>1)}
+// Часть найдена, если попала хоть в одно поле; запрос найден, когда каждая
+// часть нашлась — пусть и в разных полях.
 function matchWords(words,fields){
-  return words.every(w=>fields.some(f=>normText(f).includes(w)));
+  return words.every(w=>fields.some(f=>normText(f).replace(/\s+/g," ").includes(w)));
 }
 // Списки разделов ищут тем же движком, что дерево: раскладка и порядок слов
 // прощаются и правилу, и роли, и странице опций.
@@ -2739,22 +2728,17 @@ function matchesText(q,...fields){
 function searchHitFields(n,q){
   if(!q)return[];
   if(strictIdSearch)return String(fieldText(n,"id")).trim()===String(q).trim()?["id"]:[];
-  // В режиме фразы ищем в собственных полях объекта. Путь родительской
-  // папки не должен превращать все её устройства в совпадения; включить его
-  // можно явным выбором поля «Расположение».
-  const scope=searchScopeFields().filter(f=>treeSearchMode!=="phrase"||f!=="folder"||searchFields.has("folder"));
+  // Фразу ищем в собственных полях объекта. Путь родительской папки не
+  // должен превращать все её устройства в совпадения; включить его можно
+  // явным выбором поля «Расположение». Слова через плюс ищут и в пути:
+  // «офис+вход» — вход в папке «Офис».
+  const byWords=isWordsQuery(q);
+  const scope=searchScopeFields().filter(f=>byWords||f!=="folder"||searchFields.has("folder"));
   const vals=scope.map(f=>fieldText(n,f));
-  if(treeSearchMode==="phrase"){
-    for(const phrase of queryVariants(q).map(v=>v.replace(/\s+/g," ").trim()).filter(Boolean)){
-      const hits=scope.filter((f,i)=>normText(vals[i]).replace(/\s+/g," ").includes(phrase));
-      if(hits.length)return hits;
-    }
-    return[];
-  }
   for(const words of queryWords(q)){
     if(!matchWords(words,vals))continue;
     // Какие поля дали попадание — по ним дерево покажет тег, если поле скрыто.
-    return scope.filter((f,i)=>words.some(w=>normText(vals[i]).includes(w)));
+    return scope.filter((f,i)=>words.some(w=>normText(vals[i]).replace(/\s+/g," ").includes(w)));
   }
   return[];
 }
@@ -2965,15 +2949,6 @@ function applyStrictIdFilter(q){
   applyFiltersFromState();
 }
 function setTreeQ(v){treeQ=v;if(!/^\d+$/.test(v.trim()))strictIdSearch=false;treeMatchCache.clear();searchMatchCache.clear();updateFiltChrome();renderTree()}
-function setTreeSearchMode(mode){
-  treeSearchMode=mode==="words"?"words":"phrase";
-  treeMatchCache.clear();searchMatchCache.clear();
-  const sw=document.getElementById("goModeSwitch");if(sw)sw.dataset.mode=treeSearchMode;
-  const phrase=document.getElementById("goModePhrase"),words=document.getElementById("goModeWords");
-  [[phrase,"phrase"],[words,"words"]].forEach(([el,key])=>{if(el){const active=treeSearchMode===key;el.classList.toggle("on",active);el.setAttribute("aria-pressed",String(active))}});
-  updateFiltChrome();renderTree();
-  const inp=document.getElementById("gq");if(inp&&inp.value.trim())goSearch(inp.value);
-}
 function clearTreeQ(e){
   e&&e.stopPropagation();
   treeQ="";strictIdSearch=false;
