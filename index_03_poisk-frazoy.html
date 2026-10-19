@@ -877,9 +877,9 @@ html[data-theme="light"] .dev-bulk-badge{background:#d6e4f8;color:#2f5fad}
   <button type="button" class="hd-railtg" id="hdRailTg" data-i18n-title="Скрыть разделы" title="Скрыть разделы" aria-expanded="true" aria-controls="rail" onclick="toggleRail()"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M6 3.5v9" stroke="currentColor" stroke-width="1.5"/></svg></button>
   <div class="gojump" id="gojump">
     <span class="gojump-lead" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none"><circle cx="6.8" cy="6.8" r="4" stroke="currentColor" stroke-width="1.6"/><path d="m9.8 9.8 3.4 3.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>
-    <input id="gq" autocomplete="off" data-i18n-placeholder="Имя, IP, раздел… слова через +" placeholder="Имя, IP, раздел… слова через +"
-      data-i18n-title="Ищет фразу целиком; отдельные слова — через +, например «офис+вход». Сужает дерево по имени, IP, ID, производителю и модели; разделы, настройки и объекты вне среза предлагает списком"
-      title="Ищет фразу целиком; отдельные слова — через +, например «офис+вход». Сужает дерево по имени, IP, ID, производителю и модели; разделы, настройки и объекты вне среза предлагает списком"
+    <input id="gq" autocomplete="off" data-i18n-placeholder="Имя, IP, раздел, настройка…" placeholder="Имя, IP, раздел, настройка…"
+      data-i18n-title="Сужает дерево по имени, IP, ID, производителю и модели; разделы, настройки и объекты вне среза предлагает списком"
+      title="Сужает дерево по имени, IP, ID, производителю и модели; разделы, настройки и объекты вне среза предлагает списком"
       oninput="goInput(this.value)" onfocus="goSearch(this.value)" onkeydown="goKey(event)">
     <button type="button" class="gojump-clear hide" id="goClear" data-i18n-title="Очистить" title="Очистить" onclick="clearTreeQ(event)">✕</button>
     <span class="gojump-hint" aria-hidden="true">Ctrl K</span>
@@ -2449,7 +2449,8 @@ function goSearch(v){
     if(t.goId&&shown.has(t.goId))return false;   // это уже стоит в дереве
     const fields=t.folderTitleOnly?[t.title]:[t.title,t.skipSub?"":t.sub,t.skipKind?"":t.kind,t.extra].filter(Boolean);
     return queryWords(q).some(words=>matchWords(words,fields));
-  }).slice(0,40);
+  }).map(t=>[t,phraseRank(q,t.folderTitleOnly?[t.title]:[t.title,t.skipSub?"":t.sub,t.extra])])
+    .sort((a,b)=>b[1]-a[1]).map(([t])=>t).slice(0,40);
   goHits=[...idFilter,...targets];
   // Во весь экран дерева нет, и отчитываться за него нечем: там список — всё,
   // что у запроса есть.
@@ -2708,13 +2709,23 @@ function queryVariants(q){
   const alt=fromWrongLayout(base);
   return alt&&alt!==base?[base,alt]:[base];
 }
-// Запрос — фраза целиком: «камера вход» не найдёт «Вход, камера 2». Отдельные
-// слова, которые могут стоять в любом порядке и в разных полях, пишут через
-// плюс: «офис+вход». Каждая часть между плюсами — тоже фраза.
-function queryWords(q){return queryVariants(q).map(v=>v.split("+").map(w=>w.replace(/\s+/g," ").trim()).filter(Boolean))}
-function isWordsQuery(q){return queryWords(q).some(words=>words.length>1)}
-// Часть найдена, если попала хоть в одно поле; запрос найден, когда каждая
-// часть нашлась — пусть и в разных полях.
+// Запрос — набор слов: каждое должно найтись, порядок и поле не важны.
+// Переключателей и операторов нет; что запрос совпал фразой целиком, видно
+// по порядку подсказок: такие совпадения стоят выше. Плюс, по привычке
+// набранный между словами, читаем как пробел.
+function queryWords(q){return queryVariants(q).map(v=>v.split(/[\s+]+/).filter(Boolean))}
+// 2 — фраза целиком в первом поле (имени), 1 — в другом поле, 0 — только слова.
+function phraseRank(q,fields){
+  let best=0;
+  queryVariants(q).forEach(v=>{
+    const phrase=v.replace(/[\s+]+/g," ").trim();
+    if(!phrase)return;
+    fields.forEach((f,i)=>{if(f&&normText(f).replace(/\s+/g," ").includes(phrase))best=Math.max(best,i?1:2)});
+  });
+  return best;
+}
+// Слово найдено, если попало хоть в одно поле; запрос найден, когда каждое
+// слово нашлось — пусть и в разных полях.
 function matchWords(words,fields){
   return words.every(w=>fields.some(f=>normText(f).replace(/\s+/g," ").includes(w)));
 }
@@ -2728,15 +2739,20 @@ function matchesText(q,...fields){
 function searchHitFields(n,q){
   if(!q)return[];
   if(strictIdSearch)return String(fieldText(n,"id")).trim()===String(q).trim()?["id"]:[];
-  // Фразу ищем в собственных полях объекта. Путь родительской папки не
-  // должен превращать все её устройства в совпадения; включить его можно
-  // явным выбором поля «Расположение». Слова через плюс ищут и в пути:
-  // «офис+вход» — вход в папке «Офис».
-  const byWords=isWordsQuery(q);
-  const scope=searchScopeFields().filter(f=>byWords||f!=="folder"||searchFields.has("folder"));
+  // Путь родительской папки не должен превращать все её устройства в
+  // совпадения: одно слово ищем только в полях самого объекта. Из нескольких
+  // слов папка может закрыть часть, но хоть одно должно найтись в объекте:
+  // «офис вход» — вход в папке «Офис». Явный выбор поля «Расположение»
+  // снимает ограничение.
+  const scope=searchScopeFields();
   const vals=scope.map(f=>fieldText(n,f));
+  const limitPath=!searchFields.has("folder")&&scope.includes("folder");
   for(const words of queryWords(q)){
     if(!matchWords(words,vals))continue;
+    if(limitPath){
+      const own=vals.filter((v,i)=>scope[i]!=="folder");
+      if(words.length<2?!matchWords(words,own):!words.some(w=>matchWords([w],own)))continue;
+    }
     // Какие поля дали попадание — по ним дерево покажет тег, если поле скрыто.
     return scope.filter((f,i)=>words.some(w=>normText(vals[i]).replace(/\s+/g," ").includes(w)));
   }
