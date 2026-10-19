@@ -38,6 +38,13 @@ header{grid-area:hd;display:flex;align-items:center;gap:var(--gut);height:56px;p
 .rail-tabs::-webkit-scrollbar{display:none}
 .hd-railtg{display:grid;place-items:center;width:32px;height:32px;flex:none;padding:0;border:1px solid transparent;border-radius:8px;background:0;color:var(--mu);transition:color .12s,background .12s}
 .hd-railtg:hover{color:var(--tx);background:var(--p2)}
+.hd-nav{display:flex;gap:2px;flex:none}
+.hd-nav button{display:grid;place-items:center;width:28px;height:32px;padding:0;border:1px solid transparent;border-radius:8px;background:0;color:var(--mu);transition:color .12s,background .12s}
+.hd-nav button:hover:not(:disabled){color:var(--tx);background:var(--p2)}
+.hd-nav button:disabled{opacity:.3;cursor:default}
+.hd-nav button:focus-visible{outline:2px solid #3b82f6;outline-offset:1px}
+.nav-menu .mi.cur{color:#9ec8ff}
+.nav-menu .mi small{display:block;color:var(--mu);font-size:11px}
 .hd-railtg:focus-visible{outline:2px solid #3b82f6;outline-offset:1px}
 .hd-railtg[aria-expanded="true"]{color:#9fb3cc}
 .ws.norail>#rail{display:none}
@@ -970,6 +977,10 @@ label.acc-chk.dim{color:var(--mu)}
 </nav><aside id="aside"></aside><div class="rsz" id="rsz"></div>
 <header>
   <button type="button" class="hd-railtg" id="hdRailTg" data-i18n-title="Скрыть разделы" title="Скрыть разделы" aria-expanded="true" aria-controls="rail" onclick="toggleRail()"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M6 3.5v9" stroke="currentColor" stroke-width="1.5"/></svg></button>
+  <div class="hd-nav" role="group" aria-label="История переходов">
+    <button type="button" id="navBack" title="Назад" aria-label="Назад" disabled onclick="navStep(-1)" oncontextmenu="navMenu(event)"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" aria-hidden="true"><path d="M10 3 5 8l5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <button type="button" id="navFwd" title="Вперёд" aria-label="Вперёд" disabled onclick="navStep(1)" oncontextmenu="navMenu(event)"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" aria-hidden="true"><path d="m6 3 5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+  </div>
   <div class="gojump" id="gojump">
     <span class="gojump-lead" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none"><circle cx="6.8" cy="6.8" r="4" stroke="currentColor" stroke-width="1.6"/><path d="m9.8 9.8 3.4 3.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>
     <input id="gq" autocomplete="off" data-i18n-placeholder="Имя, IP, раздел, настройка…" placeholder="Имя, IP, раздел, настройка…"
@@ -3423,6 +3434,7 @@ function mainKey(){return app==="acc"?`acc|${accSel}|${accTab}`:`${app}|${sel}|$
 function paintMain(html){
   const host=document.getElementById("main");
   if(host)paintInto(host,html,mainKey(),mainSeen);
+  navRecord();
 }
 function renderTree(){const treeEl=document.getElementById("tree");if(!treeEl)return;
   const fn={hw:treeHw,dev:treeDev,srvs:treeServers,rules:treeRules,acc:treeRoles,sys:treeOpts,log:treeLog}[app];
@@ -8879,8 +8891,89 @@ window.onmousemove=e=>{if(!drag)return;
   const left=document.getElementById("aside")?.getBoundingClientRect().left||0;
   setAsideWidth(e.clientX-left,false);if(filtPop)placeFiltPop()};
 window.onmouseup=()=>{if(drag)setAsideWidth(asideW,true);drag=false;rsz.classList.remove("on")};
+// ── История переходов ─────────────────────────────────────────────────────
+// Каждая страница главной области — шаг: раздел, объект, роль, пользователь,
+// группа. Вкладки внутри страницы шагом не считаются, но запоминаются, чтобы
+// «назад» вернул туда, где человек был, а не на первую вкладку.
+// Кнопки ‹ › в шапке ходят по шагам, правая кнопка на них показывает список
+// недавних мест, Alt+←/→ и браузерные «назад/вперёд» делают то же через
+// history: адрес не меняется, глубокие ссылки #node=… остаются как были.
+const NAV_MAX=100;
+let navHist=[],navPos=-1,navLock=false;
+function navLoc(){return{app,sel,tab,slice,selFolder,detSel,sview,tview,rule,sys,logFilt,accSel,accTab,accDom}}
+function navKey(loc){const{tab,accTab,...rest}=loc;return JSON.stringify(rest)}
+function navTitle(){
+  const sec=i18n(APPS_LIST.find(a=>a.id===app)?.label||app);
+  let t="";
+  if(app==="hw"){const n=find(sel)?.n;t=n?locName(n):""}
+  else if(app==="rules")t=rules.find(r=>r.id===rule)?.name||"";
+  else if(app==="sys")t=sysOpts.find(o=>o.id===sys)?.n||"";
+  else if(app==="log")t=logCats.find(c=>c.id===logFilt)?.n||"";
+  else if(app==="acc"){
+    if(accSel.startsWith("role:"))t=`${i18n("Роль")} «${accRoleName(accSel.slice(5))}»`;
+    else if(accSel.startsWith("user:"))t=accUsers().find(u=>u.id===accSel.slice(5))?.login||"";
+    else if(accSel.startsWith("set:"))t=`${i18n("Набор")} «${accSetName(accSel.slice(4))}»`;
+    else if(accSel.startsWith("grp:"))t=accGroupName(accSel.slice(4));
+    else t=i18n({roles:"Роли",users:"Пользователи",sets:"Наборы прав",check:"Проверка",compare:"Сравнение ролей"}[accSel]||"");
+  }
+  return t?`${sec} › ${t}`:sec;
+}
+function navRecord(){
+  if(navLock)return;
+  const loc=navLoc(),key=navKey(loc),cur=navHist[navPos];
+  if(cur&&cur.key===key){cur.loc=loc;cur.title=navTitle();navSync();return}
+  navHist.splice(navPos+1);
+  navHist.push({key,loc,title:navTitle()});
+  if(navHist.length>NAV_MAX)navHist.shift();
+  navPos=navHist.length-1;
+  try{(navPos?history.pushState:history.replaceState).call(history,{nav:navPos},"",location.href)}catch(e){}
+  navSync();
+}
+function navApply(loc){
+  navLock=true;
+  try{
+    app=loc.app;sel=loc.sel;tab=loc.tab;slice=loc.slice;selFolder=loc.selFolder;detSel=loc.detSel;
+    rule=loc.rule;sys=loc.sys;logFilt=loc.logFilt;accSel=loc.accSel;accTab=loc.accTab;accDom=loc.accDom;
+    syncViews();sview=loc.sview;tview=loc.tview;   // syncViews ставит виды по срезу, шаг их уточняет
+    if(app==="hw"&&find(sel))expandTo(sel);
+    closeUserMenu();closeTreeCtx();accMenuClose();
+    paint();
+  }finally{navLock=false}
+}
+function navJump(pos){
+  if(pos<0||pos>=navHist.length||pos===navPos)return;
+  navPos=pos;navApply(navHist[pos].loc);navSync();
+}
+// Кнопки и клавиши идут через history, чтобы указатель браузера и наш не
+// расходились; popstate доводит переход до конца.
+function navStep(d){
+  const pos=navPos+d;
+  if(pos<0||pos>=navHist.length)return;
+  try{history.go(d)}catch(e){navJump(pos)}
+}
+window.addEventListener("popstate",e=>{
+  const pos=e.state&&typeof e.state.nav==="number"?e.state.nav:null;
+  if(pos!==null)navJump(Math.max(0,Math.min(navHist.length-1,pos)));
+});
+function navSync(){
+  const b=document.getElementById("navBack"),f=document.getElementById("navFwd");
+  if(!b||!f)return;
+  const prev=navHist[navPos-1],next=navHist[navPos+1];
+  b.disabled=!prev;f.disabled=!next;
+  b.title=prev?`${i18n("Назад")}: ${prev.title}`:i18n("Назад");
+  f.title=next?`${i18n("Вперёд")}: ${next.title}`:i18n("Вперёд");
+}
+function navMenu(e){
+  e.preventDefault();
+  if(navHist.length<2)return;
+  const items=navHist.map((h,i)=>({h,i})).reverse().slice(0,15);
+  accMenuOpen(e.currentTarget,`<div class="acc-mi-h">${i18n("Недавние места")}</div>`+items.map(({h,i})=>
+    `<button type="button" class="mi ${i===navPos?"cur on":""}" ${i===navPos?"disabled":""} onclick="accMenuClose();navStep(${i-navPos})">${escHtml(h.title)}</button>`).join(""));
+  document.getElementById("accMenu")?.classList.add("nav-menu");
+}
 document.onkeydown=e=>{
   if((e.ctrlKey||e.metaKey)&&(e.key==="k"||e.key==="K")){e.preventDefault();focusGo();return}
+  if(e.altKey&&!e.ctrlKey&&!e.metaKey&&(e.key==="ArrowLeft"||e.key==="ArrowRight")){e.preventDefault();navStep(e.key==="ArrowLeft"?-1:1);return}
   // «/» ведёт к поиску — он один и тот же во всех разделах.
   if(e.key==="/"&&!e.target.closest("input,textarea,select")){e.preventDefault();focusGo();return}
   if(app==="hw"&&!document.getElementById("gopop")?.classList.contains("open")){
