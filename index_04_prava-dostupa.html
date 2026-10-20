@@ -6648,7 +6648,7 @@ function treeRoles(){
   if(!open.has("acc-x:users"))h+=us.filter(u=>matchesText(q,u.login,u.name)).map(u=>
     `<div class="n ${accUserActive(u)?"":"off"} ${accSel==="user:"+u.id?"on":""}" style="--l:1" data-go="user:${u.id}" onclick="accGo('user:${u.id}')" title="${escHtml(u.name)} · ${i18n("вход:")} ${accAgo(u.last)}"><span class="tw"></span>${ic("acc_user")}<span class="nm">${hlText(u.login,q)}</span>${accUserDiff(u.id)?`<span class="acc-mod">●</span>`:""}${treeTail({})}</div>`).join("");
   const gs=accGroups(accDom);
-  h+=sec("groups","Папки","folder",gs.length-1,"grp:"+accDom);
+  h+=sec("groups","Папки устройств","folder",gs.length-1,"grp:"+accDom);
   if(!open.has("acc-x:groups")){
     const hidden=new Set();
     gs.forEach(g=>{if(g.parent&&(hidden.has(g.parent)||!open.has("accg:"+g.parent)))hidden.add(g.id)});
@@ -6685,10 +6685,10 @@ function accUI(){
   if(accSel==="compare")return accCmpUI();
   accSel="roles";accRolesUI();
 }
-const ACC_SUB="Роли и пользователи домена. Права выдаются роли на папки «Оборудования» и отдельные объекты; пользователь получает наибольшее по всем своим действующим ролям";
+const ACC_SUB="Роли и пользователи домена. Права выдаются роли на папки устройств (те же, что в «Оборудовании») и на отдельные объекты; пользователь получает наибольшее по всем своим действующим ролям";
 function accListTabs(){
   const cur=accSel.startsWith("grp:")?"groups":accSel;
-  return[["roles","Роли"],["users","Пользователи"],["groups","Папки"],["check","Проверка"]].map(([id,x])=>`<button class="tab ${cur===id?"on":""}" onclick="accGo('${id==="groups"?"grp:"+accDom:id}')">${i18n(x)}${id==="check"&&accIssues().length?` <span class="acc-tabcnt warn">${accIssues().length}</span>`:""}</button>`).join("");
+  return[["roles","Роли"],["users","Пользователи"],["groups","Папки устройств"],["check","Проверка"]].map(([id,x])=>`<button class="tab ${cur===id?"on":""}" onclick="accGo('${id==="groups"?"grp:"+accDom:id}')">${i18n(x)}${id==="check"&&accIssues().length?` <span class="acc-tabcnt warn">${accIssues().length}</span>`:""}</button>`).join("");
 }
 function accRolesUI(){
   const rs=accRoles(),ordinary=rs.filter(r=>!r.g.unr);
@@ -6743,7 +6743,7 @@ function accUsersUI(){
     })}</div>`);
 }
 // ── Роль ──
-const ACC_RTABS=[["global","Глобальные"],["groups","На папки"],["objects","На объекты"],["effective","Итоговый доступ"],["members","Пользователи"],["history","История"]];
+const ACC_RTABS=[["global","Глобальные"],["groups","На папки устройств"],["objects","На объекты"],["effective","Итоговый доступ"],["members","Пользователи"],["history","История"]];
 function accRoleUI(r){
   const own=accIsOwn(r.id),ro=own,d=accRoleDiff(r.id);
   if(!ACC_RTABS.some(t=>t[0]===accTab))accTab="global";
@@ -6802,7 +6802,7 @@ function accGlobalHtml(r,ro){
     ${card("Доступ к функциям",`<div class="acc-feats acc-g2">${featGroups}</div>`)}
     ${card("Карты, тревоги, закладки",`<div class="g acc-g3">${ACC_GLOB.map(([k,t,kind])=>sel(k,t,kind)).join("")}</div>`)}
     ${card("Права на управление правами",`<div class="g"><div><label>${i18n("Уровень")}</label>${accSelect("ur",g.ur,`accSetOwnField('${r.id}','ur',this.value)`,dis,false,"Права на управление правами")}</div>
-      <p class="sub" style="margin:22px 0 0">${i18n("«Права на папки и объекты» — только вкладки «На папки» и «На объекты»; «Все» — ещё роли и пользователи")}</p></div>`)}
+      <p class="sub" style="margin:22px 0 0">${i18n("«Права на папки и объекты» — только вкладки «На папки устройств» и «На объекты»; «Все» — ещё роли и пользователи")}</p></div>`)}
     ${card("Права по умолчанию",`<p class="acc-hint">${i18n("Действуют на объекты, для которых ни папка, ни право на объект не задали своего")}</p>${defGroups}`)}
     ${card("Ограничения",`<div class="g"><div><label>${i18n("Глубина просмотра архива")}</label><div class="acc-pwd"><input type="number" min="0" step="1" value="${g.depth?Math.round(g.depth/24):0}" ${ro?"disabled":""} style="max-width:120px" onchange="accSetOwnField('${r.id}','depth',Math.max(0,Math.round(+this.value||0))*24)"><span class="sub" style="align-self:center">${i18n("дней; 0 — без ограничения")}</span></div></div>
       ${sup.role||!ro?`<div><label>${i18n("Подтверждение супервизором")}</label><select ${ro?"disabled":""} onchange="accSup('${r.id}','role',this.value)"><option value="">${i18n("не требуется")}</option>${supRoles.map(x=>`<option value="${x.id}" ${x.id===sup.role?"selected":""}>${i18n("роль")} «${escHtml(x.n)}»</option>`).join("")}</select>
@@ -6835,7 +6835,7 @@ function accGroupsTabHtml(r,ro){
   const rows=accGroups(accDom).map(g=>({rid:r.id,gid:g.id,label:g.root?accGroupName(g.id):g.name,depth:g.depth,ro:ro||r.g.unr,unr:r.g.unr,dom:accDom}));
   const n=Object.keys(r.groups).filter(id=>accGroups(accDom).some(g=>g.id===id)).length;
   return`${r.g.unr?`<div class="nt">${i18n("У роли неограниченный доступ: права на папки не проверяются")}</div>`:""}
-    ${card(`${i18n("Права роли на папки")} · ${accDomName(accDom)}`,accMatrixHtml(rows,i18n("Папка"),"role:"+r.id),`<span class="ch-cams-cnt">${i18n("задано для")} <b>${n}</b> ${plural(n,"папки|папок|папок")}</span>`)}`;
+    ${card(`${i18n("Права роли на папки устройств")} · ${accDomName(accDom)}`,accMatrixHtml(rows,i18n("Папка"),"role:"+r.id),`<span class="ch-cams-cnt">${i18n("задано для")} <b>${n}</b> ${plural(n,"папки|папок|папок")}</span>`)}`;
 }
 function accMatrixHtml(rows,first,scope){
   if(accFoc.scope!==scope+"|"+accDom)accFoc={r:0,c:0,scope:scope+"|"+accDom};
@@ -6926,7 +6926,7 @@ function accObjectsHtml(r,ro){
         return`<tr class="${chg?"chg":""}"><td class="acc-num">${escHtml(o.short??"")}</td><td class="acc-cam">${accObjIc(o)} ${escHtml(locName(o))}<small class="acc-cmt">${i18n(accObjKind(o))}</small></td>
           <td class="sub acc-grps">${ACC_NOFOLDER.has(o.type)?"—":accObjGroups(o.id,accDom).map(id=>escHtml(accGroupName(id))).join(", ")}</td>
           <td class="acc-ex">${cells}</td></tr>`},
-      wrap:rows=>`<table class="acc-tbl"><tr><th>№</th><th>${i18n("Объект")}</th><th>${i18n("Папки")}</th><th>${i18n("Тип доступа · без своего права · своё право")}</th></tr>${rows}</table>`,
+      wrap:rows=>`<table class="acc-tbl"><tr><th>№</th><th>${i18n("Объект")}</th><th>${i18n("Папки устройств")}</th><th>${i18n("Тип доступа · без своего права · своё право")}</th></tr>${rows}</table>`,
       ph:"Поиск объекта",unit:"объект|объекта|объектов",empty:"В домене нет объектов"
     })}`;
 }
@@ -7122,7 +7122,7 @@ function accCmpUI(){
     ACC_DEFS.forEach(([k,t,kind])=>add("По умолчанию",i18n(t),accLv(kind,a.g[k]),accLv(kind,b.g[k])));
     const gtxt=(r,gid)=>{const o=r.groups[gid]||{};const bits=ACC_GF.filter(([f])=>o[f]).map(([f,t])=>`${i18n(t)}: ${accLv(f,o[f])}`);return bits.join(" · ")||"—"};
     const domName=locName(domains.find(d=>d.id===accDom)||{name:accDom});
-    accGroups(accDom).forEach(g=>{if(a.groups[g.id]||b.groups[g.id])add(`${i18n("На папки")} · ${domName}`,g.root?accGroupName(g.id):"  ".repeat(g.depth)+g.name,gtxt(a,g.id),gtxt(b,g.id))});
+    accGroups(accDom).forEach(g=>{if(a.groups[g.id]||b.groups[g.id])add(`${i18n("На папки устройств")} · ${domName}`,g.root?accGroupName(g.id):"  ".repeat(g.depth)+g.name,gtxt(a,g.id),gtxt(b,g.id))});
     const otxt=(r,id)=>{const o=r.objs[id]||{};const bits=Object.keys(o).map(f=>`${i18n(ACC_FIELD_NAME[f])}: ${accLv(f,o[f])}`);return bits.join(" · ")||"—"};
     const oids=new Set([...Object.keys(a.objs),...Object.keys(b.objs)]);
     const inDom=new Set(accObjects(accDom).map(x=>x.id));
@@ -7204,7 +7204,7 @@ function accGroupUI(gid){
           return`<div class="it" onclick="openNode('${n.id}',{app:'hw',tab:'${n.type==="camera"?"acc":"gen"}'})"><span>${ic(n.type)}</span><span>${escHtml(locName(n))}<small>${LB[n.type]||n.type}${also.length?` · ${i18n("ещё в:")} ${also.map(x=>escHtml(accGroupRow(x)?.name||x)).join(", ")}`:""}</small></span></div>`},
         ph:"Найти объект",unit:"объект|объекта|объектов",empty:"В папке нет объектов"});
   }
-  paintMain(mainHd(cr,title,g.root?"Корневая папка домена":`${i18n("Папка")} · ${accDomName(g.dom)}`,tabsH,act)+`<div class="sc">${body}</div>`);
+  paintMain(mainHd(cr,title,g.root?"Корневая папка устройств домена":`${i18n("Папка устройств")} · ${accDomName(g.dom)}`,tabsH,act)+`<div class="sc">${body}</div>`);
 }
 
 // ── Вкладка «Доступ» в карточке камеры («Оборудование») ──
@@ -7430,7 +7430,7 @@ function accWzRights(){
     <div class="wsec">${i18n("Доступ к функциям")}</div>${feats}
     <div class="wsec">${i18n("Карты, тревоги, закладки")}</div><div class="g acc-g3">${ACC_GLOB.map(([k,t,kind])=>sel(k,t,kind)).join("")}</div>
     <div class="wsec">${i18n("Права по умолчанию")}</div>${defs}
-    <div class="wsec">${i18n("Камеры папок")} · ${accDomName(accDom)}</div>
+    <div class="wsec">${i18n("Камеры по папкам устройств")} · ${accDomName(accDom)}</div>
     <div class="acc-wz-grp"><table class="acc-tbl">${grows}</table></div>`;
 }
 function accWzFeat(k,on){const w=accWz;w.g.feat=on?[...new Set([...w.g.feat,k])]:w.g.feat.filter(x=>x!==k);accWzRender()}
