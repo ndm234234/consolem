@@ -860,6 +860,7 @@ label.acc-chk.dim{color:var(--mu)}
 .acc-chip.sm{font-size:11px;padding:1px 7px;margin:0 4px 0 0}
 .acc-chip.on{border-color:var(--bl);color:#9ec8ff}
 .acc-chip.warn{border-color:#5a4c2a;color:#e6b35c}.acc-chip.gone{border-color:#5a3434;color:#e88;text-decoration:line-through}
+.acc-chip.exp{border-color:#5a3434;color:#e88}
 .acc-chip small{color:var(--mu);font-size:11px;text-decoration:none}
 .acc-chip .lk{font-size:inherit;color:inherit}.acc-chip.on .lk{color:#9ec8ff}
 .acc-chip.pick{cursor:pointer}.acc-chip.pick input{width:auto;height:auto;margin:0;accent-color:var(--bl)}
@@ -6825,7 +6826,7 @@ function accUserMatch(u,f){
 function accUserRolesHtml(u,linkTab){
   if(!u.roles.length)return`<span class="sub">${i18n("нет ролей — не сможет войти")}</span>`;
   return u.roles.map(id=>{const t=accUntil(u,id),ex=accExpired(u,id),soon=accSoon(u,id);
-    return`<span class="acc-chip ${ex?"gone":soon?"warn":""}" title="${ex?i18n("Срок истёк"):t?i18n("Действует до")+" "+accFmt(t):""}"><button type="button" class="lk" onclick="event.stopPropagation();accGo('role:${id}','${linkTab||"global"}')">${escHtml(accRoleName(id))}</button>${t?` <small>${ex?i18n("истёк"):i18n("до")+" "+accFmt(t)}</small>`:""}</span>`}).join("");
+    return`<span class="acc-chip ${ex?"exp":soon?"warn":""}" title="${ex?i18n("Срок истёк"):t?i18n("Действует до")+" "+accFmt(t):""}"><button type="button" class="lk" onclick="event.stopPropagation();accGo('role:${id}','${linkTab||"global"}')">${escHtml(accRoleName(id))}</button>${t?` <small>${ex?i18n("истёк"):i18n("до")+" "+accFmt(t)}</small>`:""}</span>`}).join("");
 }
 function accUserStateHtml(u){
   if(!u.on)return`<span class="bd off">${i18n("выключен")}</span>`;
@@ -7278,7 +7279,7 @@ function accMembersHtml(r,ro){
   [...accMemSel].forEach(id=>{if(!alive.has(id))accMemSel.delete(id)});
   const ck=!ro;
   const row=u=>{const s=srvUsers.find(x=>x.id===u.id),was=!!s?.roles.includes(r.id)&&accUntil(s,r.id)===accUntil(u,r.id),ex=accExpired(u,r.id),me=u.login===ACC_ME;
-    return`<tr data-uid="${u.id}" class="${was?"":"chg"} ${ex||!accUserActive(u)?"off":""} ${accMemSel.has(u.id)?"sel":""}">${ck?`<td class="acc-ck">${me?"":`<input type="checkbox" class="acc-rowchk" ${accMemSel.has(u.id)?"checked":""} aria-label="${i18n("Выбрать")} ${escHtml(u.login)}" onchange="accMemPick('${u.id}',this.checked)">`}</td>`:""}<td><button type="button" class="lk" onclick="accGo('user:${u.id}')">${escHtml(u.login)}</button>${ex?` <span class="acc-chip gone sm">${i18n("срок истёк")}</span>`:accSoon(u,r.id)?` <span class="acc-chip warn sm">${i18n("истекает")}</span>`:""}</td><td>${escHtml(u.name)}</td><td>${accUserStateHtml(u)}</td>
+    return`<tr data-uid="${u.id}" class="${was?"":"chg"} ${ex||!accUserActive(u)?"off":""} ${accMemSel.has(u.id)?"sel":""}">${ck?`<td class="acc-ck">${me?"":`<input type="checkbox" class="acc-rowchk" ${accMemSel.has(u.id)?"checked":""} aria-label="${i18n("Выбрать")} ${escHtml(u.login)}" onchange="accMemPick('${u.id}',this.checked)">`}</td>`:""}<td><button type="button" class="lk" onclick="accGo('user:${u.id}')">${escHtml(u.login)}</button>${ex?` <span class="acc-chip exp sm">${i18n("срок истёк")}</span>`:accSoon(u,r.id)?` <span class="acc-chip warn sm">${i18n("истекает")}</span>`:""}</td><td>${escHtml(u.name)}</td><td>${accUserStateHtml(u)}</td>
       <td>${accUntilInput(u,r.id,ro||me)}</td>
       <td class="sub">${u.roles.filter(id=>id!==r.id).map(id=>escHtml(accRoleName(id))).join(", ")}</td>
       <td style="text-align:right">${ro||me?"":`<button type="button" class="btn s" onclick="accAssign('${u.id}','${r.id}',false)">${i18n("Снять")}</button>`}</td></tr>`};
@@ -7420,7 +7421,7 @@ function accUserGenHtml(u){
   if(u.on&&accStale(u))warn.push(`<div class="nt">${i18n("Не входил")} ${accAgo(u.last)}. ${i18n("Если доступ больше не нужен, выключите учётную запись")}</div>`);
   const others=accRoles().filter(r=>!u.roles.includes(r.id));
   const rows=u.roles.map(id=>{const r=accRole(id);if(!r)return"";const ex=accExpired(u,id);
-    return`<tr class="${ex?"off":""}"><td><button type="button" class="lk" onclick="accGo('role:${id}','global')">${escHtml(r.n)}</button>${ex?` <span class="acc-chip gone sm">${i18n("срок истёк")}</span>`:accSoon(u,id)?` <span class="acc-chip warn sm">${i18n("истекает")}</span>`:""}</td>
+    return`<tr class="${ex?"off":""}"><td><button type="button" class="lk" onclick="accGo('role:${id}','global')">${escHtml(r.n)}</button>${ex?` <span class="acc-chip exp sm">${i18n("срок истёк")}</span>`:accSoon(u,id)?` <span class="acc-chip warn sm">${i18n("истекает")}</span>`:""}</td>
       <td class="sub">${escHtml(accSummary(r.g))}</td><td class="sub">${i18n(ACC_TZ[r.tz||0])}${r.sup?.role&&(r.sup.login||r.sup.export)?`<br>${accSupText(r)}`:""}</td><td>${accUntilInput(u,id,me)}</td>
       <td style="text-align:right">${me?"":`<button type="button" class="btn s" onclick="accAssign('${u.id}','${id}',false)">${i18n("Снять")}</button>`}</td></tr>`}).join("");
   const add=me?"":`<select style="width:auto;min-width:220px" onchange="if(this.value)accAssign('${u.id}',this.value,true)"><option value="">${i18n("Назначить роль…")}</option>${others.map(r=>`<option value="${r.id}">${escHtml(r.n)}</option>`).join("")}</select>`;
