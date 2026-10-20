@@ -6982,7 +6982,7 @@ function accGuard(mutate){
 // ── Навигация ──
 function accGo(s,t){
   accTipClose();
-  if(accFromLink())accFlashLanding();
+  if(accFromLink()){accFlashLanding();navMark()}
   if(s!==accSel)accOvNote=null;
   accSel=s;if(t)accTab=t;
   accUserSel.clear();accMemSel.clear();accGSel.clear();accSelMe=false;
@@ -10865,6 +10865,16 @@ window.onmouseup=()=>{if(drag)setAsideWidth(asideW,true);drag=false;rsz.classLis
 // history: адрес не меняется, глубокие ссылки #node=… остаются как были.
 const NAV_MAX=100;
 let navHist=[],navPos=-1,navLock=false;
+// Переход по ссылке — всегда шаг, даже если страница та же, а сменилась только
+// вкладка или место в ней: «назад» вернёт туда, где нажали, с той же прокруткой.
+// Один клик — один шаг: ссылка из «Оборудования» сначала открывает раздел,
+// потом страницу, а в истории остаётся только страница.
+var navForce=false,navLastEv=null;
+function navMark(){
+  const cur=navHist[navPos];
+  if(cur){const sc=document.querySelector("#main .sc");cur.loc.sc=sc?sc.scrollTop:null;cur.loc.foc={...accFoc}}
+  navForce=true;
+}
 function navLoc(){return{app,sel,tab,slice,selFolder,detSel,sview,tview,rule,sys,logFilt,accSel,accTab,accDom}}
 function navKey(loc){const{tab,accTab,...rest}=loc;return JSON.stringify(rest)}
 function navTitle(){
@@ -10886,8 +10896,10 @@ function navTitle(){
 }
 function navRecord(){
   if(navLock)return;
-  const loc=navLoc(),key=navKey(loc),cur=navHist[navPos];
-  if(cur&&cur.key===key){cur.loc=loc;cur.title=navTitle();navSync();return}
+  const loc=navLoc(),key=navKey(loc),cur=navHist[navPos],ev=window.event||null,force=navForce;navForce=false;
+  if(cur&&cur.key===key&&!force){cur.loc={...loc,sc:cur.loc.sc,foc:cur.loc.foc};cur.title=navTitle();navSync();return}
+  if(cur&&ev&&ev===navLastEv&&navPos>0){navHist[navPos]={key,loc,title:navTitle()};navSync();return}
+  navLastEv=ev;
   navHist.splice(navPos+1);
   navHist.push({key,loc,title:navTitle()});
   if(navHist.length>NAV_MAX)navHist.shift();
@@ -10902,9 +10914,11 @@ function navApply(loc){
     rule=loc.rule;sys=loc.sys;logFilt=loc.logFilt;accSel=loc.accSel;accTab=loc.accTab;accDom=loc.accDom;
     syncViews();sview=loc.sview;tview=loc.tview;   // syncViews ставит виды по срезу, шаг их уточняет
     if(app==="hw"&&find(sel))expandTo(sel);
-    closeUserMenu();closeTreeCtx();accMenuClose();
+    closeUserMenu();closeTreeCtx();accMenuClose();accTipClose();
     accUserSel.clear();accMemSel.clear();accSelMe=false;accDrawerClose("accBulk");accDrawerClose("accAdd");
+    if(loc.foc)accFoc={...loc.foc};
     paint();
+    if(loc.sc!=null)requestAnimationFrame(()=>{const sc=document.querySelector("#main .sc");if(sc)sc.scrollTop=loc.sc});
   }finally{navLock=false}
 }
 function navJump(pos){
