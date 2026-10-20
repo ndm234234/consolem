@@ -858,6 +858,8 @@ html[data-theme="light"] .acc-date{color-scheme:light}
 .acc-mx td.c:hover{background:#142033}
 .acc-mx td.c:focus-visible{outline:2px solid var(--bl);outline-offset:-2px}
 .acc-mx td.unset{color:var(--mu)}
+.acc-mx td.ovr{background-image:linear-gradient(225deg,#e6b35c 0 5px,transparent 5px)}
+.acc-ovnote{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.acc-ovnote>div:first-child{flex:1;min-width:260px}.acc-ovnote-a{display:flex;gap:6px}
 .acc-mx td.inh{color:#7f93ad}.acc-mx td.def{color:#5f718a;font-style:italic}
 .acc-menu{position:fixed;z-index:60;background:var(--p);border:1px solid var(--ln);border-radius:8px;box-shadow:0 12px 32px #0008;padding:4px;min-width:200px;max-width:440px;max-height:min(70vh,520px);overflow:auto}
 .acc-menu .mi{display:block;width:100%;text-align:left;border:0;background:0;padding:6px 10px 6px 26px;border-radius:5px;font-size:12px;position:relative;color:var(--tx)}
@@ -6612,11 +6614,12 @@ function accGvSrv(rid,gid,f){return accGv(rid,gid,f,accSrv())}
 function accInh(rid,gid,f,dom,st){
   const r=accRole(rid,st);if(!r)return{v:"",k:"def"};
   let best=null;
-  accChain(gid,dom).slice(1).forEach(id=>{const v=accGv(rid,id,f,st);if(v&&(!best||accRank(f,v)>accRank(f,best.v)))best={id,v}});
+  for(const id of accChain(gid,dom).slice(1)){const v=accGv(rid,id,f,st);if(v){best={id,v};break}}
   if(best)return{v:best.v,k:"grp",g:best.id};
   return{v:r.g[ACC_GF_DEF[f]]||ACC_LV[f][0][0],k:"def"};
 }
-// Право на объект → наибольший уровень по папкам объекта и папкам над ними →
+// Право на объект → по каждой папке объекта ближайшее заданное значение (сама
+// папка, иначе папка над ней и выше), из нескольких папок — наибольшее →
 // право роли по умолчанию. Неограниченный доступ обходит всё.
 function accRoleLevel(r,id,field,dom,skipObj){
   if(r.g.unr)return{lv:ACC_LV[field].at(-1)[0],src:{k:"unr"}};
@@ -6624,10 +6627,11 @@ function accRoleLevel(r,id,field,dom,skipObj){
   if(ex&&!skipObj)return{lv:ex,src:{k:"obj"}};
   let best=null;
   const o=accObj(id);
-  if(!o||!ACC_NOFOLDER.has(o.type))accObjGroups(id,dom).forEach(via=>accChain(via,dom).forEach(gid=>{
-    const v=r.groups[gid]?.[field];
-    if(v&&(!best||accRank(field,v)>accRank(field,best.lv)))best={lv:v,src:{k:"grp",g:gid,via}};
-  }));
+  if(!o||!ACC_NOFOLDER.has(o.type))accObjGroups(id,dom).forEach(via=>{
+    const gid=accChain(via,dom).find(g=>r.groups[g]?.[field]);if(!gid)return;
+    const v=r.groups[gid][field];
+    if(!best||accRank(field,v)>accRank(field,best.lv))best={lv:v,src:{k:"grp",g:gid,via}};
+  });
   return best||{lv:r.g[ACC_GF_DEF[field]]||ACC_LV[field][0][0],src:{k:"def"}};
 }
 function accRoleCam(r,cid,dom){return accRoleLevel(r,cid,"cam",dom)}
@@ -6653,7 +6657,7 @@ function accWhyGroup(rid,gid,f,dom){
   const r=accRole(rid),g=escHtml(accGroupName(gid)),own=accGv(rid,gid,f);
   if(r.g.unr)return i18n("У роли неограниченный доступ: права на папки не проверяются");
   const h=accInh(rid,gid,f,dom);
-  if(own)return`${i18n("Задано для папки")} «${g}»: <b>${accLv(f,own)}</b>`+(h.k==="grp"&&accRank(f,h.v)>accRank(f,own)?`<br>${i18n("Но папка выше")} «${escHtml(accGroupName(h.g))}» ${i18n("даёт больше")} — <b>${accLv(f,h.v)}</b>; ${i18n("действует наибольшее, своё значение ничего не ограничивает")}`:"");
+  if(own)return`${i18n("Задано для папки")} «${g}»: <b>${accLv(f,own)}</b>`+(h.k==="grp"&&h.v!==own?`<br>${i18n("Папка выше")} «${escHtml(accGroupName(h.g))}» ${i18n("задаёт")} ${accLv(f,h.v)}, ${i18n("но своё значение папки важнее")}`:"")+`<br><span class="sub">${i18n("Если объект лежит ещё в одной папке, из папок берётся наибольшее")}</span>`;
   if(h.k==="grp")return`${i18n("Для папки")} «${g}» ${i18n("не задано. Её объектам действует право папки")} «${escHtml(accGroupName(h.g))}»: <b>${accLv(f,h.v)}</b>`;
   return`${i18n("Для папки")} «${g}» ${i18n("и папок над ней не задано. Действует право роли по умолчанию:")} <b>${accLv(f,h.v)}</b>`;
 }
@@ -7327,20 +7331,37 @@ function accMatrixHtml(rows,first,scope){
     const v=accGv(row.rid,row.gid,f),chg=v!==accGvSrv(row.rid,row.gid,f);
     let txt,cls="",title="";
     if(row.unr){txt="—";cls="unset";title=i18n("Неограниченный доступ: не проверяется")}
-    else if(v){txt=accLv(f,v)}
+    else if(v){txt=accLv(f,v);const h=accInh(row.rid,row.gid,f,row.dom);if(h.k==="grp"&&h.v!==v){cls="ovr";title=`${i18n("Своё значение папки важнее папки выше")} «${accGroupName(h.g)}» (${accLv(f,h.v)})`}}
     else{const h=accInh(row.rid,row.gid,f,row.dom);cls=h.k==="grp"?"inh":"def";txt=(h.k==="grp"?"↑ ":"")+accLv(f,h.v);
       title=h.k==="grp"?`${i18n("Унаследовано от папки")} «${accGroupName(h.g)}»`:i18n("Право роли по умолчанию")}
     return`<td class="c ${cls} ${chg?"chg":""} ${row.ro?"ro":""}" role="gridcell" tabindex="${i===accFoc.r&&j===accFoc.c?0:-1}" data-mx="${i}:${j}" title="${escHtml(title)}" aria-label="${escHtml(row.label)}, ${i18n(ft)}: ${txt}" onclick="accCellClick(event,${i},${j})" onkeydown="accCellKey(event,${i},${j})" onfocus="accFoc.r=${i};accFoc.c=${j}">${txt}</td>`}).join("")}</tr>`).join("");
-  return`<p class="acc-hint">${i18n("Белым — задано для папки. Серым — что действует без своего значения: ↑ от папки выше, без стрелки — право роли по умолчанию. Из нескольких папок объекта берётся наибольшее. Архивы, видеостены, плагины и макрокоманды в папках не лежат — для них есть только права по умолчанию и исключения")}<br>${i18n("Стрелки — переход, Пробел — следующее значение, Enter — «Почему так»")}</p>
-    <div class="acc-wrap"><table class="acc-mx" role="grid">${head}${body}</table></div>`;
+  return`<p class="acc-hint">${i18n("Белым — задано для папки: оно важнее папок выше. Серым — что действует без своего значения: ↑ от ближайшей папки выше, где задано, без стрелки — право роли по умолчанию. Если объект лежит в нескольких папках, из них берётся наибольшее. Архивы, видеостены, плагины и макрокоманды в папках не лежат — для них есть только права по умолчанию и исключения")}<br>${i18n("Стрелки — переход, Пробел — следующее значение, Enter — «Почему так»")}</p>
+    ${accOvNoteHtml(rows)}<div class="acc-wrap"><table class="acc-mx" role="grid">${head}${body}</table></div>`;
 }
 function accCellAt(i,j){return document.querySelector(`[data-mx="${i}:${j}"]`)}
 function accRefocus(){
   if(!accMxRows.length||document.activeElement&&document.activeElement!==document.body&&!document.activeElement.closest?.(".acc-mx"))return;
   requestAnimationFrame(()=>accCellAt(accFoc.r,accFoc.c)?.focus({preventScroll:true}));
 }
+// Последняя правка папки: если ниже есть папки со своим значением, они важнее
+// и не меняются — над матрицей об этом говорится, с кнопкой «Сбросить у вложенных».
+let accOvNote=null;
+function accDescOwn(rid,gid,f,dom){return accGroups(dom).filter(g=>g.id!==gid&&accChain(g.id,dom).includes(gid)&&accGv(rid,g.id,f))}
+function accOvNoteHtml(rows){
+  const n=accOvNote;if(!n||!rows.some(x=>x.rid===n.rid&&x.gid===n.gid&&x.dom===n.dom))return"";
+  const ds=accDescOwn(n.rid,n.gid,n.f,n.dom);if(!ds.length)return"";
+  const fn=i18n(ACC_FIELD_NAME[n.f]),list=ds.slice(0,4).map(g=>`«${escHtml(g.root?accGroupName(g.id):g.name)}» — ${accLv(n.f,accGv(n.rid,g.id,n.f))}`).join(", ")+(ds.length>4?` ${i18n("и ещё")} ${ds.length-4}`:"");
+  return`<div class="nt acc-ovnote"><div>${i18n("Роль")} «${escHtml(accRoleName(n.rid))}», ${fn}: ${i18n("в")} ${ds.length} ${plural(ds.length,"вложенной папке|вложенных папках|вложенных папках")} ${i18n("задано своё, оно важнее и не изменилось")}: ${list}</div>
+    <div class="acc-ovnote-a"><button type="button" class="btn s" onclick="accOvReset()">${i18n("Сбросить у вложенных")}</button><button type="button" class="btn s" onclick="accOvNote=null;accUI()">${i18n("Оставить")}</button></div></div>`;
+}
+function accOvReset(){
+  const n=accOvNote,r=n&&accRole(n.rid);if(!r)return;
+  accDescOwn(n.rid,n.gid,n.f,n.dom).forEach(g=>{const c={...r.groups[g.id]};delete c[n.f];if(Object.keys(c).length)r.groups[g.id]=c;else delete r.groups[g.id]});
+  accOvNote=null;accEdited();
+}
 function accSetCell(i,j,v){
   const row=accMxRows[i],f=ACC_GF[j][0],r=accRole(row.rid);if(!r||row.ro)return;
+  accOvNote={rid:row.rid,gid:row.gid,f,dom:row.dom};
   const cur={...(r.groups[row.gid]||{})};
   if(v)cur[f]=v;else delete cur[f];
   if(Object.keys(cur).length)r.groups[row.gid]=cur;else delete r.groups[row.gid];
