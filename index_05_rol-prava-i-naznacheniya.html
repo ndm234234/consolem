@@ -859,6 +859,14 @@ html[data-theme="light"] .acc-date{color-scheme:light}
 .acc-mx td.c:focus-visible{outline:2px solid var(--bl);outline-offset:-2px}
 .acc-mx td.unset{color:var(--mu)}
 .acc-mx td.ovr{background-image:linear-gradient(225deg,#e6b35c 0 5px,transparent 5px)}
+.acc-legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--mu);margin:0 0 6px}
+.acc-lg-i{display:inline-flex;align-items:center;gap:6px}
+.acc-lg{display:inline-block;padding:2px 8px;border:1px solid var(--ln);border-radius:4px;color:var(--tx);background:var(--p)}
+.acc-lg.inh{color:#7f93ad}.acc-lg.def{color:#5f718a;font-style:italic}
+.acc-lg.ovr{background-image:linear-gradient(225deg,#e6b35c 0 5px,transparent 5px)}
+.acc-src{font-size:inherit}
+@keyframes accFlash{0%{background-color:transparent;box-shadow:inset 0 0 0 2px transparent}12%,44%{background-color:#2f6fed55;box-shadow:inset 0 0 0 2px var(--bl)}28%,60%{background-color:#2f6fed1f;box-shadow:inset 0 0 0 2px var(--bl)}100%{background-color:transparent;box-shadow:inset 0 0 0 2px transparent}}
+.acc-flash,tr.acc-flash>td{animation:accFlash 2.4s ease-out}
 .acc-ovnote{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.acc-ovnote>div:first-child{flex:1;min-width:260px}.acc-ovnote-a{display:flex;gap:6px}
 .acc-mx td.inh{color:#7f93ad}.acc-mx td.def{color:#5f718a;font-style:italic}
 .acc-menu{position:fixed;z-index:60;background:var(--p);border:1px solid var(--ln);border-radius:8px;box-shadow:0 12px 32px #0008;padding:4px;min-width:200px;max-width:440px;max-height:min(70vh,520px);overflow:auto}
@@ -6609,8 +6617,8 @@ function accObjIc(n){return ic(n.type==="videowall"?"videowall":n.type==="plugin
 // ── Расчёт: права на папки и итоговый доступ ──
 function accGv(rid,gid,f,st){return accRole(rid,st)?.groups[gid]?.[f]||""}
 function accGvSrv(rid,gid,f){return accGv(rid,gid,f,accSrv())}
-// Что действует на объекты папки, когда своего значения нет: наибольшее по
-// папкам выше, иначе право роли по умолчанию.
+// Что действует на объекты папки, когда своего значения нет: значение
+// ближайшей папки выше, где оно задано, иначе право роли по умолчанию.
 function accInh(rid,gid,f,dom,st){
   const r=accRole(rid,st);if(!r)return{v:"",k:"def"};
   let best=null;
@@ -6624,17 +6632,51 @@ function accInh(rid,gid,f,dom,st){
 function accRoleLevel(r,id,field,dom,skipObj){
   if(r.g.unr)return{lv:ACC_LV[field].at(-1)[0],src:{k:"unr"}};
   const ex=r.objs[id]?.[field];
-  if(ex&&!skipObj)return{lv:ex,src:{k:"obj"}};
+  if(ex&&!skipObj)return{lv:ex,src:{k:"obj",oid:id,dom}};
   let best=null;
   const o=accObj(id);
   if(!o||!ACC_NOFOLDER.has(o.type))accObjGroups(id,dom).forEach(via=>{
     const gid=accChain(via,dom).find(g=>r.groups[g]?.[field]);if(!gid)return;
     const v=r.groups[gid][field];
-    if(!best||accRank(field,v)>accRank(field,best.lv))best={lv:v,src:{k:"grp",g:gid,via}};
+    if(!best||accRank(field,v)>accRank(field,best.lv))best={lv:v,src:{k:"grp",g:gid,via,dom}};
   });
-  return best||{lv:r.g[ACC_GF_DEF[field]]||ACC_LV[field][0][0],src:{k:"def"}};
+  return best||{lv:r.g[ACC_GF_DEF[field]]||ACC_LV[field][0][0],src:{k:"def",dom}};
 }
 function accRoleCam(r,cid,dom){return accRoleLevel(r,cid,"cam",dom)}
+// Ссылка «откуда значение»: переход к месту, где оно задано, с подсветкой —
+// как переход из поиска по настройкам.
+function accSrcLink(rid,s,f,label){
+  const dom=s.dom||accDom;
+  const go=s.k==="grp"?`accJumpGrp('${rid}','${s.g}','${f}','${dom}')`:s.k==="obj"?`accJumpObj('${rid}','${s.oid}','${dom}')`:`accJumpDef('${rid}','${f}')`;
+  return`<button type="button" class="lk acc-src" onclick="event.stopPropagation();accMenuClose();${go}">${label}</button>`;
+}
+function accFlash(find){
+  setTimeout(()=>{const els=find();if(!els||!els.length)return;
+    els[0].scrollIntoView({block:"center",inline:"center",behavior:"smooth"});
+    els.forEach(el=>{el.classList.remove("acc-flash");void el.offsetWidth;el.classList.add("acc-flash")});
+    setTimeout(()=>els.forEach(el=>el.classList.remove("acc-flash")),2600);
+  },30);
+}
+function accFlashCell(pick,f){
+  accFlash(()=>{const i=accMxRows.findIndex(pick),j=ACC_GF.findIndex(x=>x[0]===f);if(i<0||j<0)return null;
+    const c=accCellAt(i,j);if(!c)return null;accFoc.r=i;accFoc.c=j;return[c,c.parentElement.firstElementChild]});
+}
+function accJumpGrp(rid,gid,f,dom){
+  const inGrp=app==="acc"&&accSel.startsWith("grp:");
+  if(app!=="acc")goApp("acc");accDom=dom||accDom;
+  if(inGrp){accGo("grp:"+gid,"rights");accFlashCell(x=>x.rid===rid,f)}
+  else{accGo("role:"+rid,"groups");accFlashCell(x=>x.gid===gid,f)}
+}
+function accJumpDef(rid,f){
+  if(app!=="acc")goApp("acc");accGo("role:"+rid,"defs");
+  accFlash(()=>{const el=document.querySelector(`[data-def="${ACC_GF_DEF[f]}"]`);return el?[el]:null});
+}
+function accJumpObj(rid,oid,dom){
+  if(app!=="acc")goApp("acc");accDom=dom||accDom;
+  const r=accRole(rid);if(r){listQ.accobj="";const at=accExObjs(r,accDom).findIndex(o=>o.id===oid);if(at>=0)pageNo.accobj=Math.floor(at/pageSize)+1}
+  accGo("role:"+rid,"objects");
+  accFlash(()=>{const el=document.querySelector(`tr[data-oid="${CSS.escape(oid)}"]`);return el?[el]:null});
+}
 function accEffIn(st,u,id,dom,field="cam"){
   const levels=accUserRoles(u,true,st).map(rid=>accRole(rid,st)).filter(Boolean).map(r=>({r,...accRoleLevel(r,id,field,dom)}));
   let best=null;
@@ -6645,21 +6687,24 @@ function accEff(u,id,dom,field="cam"){return accEffIn(accSt(),u,id,dom,field)}
 function accUserSignIn(u,st){return accUserActive(u)&&accUserRoles(u,true,st).some(id=>{const r=accRole(id,st);return r&&accCanSignIn(r.g)})}
 function accSrcText(x,field="cam"){
   if(!x)return i18n("нет действующих ролей");
-  const fb=accLv(field,x.r.g[ACC_GF_DEF[field]]||ACC_LV[field][0][0]),s=x.src;
+  const s=x.src,rid=x.r.id;
   if(s.k==="unr")return i18n("неограниченный доступ роли");
-  if(s.k==="obj")return`${i18n("право на объект; по умолчанию роли:")} ${fb}`;
-  if(s.k==="grp")return s.g===s.via
-    ?`${i18n("из папки")} «${escHtml(accGroupName(s.g))}»; ${i18n("по умолчанию роли:")} ${fb}`
-    :`${i18n("из папки")} «${escHtml(accGroupName(s.g))}» ${i18n("над папкой")} «${escHtml(accGroupName(s.via))}»; ${i18n("по умолчанию роли:")} ${fb}`;
-  return i18n("по умолчанию роли");
+  if(s.k==="obj")return accSrcLink(rid,s,field,i18n("исключение для объекта"));
+  if(s.k==="grp")return`${i18n("из папки устройств")} ${accSrcLink(rid,s,field,"«"+escHtml(accGroupName(s.g))+"»")}`+(s.g!==s.via?` <span class="sub">(${i18n("объект лежит в")} «${escHtml(accGroupName(s.via))}»)</span>`:"");
+  return accSrcLink(rid,s,field,i18n("право по умолчанию"));
 }
 function accWhyGroup(rid,gid,f,dom){
-  const r=accRole(rid),g=escHtml(accGroupName(gid)),own=accGv(rid,gid,f);
-  if(r.g.unr)return i18n("У роли неограниченный доступ: права на папки не проверяются");
-  const h=accInh(rid,gid,f,dom);
-  if(own)return`${i18n("Задано для папки")} «${g}»: <b>${accLv(f,own)}</b>`+(h.k==="grp"&&h.v!==own?`<br>${i18n("Папка выше")} «${escHtml(accGroupName(h.g))}» ${i18n("задаёт")} ${accLv(f,h.v)}, ${i18n("но своё значение папки важнее")}`:"")+`<br><span class="sub">${i18n("Если объект лежит ещё в одной папке, из папок берётся наибольшее")}</span>`;
-  if(h.k==="grp")return`${i18n("Для папки")} «${g}» ${i18n("не задано. Её объектам действует право папки")} «${escHtml(accGroupName(h.g))}»: <b>${accLv(f,h.v)}</b>`;
-  return`${i18n("Для папки")} «${g}» ${i18n("и папок над ней не задано. Действует право роли по умолчанию:")} <b>${accLv(f,h.v)}</b>`;
+  const r=accRole(rid),gn=`«${escHtml(accGroupName(gid))}»`,own=accGv(rid,gid,f);
+  if(r.g.unr)return`<p>${i18n("У роли неограниченный доступ: значения папок устройств не проверяются")}</p>`;
+  const h=accInh(rid,gid,f,dom),fn=i18n(ACC_FIELD_NAME[f]).toLowerCase();
+  const up=()=>accSrcLink(rid,{k:"grp",g:h.g,dom},f,"«"+escHtml(accGroupName(h.g))+"»");
+  const many=`<p class="sub">${i18n("Если камера лежит ещё в одной папке устройств, она получает наибольшее из значений этих папок")}</p>`;
+  if(own&&h.k==="grp"&&h.v!==own)return`<p>${i18n("Для")} ${gn} ${i18n("задано")} <b>${accLv(f,own)}</b>.</p><p>${i18n("В папке устройств выше")}, ${up()}, ${i18n("задано")} ${accLv(f,h.v)}. ${i18n("Для")} ${gn} ${i18n("и того, что в ней, действует своё значение: побеждает папка устройств, ближайшая к объекту")}</p>`+many;
+  if(own)return`<p>${i18n("Для")} ${gn} ${i18n("задано")} <b>${accLv(f,own)}</b>. ${i18n("Это значение получают её объекты и вложенные папки устройств, где своего значения нет")}</p>`+many;
+  if(h.k==="grp")return`<p>${i18n("Для")} ${gn} ${i18n("ничего не задано. Значение")} <b>${accLv(f,h.v)}</b> ${i18n("взято из папки устройств выше")}: ${up()}</p>`+many;
+  const def=`${accSrcLink(rid,{k:"def"},f,i18n("право по умолчанию"))}: <b>${accLv(f,h.v)}</b>`;
+  if(accChain(gid,dom).length<2)return`<p>${i18n("Для")} ${gn} ${i18n("ничего не задано. Действует")} ${def}</p>`+many;
+  return`<p>${i18n("Ни для")} ${gn}, ${i18n("ни для папок устройств выше ничего не задано. Действует")} ${def}</p>`+many;
 }
 
 // ── Черновик ──
@@ -6838,13 +6883,13 @@ function accPlan(){
     accLogPlan(lines);
     accSt().users.forEach(u=>{delete u.pwdReset;delete u.pwdSet;delete u.must;delete u.imported;delete u.impUpd;delete u.impTouched});
     accCats().forEach(c=>delete c.pwdSet);
-    accData().srv=accClone(accData().ed);toast(i18n("Изменения применены"));paint();
+    accData().srv=accClone(accData().ed);accOvNote=null;toast(i18n("Изменения применены"));paint();
   },{html:true,cancelLabel:"Закрыть"});
 }
 function accRevert(){
   const n=accPlanLines().length;
   askConfirm("Сбросить черновик?",`${n} ${plural(n,"изменение будет потеряно|изменения будут потеряны|изменений будут потеряны")}. ${i18n("На сервере всё останется как есть")}`,"","Сбросить",()=>{
-    accData().ed=accClone(accData().srv);Object.keys(accCatPwd).forEach(k=>delete accCatPwd[k]);toast(i18n("Черновик сброшен"));accMenuClose();paint();
+    accData().ed=accClone(accData().srv);Object.keys(accCatPwd).forEach(k=>delete accCatPwd[k]);accOvNote=null;toast(i18n("Черновик сброшен"));accMenuClose();paint();
   },{rawMsg:true});
 }
 function accEdited(){accResolveAll();paint();accRefocus()}
@@ -6883,6 +6928,7 @@ function accGuard(mutate){
 
 // ── Навигация ──
 function accGo(s,t){
+  if(s!==accSel)accOvNote=null;
   accSel=s;if(t)accTab=t;
   accUserSel.clear();accMemSel.clear();accGSel.clear();accSelMe=false;
   if(t==="members"&&s.startsWith("role:"))resetPage("accmem:"+s.slice(5));
@@ -7277,7 +7323,7 @@ function accGlobalHtml(r,ro){
     ${card("Доступ к функциям",`<div class="acc-feats acc-g2">${featGroups}</div>`)}
     ${card("Карты, тревоги, закладки",`<div class="g acc-g3">${ACC_GLOB.map(([k,t,kind])=>sel(k,t,kind)).join("")}</div>`)}
     ${card("Права на управление правами",`<div class="g"><div><label>${i18n("Уровень")}</label>${accSelect("ur",g.ur,`accSetOwnField('${r.id}','ur',this.value)`,dis,false,"Права на управление правами")}</div>
-      <p class="sub" style="margin:22px 0 0">${i18n("«Права на папки и объекты» — только доступ к устройствам: папки и исключения; «Все» — ещё роли и пользователи")}</p></div>`)}
+      <p class="sub" style="margin:22px 0 0">${i18n("«Права на папки и объекты» — только доступ к устройствам: папки устройств и исключения; «Все» — ещё роли и пользователи")}</p></div>`)}
     ${card("Ограничения",`<div class="g"><div><label>${i18n("Глубина просмотра архива")}</label><div class="acc-pwd"><input type="number" min="0" step="1" value="${g.depth?Math.round(g.depth/24):0}" ${ro?"disabled":""} style="max-width:120px" onchange="accSetOwnField('${r.id}','depth',Math.max(0,Math.round(+this.value||0))*24)"><span class="sub" style="align-self:center">${i18n("дней; 0 — без ограничения")}</span></div></div>
       ${sup.role||!ro?`<div><label>${i18n("Подтверждение супервизором")}</label><select ${ro?"disabled":""} onchange="accSup('${r.id}','role',this.value)"><option value="">${i18n("не требуется")}</option>${supRoles.map(x=>`<option value="${x.id}" ${x.id===sup.role?"selected":""}>${i18n("роль")} «${escHtml(x.n)}»</option>`).join("")}</select>
         <div class="acc-chips" style="margin-top:6px"><label class="acc-chk"><input type="checkbox" ${sup.login?"checked":""} ${ro||!sup.role?"disabled":""} onchange="accSup('${r.id}','login',this.checked)"> ${i18n("вход")}</label><label class="acc-chk"><input type="checkbox" ${sup.export?"checked":""} ${ro||!sup.role?"disabled":""} onchange="accSup('${r.id}','export',this.checked)"> ${i18n("экспорт")}</label></div></div>`:""}</div>
@@ -7305,16 +7351,17 @@ function accSup(rid,k,v){const r=accRole(rid);if(!r)return;r.sup=r.sup||{role:""
 // Шаг 1 цепочки: что роль даёт на объект, если ни папка, ни исключение не задали своего.
 function accDefsHtml(r,ro){
   const g=r.g,dis=ro||g.unr;
-  const sel=(k,t,kind)=>`<div><label>${i18n(t)}</label>${accSelect(kind,g[k],`accSetOwnField('${r.id}','${k}',this.value)`,dis,false,t)}</div>`;
+  const sel=(k,t,kind)=>`<div data-def="${k}"><label>${i18n(t)}</label>${accSelect(kind,g[k],`accSetOwnField('${r.id}','${k}',this.value)`,dis,false,t)}</div>`;
   const defGroups=ACC_DEF_GROUPS.map(gr=>`<div class="acc-fgrp-h">${i18n(gr)}</div><div class="g acc-g3">${ACC_DEFS.filter(d=>d[3]===gr).map(([k,t,kind])=>sel(k,t,kind)).join("")}</div>`).join("");
   return`${g.unr?`<div class="nt">${i18n("У роли неограниченный доступ: права на устройства не проверяются")}</div>`:""}
     ${accForbidsDef(g)?`<div class="nt">${i18n("Камеры по умолчанию — «Нет»: новые камеры этой роли не будут видны. Выдайте права на папку или измените право по умолчанию")}</div>`:""}
-    <p class="acc-hint">${i18n("Основа для всех объектов домена. Папки устройств задают своё поверх неё, исключения — поверх папок")}</p>
+    <p class="acc-hint">${i18n("Действует на объект, если ни его папки устройств, ни исключение не задают своего значения")}</p>
     ${card("Права по умолчанию",defGroups)}`;
 }
 // «На папки»: матрица «папка × тип доступа», колонки собраны в группы.
-// Унаследованное видно сразу: серым, со стрелкой — от папки выше, без
-// стрелки — право роли по умолчанию.
+// Унаследованное видно сразу: серым, со стрелкой — от ближайшей папки выше,
+// где задано, без стрелки — право роли по умолчанию; уголок — своё значение
+// заменяет значение папки выше.
 function accGroupsTabHtml(r,ro){
   const rows=accGroups(accDom).map(g=>({rid:r.id,gid:g.id,label:g.root?accGroupName(g.id):g.name,depth:g.depth,ro:ro||r.g.unr,unr:r.g.unr,dom:accDom}));
   const n=Object.keys(r.groups).filter(id=>accGroups(accDom).some(g=>g.id===id)).length;
@@ -7331,11 +7378,13 @@ function accMatrixHtml(rows,first,scope){
     const v=accGv(row.rid,row.gid,f),chg=v!==accGvSrv(row.rid,row.gid,f);
     let txt,cls="",title="";
     if(row.unr){txt="—";cls="unset";title=i18n("Неограниченный доступ: не проверяется")}
-    else if(v){txt=accLv(f,v);const h=accInh(row.rid,row.gid,f,row.dom);if(h.k==="grp"&&h.v!==v){cls="ovr";title=`${i18n("Своё значение папки важнее папки выше")} «${accGroupName(h.g)}» (${accLv(f,h.v)})`}}
+    else if(v){txt=accLv(f,v);const h=accInh(row.rid,row.gid,f,row.dom);title=i18n("Задано здесь");if(h.k==="grp"&&h.v!==v){cls="ovr";title=`${i18n("Задано здесь. Заменяет")} «${accLv(f,h.v)}» ${i18n("из папки устройств")} «${accGroupName(h.g)}»`}}
     else{const h=accInh(row.rid,row.gid,f,row.dom);cls=h.k==="grp"?"inh":"def";txt=(h.k==="grp"?"↑ ":"")+accLv(f,h.v);
-      title=h.k==="grp"?`${i18n("Унаследовано от папки")} «${accGroupName(h.g)}»`:i18n("Право роли по умолчанию")}
+      title=h.k==="grp"?`${i18n("Взято из папки устройств")} «${accGroupName(h.g)}»`:i18n("Нигде не задано — право по умолчанию")}
     return`<td class="c ${cls} ${chg?"chg":""} ${row.ro?"ro":""}" role="gridcell" tabindex="${i===accFoc.r&&j===accFoc.c?0:-1}" data-mx="${i}:${j}" title="${escHtml(title)}" aria-label="${escHtml(row.label)}, ${i18n(ft)}: ${txt}" onclick="accCellClick(event,${i},${j})" onkeydown="accCellKey(event,${i},${j})" onfocus="accFoc.r=${i};accFoc.c=${j}">${txt}</td>`}).join("")}</tr>`).join("");
-  return`<p class="acc-hint">${i18n("Белым — задано для папки: оно важнее папок выше. Серым — что действует без своего значения: ↑ от ближайшей папки выше, где задано, без стрелки — право роли по умолчанию. Если объект лежит в нескольких папках, из них берётся наибольшее. Архивы, видеостены, плагины и макрокоманды в папках не лежат — для них есть только права по умолчанию и исключения")}<br>${i18n("Стрелки — переход, Пробел — следующее значение, Enter — «Почему так»")}</p>
+  const lg=(cls,txt,t)=>`<span class="acc-lg-i"><span class="acc-lg ${cls}">${txt.replace("Полный",i18n("Полный"))}</span>${i18n(t)}</span>`;
+  return`<div class="acc-legend">${lg("","Полный","задано здесь")}${lg("inh","↑ Полный","своего нет — взято из папки устройств выше")}${lg("def","Полный","нигде не задано — право по умолчанию")}${lg("ovr","Полный","задано здесь и заменяет значение папки устройств выше")}</div>
+    <p class="acc-hint">${i18n("Если камера лежит в нескольких папках устройств, она получает наибольшее из их значений. Архивы, видеостены, плагины и макрокоманды в папки устройств не входят — для них есть «По умолчанию» и «Исключения». Нажмите на ячейку: можно изменить значение или узнать, откуда оно")}</p>
     ${accOvNoteHtml(rows)}<div class="acc-wrap"><table class="acc-mx" role="grid">${head}${body}</table></div>`;
 }
 function accCellAt(i,j){return document.querySelector(`[data-mx="${i}:${j}"]`)}
@@ -7345,14 +7394,16 @@ function accRefocus(){
 }
 // Последняя правка папки: если ниже есть папки со своим значением, они важнее
 // и не меняются — над матрицей об этом говорится, с кнопкой «Сбросить у вложенных».
-let accOvNote=null;
-function accDescOwn(rid,gid,f,dom){return accGroups(dom).filter(g=>g.id!==gid&&accChain(g.id,dom).includes(gid)&&accGv(rid,g.id,f))}
+var accOvNote=null;
+function accDescOwn(rid,gid,f,dom){const nv=accGv(rid,gid,f);return accGroups(dom).filter(g=>g.id!==gid&&accChain(g.id,dom).includes(gid)&&accGv(rid,g.id,f)&&accGv(rid,g.id,f)!==nv)}
 function accOvNoteHtml(rows){
   const n=accOvNote;if(!n||!rows.some(x=>x.rid===n.rid&&x.gid===n.gid&&x.dom===n.dom))return"";
   const ds=accDescOwn(n.rid,n.gid,n.f,n.dom);if(!ds.length)return"";
-  const fn=i18n(ACC_FIELD_NAME[n.f]),list=ds.slice(0,4).map(g=>`«${escHtml(g.root?accGroupName(g.id):g.name)}» — ${accLv(n.f,accGv(n.rid,g.id,n.f))}`).join(", ")+(ds.length>4?` ${i18n("и ещё")} ${ds.length-4}`:"");
-  return`<div class="nt acc-ovnote"><div>${i18n("Роль")} «${escHtml(accRoleName(n.rid))}», ${fn}: ${i18n("в")} ${ds.length} ${plural(ds.length,"вложенной папке|вложенных папках|вложенных папках")} ${i18n("задано своё, оно важнее и не изменилось")}: ${list}</div>
-    <div class="acc-ovnote-a"><button type="button" class="btn s" onclick="accOvReset()">${i18n("Сбросить у вложенных")}</button><button type="button" class="btn s" onclick="accOvNote=null;accUI()">${i18n("Оставить")}</button></div></div>`;
+  const fn=i18n(ACC_FIELD_NAME[n.f]),gn=`«${escHtml(accGroupName(n.gid))}»`,nv=accGv(n.rid,n.gid,n.f);
+  const list=ds.slice(0,4).map(g=>`${accSrcLink(n.rid,{k:"grp",g:g.id,dom:n.dom},n.f,"«"+escHtml(g.root?accGroupName(g.id):g.name)+"»")} — ${accLv(n.f,accGv(n.rid,g.id,n.f))}`).join(", ")+(ds.length>4?` ${i18n("и ещё")} ${ds.length-4}`:"");
+  const what=nv?`${i18n("для")} ${gn} ${i18n("теперь")} «${accLv(n.f,nv)}»`:`${i18n("у")} ${gn} ${i18n("снято своё значение")}`;
+  return`<div class="nt acc-ovnote"><div><b>${fn}</b>: ${what}. ${i18n("Но внутри")} ${gn} ${i18n("есть")} ${ds.length} ${plural(ds.length,"папка устройств|папки устройств|папок устройств")} ${i18n("со своим значением — для их объектов оно не изменилось")}: ${list}</div>
+    <div class="acc-ovnote-a"><button type="button" class="btn s" onclick="accOvReset()">${nv?`${i18n("Пусть тоже берут")} «${accLv(n.f,nv)}»`:i18n("Снять и у них")}</button><button type="button" class="btn s" onclick="accOvNote=null;accUI()">${i18n("Оставить как есть")}</button></div></div>`;
 }
 function accOvReset(){
   const n=accOvNote,r=n&&accRole(n.rid);if(!r)return;
@@ -7372,11 +7423,11 @@ function accCellClick(e,i,j){
   const row=accMxRows[i],f=ACC_GF[j][0],v=accGv(row.rid,row.gid,f),el=e.currentTarget;
   if(row.ro){accWhy(el,i,j);return}
   accMenuOpen(el,[["","Не задано"],...ACC_LV[f]].map(([k,t])=>`<button type="button" class="mi ${k===v?"on":""}" title="${escHtml(ACC_LV_HINT[f]?.[k]||"")}" onclick="accMenuClose();accSetCell(${i},${j},'${k}')">${i18n(t)}</button>`).join("")
-    +`<div class="acc-sep"></div><button type="button" class="mi" onclick="accWhy(accCellAt(${i},${j}),${i},${j})">${i18n("Почему так")}…</button>`);
+    +`<div class="acc-sep"></div><button type="button" class="mi" onclick="accWhy(accCellAt(${i},${j}),${i},${j})">${i18n("Откуда значение")}…</button>`);
 }
 function accWhy(el,i,j){
   const row=accMxRows[i],f=ACC_GF[j][0];
-  accMenuOpen(el,`<div class="acc-why"><b>${i18n("Почему так")}</b><p>${accWhyGroup(row.rid,row.gid,f,row.dom)}</p></div>`);
+  accMenuOpen(el,`<div class="acc-why"><b>${i18n("Откуда значение")}</b>${accWhyGroup(row.rid,row.gid,f,row.dom)}</div>`);
 }
 function accCellKey(e,i,j){
   const move=(r,c)=>{accFoc.r=Math.max(0,Math.min(accMxRows.length-1,r));accFoc.c=Math.max(0,Math.min(ACC_GF.length-1,c));accCellAt(accFoc.r,accFoc.c)?.focus()};
@@ -7427,10 +7478,10 @@ function accExOverridden(r,oid,f,dom,st){
 function accObjectsHtml(r,ro){
   if(r.g.unr)return`<div class="nt">${i18n("У роли неограниченный доступ: исключения не проверяются")}</div>`;
   const items=accExObjs(r,accDom),srv=accSrvRole(r.id),dis=ro;
-  const hint=`<p class="acc-hint">${i18n("Исключение заменяет то, что объекту дают папки, — и вверх, и вниз. Действует только внутри этой роли: если другая роль пользователя даёт больше, действует она")}</p>`;
+  const hint=`<p class="acc-hint">${i18n("Исключение задаёт значение для одного объекта вместо того, что дают его папки устройств, — и больше, и меньше. Оно действует только внутри этой роли: если другая роль пользователя даёт больше, у него будет больше")}</p>`;
   const add=ro?"":`<button type="button" class="btn s pri" onclick="accExPick(this,'${r.id}')">+ ${i18n("Исключение")}…</button>`;
-  if(!items.length)return hint+`<div class="card"><div class="cb acc-empty"><p>${i18n("Исключений нет: на всех объектах действует то, что дают папки и права по умолчанию")}</p>${add}</div></div>`;
-  const srcShort=x=>x.src.k==="grp"?`${i18n("папка")} «${escHtml(accGroupName(x.src.g))}»`:i18n("по умолчанию");
+  if(!items.length)return hint+`<div class="card"><div class="cb acc-empty"><p>${i18n("Исключений нет: объекты получают то, что дают их папки устройств или права по умолчанию")}</p>${add}</div></div>`;
+  const srcShort=x=>x.src.k==="grp"?`${i18n("папка устройств")} «${escHtml(accGroupName(x.src.g))}»`:i18n("право по умолчанию");
   return hint+listCard({
     key:"accobj",how:"acc",title:`${i18n("Исключения")} · ${accDomName(accDom)}`,items,head:add,
     text:o=>[o.short!=null?String(o.short):"",locName(o),accObjKind(o)],
@@ -7439,11 +7490,11 @@ function accObjectsHtml(r,ro){
         const dir=!v?"":accRank(f,v)>accRank(f,inh.lv)?`<span class="acc-exdir up" title="${i18n("Выше, чем без исключения")}">↑</span>`:accRank(f,v)<accRank(f,inh.lv)?`<span class="acc-exdir dn" title="${i18n("Ниже, чем без исключения")}">↓</span>`:`<span class="acc-exdir eq" title="${i18n("Совпадает с тем, что и так действует: исключение лишнее")}">=</span>`;
         const ov=v?accExOverridden(r,o.id,f,accDom):[];
         const ovH=ov.length?`<div class="acc-exov" title="${escHtml(ov.slice(0,8).map(x=>`${x.u.login}: ${accLv(f,x.e.lv)} — ${i18n("роль")} «${x.e.best.r.n}»`).join("\n"))}">${i18n("Не действует для")} ${ov.length} ${plural(ov.length,"пользователя|пользователей|пользователей")}: ${i18n("другая их роль даёт больше. Понижение — не запрет")}</div>`:"";
-        const opts=[["",`${i18n("Как в папках")} (${accLv(f,inh.lv)})`]].concat(ACC_LV[f].map(([k,t])=>[k,i18n(t)]));
+        const opts=[["",`${i18n("Без исключения")} (${accLv(f,inh.lv)})`]].concat(ACC_LV[f].map(([k,t])=>[k,i18n(t)]));
         const selH=`<select ${dis?"disabled":""} aria-label="${escHtml(i18n("Исключение для")+" «"+locName(o)+"»")}" onchange="(accExAdd['${r.id}']=accExAdd['${r.id}']||new Set()).add('${o.id}');accSetObj('${r.id}','${o.id}','${f}',this.value)">${opts.map(([k,t])=>`<option value="${k}" ${k===v?"selected":""}>${escHtml(t)}</option>`).join("")}</select>`;
-        return`<div class="acc-exrow"><span class="acc-exf">${i18n(ACC_FIELD_NAME[f])}</span><span class="sub acc-exwo" title="${i18n("Что действует без исключения")}: ${srcShort(inh)}">${accLv(f,inh.lv)} <small>· ${srcShort(inh)}</small></span><span class="acc-exarr">→</span>${selH}${dir}</div>${ovH}`}).join("");
-      return`<tr class="${chg?"chg":""}"><td class="acc-num">${escHtml(o.short??"")}</td><td class="acc-cam">${accObjIc(o)} ${escHtml(locName(o))}<small class="acc-cmt">${i18n(accObjKind(o))}</small></td>
-        <td class="acc-ex">${cells}</td><td style="text-align:right">${dis?"":`<button type="button" class="btn s" title="${i18n("Вернуть объекту то, что дают папки")}" onclick="accExDrop('${r.id}','${o.id}')">${i18n("Убрать")}</button>`}</td></tr>`},
+        return`<div class="acc-exrow"><span class="acc-exf">${i18n(ACC_FIELD_NAME[f])}</span><span class="sub acc-exwo" title="${i18n("Что действует без исключения")}: ${srcShort(inh)}">${accLv(f,inh.lv)} <small>· ${accSrcLink(r.id,inh.src,f,inh.src.k==="grp"?"«"+escHtml(accGroupName(inh.src.g))+"»":i18n("по умолчанию"))}</small></span><span class="acc-exarr">→</span>${selH}${dir}</div>${ovH}`}).join("");
+      return`<tr class="${chg?"chg":""}" data-oid="${escHtml(o.id)}"><td class="acc-num">${escHtml(o.short??"")}</td><td class="acc-cam">${accObjIc(o)} ${escHtml(locName(o))}<small class="acc-cmt">${i18n(accObjKind(o))}</small></td>
+        <td class="acc-ex">${cells}</td><td style="text-align:right">${dis?"":`<button type="button" class="btn s" title="${i18n("Вернуть объекту то, что дают его папки устройств")}" onclick="accExDrop('${r.id}','${o.id}')">${i18n("Убрать")}</button>`}</td></tr>`},
     wrap:rows=>`<table class="acc-tbl"><tr><th>№</th><th>${i18n("Объект")}</th><th>${i18n("Тип доступа · без исключения → исключение")}</th><th></th></tr>${rows}</table>`,
     ph:"Поиск объекта",unit:"исключение|исключения|исключений",empty:"Ничего не найдено"
   });
@@ -7478,8 +7529,9 @@ function accSetObj(rid,oid,f,v){
   accEdited();
 }
 // «Итоговый доступ»: что получает пользователь на каждом объекте с учётом
-// всех своих действующих ролей — права на объект, папок и по умолчанию,
-// сложенные по правилу «наибольшее побеждает». Считает интерфейс, решает
+// всех своих действующих ролей: внутри роли — исключение, папки устройств
+// (ближайшая заданная, из нескольких — наибольшее) или по умолчанию; между
+// ролями — наибольшее. Считает интерфейс, решает
 // сервер — так и написано. Та же таблица — в карточке пользователя.
 function accEffTableHtml(u){
   const objs=accObjects(accDom);
@@ -7490,7 +7542,7 @@ function accEffTableHtml(u){
   window._accEff=items;
   const many=accUserRoles(u,true).length>1;
   const tzs=[...new Set(accUserRoles(u,true).map(id=>accRole(id)?.tz||0))].filter(t=>t);
-  return`<div class="nt">${i18n("Итог = наибольшее по всем действующим ролям; внутри роли: право на объект → папки объекта и папки над ними → право по умолчанию. Считает интерфейс по правилам сервера, окончательное решение принимает сервер")}${tzs.length?`. ${i18n("Вход ограничен расписанием ролей:")} ${tzs.map(t=>i18n(ACC_TZ[t]).toLowerCase()).join("; ")}`:""}</div>
+  return`<div class="nt">${i18n("Итог — наибольшее по всем действующим ролям. Внутри роли: исключение для объекта, иначе значение его папки устройств (ближайшей, где оно задано; из нескольких папок — наибольшее), иначе право по умолчанию. Считает интерфейс по правилам сервера, окончательно решает сервер")}${tzs.length?`. ${i18n("Вход ограничен расписанием ролей:")} ${tzs.map(t=>i18n(ACC_TZ[t]).toLowerCase()).join("; ")}`:""}</div>
     <div class="acc-bar"><label class="acc-chk"><input type="checkbox" ${accEffVis?"checked":""} onchange="accEffVis=this.checked;resetPage('acceff');accUI()"> ${i18n("Только то, что пользователь увидит")} (${visible.length} ${i18n("из")} ${rows.length})</label></div>
     ${listCard({
       key:"acceff",how:"acc",title:`${i18n("Объекты")} · ${accDomName(accDom)}`,items,
