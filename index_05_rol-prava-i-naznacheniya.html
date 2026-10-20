@@ -868,6 +868,7 @@ html[data-theme="light"] .acc-date{color-scheme:light}
 .acc-tip{z-index:59;max-width:380px}
 @keyframes accFlash{0%{background-color:transparent;box-shadow:inset 0 0 0 2px transparent}12%,44%{background-color:#2f6fed55;box-shadow:inset 0 0 0 2px var(--bl)}28%,60%{background-color:#2f6fed1f;box-shadow:inset 0 0 0 2px var(--bl)}100%{background-color:transparent;box-shadow:inset 0 0 0 2px transparent}}
 .acc-flash,tr.acc-flash>td{animation:accFlash 2.4s ease-out}
+h1.acc-flash,.tab.acc-flash,.n.acc-flash{border-radius:6px}
 .acc-ovnote{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.acc-ovnote>div:first-child{flex:1;min-width:260px}.acc-ovnote-a{display:flex;gap:6px}
 .acc-mx td.inh{color:#7f93ad}.acc-mx td.def{color:#5f718a;font-style:italic}
 .acc-menu{position:fixed;z-index:60;background:var(--p);border:1px solid var(--ln);border-radius:8px;box-shadow:0 12px 32px #0008;padding:4px;min-width:200px;max-width:440px;max-height:min(70vh,520px);overflow:auto}
@@ -6651,12 +6652,33 @@ function accSrcLink(rid,s,f,label){
   const go=s.k==="grp"?`accJumpGrp('${rid}','${s.g}','${f}','${dom}')`:s.k==="obj"?`accJumpObj('${rid}','${s.oid}','${dom}')`:`accJumpDef('${rid}','${f}')`;
   return`<button type="button" class="lk acc-src" onclick="event.stopPropagation();accMenuClose();${go}">${label}</button>`;
 }
-function accFlash(find){
+var accFlashReq=0;
+function accFlash(find,keepScroll){
+  accFlashReq++;
   setTimeout(()=>{const els=find();if(!els||!els.length)return;
-    els[0].scrollIntoView({block:"center",inline:"center",behavior:"smooth"});
+    if(!keepScroll)els[0].scrollIntoView({block:"center",inline:"center",behavior:"smooth"});
     els.forEach(el=>{el.classList.remove("acc-flash");void el.offsetWidth;el.classList.add("acc-flash")});
     setTimeout(()=>els.forEach(el=>el.classList.remove("acc-flash")),2600);
   },30);
+}
+// Куда попали по ссылке: заголовок открытой страницы, активная вкладка и шаг,
+// выбранный пункт дерева. Если переход знает точное место (ячейку, поле,
+// строку), подсвечивается только оно.
+function accFlashLanding(){
+  const at=accFlashReq;
+  setTimeout(()=>{if(accFlashReq!==at)return;
+    const els=[".hd h1",".hd .tabs .tab.on",".acc-subnav .acc-pill.on","#tree .n.on"].map(q=>document.querySelector(q)).filter(Boolean);
+    document.querySelector("#tree .n.on")?.scrollIntoView({block:"nearest"});
+    if(els.length)accFlash(()=>els,true);
+  },40);
+}
+// Переход по ссылке — не по дереву, вкладкам и шагам: им подсветка не нужна,
+// место и так под рукой.
+function accFromLink(){
+  const ev=window.event;if(!ev||ev.type!=="click"||!ev.target?.closest)return false;
+  const t=ev.target;
+  if(t.closest("#tree,.tabs,.acc-subnav,.rail-tabs,.asw"))return false;
+  return!!t.closest(".lk,.cr-link,.mi,tr.click,.acc-chip button,.ch-act");
 }
 function accFlashCell(pick,f){
   accFlash(()=>{const i=accMxRows.findIndex(pick),j=ACC_GF.findIndex(x=>x[0]===f);if(i<0||j<0)return null;
@@ -6959,6 +6981,7 @@ function accGuard(mutate){
 // ── Навигация ──
 function accGo(s,t){
   accTipClose();
+  if(accFromLink())accFlashLanding();
   if(s!==accSel)accOvNote=null;
   accSel=s;if(t)accTab=t;
   accUserSel.clear();accMemSel.clear();accGSel.clear();accSelMe=false;
@@ -8516,7 +8539,7 @@ function accIssues(st){
     else if(!r.g.unr&&!accHasNo(r.g)&&!accCanSignIn(r.g))out.push({key:"r-nologin:"+r.id,k:"role",sev:2,text:`${i18n("Роль")} «${escHtml(r.n)}» ${i18n("не даёт входа:")} ${act} ${plural(act,"пользователь|пользователя|пользователей")}`,go:`accGo('role:${r.id}','global')`});
     if(accHasNo(r.g))out.push({key:"r-norights:"+r.id,k:"role",sev:2,text:`${i18n("У роли")} «${escHtml(r.n)}» ${i18n("не заданы права")}`,go:`accGo('role:${r.id}','global')`});
     if(!r.g.unr){const ov=new Set();let n=0,dom1="";Object.keys(r.objs).forEach(oid=>{const dom=accObjDom(oid);if(!dom)return;let hit=false;Object.keys(r.objs[oid]).forEach(f=>{const xs=accExOverridden(r,oid,f,dom,st);xs.forEach(x=>ov.add(x.u.id));if(xs.length)hit=true});if(hit){n++;dom1=dom1||dom}});
-      if(n)out.push({key:"r-exov:"+r.id,k:"role",sev:1,text:`${i18n("Роль")} «${escHtml(r.n)}»: ${i18n("исключения-понижения на")} ${n} ${plural(n,"объекте|объектах|объектах")} ${i18n("не действуют для")} ${ov.size} ${plural(ov.size,"пользователя|пользователей|пользователей")} — ${i18n("другая их роль даёт больше")}`,go:`accDom='${dom1}';accGo('role:${r.id}','objects')`});}
+      if(n)out.push({key:"r-exov:"+r.id,k:"role",sev:1,text:`${i18n("Роль")} «${escHtml(r.n)}»: ${i18n("исключения-понижения на")} ${n} ${plural(n,"объекте|объектах|объектах")} ${i18n("не действуют для")} ${ov.size} ${plural(ov.size,"пользователя|пользователей|пользователей")} — ${i18n("другая их роль даёт больше")}`,go:`accDom='${dom1}';accGo('role:${r.id}','objects');accFlash(()=>[...document.querySelectorAll('.acc-exov')].map(e=>e.closest('tr')))`});}
     if(r.sup?.role&&(r.sup.login||r.sup.export)&&!accRoleUsers(r.sup.role,true,st).length)out.push({key:"r-sup:"+r.id,k:"role",sev:2,text:`${i18n("Роль")} «${escHtml(r.n)}» ${i18n("ждёт подтверждения от роли")} «${escHtml(accRoleName(r.sup.role))}», ${i18n("а в ней нет действующих пользователей")}`,go:`accGo('role:${r.id}','global')`});
   });
   (st.groups||[]).forEach(g=>{
