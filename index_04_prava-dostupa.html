@@ -826,6 +826,7 @@ html[data-theme="light"] .dev-bulk-badge{background:#d6e4f8;color:#2f5fad}
 .acc-tbl .lk{font-size:inherit;text-align:left}
 .acc-date{width:150px;height:28px;padding:0 6px;font-size:12px;color-scheme:dark}
 html[data-theme="light"] .acc-date{color-scheme:light}
+.acc-until-act{font-size:11px;color:var(--mu);margin-top:3px;white-space:nowrap}
 .acc-date.gone{color:#e88;border-color:#5a3434}.acc-date.warn{color:#e6b35c;border-color:#5a4c2a}
 .sw.dis{opacity:.45;cursor:default}
 .sw:focus-visible{outline:2px solid var(--bl);outline-offset:2px}
@@ -911,6 +912,22 @@ label.acc-chk.dim{color:var(--mu)}
 .acc-rules .ok{color:#75e1a9}.acc-rules .bad{color:#e06a6a}
 .acc-ulist{max-height:300px;overflow:auto;border:1px solid var(--ln);border-radius:8px;padding:2px 10px}
 .acc-ulist label.acc-chk{padding:7px 0;border-bottom:1px solid var(--ln)}.acc-ulist label.acc-chk:last-child{border-bottom:0}
+/* Массовые правки: панель над списком липнет к верху прокрутки, чтобы действия не уезжали за сотни строк. */
+.acc-bulk{display:flex;align-items:center;gap:8px;flex-wrap:wrap;position:sticky;top:0;z-index:5;margin:0 0 10px;padding:8px 10px;background:var(--p2);border:1px solid var(--ln);border-radius:8px;box-shadow:0 6px 12px -8px #0008}
+.acc-bulk .l{display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex:1;min-width:0}
+.acc-bulk .r{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.acc-bulk .cnt{font-size:13px;font-weight:600;color:var(--tx);line-height:1.2;text-align:left;min-width:110px}
+.acc-bulk .hint{font-size:11px;color:#e6b35c}
+.acc-tbl th.acc-ck,.acc-tbl td.acc-ck{width:28px;padding-right:0}
+.acc-tbl .acc-ck input{width:auto;height:auto;margin:0;accent-color:var(--bl);cursor:pointer;vertical-align:middle}
+.acc-tbl tr.sel td{background:#172a46}
+.acc-filts select.acc-fsel{width:auto;max-width:220px;height:28px;font-size:12px;padding:0 8px;border-radius:99px}
+.acc-ulist.tall{max-height:50vh}
+.acc-ad-h{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 6px;font-size:12px}
+.acc-impact-sum{margin:0 0 6px;font-size:12px;color:var(--mu)}.acc-impact-sum b{color:var(--tx)}
+html[data-theme="light"] .acc-bulk{box-shadow:0 6px 12px -8px #0003}
+html[data-theme="light"] .acc-bulk .hint{color:#9a6a12}
+html[data-theme="light"] .acc-tbl tr.sel td{background:#e3eefc}
 .acc-feat-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px}
 .acc-wz-grp{max-height:260px;overflow:auto;border:1px solid var(--ln);border-radius:8px}
 .acc-wz-grp td{padding:4px 8px}
@@ -2649,7 +2666,7 @@ function closeConfirm(){
   document.getElementById("confirm")?.classList.remove("open");
 }
 function askConfirm(title,msg,warn,okLabel,onOk,opts={}){
-  document.getElementById("confirmTitle").textContent=i18n(title);
+  document.getElementById("confirmTitle").textContent=opts.rawTitle?title:i18n(title);
   const msgEl=document.getElementById("confirmMsg");
   if(opts.html)msgEl.innerHTML=msg;else msgEl.textContent=opts.rawMsg?msg:i18n(msg);
   document.getElementById("confirmWarn").textContent=warn?i18n(warn):"";
@@ -4664,6 +4681,7 @@ function listBodyHtml(o){
   if(!o.items.length)return`<p class="sub">${i18n(o.empty||"Список пуст")}</p>`+(o.extra||"");
   const found=listFound(o),rows=pageSlice(o.key,found).map(o.row).join("");
   return listSearchHtml(o.key,o.ph,o.how)
+    +(o.mid?o.mid(found):"")
     +(rows?(o.wrap?o.wrap(rows):rows):`<p class="sub">${i18n("Ничего не найдено")}</p>`)
     +(o.extra||"")
     +(found.length?`<div class="tfoot">${pagerHtml(o.key,found.length,o.how||"list",o.unit)}</div>`:"");
@@ -6192,6 +6210,8 @@ Object.assign(IC,{
 // увидеть исключения и то, что пользователь видит, а не весь домен.
 let ACC=null,accSel="roles",accTab="global",accDom="d1",accObjOnly=true,accEffVis=true,accCamOnly=true;
 let accFoc={r:0,c:0,scope:""},accMxRows=[],accUserFilt="all",accCmp=["op","gd"],accCmpOnly=true;
+// Список пользователей: выбранные строки, срезы «Роль» и «Источник», окна массовых правок.
+let accUserSel=new Set(),accMemSel=new Set(),accSelMe=false,accUserRoleFilt="",accUserSrcFilt="",accUserO=null,accMemO=null,accBk=null,accAd=null;
 const accEffUser={},accSetting={};
 // Пользователей много — их ветка начинается свёрнутой; корни папок раскрыты.
 open.add("acc-x:users");domains.forEach(d=>open.add("accg:"+d.id));
@@ -6273,6 +6293,26 @@ function accSeed(){
     ["auditor","Татьяна Орлова","t.orlova@audit.ru",1,["aud"],null,null,{expires:45}],["contractor","ООО «Монтаж-Сервис»","info@montazh.ru",1,["ext"],-1,{ext:5},{expires:5,web:1,mobile:0}],
     ["svetlana","Светлана Егорова","s.egorova@corp.local",1,[],-120,null,{expires:-30}]
   ];
+  // Типовая установка: 12 площадок, на каждой 20 постов охраны, 6 операторов и
+  // 4 наблюдателя. Без Math.random: всё считается от номера, чтобы макет при
+  // каждой загрузке выглядел одинаково. Примерно 2% выключены и 2% «забыты»
+  // (не входили 100–200 дней): они попадают в «Проверку» как «не входил 90 дней».
+  // Просроченных назначений и пользователей без ролей среди них нет.
+  {
+    const FN=["Алексей","Борис","Виктор","Геннадий","Денис","Егор","Захар","Игорь","Кирилл","Леонид","Максим","Никита","Олег","Павел","Роман","Сергей","Тимур","Фёдор","Юрий","Ярослав"];
+    const LN=["Андреев","Беляев","Васильев","Григорьев","Денисов","Ермаков","Жуков","Зуев","Исаев","Крылов","Логинов","Миронов","Назаров","Орлов","Прохоров","Родионов","Субботин","Тарасов","Устинов","Филиппов"];
+    const pad=n=>String(n).padStart(2,"0");
+    let k=0;
+    const add=(login,name,email,role,days,x)=>{
+      const off=k%50===7,old=k%50===31;
+      U.push([login,name,email,off?0:1,[role],old?-(100+(k*7)%101):-(k%days),null,x]);k++;
+    };
+    for(let s=1;s<=12;s++){
+      for(let g=1;g<=20;g++)add(`s${s}.guard${pad(g)}`,`Охрана, площадка ${s}, пост ${pad(g)}`,"","gd",4,{web:1,mobile:0});
+      for(let o=0;o<6;o++)add(`s${s}.op${o+1}`,`${FN[(s*3+o*7)%20]} ${LN[(s*5+o*3)%20]}`,`s${s}.op${o+1}@corp.local`,"op",6,{ldap:"corp.local"});
+      for(let v=0;v<4;v++)add(`s${s}.view${v+1}`,`${FN[(s*7+v*3+5)%20]} ${LN[(s*11+v*9+2)%20]}`,`s${s}.view${v+1}@corp.local`,"view",6,{ldap:"corp.local"});
+    }
+  }
   const users=U.map(([login,name,email,on,rs,last,until,x={}],i)=>({id:"u"+(i+1),login,name,email,on:!!on,roles:rs,
     last:last==null?null:accIso(last),until:Object.fromEntries(Object.entries(until||{}).map(([k,v])=>[k,accIso(v)])),
     expires:x.expires!=null?accIso(x.expires):"",web:x.web??0,mobile:x.mobile??0,ldap:x.ldap||""}));
@@ -6519,8 +6559,20 @@ function accUserDiff(uid){
 function accRolesText(u){return u.roles.length?u.roles.map(id=>"«"+escHtml(accRoleName(id))+"»"+(accUntil(u,id)?` ${i18n("до")} ${accFmt(accUntil(u,id))}`:"")).join(", "):i18n("нет")}
 function accSupText(r,raw){const s=r.sup||{};if(!s.role||(!s.login&&!s.export))return i18n("без подтверждения");const n=accRoleName(s.role);return`${[s.login?i18n("вход"):"",s.export?i18n("экспорт"):""].filter(Boolean).join(` ${i18n("и")} `)} ${i18n("подтверждает")} «${raw?n:escHtml(n)}»`}
 function accCardText(r){return`«${escHtml(r.n)}»${r.comment?" — "+escHtml(r.comment):""}; ${i18n("вход")}: ${i18n(ACC_TZ[r.tz||0]).toLowerCase()}; ${accSupText(r)}`}
+const ACC_TREE_USERS=12;  // сколько пользователей перечисляет дерево слева без запроса
+let accPlanMeta=[];       // для строк плана-«массовок»: кого они затрагивают (нужно журналу)
+const ACC_AGG=5;  // сколько пользователей с одной и той же правкой ещё перечисляются по одному
+// Что изменилось в ролях пользователя против сервера: [«add»|«upd»|«rem», роль, срок].
+function accRoleAtoms(s,u){
+  const out=[];
+  u.roles.forEach(id=>{if(!s.roles.includes(id))out.push(["add",id,accUntil(u,id)]);else if(accUntil(u,id)!==accUntil(s,id))out.push(["upd",id,accUntil(u,id)])});
+  s.roles.forEach(id=>{if(!u.roles.includes(id))out.push(["rem",id,""])});
+  return out;
+}
+function accLogins(list,k=3){return list.slice(0,k).map(escHtml).join(", ")+(list.length>k?` ${i18n("и ещё")} ${list.length-k}`:"")}
 function accPlanLines(){
   const out=[],srv=accSrv();
+  accPlanMeta=[];
   accRoles().forEach(r=>{
     const d=accRoleDiff(r.id),n=`«${escHtml(r.n)}»`;
     if(d.isNew){out.push(`${i18n("Создать роль")} ${accCardText(r)}: ${escHtml(accSummary(r.g))}`);
@@ -6532,21 +6584,57 @@ function accPlanLines(){
     if(d.objs)out.push(`${i18n("Права роли")} ${n} ${i18n("на объекты")}: ${d.objs} ${plural(d.objs,"объект|объекта|объектов")}`);
   });
   srv.roles.forEach(r=>{if(!accRole(r.id))out.push(`${i18n("Удалить роль")} «${escHtml(r.n)}»`)});
+  // Одинаковая правка у многих пользователей — одна строка, а не сто: черновик
+  // после массового действия остаётся читаемым, а счётчик в шапке — честным.
+  const srvBy=new Map(srv.users.map(x=>[x.id,x])),atomsOf=new Map(),grp=new Map();
+  const add=(k,u)=>{(grp.get(k)||grp.set(k,[]).get(k)).push(u)};
   accUsers().forEach(u=>{
-    const s=srv.users.find(x=>x.id===u.id);
+    const s=srvBy.get(u.id);if(!s)return;
+    const atoms=accRoleAtoms(s,u);atomsOf.set(u.id,atoms);
+    atoms.forEach(a=>add("r|"+a.join("|"),u));
+    if(s.on!==u.on)add(u.on?"on":"off",u);
+    if((s.expires||"")!==(u.expires||""))add("exp|"+(u.expires||""),u);
+  });
+  const big=k=>(grp.get(k)?.length||0)>ACC_AGG;
+  accUsers().forEach(u=>{
+    const s=srvBy.get(u.id);
     if(!s){out.push(`${i18n("Создать пользователя")} ${escHtml(u.login)}${u.name?` (${escHtml(u.name)})`:""}${u.email?", "+escHtml(u.email):""}, ${i18n(u.on?"включён":"выключен")}${u.expires?`, ${i18n("учётная запись до")} ${accFmt(u.expires)}`:""}${u.web||u.mobile?`, ${i18n("лимит подключений: веб")} — ${u.web||i18n("без лимита")}, ${i18n("мобильные")} — ${u.mobile||i18n("без лимита")}`:""}`);
       if(u.pwdSet)out.push(`${i18n("Задать пароль пользователю")} ${escHtml(u.login)}${u.must?` — ${i18n("сменить при первом входе")}`:""}`);
       if(u.roles.length)out.push(`${i18n("Роли пользователя")} ${escHtml(u.login)}: ${accRolesText(u)}`);
       return}
-    if(s.on!==u.on)out.push(`${i18n("Пользователь")} ${escHtml(u.login)}: ${i18n(u.on?"включить":"выключить")}`);
+    if(s.on!==u.on&&!big(u.on?"on":"off"))out.push(`${i18n("Пользователь")} ${escHtml(u.login)}: ${i18n(u.on?"включить":"выключить")}`);
     if(s.name!==u.name||s.email!==u.email)out.push(`${i18n("Карточка пользователя")} ${escHtml(u.login)}: ${escHtml(u.name)}${u.email?", "+escHtml(u.email):""}`);
-    if((s.expires||"")!==(u.expires||""))out.push(`${i18n("Срок учётной записи")} ${escHtml(u.login)}: ${u.expires?i18n("до")+" "+accFmt(u.expires):i18n("бессрочно")}`);
+    if((s.expires||"")!==(u.expires||"")&&!big("exp|"+(u.expires||"")))out.push(`${i18n("Срок учётной записи")} ${escHtml(u.login)}: ${u.expires?i18n("до")+" "+accFmt(u.expires):i18n("бессрочно")}`);
     if((s.web||0)!==(u.web||0)||(s.mobile||0)!==(u.mobile||0))out.push(`${i18n("Лимит подключений")} ${escHtml(u.login)}: ${i18n("веб")} — ${u.web||i18n("без лимита")}, ${i18n("мобильные")} — ${u.mobile||i18n("без лимита")}`);
     if(u.pwdReset)out.push(`${i18n("Сбросить пароль пользователю")} ${escHtml(u.login)}: ${i18n("ссылка для смены придёт на")} ${escHtml(u.email||i18n("— e-mail не задан, пароль сообщит администратор"))}`);
-    if(accCanon(s.roles)!==accCanon(u.roles)||accCanon(s.until)!==accCanon(u.until))
+    const atoms=atomsOf.get(u.id),left=atoms.filter(a=>!big("r|"+a.join("|")));
+    if(left.length||(!atoms.length&&(accCanon(s.roles)!==accCanon(u.roles)||accCanon(s.until)!==accCanon(u.until))))
       out.push(`${i18n("Роли пользователя")} ${escHtml(u.login)}: ${accRolesText(u)}`);
   });
-  srv.users.forEach(u=>{if(!accUser(u.id))out.push(`${i18n("Удалить пользователя")} ${escHtml(u.login)}`)});
+  grp.forEach((us,k)=>{
+    const n=us.length;if(n<=ACC_AGG)return;
+    const [t,a,rid,d]=k.split("|");
+    const mass=`(${i18n("массово")})`,ids=us.map(u=>u.id),dt=x=>x?i18n("до")+" "+accFmt(x):i18n("бессрочно");
+    if(t==="r"){
+      const rn=`«${escHtml(accRoleName(rid))}»`,rp=`«${accRoleName(rid)}»`;
+      accPlanMeta[out.length]={ids,short:a==="add"?`${i18n("Назначена роль")} ${rp}${d?" "+dt(d):""} ${mass}`:a==="rem"?`${i18n("Снята роль")} ${rp} ${mass}`:`${i18n("Срок роли")} ${rp} — ${dt(d)} ${mass}`};
+      if(a==="add")out.push(`${i18n("Роль")} ${rn} ${i18n("назначена")} ${n} ${plural(n,"пользователю|пользователям|пользователям")}${d?` (${i18n("срок до")} ${accFmt(d)})`:""}`);
+      else if(a==="rem")out.push(`${i18n("Снята роль")} ${rn} ${i18n("у")} ${accWhoGen(n)}`);
+      else out.push(`${i18n("Срок роли")} ${rn} — ${d?i18n("до")+" "+accFmt(d):i18n("бессрочно")} ${i18n("у")} ${accWhoGen(n)}`);
+    }else if(t==="exp"){
+      accPlanMeta[out.length]={ids,short:`${a?`${i18n("Срок учётной записи до")} ${accFmt(a)}`:i18n("Срок учётной записи снят")} ${mass}`};
+      out.push(`${a?`${i18n("Срок учётной записи до")} ${accFmt(a)}`:i18n("Срок учётной записи снят")} ${i18n("у")} ${accWhoGen(n)}`);
+    }else{
+      accPlanMeta[out.length]={ids,short:`${i18n(t==="on"?"Включён":"Выключен")} ${mass}`};
+      out.push(`${i18n(plural(n,t==="on"?"Включён|Включены|Включены":"Выключен|Выключены|Выключены"))} ${accWho(n)}: ${accLogins(us.map(u=>u.login))}`);
+    }
+  });
+  const gone=srv.users.filter(u=>!accUser(u.id));
+  if(gone.length>ACC_AGG){
+    accPlanMeta[out.length]={ids:gone.map(u=>u.id),short:`${i18n("Удалён")} (${i18n("массово")})`};
+    out.push(`${i18n(plural(gone.length,"Удалён|Удалены|Удалены"))} ${accWho(gone.length)}: ${accLogins(gone.map(u=>u.login))}`);
+  }
+  else gone.forEach(u=>out.push(`${i18n("Удалить пользователя")} ${escHtml(u.login)}`));
   return out;
 }
 // Последствия в людях: кто перестанет или начнёт видеть объекты, кто
@@ -6557,8 +6645,15 @@ function accImpact(){
   // Плагины и макрокоманды общие для всех доменов — каждый объект считается один раз.
   const seen=new Set(),objs=[];
   domains.forEach(d=>accObjects(d.id).forEach(n=>{if(seen.has(n.id))return;seen.add(n.id);objs.push([n.id,d.id,accObjFields(n)[0]])}));
+  // Расчёт дорогой, а при массовой правке большинство из сотен пользователей не
+  // меняется: пропускаем тех, у кого те же роли, сроки и состояние, а роли
+  // не тронуты — их итог совпадает с серверным по построению.
+  const touched=new Set([...accRoles().filter(x=>{const d=accRoleDiff(x.id);return d.global||d.groups||d.objs}).map(x=>x.id),...srv.roles.filter(x=>!accRole(x.id)).map(x=>x.id)]);
+  const srvBy=new Map(srv.users.map(x=>[x.id,x]));
   accUsers().forEach(u=>{
-    const s=srv.users.find(x=>x.id===u.id)||{...u,roles:[],on:false,until:{}};
+    const old=srvBy.get(u.id);
+    if(old&&accCanon(old.roles)===accCanon(u.roles)&&accCanon(old.until)===accCanon(u.until)&&old.on===u.on&&(old.expires||"")===(u.expires||"")&&![...old.roles,...u.roles].some(id=>touched.has(id)))return;
+    const s=old||{...u,roles:[],on:false,until:{}};
     let lose=0,gain=0;
     objs.forEach(([id,dom,f])=>{
       const a=accVisible(f,accEffIn(srv,s,id,dom,f).lv),b=accVisible(f,accEffIn(ed,u,id,dom,f).lv);
@@ -6571,9 +6666,9 @@ function accImpact(){
     // Потеря входа важнее: что он «начнёт видеть», уже не имеет значения.
     if(lose&&!(inA&&!inB))bits.push(`${i18n("перестанет видеть")} ${lose} ${plural(lose,"объект|объекта|объектов")}`);
     if(gain&&inB)bits.push(`${i18n("начнёт видеть")} ${gain} ${plural(gain,"объект|объекта|объектов")}`);
-    if(bits.length)out.push({u,text:bits.join(", "),bad:(inA&&!inB)||lose>0});
+    if(bits.length)out.push({u,text:bits.join(", "),bad:(inA&&!inB)||lose>0,inNew:!inA&&inB,inLost:inA&&!inB,vis:(lose>0&&!(inA&&!inB))||(gain>0&&inB)});
   });
-  srv.users.forEach(u=>{if(!accUser(u.id))out.push({u,text:i18n("учётная запись будет удалена"),bad:true})});
+  srv.users.forEach(u=>{if(!accUser(u.id))out.push({u,text:i18n("учётная запись будет удалена"),bad:true,inLost:accUserSignIn(u,srv)})});
   return out;
 }
 function accActsHtml(){
@@ -6586,7 +6681,9 @@ function accActsHtml(){
 function accPlan(){
   const lines=accPlanLines(),imp=accImpact();
   const shown=imp.slice(0,8);
-  const impHtml=imp.length?`<div class="acc-plan-h">${i18n("Последствия для людей")}</div><ul class="acc-impact">${shown.map(x=>`<li class="${x.bad?"bad":"good"}"><b>${escHtml(x.u.login)}</b> ${x.text}</li>`).join("")}${imp.length>shown.length?`<li class="sub">${i18n("и ещё")} ${imp.length-shown.length}</li>`:""}</ul>`
+  const cnt=[[imp.filter(x=>x.inNew).length,"получат вход впервые"],[imp.filter(x=>x.inLost).length,"потеряют вход"],[imp.filter(x=>x.vis).length,"изменится набор видимых объектов"]];
+  const summary=cnt.some(c=>c[0])?`<p class="acc-impact-sum">${cnt.filter(c=>c[0]).map(([n,t])=>`<b>${n}</b> ${i18n(t)}`).join(" · ")}</p>`:"";
+  const impHtml=imp.length?`<div class="acc-plan-h">${i18n("Последствия для людей")}</div>${summary}<ul class="acc-impact">${shown.map(x=>`<li class="${x.bad?"bad":"good"}"><b>${escHtml(x.u.login)}</b> ${x.text}</li>`).join("")}${imp.length>shown.length?`<li class="sub">${i18n("и ещё")} ${imp.length-shown.length}</li>`:""}</ul>`
     :`<p class="sub">${i18n("Ни у кого не меняется ни вход, ни набор видимых объектов")}</p>`;
   askConfirm("План изменений",`<div class="acc-plan-h">${i18n("Что будет записано")}</div><ol class="acc-plan">${lines.map(l=>`<li>${l}</li>`).join("")}</ol>${impHtml}`,"","Применить",()=>{
     accLogPlan(lines);
@@ -6604,15 +6701,19 @@ function accEdited(){accResolveAll();paint();accRefocus()}
 // История пишется при применении: что именно записали и кто.
 function accLogPlan(lines){
   const tmp=document.createElement("div");
-  lines.forEach(h=>{tmp.innerHTML=h;const text=tmp.textContent;
+  accPlanLines();const meta=accPlanMeta;  // кого затрагивают строки-«массовки»
+  lines.forEach((h,i)=>{tmp.innerHTML=h;const text=tmp.textContent,m=meta[i];
     // Роль записи — та, что названа первой; остальные упомянутые тоже видят её в истории.
     const all=[...accRoles(),...accSrv().roles.filter(r=>!accRole(r.id))];
     const hits=all.map(r=>({id:r.id,at:text.indexOf(`«${r.n}»`)})).filter(x=>x.at>=0).sort((a,b)=>a.at-b.at);
     const role=hits[0]?.id,roles=[...new Set(hits.map(x=>x.id))];
     const words=text.split(/[\s:,()]+/);
-    const user=[...accUsers(),...accSrv().users].find(u=>words.includes(u.login))?.id;
+    const user=m?null:[...accUsers(),...accSrv().users].find(u=>words.includes(u.login))?.id;
     const e={t:accNow(),who:ACC_ME,text,...(role?{role,roles}:{}),...(user?{user}:{})};
     accSt().log.unshift(e);accSrv().log.unshift(accClone(e));
+    // Массовая правка: у роли одна запись (она выше), а у каждого затронутого —
+    // своя короткая, чтобы история пользователя не молчала.
+    if(m)m.ids.forEach(id=>{const ue={t:e.t,who:ACC_ME,text:m.short,user:id};accSt().log.unshift(ue);accSrv().log.unshift(accClone(ue))});
   });
 }
 // ── Защита от самоблокировки ──
@@ -6629,6 +6730,8 @@ function accGuard(mutate){
 // ── Навигация ──
 function accGo(s,t){
   accSel=s;if(t)accTab=t;
+  accUserSel.clear();accMemSel.clear();accSelMe=false;
+  if(t==="members"&&s.startsWith("role:"))resetPage("accmem:"+s.slice(5));
   if(s.startsWith("role:"))role=s.slice(5);
   if(s.startsWith("grp:")){const g=accGroupRow(s.slice(4));if(g){accDom=g.dom;open.delete("acc-x:groups");accChain(g.id,g.dom).slice(1).forEach(id=>open.add("accg:"+id))}}
   if(s.startsWith("user:"))open.delete("acc-x:users");
@@ -6645,8 +6748,12 @@ function treeRoles(){
     const d=accRoleDiff(r.id);
     return`<div class="n ${accSel==="role:"+r.id?"on":""}" style="--l:1" data-go="role:${r.id}" onclick="accGo('role:${r.id}')" title="${escHtml(accSummary(r.g))}"><span class="tw"></span>${ic(r.g.unr?"acc_admin":"acc_role")}<span class="nm">${hlText(r.n,q)}${accIsOwn(r.id)?` <span class="acc-own-t">${i18n("ваша")}</span>`:""}</span>${d.any?`<span class="acc-mod" title="${i18n(d.isNew?"Новая, в черновике":"Изменено в черновике")}">●</span>`:""}${treeTail({cnt:treeCntHtml(accRoleUsers(r.id,true).length)})}</div>`}).join("");
   h+=sec("users","Пользователи","acc_user",us.length,"users");
-  if(!open.has("acc-x:users"))h+=us.filter(u=>matchesText(q,u.login,u.name)).map(u=>
+  // Без запроса — первые 12: сотни узлов дерево не читает. Запрос ищет среди всех.
+  if(!open.has("acc-x:users")){const uf=us.filter(u=>matchesText(q,u.login,u.name)),cap=q?uf.length:ACC_TREE_USERS,shown=uf.slice(0,cap),cur=accSel.startsWith("user:")?uf.find(u=>"user:"+u.id===accSel):null;
+    if(cur&&!shown.includes(cur))shown.push(cur);  // открытый пользователь остаётся на виду
+    h+=shown.map(u=>
     `<div class="n ${accUserActive(u)?"":"off"} ${accSel==="user:"+u.id?"on":""}" style="--l:1" data-go="user:${u.id}" onclick="accGo('user:${u.id}')" title="${escHtml(u.name)} · ${i18n("вход:")} ${accAgo(u.last)}"><span class="tw"></span>${ic("acc_user")}<span class="nm">${hlText(u.login,q)}</span>${accUserDiff(u.id)?`<span class="acc-mod">●</span>`:""}${treeTail({})}</div>`).join("");
+    if(uf.length>shown.length)h+=`<div class="n" style="--l:1" data-go="acc:users" onclick="accGo('users')"><span class="tw"></span><span class="nm sub">${i18n("и ещё")} ${uf.length-shown.length} — ${i18n("открыть список")}</span>${treeTail({})}</div>`;}
   const gs=accGroups(accDom);
   h+=sec("groups","Папки устройств","folder",gs.length-1,"grp:"+accDom);
   if(!open.has("acc-x:groups")){
@@ -6726,21 +6833,192 @@ function accUserStateHtml(u){
   if(accAcctSoon(u))return`<span class="bd">${i18n("до")} ${accFmt(u.expires)}</span>`;
   return`<span class="bd">${i18n("включён")}</span>`;
 }
+function accUserMatchAll(u){
+  return accUserMatch(u,accUserFilt)&&accUserRSMatch(u);
+}
+function accUserRSMatch(u){
+  return(!accUserRoleFilt||u.roles.includes(accUserRoleFilt))&&(!accUserSrcFilt||(accUserSrcFilt==="ldap")===!!u.ldap);
+}
+function accMeId(){return accUsers().find(u=>u.login===ACC_ME)?.id}
 function accUsersUI(){
-  const all=accUsers(),us=all.filter(u=>accUserMatch(u,accUserFilt));
-  const chips=ACC_UFILT.map(([id,t])=>{const n=id==="all"?all.length:all.filter(u=>accUserMatch(u,id)).length;
-    return`<button type="button" class="acc-filt ${accUserFilt===id?"on":""}" ${n||id==="all"?"":"disabled"} onclick="accUserFilt='${id}';resetPage('accusers');accUI()">${i18n(t)} <b>${n}</b></button>`}).join("");
-  paintMain(mainHd("",i18n("Права"),ACC_SUB,accListTabs(),accActsHtml()+`<button type="button" class="btn s pri" onclick="accUserDlgOpen()">${i18n("Новый пользователь")}</button>`)
-    +`<div class="sc"><div class="acc-filts">${chips}</div>${listCard({
-      key:"accusers",how:"acc",title:"Пользователи",items:us,
-      text:u=>[u.login,u.name,u.ldap,...u.roles.map(id=>accRoleName(id))],
-      row:u=>`<tr class="click ${accUserActive(u)?"":"off"}" onclick="accGo('user:${u.id}')"><td><button type="button" class="lk">${escHtml(u.login)}</button>${u.login===ACC_ME?` · <span class="sub">${i18n("это вы")}</span>`:""}${u.ldap?` <span class="acc-chip sm" title="LDAP ${escHtml(u.ldap)}">LDAP</span>`:""}${accUserDiff(u.id)?` <span class="acc-mod">●</span>`:""}</td><td>${escHtml(u.name)}</td>
+  const all=accUsers(),meId=accMeId();
+  if(accUserRoleFilt&&!accRole(accUserRoleFilt))accUserRoleFilt="";
+  // Выбор переживает страницы и поиск, но не пользователей, которых уже нет.
+  const alive=new Set(all.map(u=>u.id));
+  [...accUserSel].forEach(id=>{if(!alive.has(id)||id===meId)accUserSel.delete(id)});
+  const us=all.filter(accUserMatchAll),base=all.filter(accUserRSMatch);  // чипы считают с учётом селектов «Роль» и «Источник»
+  const chips=ACC_UFILT.map(([id,t])=>{const n=id==="all"?base.length:base.filter(u=>accUserMatch(u,id)).length;
+    return`<button type="button" class="acc-filt ${accUserFilt===id?"on":""}" ${n||id==="all"?"":"disabled"} onclick="accUserFilt='${id}';accUserSel.clear();accSelMe=false;resetPage('accusers');accUI()">${i18n(t)} <b>${n}</b></button>`}).join("");
+  const sels=`<select class="acc-fsel" aria-label="${i18n("Роль")}" onchange="accUserRoleFilt=this.value;accUserSel.clear();accSelMe=false;resetPage('accusers');accUI()"><option value="">${i18n("Роль: все")}</option>${accRoles().map(r=>`<option value="${r.id}" ${accUserRoleFilt===r.id?"selected":""}>${i18n("Роль")}: ${escHtml(r.n)}</option>`).join("")}</select>
+    <select class="acc-fsel" aria-label="${i18n("Источник")}" onchange="accUserSrcFilt=this.value;accUserSel.clear();accSelMe=false;resetPage('accusers');accUI()">${[["","Источник: все"],["local","Источник: локальные"],["ldap","Источник: LDAP"]].map(([v,t])=>`<option value="${v}" ${accUserSrcFilt===v?"selected":""}>${i18n(t)}</option>`).join("")}</select>`;
+  const cleanFilt=accUserFilt==="all"&&!accUserRoleFilt&&!accUserSrcFilt;
+  accUserO={
+    key:"accusers",how:"acc",title:"Пользователи",items:us,
+    text:u=>[u.login,u.name,u.ldap,...u.roles.map(id=>accRoleName(id))],
+    mid:accBulkBar,
+    row:u=>{const me=u.login===ACC_ME;
+      return`<tr data-uid="${u.id}" class="click ${accUserActive(u)?"":"off"} ${accUserSel.has(u.id)?"sel":""}" onclick="accGo('user:${u.id}')"><td class="acc-ck" onclick="event.stopPropagation()"><input type="checkbox" class="acc-rowchk" ${accUserSel.has(u.id)?"checked":""} ${me?"disabled":""} aria-label="${i18n("Выбрать")} ${escHtml(u.login)}" title="${me?i18n("Свои роли и состояние менять нельзя"):""}" onchange="accUserPick('${u.id}',this.checked)"></td><td><button type="button" class="lk">${escHtml(u.login)}</button>${me?` · <span class="sub">${i18n("это вы")}</span>`:""}${u.ldap?` <span class="acc-chip sm" title="LDAP ${escHtml(u.ldap)}">LDAP</span>`:""}${accUserDiff(u.id)?` <span class="acc-mod">●</span>`:""}</td><td>${escHtml(u.name)}</td>
         <td>${accUserRolesHtml(u)}</td>
         <td class="${accStale(u)?"acc-warn":"sub"}">${accAgo(u.last)}</td>
-        <td>${accUserStateHtml(u)}</td></tr>`,
-      wrap:rows=>`<table class="acc-tbl"><tr><th>${i18n("Логин")}</th><th>${i18n("Имя")}</th><th>${i18n("Роли")}</th><th>${i18n("Последний вход")}</th><th>${i18n("Состояние")}</th></tr>${rows}</table>`,
-      ph:"Поиск по логину, имени и роли",unit:"пользователь|пользователя|пользователей",empty:accUserFilt==="all"?"Пользователей нет":"Таких пользователей нет"
-    })}</div>`);
+        <td>${accUserStateHtml(u)}</td></tr>`},
+    wrap:rows=>`<table class="acc-tbl"><tr><th class="acc-ck"><input type="checkbox" id="accPageChk" aria-label="${i18n("Выбрать все на странице")}" title="${i18n("Выбрать все на странице")}" onchange="accUserPage(this.checked)"></th><th>${i18n("Логин")}</th><th>${i18n("Имя")}</th><th>${i18n("Роли")}</th><th>${i18n("Последний вход")}</th><th>${i18n("Состояние")}</th></tr>${rows}</table>`,
+    ph:"Поиск по логину, имени и роли",unit:"пользователь|пользователя|пользователей",empty:cleanFilt?"Пользователей нет":"Таких пользователей нет"
+  };
+  paintMain(mainHd("",i18n("Права"),ACC_SUB,accListTabs(),accActsHtml()+`<button type="button" class="btn s pri" onclick="accUserDlgOpen()">${i18n("Новый пользователь")}</button>`)
+    +`<div class="sc"><div class="acc-filts">${chips}${sels}</div>${listCard(accUserO)}</div>`);
+  accSelHead();
+}
+// ── Выбор и массовые правки ──
+// Выбор живёт в accUserSel (список) и accMemSel (вкладка «Пользователи» роли).
+// Текущий администратор в выбор не попадает: свои роли и состояние он менять
+// не может, и защита от самоблокировки всё равно отказала бы.
+function accSelUsers(){return accUsers().filter(u=>accUserSel.has(u.id)&&u.login!==ACC_ME)}
+function accBulkIds(sc){const me=accMeId();return[...(sc==="m"?accMemSel:accUserSel)].filter(id=>id!==me&&accUser(id))}
+function accWho(n){return`${n} ${i18n(plural(n,"пользователь|пользователя|пользователей"))}`}
+function accWhoGen(n){return`${n} ${i18n(plural(n,"пользователя|пользователей|пользователей"))}`}
+function accBulkBar(found){
+  const n=accUserSel.size,pool=found.filter(u=>u.login!==ACC_ME),all=pool.length>0&&pool.every(u=>accUserSel.has(u.id));
+  const inList=new Set(found.map(u=>u.id)),hid=[...accUserSel].filter(id=>!inList.has(id)).length;
+  const b=(label,act,cls)=>`<button type="button" class="btn s ${cls||""}" ${n?"":"disabled"} onclick="${act}">${i18n(label)}</button>`;
+  const pick=all?"":pool.length?`<button type="button" class="btn s" onclick="accUserSelAll(true)">${i18n("Выбрать всех найденных")} (${pool.length})</button>`:"";
+  const clear=n?`<button type="button" class="btn s" onclick="accUserSelAll(false)">${i18n("Снять выделение")}</button>`:"";
+  return`<div class="acc-bulk" id="accBulkBar" role="toolbar" aria-label="${i18n("Действия над выбранными")}"><div class="l"><span class="cnt">${n?`${i18n("Выбрано")} ${n}`:i18n("Ничего не выбрано")}${hid?` <span class="sub" style="font-weight:400">· ${i18n("из них")} ${hid} ${i18n("не в списке")}</span>`:""}</span>${pick}${clear}${accSelMe?`<span class="hint">${i18n("Вы исключены из выборки: свои роли и состояние менять нельзя")}</span>`:""}</div>
+    <div class="r">${b("Назначить роль…","accBulkMenu(this,'assign','u')")}${b("Снять роль…","accBulkMenu(this,'remove','u')")}${b("Срок роли…","accBulkOpen('until','','u')")}${b("Включить","accBulkOn(true)")}${b("Выключить","accBulkOn(false)")}${b("Срок учётной записи…","accBulkOpen('acct','','u')")}
+      <button type="button" class="btn s" title="${n?`${i18n("выбранных")} ${n}`:`${i18n("всех найденных")} ${found.length}`}" onclick="accUserExport()">${i18n("Экспорт CSV")}</button>${b("Удалить…","accUserDelete()","danger")}</div></div>`;
+}
+// Перерисовка на месте: страница не прыгает и поиск не теряет фокус.
+function accSelHead(){
+  const sel=accSel.startsWith("role:")?accMemSel:accUserSel,h=document.getElementById("accPageChk");
+  if(!h)return;
+  const rows=[...document.querySelectorAll("#main tr[data-uid]")].filter(tr=>tr.querySelector("input.acc-rowchk:not(:disabled)"));
+  const k=rows.filter(tr=>sel.has(tr.dataset.uid)).length;
+  h.checked=rows.length>0&&k===rows.length;h.indeterminate=k>0&&k<rows.length;
+}
+function accSelPaint(){
+  const mem=accSel.startsWith("role:"),sel=mem?accMemSel:accUserSel,bar=document.getElementById("accBulkBar");
+  if(bar)bar.outerHTML=mem?accMemBar(accSelRole(),listFound(accMemO)):accBulkBar(listFound(accUserO));
+  document.querySelectorAll("#main tr[data-uid]").forEach(tr=>{const on=sel.has(tr.dataset.uid);tr.classList.toggle("sel",on);const c=tr.querySelector("input.acc-rowchk");if(c)c.checked=on});
+  accSelHead();
+}
+function accSelToggle(set,id,on){on?set.add(id):set.delete(id);if(!set.size)accSelMe=false;accSelPaint()}
+function accUserPick(id,on){accSelToggle(accUserSel,id,on)}
+function accSelPage(set,on){
+  const me=accMeId();
+  document.querySelectorAll("#main tr[data-uid]").forEach(tr=>{const id=tr.dataset.uid;if(id===me){if(on)accSelMe=true;return}on?set.add(id):set.delete(id)});
+  if(!on||!set.size)accSelMe=false;accSelPaint();
+}
+function accUserPage(on){accSelPage(accUserSel,on)}
+function accUserSelAll(on){
+  if(on)listFound(accUserO).forEach(u=>{if(u.login===ACC_ME)accSelMe=true;else accUserSel.add(u.id)});
+  else{accUserSel.clear();accSelMe=false}
+  accSelPaint();
+}
+// Все действия идут в черновик одним accGuard: либо применяются ко всем, либо
+// ни к одному, если администратор остался бы один без входа.
+function accBulkRun(ids,fn,del){
+  const set=new Set(ids);
+  const ok=accGuard(st=>{if(del)st.users=st.users.filter(u=>!set.has(u.id));else st.users.forEach(u=>{if(set.has(u.id))fn(u)})});
+  if(ok)accEdited();
+  return ok;
+}
+function accAssignFn(rid,date){
+  return u=>{u.roles=[...new Set([...u.roles,rid])];u.until=u.until||{};if(date)u.until[rid]=date;else delete u.until[rid]};
+}
+function accBulkMenu(el,kind,sc){
+  const ids=accBulkIds(sc),us=ids.map(id=>accUser(id));if(!us.length)return;
+  let html;
+  if(kind==="assign")html=accRoles().map(r=>`<button type="button" class="mi" onclick="accBulkOpen('assign','${r.id}','${sc}')">${escHtml(r.n)}<small>${escHtml(accSummary(r.g))}</small></button>`).join("");
+  else{
+    const rs=accRoles().map(r=>[r,us.filter(u=>u.roles.includes(r.id)).length]).filter(x=>x[1]);
+    html=rs.length?rs.map(([r,k])=>`<button type="button" class="mi" onclick="accBulkRemove('${r.id}','${sc}')">${escHtml(r.n)}<small>${i18n("у")} ${k} ${i18n("из")} ${us.length}</small></button>`).join("")
+      :`<div class="acc-why">${i18n("У выбранных нет ролей")}</div>`;
+  }
+  accMenuOpen(el,html);
+}
+function accBulkRemove(rid,sc){
+  accMenuClose();
+  const ids=accBulkIds(sc),k=ids.filter(id=>accUser(id).roles.includes(rid)).length;
+  if(!k)return;
+  if(accBulkRun(ids,u=>{u.roles=u.roles.filter(x=>x!==rid);if(u.until)delete u.until[rid]}))
+    toast(`${i18n("Роль")} «${accRoleName(rid)}» ${i18n("снята у")} ${accWhoGen(k)} — ${i18n("в черновике")}`);
+}
+function accBulkOn(on){
+  const ids=accBulkIds("u"),n=ids.length;if(!n)return;
+  const run=()=>{if(accBulkRun(ids,u=>{u.on=on}))toast(`${i18n(on?"Включено":"Выключено")}: ${accWho(n)} — ${i18n("в черновике")}`)};
+  if(on)run();
+  else askConfirm(`${i18n("Выключить")} ${accWhoGen(n)}?`,i18n("Пользователи не смогут войти; изменение попадёт в черновик"),"","Выключить",run,{rawMsg:true,rawTitle:true});
+}
+function accUserDelete(){
+  const ids=accBulkIds("u"),n=ids.length;if(!n)return;
+  const logins=ids.slice(0,5).map(id=>escHtml(accUser(id).login)).join(", ")+(n>5?` ${i18n("и ещё")} ${n-5}`:"");
+  askConfirm(`${i18n("Удалить")} ${accWhoGen(n)}?`,`<p>${logins}</p><p class="sub">${i18n("Изменение попадёт в черновик; на сервере пользователи останутся, пока вы не примените изменения")}</p>`,"","Удалить",()=>{
+    if(accBulkRun(ids,null,true)){accSelMe=false;toast(`${i18n("Удалено")}: ${accWho(n)} — ${i18n("в черновике")}`)}
+  },{html:true,rawTitle:true});
+}
+function accUserStateText(u){return!u.on?i18n("выключен"):accAcctExpired(u)?`${i18n("срок истёк")} ${accFmt(u.expires)}`:u.expires?`${i18n("включён")}, ${i18n("до")} ${accFmt(u.expires)}`:i18n("включён")}
+function accUserExport(){
+  const us=accUserSel.size?accSelUsers():listFound(accUserO);
+  if(!us.length)return;
+  const q=v=>{v=String(v??"");if(/^[=+\-@]/.test(v))v="'"+v;  // не даём Excel принять значение за формулу
+    return/[;"\r\n]/.test(v)?`"${v.replace(/"/g,'""')}"`:v};
+  const rolesTxt=u=>u.roles.map(id=>accRoleName(id)+(accUntil(u,id)?` (${i18n("до")} ${accFmt(accUntil(u,id))})`:"")).join(", ");
+  const head=["Логин","Имя","E-mail","Роли","Состояние","Последний вход","Источник"].map(h=>q(i18n(h))).join(";");
+  const rows=us.map(u=>[u.login,u.name,u.email,rolesTxt(u),accUserStateText(u),u.last?accFmt(u.last):i18n("никогда"),u.ldap?"LDAP "+u.ldap:i18n("локальный")].map(q).join(";"));
+  const blob=new Blob(["\ufeff"+[head,...rows].join("\r\n")],{type:"text/csv;charset=utf-8"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="users.csv";
+  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  toast(`${i18n("Экспортировано")} ${accWho(us.length)}`);
+}
+// Окно «Назначить роль…», «Срок роли…», «Срок учётной записи…» над выбранными.
+// В карточке роли (sc="m") роль задана и не выбирается.
+function accBulkOpen(kind,rid,sc){
+  accMenuClose();
+  const ids=accBulkIds(sc||"u");if(!ids.length)return;
+  const fixed=sc==="m";
+  accBk={kind,rid:fixed?accSel.slice(5):rid,fixed,ids,date:""};
+  accDrawer("accBulk",kind==="assign"?"Назначить роль":kind==="until"?"Срок роли":"Срок учётной записи");
+  document.getElementById("accBulkSt").innerHTML="";document.getElementById("accBulkN").textContent="";
+  accBulkRender();
+}
+function accBulkTargets(){
+  const b=accBk,us=b.ids.map(id=>accUser(id)).filter(Boolean);
+  return b.kind==="until"?us.filter(u=>u.roles.includes(b.rid)):us;
+}
+function accBulkRender(){
+  const b=accBk;if(!b)return;
+  const us=b.ids.map(id=>accUser(id)).filter(Boolean),n=us.length;
+  const rs=accRoles().filter(r=>us.some(u=>u.roles.includes(r.id)));
+  if(b.kind==="until"&&!b.fixed&&!rs.some(r=>r.id===b.rid))b.rid=rs[0]?.id||"";
+  const r=accRole(b.rid);
+  const date=label=>`<div class="acc-wz-f" style="margin-top:12px"><label>${i18n(label)}</label><div class="acc-pwd"><input type="date" value="${b.date}" style="max-width:200px" onchange="accBk.date=this.value;accBulkCheck()"><span class="sub" style="align-self:center">${i18n("пусто — бессрочно")}</span></div><div class="fld-err" id="accBulkE"></div></div>`;
+  const who=`<p class="acc-hint">${i18n("Выбрано")}: ${accWho(n)}</p>`;
+  let body,k=n;
+  if(b.kind==="assign"){
+    const has=us.filter(u=>u.roles.includes(b.rid)).length;
+    body=`${who}<div class="wsec">${i18n("Роль")} «${escHtml(r?.n||"")}»</div><p class="sub">${escHtml(r?accSummary(r.g):"")}</p>${date("Роль действует до")}${has?`<p class="acc-hint">${i18n("Роль уже есть у")} ${has}, ${i18n("им срок будет обновлён")}</p>`:""}`;
+  }else if(b.kind==="until"){
+    k=us.filter(u=>u.roles.includes(b.rid)).length;
+    const pick=b.fixed?`<div class="wsec">${i18n("Роль")} «${escHtml(r?.n||"")}»</div>`
+      :!rs.length?`<p class="sub">${i18n("У выбранных нет ролей")}</p>`:`<div class="wsec">${i18n("Роль")}</div><select onchange="accBk.rid=this.value;accBulkRender()">${rs.map(x=>`<option value="${x.id}" ${x.id===b.rid?"selected":""}>${escHtml(x.n)} — ${i18n("у")} ${us.filter(u=>u.roles.includes(x.id)).length} ${i18n("из")} ${n}</option>`).join("")}</select>`;
+    body=`${who}${pick}${rs.length?date("Роль действует до"):""}${rs.length?`<p class="acc-hint">${i18n("Срок получат только те, у кого есть эта роль")}: ${k} ${i18n("из")} ${n}. ${i18n("Пусто — срок снимается")}</p>`:""}`;
+  }else body=`${who}${date("Учётная запись действует до")}`;
+  document.getElementById("accBulkBd").innerHTML=body;
+  document.getElementById("accBulkFt").innerHTML=`<button class="btn" onclick="accDrawerClose('accBulk')">${i18n("Отмена")}</button><button class="btn pri" style="margin-left:auto" ${k?"":"disabled"} onclick="accBulkApply()">${i18n("В черновик")} (${k})</button>`;
+}
+function accBulkCheck(){
+  const b=accBk,e=document.getElementById("accBulkE"),bad=!!b.date&&accDays(b.date)<0;
+  if(e)e.textContent=bad?i18n("Срок уже прошёл"):"";
+  return!bad;
+}
+function accBulkApply(){
+  const b=accBk;if(!b||!accBulkCheck())return;
+  const k=accBulkTargets().length;
+  const fn=b.kind==="assign"?accAssignFn(b.rid,b.date)
+    :b.kind==="until"?(u=>{if(!u.roles.includes(b.rid))return;u.until=u.until||{};if(b.date)u.until[b.rid]=b.date;else delete u.until[b.rid]})
+    :(u=>{u.expires=b.date});
+  if(!accBulkRun(b.ids,fn))return;
+  accDrawerClose("accBulk");
+  toast(`${i18n(b.kind==="assign"?"Роль назначена":b.kind==="until"?"Срок роли изменён":"Срок учётной записи изменён")}: ${accWho(k)} — ${i18n("в черновике")}`);
 }
 // ── Роль ──
 const ACC_RTABS=[["global","Глобальные"],["groups","На папки устройств"],["objects","На объекты"],["effective","Итоговый доступ"],["members","Пользователи"],["history","История"]];
@@ -6748,7 +7026,7 @@ function accRoleUI(r){
   const own=accIsOwn(r.id),ro=own,d=accRoleDiff(r.id);
   if(!ACC_RTABS.some(t=>t[0]===accTab))accTab="global";
   const mark={global:d.global,groups:d.groups,objects:d.objs,members:d.users};
-  const tabsH=ACC_RTABS.map(([id,x])=>`<button class="tab ${accTab===id?"on":""}" onclick="accTab='${id}';accMenuClose();accUI()">${i18n(x)}${id==="members"?` <span class="acc-tabcnt">${accRoleUsers(r.id,true).length}</span>`:""}${mark[id]?` <span class="acc-mod">●</span>`:""}</button>`).join("");
+  const tabsH=ACC_RTABS.map(([id,x])=>`<button class="tab ${accTab===id?"on":""}" onclick="accTab='${id}';${id==="members"?`resetPage('accmem:${r.id}');`:""}accMenuClose();accUI()">${i18n(x)}${id==="members"?` <span class="acc-tabcnt">${accRoleUsers(r.id,true).length}</span>`:""}${mark[id]?` <span class="acc-mod">●</span>`:""}</button>`).join("");
   const cr=`<button type="button" class="cr-link" onclick="accGo('roles')">${i18n("Права")}</button><span class="cr-sep">›</span><button type="button" class="cr-link" onclick="accGo('roles')">${i18n("Роли")}</button>`;
   const title=`<span class="hd-ic">${ic(r.g.unr?"acc_admin":"acc_role")}</span>${i18n("Роль")} «${escHtml(r.n)}»${own?` <span class="acc-own">${i18n("ваша роль")}</span>`:""}${d.isNew?` <span class="acc-own">${i18n("в черновике")}</span>`:""}`;
   const sub=[escHtml(r.comment),`${i18n("вход:")} ${i18n(ACC_TZ[r.tz||0]).toLowerCase()}`,r.sup?.role&&(r.sup.login||r.sup.export)?accSupText(r):""].filter(Boolean).join(" · ");
@@ -6980,9 +7258,13 @@ function accEffWhy(el,i){
     return`<div class="acc-why-f">${i18n(ACC_FIELD_NAME[f])}</div><ul>${e.levels.map(l=>`<li>${i18n("Роль")} «${escHtml(l.r.n)}»: <b>${accLv(f,l.lv)}</b> — ${accSrcText(l,f)}</li>`).join("")||`<li>${i18n("нет действующих ролей")}</li>`}</ul><p>${i18n("Итог — наибольший по ролям:")} <b>${accLv(f,e.lv)}</b></p>`}).join("");
   accMenuOpen(el,`<div class="acc-why"><b>${i18n("Почему так")}: «${escHtml(locName(x.o))}»</b>${blocks}</div>`);
 }
+// Срок живёт на назначении «пользователь × роль», а не на роли. У истёкшего —
+// быстрые действия, чтобы не искать, где его продлить.
 function accUntilInput(u,rid,ro){
-  const t=accUntil(u,rid);
-  return`<input type="date" class="acc-date ${accExpired(u,rid)?"gone":accSoon(u,rid)?"warn":""}" value="${t}" ${ro?"disabled":""} title="${i18n("Срок действия назначения; пусто — бессрочно")}" aria-label="${i18n("Срок")}" onchange="accSetUntil('${u.id}','${rid}',this.value,this)">`;
+  const t=accUntil(u,rid),ex=accExpired(u,rid);
+  const inp=`<input type="date" class="acc-date ${ex?"gone":accSoon(u,rid)?"warn":""}" value="${t}" ${ro?"disabled":""} title="${i18n("Срок действия назначения; пусто — бессрочно")}" aria-label="${i18n("Срок")}" onchange="accSetUntil('${u.id}','${rid}',this.value,this)">`;
+  if(!ex||ro)return inp;
+  return`${inp}<div class="acc-until-act">${i18n("истёк")} ${accFmt(t)} · <button type="button" class="lk" onclick="accSetUntil('${u.id}','${rid}',accIso(30))">${i18n("+30 дней")}</button> · <button type="button" class="lk" onclick="accSetUntil('${u.id}','${rid}','')">${i18n("бессрочно")}</button></div>`;
 }
 function accSetUntil(uid,rid,v,el){
   const ok=accGuard(st=>{const u=st.users.find(x=>x.id===uid);if(!u)return;u.until=u.until||{};if(v)u.until[rid]=v;else delete u.until[rid]});
@@ -6991,15 +7273,94 @@ function accSetUntil(uid,rid,v,el){
 }
 function accMembersHtml(r,ro){
   const us=accRoleUsers(r.id),act=accRoleUsers(r.id,true),srvUsers=accSrv().users;
-  const others=accUsers().filter(u=>!u.roles.includes(r.id)&&u.login!==ACC_ME);
-  const rows=us.map(u=>{const s=srvUsers.find(x=>x.id===u.id),was=!!s?.roles.includes(r.id)&&accUntil(s,r.id)===accUntil(u,r.id),ex=accExpired(u,r.id);
-    return`<tr class="${was?"":"chg"} ${ex||!accUserActive(u)?"off":""}"><td><button type="button" class="lk" onclick="accGo('user:${u.id}')">${escHtml(u.login)}</button>${ex?` <span class="acc-chip gone sm">${i18n("срок истёк")}</span>`:accSoon(u,r.id)?` <span class="acc-chip warn sm">${i18n("истекает")}</span>`:""}</td><td>${escHtml(u.name)}</td><td>${accUserStateHtml(u)}</td>
-      <td>${accUntilInput(u,r.id,ro||u.login===ACC_ME)}</td>
+  // Выбор — только среди тех, кого здесь можно менять: себя и чужую (свою) роль нельзя.
+  const alive=new Set(us.filter(u=>u.login!==ACC_ME).map(u=>u.id));
+  [...accMemSel].forEach(id=>{if(!alive.has(id))accMemSel.delete(id)});
+  const ck=!ro;
+  const row=u=>{const s=srvUsers.find(x=>x.id===u.id),was=!!s?.roles.includes(r.id)&&accUntil(s,r.id)===accUntil(u,r.id),ex=accExpired(u,r.id),me=u.login===ACC_ME;
+    return`<tr data-uid="${u.id}" class="${was?"":"chg"} ${ex||!accUserActive(u)?"off":""} ${accMemSel.has(u.id)?"sel":""}">${ck?`<td class="acc-ck">${me?"":`<input type="checkbox" class="acc-rowchk" ${accMemSel.has(u.id)?"checked":""} aria-label="${i18n("Выбрать")} ${escHtml(u.login)}" onchange="accMemPick('${u.id}',this.checked)">`}</td>`:""}<td><button type="button" class="lk" onclick="accGo('user:${u.id}')">${escHtml(u.login)}</button>${ex?` <span class="acc-chip gone sm">${i18n("срок истёк")}</span>`:accSoon(u,r.id)?` <span class="acc-chip warn sm">${i18n("истекает")}</span>`:""}</td><td>${escHtml(u.name)}</td><td>${accUserStateHtml(u)}</td>
+      <td>${accUntilInput(u,r.id,ro||me)}</td>
       <td class="sub">${u.roles.filter(id=>id!==r.id).map(id=>escHtml(accRoleName(id))).join(", ")}</td>
-      <td style="text-align:right">${ro||u.login===ACC_ME?"":`<button type="button" class="btn s" onclick="accAssign('${u.id}','${r.id}',false)">${i18n("Снять")}</button>`}</td></tr>`}).join("");
-  const add=ro?"":`<select style="width:auto;min-width:240px" onchange="if(this.value)accAssign(this.value,'${r.id}',true)"><option value="">${i18n("Назначить роль пользователю…")}</option>${others.map(u=>`<option value="${u.id}">${escHtml(u.login)} — ${escHtml(u.name)}</option>`).join("")}</select>`;
+      <td style="text-align:right">${ro||me?"":`<button type="button" class="btn s" onclick="accAssign('${u.id}','${r.id}',false)">${i18n("Снять")}</button>`}</td></tr>`};
+  const add=ro?"":`<button type="button" class="btn s pri" onclick="accAdOpen('${r.id}')">${i18n("Добавить пользователей…")}</button>`;
   const title=`${i18n("Действующие")}: ${act.length}${us.length>act.length?` · ${i18n("истёкшие или выключенные")}: ${us.length-act.length}`:""}`;
-  return card(title,us.length?`<table class="acc-tbl"><tr><th>${i18n("Логин")}</th><th>${i18n("Имя")}</th><th>${i18n("Состояние")}</th><th>${i18n("Роль действует до")}</th><th>${i18n("Другие роли")}</th><th></th></tr>${rows}</table>`:`<p class="sub">${i18n("В роли нет пользователей")}</p>`,add);
+  const wrap=rows=>`<table class="acc-tbl"><tr>${ck?`<th class="acc-ck"><input type="checkbox" id="accPageChk" aria-label="${i18n("Выбрать всех")}" title="${i18n("Выбрать всех")}" onchange="accMemPage(this.checked)"></th>`:""}<th>${i18n("Логин")}</th><th>${i18n("Имя")}</th><th>${i18n("Состояние")}</th><th>${i18n("Роль действует до")}</th><th>${i18n("Другие роли")}</th><th></th></tr>${rows}</table>`;
+  setTimeout(accSelHead,0);
+  accMemO={key:"accmem:"+r.id,how:"acc",title,items:us,text:u=>[u.login,u.name],head:add,row,wrap,
+    mid:ck&&alive.size?found=>accMemBar(r,found):null,ph:"Поиск по логину и имени",unit:"пользователь|пользователя|пользователей",empty:"В роли нет пользователей"};
+  return`<p class="acc-hint">${i18n("Срок действия задаётся каждому назначению отдельно — в колонке «Роль действует до» или через «Срок роли…» для выбранных. У самой роли срока нет")}</p>`+listCard(accMemO);
+}
+function accMemBar(r,found){
+  const n=accMemSel.size,pool=found.filter(u=>u.login!==ACC_ME),all=pool.length>0&&pool.every(u=>accMemSel.has(u.id));
+  const pick=all?"":pool.length?`<button type="button" class="btn s" onclick="accMemSelAll(true)">${i18n("Выбрать всех найденных")} (${pool.length})</button>`:"";
+  const clear=n?`<button type="button" class="btn s" onclick="accMemSelAll(false)">${i18n("Снять выделение")}</button>`:"";
+  const b=(label,act)=>`<button type="button" class="btn s" ${n?"":"disabled"} onclick="${act}">${i18n(label)}</button>`;
+  return`<div class="acc-bulk" id="accBulkBar" role="toolbar" aria-label="${i18n("Действия над выбранными")}"><div class="l"><span class="cnt">${n?`${i18n("Выбрано")} ${n}`:i18n("Ничего не выбрано")}</span>${pick}${clear}</div>
+    <div class="r">${b("Снять роль",`accBulkRemove('${r.id}','m')`)}${b("Срок роли…",`accBulkOpen('until','${r.id}','m')`)}</div></div>`;
+}
+function accMemPick(id,on){accSelToggle(accMemSel,id,on)}
+function accMemPage(on){accSelPage(accMemSel,on)}
+function accMemSelAll(on){
+  if(on)listFound(accMemO).forEach(u=>{if(u.login!==ACC_ME)accMemSel.add(u.id)});else accMemSel.clear();
+  accSelPaint();
+}
+// «Добавить пользователей…»: окно с поиском и галочками для роли. Список
+// может быть на сотни строк, поэтому он прокручивается, а при вводе
+// перерисовывается только он — поле поиска фокус не теряет.
+function accAdOpen(rid){
+  const r=accRole(rid);if(!r)return;
+  accMenuClose();
+  accAd={rid,q:"",chip:"all",sel:new Set(),until:""};
+  accDrawer("accAdd",`${i18n("Добавить пользователей в роль")} «${r.n}»`,true);
+  document.getElementById("accAddSt").innerHTML="";document.getElementById("accAddN").textContent="";
+  document.getElementById("accAddBd").innerHTML=`<div class="sq lst-sq" style="margin:0 0 8px"><span class="sq-lead">${IC_FIND}</span><input type="text" placeholder="${i18n("Логин или имя…")}" autocomplete="off" oninput="accAd.q=this.value;accAdLive()"></div>
+    <div class="acc-filts" id="accAdChips" style="margin-bottom:8px"></div>
+    <div class="acc-ad-h"><span class="sub" id="accAdCnt"></span><button type="button" class="lk" id="accAdAll" onclick="accAdAll()"></button></div>
+    <div class="acc-ulist tall" id="accAdUl"></div>
+    <div class="acc-wz-f" style="margin-top:12px"><label>${i18n("Роль действует до")}</label><div class="acc-pwd"><input type="date" style="max-width:200px" onchange="accAd.until=this.value;accAdCheck()"><span class="sub" style="align-self:center">${i18n("пусто — бессрочно")}</span></div><div class="fld-err" id="accAdE"></div></div>`;
+  document.getElementById("accAddFt").innerHTML=`<button class="btn" onclick="accDrawerClose('accAdd')">${i18n("Отмена")}</button><button class="btn pri" id="accAdOk" style="margin-left:auto" onclick="accAdApply()"></button>`;
+  accAdLive();
+}
+function accAdPool(){return accUsers().filter(u=>u.login!==ACC_ME&&!u.roles.includes(accAd.rid))}
+function accAdFound(){
+  const a=accAd,q=a.q.trim().toLowerCase();
+  return accAdPool().filter(u=>(a.chip==="all"||(a.chip==="none"?!u.roles.length:!!u.ldap))&&(!q||u.login.toLowerCase().includes(q)||u.name.toLowerCase().includes(q)));
+}
+function accAdLive(){
+  const a=accAd;if(!a)return;
+  const pool=accAdPool(),list=accAdFound();
+  document.getElementById("accAdChips").innerHTML=[["all","Все",pool.length],["none","Без ролей",pool.filter(u=>!u.roles.length).length],["ldap","LDAP",pool.filter(u=>u.ldap).length]]
+    .map(([id,t,n])=>`<button type="button" class="acc-filt ${a.chip===id?"on":""}" onclick="accAd.chip='${id}';accAdLive()">${i18n(t)} <b>${n}</b></button>`).join("");
+  document.getElementById("accAdUl").innerHTML=list.length?list.map(u=>`<label class="acc-chk"><input type="checkbox" ${a.sel.has(u.id)?"checked":""} onchange="accAdPick('${u.id}',this.checked)">
+    <span>${escHtml(u.login)}${u.ldap?` <span class="acc-chip sm">LDAP</span>`:""} <span class="sub">— ${escHtml(u.name)}${u.roles.length?" · "+u.roles.map(id=>escHtml(accRoleName(id))).join(", "):""}</span></span></label>`).join("")
+    :`<p class="sub">${i18n(pool.length?"Ничего не найдено":"Все остальные пользователи уже в этой роли")}</p>`;
+  accAdFoot();
+}
+function accAdFoot(){
+  const a=accAd;if(!a)return;
+  const list=accAdFound(),all=list.length>0&&list.every(u=>a.sel.has(u.id));
+  document.getElementById("accAdCnt").textContent=`${i18n("Найдено")}: ${list.length}`;
+  const l=document.getElementById("accAdAll");
+  l.textContent=all?i18n("Снять выделение"):`${i18n("Выбрать всех найденных")} (${list.length})`;l.hidden=!list.length;
+  const ok=document.getElementById("accAdOk");ok.textContent=`${i18n("В черновик")} (${a.sel.size})`;ok.disabled=!a.sel.size;
+}
+function accAdPick(id,on){on?accAd.sel.add(id):accAd.sel.delete(id);accAdFoot()}
+function accAdAll(){
+  const a=accAd,list=accAdFound(),all=list.length>0&&list.every(u=>a.sel.has(u.id));
+  list.forEach(u=>all?a.sel.delete(u.id):a.sel.add(u.id));
+  accAdLive();
+}
+function accAdCheck(){
+  const a=accAd,e=document.getElementById("accAdE"),bad=!!a.until&&accDays(a.until)<0;
+  if(e)e.textContent=bad?i18n("Срок уже прошёл"):"";
+  return!bad;
+}
+function accAdApply(){
+  const a=accAd;if(!a||!a.sel.size||!accAdCheck())return;
+  const ids=[...a.sel],n=ids.length,name=accRoleName(a.rid);
+  if(!accBulkRun(ids,accAssignFn(a.rid,a.until)))return;
+  accDrawerClose("accAdd");
+  toast(`${i18n("Роль")} «${name}» ${i18n("назначена")}: ${accWho(n)} — ${i18n("в черновике")}`);
 }
 function accAssign(uid,rid,on){
   const ok=accGuard(st=>{const u=st.users.find(x=>x.id===uid);if(!u)return;
@@ -7049,7 +7410,11 @@ function accUserGenHtml(u){
   const warn=[];
   if(!u.on)warn.push(`<div class="nt">${i18n("Учётная запись выключена: войти нельзя, роли не действуют")}</div>`);
   else if(accAcctExpired(u))warn.push(`<div class="nt err">${i18n("Срок учётной записи истёк")} ${accFmt(u.expires)}: ${i18n("войти нельзя, роли не действуют. Продлите срок или удалите учётную запись")}</div>`);
-  else if(!accUserRoles(u,true).length)warn.push(`<div class="nt err">${i18n("Нет действующих ролей: пользователь не сможет войти")}</div>`);
+  else if(!accUserRoles(u,true).length){
+    const ex=u.roles.filter(id=>accExpired(u,id));
+    if(ex.length)warn.push(`<div class="nt err">${ex.length>1?i18n("Срок всех ролей истёк"):`${i18n("Срок роли")} «${escHtml(accRoleName(ex[0]))}» ${i18n("истёк")} ${accFmt(accUntil(u,ex[0]))}`}: ${i18n("пользователь не сможет войти. Продлите срок в колонке «Роль действует до» или снимите роль")}</div>`);
+    else warn.push(`<div class="nt err">${i18n("Роли не назначены: пользователь не сможет войти")}</div>`);
+  }
   else if(!accUserSignIn(u,accSt()))warn.push(`<div class="nt err">${i18n("Ни одна из ролей не даёт входа в веб-интерфейс")}</div>`);
   if(accUserActive(u)&&accAcctSoon(u))warn.push(`<div class="nt">${i18n("Срок учётной записи истекает")} ${accFmt(u.expires)}</div>`);
   if(u.on&&accStale(u))warn.push(`<div class="nt">${i18n("Не входил")} ${accAgo(u.last)}. ${i18n("Если доступ больше не нужен, выключите учётную запись")}</div>`);
@@ -7234,13 +7599,13 @@ function accCamWhy(el,i){
 }
 
 // ── Общее для боковых окон ──
-function accDrawer(id,title){
+function accDrawer(id,title,raw){  // raw — заголовок уже собран из переведённых частей
   if(!document.getElementById(id)){
     document.body.insertAdjacentHTML("beforeend",`<div class="mask" id="${id}" onclick="if(event.target===this)accDrawerClose('${id}')">
       <div class="dr acc-wiz" onclick="event.stopPropagation()"><div class="dh"><b id="${id}T"></b><span class="dev-step-n" id="${id}N"></span><button class="btn s" style="margin-left:auto" onclick="accDrawerClose('${id}')">✕</button></div>
       <div class="acc-st" id="${id}St"></div><div class="db" id="${id}Bd"></div><div class="df" id="${id}Ft"></div></div></div>`);
   }
-  document.getElementById(id+"T").textContent=i18n(title);
+  document.getElementById(id+"T").textContent=raw?title:i18n(title);
   document.getElementById(id).classList.add("open");
   setTimeout(()=>document.querySelector(`#${id}Bd input`)?.focus(),30);
 }
@@ -7250,7 +7615,7 @@ function accDrawerClose(id){
   el.classList.remove("open");
   // Тело очищаем: иначе одинаковые id полей двух окон мешали бы живой проверке.
   document.getElementById(id+"Bd").innerHTML="";
-  if(id==="accWiz")accWz=null;if(id==="accUd")accUd=null;
+  if(id==="accWiz")accWz=null;if(id==="accUd")accUd=null;if(id==="accBulk")accBk=null;if(id==="accAdd")accAd=null;
 }
 const ACC_PWD_MIN=8;
 function accPwdRulesOf(pwd,login){
@@ -7509,7 +7874,9 @@ function accUdApply(){
 ESC_LAYERS.splice(1,0,
   {is:()=>!!document.getElementById("accMenu"),off(){accMenuClose();accRefocus()}},
   {is:accWzIsOpen,off:accWzClose},
-  {is:()=>accDrawerOpen("accUd"),off:()=>accDrawerClose("accUd")});
+  {is:()=>accDrawerOpen("accUd"),off:()=>accDrawerClose("accUd")},
+  {is:()=>accDrawerOpen("accBulk"),off:()=>accDrawerClose("accBulk")},
+  {is:()=>accDrawerOpen("accAdd"),off:()=>accDrawerClose("accAdd")});
 // Настройки описаны списком, а не разметкой: то же описание рисует страницу
 // и даёт поиску цели, поэтому найденная настройка не может разойтись с той,
 // что на экране.
@@ -9170,6 +9537,7 @@ function navApply(loc){
     syncViews();sview=loc.sview;tview=loc.tview;   // syncViews ставит виды по срезу, шаг их уточняет
     if(app==="hw"&&find(sel))expandTo(sel);
     closeUserMenu();closeTreeCtx();accMenuClose();
+    accUserSel.clear();accMemSel.clear();accSelMe=false;accDrawerClose("accBulk");accDrawerClose("accAdd");
     paint();
   }finally{navLock=false}
 }
