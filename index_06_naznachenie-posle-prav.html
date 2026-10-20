@@ -8688,16 +8688,18 @@ function accPwdFieldHtml(w,setFn,genFn,toggleFn,errFn){
 }
 
 // ── Мастер «Новая роль» ──
-// Роль → Пользователь → Права → Итог. Всё попадает в черновик, как и
-// остальные правки; на сервер — через общее «Применить…» с последствиями.
-const ACC_WZ=[["role","Роль"],["user","Пользователь"],["rights","Права"],["plan","Итог"]];
+// Роль → Права → Кому → Итог. Сначала — что роль даёт, потом — кому; людей
+// можно не назначать вовсе («Пока никому»): их добавляют потом на странице
+// роли. Всё попадает в черновик, как и остальные правки; на сервер — через
+// общее «Применить…» с последствиями.
+const ACC_WZ=[["role","Роль"],["rights","Права"],["user","Кому"],["plan","Итог"]];
 let accWz=null;
 // Основа роли выбирается на первом шаге: пустая, встроенный шаблон или
 // существующая роль. «Создать на основе» из меню роли открывает мастер сразу
 // с этой ролью в основе.
 function accWzOpen(rid){
   accMenuClose();accData();
-  accWz={step:0,tried:new Set(),name:"",comment:"",tz:0,sup:{role:"",login:false,export:false},newUser:true,login:"",uname:"",email:"",on:true,pwd:"",show:false,must:true,until:"",expires:"",
+  accWz={step:0,tried:new Set(),name:"",comment:"",tz:0,sup:{role:"",login:false,export:false},who:"none",login:"",uname:"",email:"",on:true,pwd:"",show:false,must:true,until:"",expires:"",
     assigned:new Set(),uq:"",base:"",baseName:"",lostGrp:0,skipUnr:false,g:accNoRights(),grp:{},snapG:null,snapGrp:null};
   const src=typeof rid==="string"?accRole(rid):null;
   if(src){accWzFill("role:"+src.id);let n=`${src.n} (${i18n("копия")})`,k=2;while(accRoles().some(x=>x.n===n))n=`${src.n} (${i18n("копия")} ${k++})`;accWz.name=n}else accWzFill("");
@@ -8710,11 +8712,11 @@ function accWzErrs(){
   const w=accWz,e={};
   if(!w.name.trim())e.name="Заполните поле";
   else if(taken(accRoles().map(r=>r.n),w.name))e.name="Роль с таким именем уже есть";
-  if(w.newUser){
+  if(w.who==="new"){
     e.login=accLoginIssue(w.login);e.email=accEmailIssue(w.email);e.pwd=accPwdIssue(w.pwd,w.login);
     if(w.expires&&accDays(w.expires)<0)e.expires="Срок уже прошёл";
-  }else if(!w.assigned.size)e.assigned="Создайте пользователя или назначьте роль существующему";
-  if(w.until&&accDays(w.until)<0)e.until="Срок уже прошёл";
+  }else if(w.who==="users"&&!w.assigned.size)e.assigned="Отметьте пользователей или выберите «Пока никому»";
+  if(w.who!=="none"&&w.until&&accDays(w.until)<0)e.until="Срок уже прошёл";
   return e;
 }
 const ACC_WZ_FIELDS={role:["name"],user:["login","email","pwd","assigned","until","expires"],rights:[],plan:[]};
@@ -8751,7 +8753,7 @@ function accWzRole(){
     ${accWzBaseHtml()}
     <div class="acc-wz-f"><label>${i18n("Комментарий")}</label><input type="text" value="${escHtml(w.comment)}" oninput="accWz.comment=this.value"></div>
     <div class="acc-wz-f"><label>${i18n("Расписание входа")}</label><select onchange="accWz.tz=+this.value">${ACC_TZ.map((t,i)=>`<option value="${i}" ${i===w.tz?"selected":""}>${i18n(t)}</option>`).join("")}</select>
-      <p class="acc-hint" style="margin-top:6px">${i18n("Вне расписания пользователи роли не смогут войти. Срок, после которого роль перестаёт действовать, задаётся назначению на следующем шаге")}</p></div>
+      <p class="acc-hint" style="margin-top:6px">${i18n("Вне расписания пользователи роли не смогут войти. Срок, после которого роль перестаёт действовать, задаётся назначению на шаге «Кому»")}</p></div>
     <div class="acc-wz-f"><label>${i18n("Подтверждение супервизором")}</label><select onchange="accWz.sup.role=this.value;if(!this.value){accWz.sup.login=false;accWz.sup.export=false}else if(!accWz.sup.login&&!accWz.sup.export)accWz.sup.login=true;accWzRender()"><option value="">${i18n("не требуется")}</option>${accRoles().map(x=>`<option value="${x.id}" ${x.id===sup.role?"selected":""}>${i18n("роль")} «${escHtml(x.n)}»</option>`).join("")}</select>
       ${sup.role?`<div class="acc-chips" style="margin-top:6px"><label class="acc-chk"><input type="checkbox" ${sup.login?"checked":""} onchange="accWz.sup.login=this.checked"> ${i18n("вход")}</label><label class="acc-chk"><input type="checkbox" ${sup.export?"checked":""} onchange="accWz.sup.export=this.checked"> ${i18n("экспорт")}</label></div>`:""}
       <p class="acc-hint" style="margin-top:6px">${i18n("Пользователь роли сможет войти или выгрузить видео только после подтверждения кем-то из выбранной роли")}</p></div>`;
@@ -8796,9 +8798,10 @@ function accWzBaseNote(){
 }
 function accWzUser(){
   const w=accWz;
-  const mode=`<div class="acc-seg"><button type="button" class="${w.newUser?"on":""}" onclick="accWz.newUser=true;accWzRender()">${i18n("Создать пользователя")}</button><button type="button" class="${w.newUser?"":"on"}" onclick="accWz.newUser=false;accWzRender()">${i18n("Назначить роль существующим пользователям")}</button></div>`;
+  const mode=`<div class="acc-seg">${[["none","Пока никому"],["users","Существующим пользователям"],["new","Новому пользователю"]].map(([k,t])=>`<button type="button" class="${w.who===k?"on":""}" onclick="accWz.who='${k}';accWzRender()">${i18n(t)}</button>`).join("")}</div>`;
+  if(w.who==="none")return mode+`<p class="acc-hint" style="margin-top:12px">${i18n("Роль будет создана без пользователей. Добавить их можно потом на странице роли: «Назначения» → «Добавить пользователей…» или через группу пользователей")}</p>`;
   const until=`<div class="acc-wz-f" style="margin-top:12px"><label>${i18n("Роль действует до")}</label><div class="acc-pwd"><input type="date" value="${w.until}" style="max-width:200px" onchange="accWzSet('until',this.value)"><span class="sub" style="align-self:center">${i18n("пусто — бессрочно")}</span></div>${accErr("until")}</div>`;
-  if(!w.newUser){
+  if(w.who==="users"){
     return mode+`<div class="sq lst-sq" style="margin:12px 0 8px"><span class="sq-lead">${IC_FIND}</span><input type="text" value="${escHtml(w.uq)}" placeholder="${i18n("Логин или имя…")}" oninput="accWz.uq=this.value;document.getElementById('accWzUl').innerHTML=accWzUsersHtml()"></div>
       <div class="acc-ulist" id="accWzUl">${accWzUsersHtml()}</div>${accErr("assigned")}${until}`;
   }
@@ -8843,18 +8846,19 @@ function accWzPlan(){
   const nm=escHtml(w.name.trim()),until=w.until?` ${i18n("до")} ${accFmt(w.until)}`:"";
   const supTxt=accSupText({sup:w.sup});
   steps.push(`${i18n("Роль")} «${nm}»${w.comment.trim()?` — ${escHtml(w.comment.trim())}`:""}; ${i18n("вход")}: ${i18n(ACC_TZ[w.tz]).toLowerCase()}; ${supTxt}`);
-  if(w.newUser){
+  if(w.who==="new"){
     steps.push(`${i18n("Пользователь")} <b>${escHtml(w.login)}</b>${w.uname.trim()?` (${escHtml(w.uname.trim())})`:""}${w.email.trim()?`, ${escHtml(w.email.trim())}`:""}, ${i18n(w.on?"включён":"выключен")}${w.expires?`, ${i18n("учётная запись до")} ${accFmt(w.expires)}`:""}, ${i18n("пароль задан")}${w.must?`, ${i18n("сменить при первом входе")}`:""}`);
     steps.push(`${i18n("Назначение")}: «${nm}» → <b>${escHtml(w.login)}</b>${until}`);
-  }else steps.push(`${i18n("Назначение")}: «${nm}»${until} → ${[...w.assigned].map(id=>`<b>${escHtml(accUser(id)?.login||id)}</b>`).join(", ")}`);
+  }else if(w.who==="none")steps.push(`${i18n("Назначение")}: ${i18n("пока никому — пользователей можно добавить на странице роли")}`);
+  else steps.push(`${i18n("Назначение")}: «${nm}»${until} → ${[...w.assigned].map(id=>`<b>${escHtml(accUser(id)?.login||id)}</b>`).join(", ")}`);
   const bt=accWzBaseText();
   steps.push(`${i18n("Основа прав")}: ${bt[0].toLowerCase()+bt.slice(1)}`);
   steps.push(`${i18n("Глобальные права")}: ${escHtml(accSummary(g))}; ${i18n("камеры по умолчанию")} — ${accLv("cam",g.dCam).toLowerCase()}`);
   const gs=Object.entries(w.grp);
   steps.push(gs.length?`${i18n("Права на папки")}: ${gs.map(([id,v])=>`«${escHtml(accGroupName(id))}» — ${accLv("cam",v).toLowerCase()}`).join(", ")}`:`${i18n("Права на папки")}: ${i18n("не задаются")}`);
   const warn=[];
-  if(!accCanSignIn(g))warn.push(`<div class="nt err">${i18n(w.newUser?"Пользователь не сможет войти в веб-интерфейс":"Роль без права «Вход в веб-интерфейс» не даст пользователям войти")}</div>`);
-  if(w.newUser&&!w.on)warn.push(`<div class="nt">${i18n("Пользователь создаётся выключенным: войти он сможет после включения")}</div>`);
+  if(!accCanSignIn(g))warn.push(`<div class="nt err">${i18n(w.who==="new"?"Пользователь не сможет войти в веб-интерфейс":"Роль без права «Вход в веб-интерфейс» не даст пользователям войти")}</div>`);
+  if(w.who==="new"&&!w.on)warn.push(`<div class="nt">${i18n("Пользователь создаётся выключенным: войти он сможет после включения")}</div>`);
   return`${warn.join("")}<p class="acc-hint">${i18n("Всё это попадёт в черновик. На сервер — через «Применить…» в шапке, вместе с остальными правками и последствиями для людей")}</p>
     <ol class="acc-plan">${steps.map(s=>`<li>${s}</li>`).join("")}</ol>`;
 }
@@ -8862,8 +8866,8 @@ function accWzApply(){
   const w=accWz,id="r"+Date.now().toString(36),st=accSt();
   st.roles.push({id,n:w.name.trim(),comment:w.comment.trim(),tz:w.tz,sup:accClone(w.sup),own:accClone(w.g),groups:Object.fromEntries(Object.entries(w.grp).map(([g,v])=>[g,{cam:v}])),objs:{}});
   const until=w.until?{[id]:w.until}:{};
-  if(w.newUser)st.users.push({id:"u"+id,login:w.login.trim(),name:w.uname.trim(),email:w.email.trim(),on:w.on,roles:[id],last:null,created:accIso(0),until,expires:w.expires||"",web:0,mobile:0,ldap:"",pwdSet:true,must:w.must});
-  else st.users.forEach(u=>{if(w.assigned.has(u.id)&&!u.roles.includes(id)){u.roles.push(id);if(w.until){u.until=u.until||{};u.until[id]=w.until}}});
+  if(w.who==="new")st.users.push({id:"u"+id,login:w.login.trim(),name:w.uname.trim(),email:w.email.trim(),on:w.on,roles:[id],last:null,created:accIso(0),until,expires:w.expires||"",web:0,mobile:0,ldap:"",pwdSet:true,must:w.must});
+  else if(w.who==="users")st.users.forEach(u=>{if(w.assigned.has(u.id)&&!u.roles.includes(id)){u.roles.push(id);if(w.until){u.until=u.until||{};u.until[id]=w.until}}});
   accResolveAll();
   accWzClose();toast(`${i18n("Роль")} «${w.name.trim()}» ${i18n("добавлена в черновик")}`);
   accGo("role:"+id,"global");
