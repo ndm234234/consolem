@@ -865,6 +865,7 @@ html[data-theme="light"] .acc-date{color-scheme:light}
 .acc-lg.inh{color:#7f93ad}.acc-lg.def{color:#5f718a;font-style:italic}
 .acc-lg.ovr{background-image:linear-gradient(225deg,#e6b35c 0 5px,transparent 5px)}
 .acc-src{font-size:inherit}
+.acc-tip{z-index:59;max-width:380px}
 @keyframes accFlash{0%{background-color:transparent;box-shadow:inset 0 0 0 2px transparent}12%,44%{background-color:#2f6fed55;box-shadow:inset 0 0 0 2px var(--bl)}28%,60%{background-color:#2f6fed1f;box-shadow:inset 0 0 0 2px var(--bl)}100%{background-color:transparent;box-shadow:inset 0 0 0 2px transparent}}
 .acc-flash,tr.acc-flash>td{animation:accFlash 2.4s ease-out}
 .acc-ovnote{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.acc-ovnote>div:first-child{flex:1;min-width:260px}.acc-ovnote-a{display:flex;gap:6px}
@@ -6957,6 +6958,7 @@ function accGuard(mutate){
 
 // ── Навигация ──
 function accGo(s,t){
+  accTipClose();
   if(s!==accSel)accOvNote=null;
   accSel=s;if(t)accTab=t;
   accUserSel.clear();accMemSel.clear();accGSel.clear();accSelMe=false;
@@ -7410,10 +7412,10 @@ function accMatrixHtml(rows,first,scope){
     else if(v){txt=accLv(f,v);const h=accInh(row.rid,row.gid,f,row.dom);const gn=accGroupName(row.gid);title=`${i18n("Своё значение папки устройств")} «${gn}»`;if(h.k==="grp"&&h.v!==v){cls="ovr";title=`${i18n("Своё значение папки устройств")} «${gn}». ${i18n("Для неё действует оно, а не")} «${accLv(f,h.v)}» ${i18n("из папки устройств выше")}, «${accGroupName(h.g)}»`}}
     else{const h=accInh(row.rid,row.gid,f,row.dom);cls=h.k==="grp"?"inh":"def";txt=(h.k==="grp"?"↑ ":"")+accLv(f,h.v);
       title=h.k==="grp"?`${i18n("У папки устройств")} «${accGroupName(row.gid)}» ${i18n("своего значения нет — взято из папки устройств выше")}, «${accGroupName(h.g)}»`:i18n("Нигде не задано — право по умолчанию")}
-    return`<td class="c ${cls} ${chg?"chg":""} ${row.ro?"ro":""}" role="gridcell" tabindex="${i===accFoc.r&&j===accFoc.c?0:-1}" data-mx="${i}:${j}" title="${escHtml(title)}" aria-label="${escHtml(row.label)}, ${i18n(ft)}: ${txt}" onclick="accCellClick(event,${i},${j})" onkeydown="accCellKey(event,${i},${j})" onfocus="accFoc.r=${i};accFoc.c=${j}">${txt}</td>`}).join("")}</tr>`).join("");
+    return`<td class="c ${cls} ${chg?"chg":""} ${row.ro?"ro":""}" role="gridcell" tabindex="${i===accFoc.r&&j===accFoc.c?0:-1}" data-mx="${i}:${j}" onmouseenter="accTipShow(this,${i},${j})" onmouseleave="accTipLeave()" aria-label="${escHtml(row.label)}, ${i18n(ft)}: ${txt}" onclick="accCellClick(event,${i},${j})" onkeydown="accCellKey(event,${i},${j})" onfocus="accFoc.r=${i};accFoc.c=${j}">${txt}</td>`}).join("")}</tr>`).join("");
   const lg=(cls,txt,t)=>`<span class="acc-lg-i"><span class="acc-lg ${cls}">${txt.replace("Полный",i18n("Полный"))}</span>${i18n(t)}</span>`;
   return`<div class="acc-legend">${lg("","Полный","своё значение папки устройств")}${lg("inh","↑ Полный","своего нет — взято из папки устройств выше")}${lg("def","Полный","нигде не задано — право по умолчанию")}${lg("ovr","Полный","своё значение, которое заменяет значение папки устройств выше")}</div>
-    <p class="acc-hint">${i18n("Если камера лежит в нескольких папках устройств, она получает наибольшее из их значений. Архивы, видеостены, плагины и макрокоманды в папки устройств не входят — для них есть «По умолчанию» и «Исключения». Нажмите на ячейку: можно изменить значение или узнать, откуда оно")}</p>
+    <p class="acc-hint">${i18n("Если камера лежит в нескольких папках устройств, она получает наибольшее из их значений. Архивы, видеостены, плагины и макрокоманды в папки устройств не входят — для них есть «По умолчанию» и «Исключения». Наведите на ячейку — появится, откуда значение; нажмите — можно изменить его или сразу перейти к источнику. С клавиатуры: стрелки — переход, Пробел — следующее значение, Enter — откуда значение")}</p>
     ${accOvNoteHtml(rows)}<div class="acc-wrap"><table class="acc-mx" role="grid">${head}${body}</table></div>`;
 }
 function accCellAt(i,j){return document.querySelector(`[data-mx="${i}:${j}"]`)}
@@ -7448,12 +7450,52 @@ function accSetCell(i,j,v){
   accFoc.r=i;accFoc.c=j;accEdited();
 }
 function accCellClick(e,i,j){
-  accFoc.r=i;accFoc.c=j;
+  accFoc.r=i;accFoc.c=j;accTipClose();
   const row=accMxRows[i],f=ACC_GF[j][0],v=accGv(row.rid,row.gid,f),el=e.currentTarget;
   if(row.ro){accWhy(el,i,j);return}
   accMenuOpen(el,[["","Не задано"],...ACC_LV[f]].map(([k,t])=>`<button type="button" class="mi ${k===v?"on":""}" title="${escHtml(ACC_LV_HINT[f]?.[k]||"")}" onclick="accMenuClose();accSetCell(${i},${j},'${k}')">${i18n(t)}</button>`).join("")
-    +`<div class="acc-sep"></div><button type="button" class="mi" onclick="accWhy(accCellAt(${i},${j}),${i},${j})">${i18n("Откуда значение")}…</button>`);
+    +`<div class="acc-sep"></div>${accSrcMenuItem(i,j)}`);
 }
+// Откуда значение ячейки: своё — где ещё эта настройка; иначе — папка
+// устройств выше или право по умолчанию.
+function accCellSrc(i,j){
+  const row=accMxRows[i],f=ACC_GF[j][0];if(!row||row.unr)return null;
+  const inGrp=accSel.startsWith("grp:");
+  if(accGv(row.rid,row.gid,f))return inGrp
+    ?{label:`${i18n("Где ещё эта настройка")} → ${i18n("роль")} «${escHtml(accRoleName(row.rid))}»`,go:()=>{accDom=row.dom;accGo("role:"+row.rid,"groups");accFlashCell(x=>x.gid===row.gid,f)}}
+    :{label:`${i18n("Где ещё эта настройка")} → ${i18n("карточка папки устройств")} «${escHtml(accGroupName(row.gid))}»`,go:()=>{accGo("grp:"+row.gid,"rights");accFlashCell(x=>x.rid===row.rid,f)}};
+  const h=accInh(row.rid,row.gid,f,row.dom);
+  if(h.k==="grp")return{label:`${i18n("Откуда значение")} → «${escHtml(accGroupName(h.g))}»`,go:()=>accJumpGrp(row.rid,h.g,f,row.dom)};
+  return{label:`${i18n("Откуда значение")} → ${i18n("право по умолчанию")}`,go:()=>accJumpDef(row.rid,f)};
+}
+function accSrcMenuItem(i,j){
+  const x=accCellSrc(i,j);if(!x)return"";
+  return`<div class="acc-sep"></div><button type="button" class="mi" onclick="accMenuClose();accCellSrc(${i},${j}).go()">${x.label}</button>`;
+}
+// Подсказка при наведении: то же объяснение, что по Enter. Окно не мешает
+// меню, в него можно перевести мышь и нажать ссылку.
+var accTipT=0,accTipH=0;
+function accTipShow(el,i,j){
+  clearTimeout(accTipT);clearTimeout(accTipH);
+  if(document.getElementById("accMenu"))return;
+  accTipT=setTimeout(()=>{
+    if(document.getElementById("accMenu")||!el.isConnected)return;
+    accTipClose();
+    const row=accMxRows[i],f=ACC_GF[j][0];if(!row)return;
+    const t=document.createElement("div");t.className="acc-menu acc-tip";t.id="accTip";
+    t.innerHTML=`<div class="acc-why"><b>${i18n("Откуда значение")}</b>${accWhyGroup(row.rid,row.gid,f,row.dom)}</div>`;
+    t.onmouseenter=()=>clearTimeout(accTipH);t.onmouseleave=accTipLeave;
+    t.addEventListener("click",()=>accTipClose());
+    document.body.appendChild(t);
+    const b=el.getBoundingClientRect(),th=t.offsetHeight,tw=t.offsetWidth;
+    let top=b.bottom+4,left=b.left;
+    if(top+th>innerHeight-8)top=Math.max(8,b.top-th-4);
+    if(left+tw>innerWidth-8)left=Math.max(8,innerWidth-tw-8);
+    t.style.top=top+"px";t.style.left=left+"px";
+  },450);
+}
+function accTipLeave(){clearTimeout(accTipT);clearTimeout(accTipH);accTipH=setTimeout(accTipClose,250)}
+function accTipClose(){clearTimeout(accTipT);document.getElementById("accTip")?.remove()}
 function accWhy(el,i,j){
   const row=accMxRows[i],f=ACC_GF[j][0];
   accMenuOpen(el,`<div class="acc-why"><b>${i18n("Откуда значение")}</b>${accWhyGroup(row.rid,row.gid,f,row.dom)}</div>`);
@@ -7472,7 +7514,7 @@ function accCellKey(e,i,j){
   e.preventDefault();
 }
 function accMenuOpen(anchor,html){
-  accMenuClose();
+  accMenuClose();accTipClose();
   if(!anchor)return;
   const m=document.createElement("div");m.className="acc-menu";m.id="accMenu";m.innerHTML=html;
   document.body.appendChild(m);
