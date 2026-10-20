@@ -809,6 +809,12 @@ html[data-theme="light"] .dev-bulk-badge{background:#d6e4f8;color:#2f5fad}
 .acc-own{font-size:11px;font-weight:500;color:var(--mu);border:1px solid var(--ln);border-radius:99px;padding:1px 8px}
 .acc-mod{color:#e6b35c;font-size:9px;line-height:1;flex:none}
 .acc-tabcnt{font-size:11px;color:var(--mu)}.acc-tabcnt.warn{color:#e6b35c}
+.acc-subtabs{display:inline-flex;border:1px solid var(--ln);border-radius:8px;overflow:hidden;background:var(--p2);margin:0 0 12px}
+.acc-subtabs button{background:0;border:0;border-right:1px solid var(--ln);color:var(--mu);padding:6px 12px;font-size:12px;display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+.acc-subtabs button:last-child{border-right:0}.acc-subtabs button:hover{color:var(--tx)}
+.acc-subtabs button.on{background:#1a2d4d;color:#fff;font-weight:600}
+html[data-theme="light"] .acc-subtabs button.on{background:#e8f0ff;color:#1a3a7a}
+.acc-effl{margin-right:12px;font-size:12px}
 .acc-dirty{font-size:12px;color:#e6b35c;white-space:nowrap}
 .acc-hint{font-size:12px;color:var(--mu);margin:0 0 10px}
 .acc-from{font-size:11px;color:#9ec8ff;margin-top:3px}
@@ -6237,7 +6243,7 @@ let ACC=null,accSel="roles",accTab="global",accDom="d1",accObjOnly=true,accEffVi
 let accFoc={r:0,c:0,scope:""},accMxRows=[],accUserFilt="all",accCmp=["op","gd"],accCmpOnly=true;
 // Список пользователей: выбранные строки, срезы «Роль» и «Источник», окна массовых правок.
 let accUserSel=new Set(),accMemSel=new Set(),accSelMe=false,accUserRoleFilt="",accUserSrcFilt="",accUserGrpFilt="",accUserO=null,accMemO=null,accBk=null,accAd=null;
-const accEffUser={},accSetting={};
+const accSetting={};
 // Пользователей много — их ветка начинается свёрнутой; корни папок раскрыты.
 open.add("acc-x:users");domains.forEach(d=>open.add("accg:"+d.id));
 function accClone(x){return JSON.parse(JSON.stringify(x))}
@@ -7186,19 +7192,26 @@ function accBulkApply(){
   toast(`${i18n(b.kind==="assign"?"Роль назначена":b.kind==="until"?"Срок роли изменён":"Срок учётной записи изменён")}: ${accWho(k)} — ${i18n("в черновике")}`);
 }
 // ── Роль ──
-const ACC_RTABS=[["global","Глобальные"],["groups","На папки устройств"],["objects","На объекты"],["effective","Итоговый доступ"],["members","Пользователи"],["history","История"]];
+// Два блока: что роль даёт (права, внутри — три вида) и кому она выдана. История — про оба.
+const ACC_RPERM=[["global","Глобальные"],["groups","На папки устройств"],["objects","На объекты"]];
+const ACC_RTABS=[["perm","Права"],["members","Назначения"],["history","История"]];
+let accPermLast="global";
 function accRoleUI(r){
   const own=accIsOwn(r.id),ro=own,d=accRoleDiff(r.id);
-  if(!ACC_RTABS.some(t=>t[0]===accTab))accTab="global";
-  const mark={global:d.global,groups:d.groups,objects:d.objs,members:d.users};
-  const tabsH=ACC_RTABS.map(([id,x])=>`<button class="tab ${accTab===id?"on":""}" onclick="accTab='${id}';${id==="members"?`resetPage('accmem:${r.id}');`:""}accMenuClose();accUI()">${i18n(x)}${id==="members"?` <span class="acc-tabcnt">${accRoleUsers(r.id,true).length}</span>`:""}${mark[id]?` <span class="acc-mod">●</span>`:""}</button>`).join("");
+  if(accTab==="perm")accTab=accPermLast;
+  if(!ACC_RPERM.some(t=>t[0]===accTab)&&!ACC_RTABS.some(t=>t[0]===accTab))accTab="global";
+  const inPerm=ACC_RPERM.some(t=>t[0]===accTab);if(inPerm)accPermLast=accTab;
+  const mark={global:d.global,groups:d.groups,objects:d.objs,members:d.users};mark.perm=mark.global||mark.groups||mark.objects;
+  const top=inPerm?"perm":accTab,mod=id=>mark[id]?` <span class="acc-mod" title="${i18n("Есть изменения в черновике")}">●</span>`:"";
+  const tabsH=ACC_RTABS.map(([id,x])=>`<button class="tab ${top===id?"on":""}" onclick="accTab='${id}';${id==="members"?`resetPage('accmem:${r.id}');`:""}accMenuClose();accUI()">${i18n(x)}${id==="members"?` <span class="acc-tabcnt">${accRoleUsers(r.id,true).length}</span>`:""}${mod(id)}</button>`).join("");
+  const seg=inPerm?`<div class="acc-subtabs" role="tablist" aria-label="${i18n("Права роли")}">${ACC_RPERM.map(([id,x])=>`<button type="button" role="tab" aria-selected="${accTab===id}" class="${accTab===id?"on":""}" onclick="accTab='${id}';accMenuClose();accUI()">${i18n(x)}${mod(id)}</button>`).join("")}</div>`:"";
   const cr=`<button type="button" class="cr-link" onclick="accGo('roles')">${i18n("Права")}</button><span class="cr-sep">›</span><button type="button" class="cr-link" onclick="accGo('roles')">${i18n("Роли")}</button>`;
   const title=`<span class="hd-ic">${ic(r.g.unr?"acc_admin":"acc_role")}</span>${i18n("Роль")} «${escHtml(r.n)}»${own?` <span class="acc-own">${i18n("ваша роль")}</span>`:""}${d.isNew?` <span class="acc-own">${i18n("в черновике")}</span>`:""}`;
   const sub=[escHtml(r.comment),`${i18n("вход:")} ${i18n(ACC_TZ[r.tz||0]).toLowerCase()}`,r.sup?.role&&(r.sup.login||r.sup.export)?accSupText(r):""].filter(Boolean).join(" · ");
   const note=own?`<div class="nt">${i18n("Вы не можете менять права своей роли")}</div>`:"";
   const acts=accActsHtml()+`<button type="button" class="btn s" onclick="accRoleMenu(this,'${r.id}')">${i18n("Действия")} ▾</button>`;
-  const body={global:accGlobalHtml,groups:accGroupsTabHtml,objects:accObjectsHtml,effective:accEffectiveTabHtml,members:accMembersHtml,history:accRoleHistoryHtml}[accTab](r,ro);
-  paintMain(mainHd(cr,title,sub,tabsH,acts)+`<div class="sc">${note}${body}</div>`);
+  const body={global:accGlobalHtml,groups:accGroupsTabHtml,objects:accObjectsHtml,members:accMembersHtml,history:accRoleHistoryHtml}[accTab](r,ro);
+  paintMain(mainHd(cr,title,sub,tabsH,acts)+`<div class="sc">${note}${seg}${body}</div>`);
 }
 function accRoleMenu(el,rid){
   const r=accRole(rid),others=accRoles().filter(x=>x.id!==rid);
@@ -7384,15 +7397,6 @@ function accSetObj(rid,oid,f,v){
 // всех своих действующих ролей — права на объект, папок и по умолчанию,
 // сложенные по правилу «наибольшее побеждает». Считает интерфейс, решает
 // сервер — так и написано. Та же таблица — в карточке пользователя.
-function accEffectiveTabHtml(r){
-  const us=accRoleUsers(r.id,true);
-  if(!us.length)return`<div class="nt">${i18n("У роли нет действующих пользователей: итоговый доступ считать не для кого")}</div>`;
-  let uid=accEffUser[r.id];if(!us.some(u=>u.id===uid))uid=accEffUser[r.id]=us[0].id;
-  const u=us.find(x=>x.id===uid);
-  return`<div class="acc-bar"><div style="min-width:240px"><label>${i18n("Пользователь роли")}</label><select onchange="accEffUser['${r.id}']=this.value;resetPage('acceff');accUI()">${us.map(x=>`<option value="${x.id}" ${x.id===uid?"selected":""}>${escHtml(x.login)} — ${escHtml(x.name)}</option>`).join("")}</select></div>
-      <div class="acc-roles-of"><label>${i18n("Роли пользователя")}</label>${accUserRoles(u,true).map(id=>`<span class="acc-chip ${id===r.id?"on":""}">${escHtml(accRoleName(id))}</span>`).join("")} <button type="button" class="lk" onclick="accGo('user:${u.id}','access')">${i18n("Карточка")} →</button></div></div>
-    ${accEffTableHtml(u)}`;
-}
 function accEffTableHtml(u){
   const objs=accObjects(accDom);
   const rows=objs.map(o=>{const fs=accObjFields(o);return{o,fs,e:Object.fromEntries(fs.map(f=>[f,accEff(u,o.id,accDom,f)]))}});
@@ -7453,7 +7457,7 @@ function accMembersHtml(r,ro){
       <td class="sub">${e?accViaHtml(e):""}</td>
       <td>${accUntilInput(u,r.id,ro||me)}</td>
       <td class="sub">${accUserRoles(u,false).filter(id=>id!==r.id).map(id=>escHtml(accRoleName(id))).join(", ")}</td>
-      <td style="text-align:right">${ro||me?"":direct?`<button type="button" class="btn s" onclick="accAssign('${u.id}','${r.id}',false)">${i18n("Снять")}</button>`:`<button type="button" class="btn s" disabled title="${i18n("Роль выдана группой")} «${escHtml(via)}»: ${i18n("снимите её у группы или исключите участника")}">${i18n("Снять")}</button>`}</td></tr>`};
+      <td style="text-align:right;white-space:nowrap">${accUserActive(u)&&!ex?`<button type="button" class="lk acc-effl" title="${i18n("Что пользователь видит и может со всеми своими ролями")}" onclick="accGo('user:${u.id}','access')">${i18n("Итоговый доступ")} →</button>`:""}${ro||me?"":direct?`<button type="button" class="btn s" onclick="accAssign('${u.id}','${r.id}',false)">${i18n("Снять")}</button>`:`<button type="button" class="btn s" disabled title="${i18n("Роль выдана группой")} «${escHtml(via)}»: ${i18n("снимите её у группы или исключите участника")}">${i18n("Снять")}</button>`}</td></tr>`};
   const add=ro?"":`<button type="button" class="btn s pri" onclick="accAdOpen('${r.id}')">${i18n("Добавить пользователей…")}</button>`;
   const title=`${i18n("Действующие")}: ${act.length}${us.length>act.length?` · ${i18n("истёкшие или выключенные")}: ${us.length-act.length}`:""}`;
   const wrap=rows=>`<table class="acc-tbl"><tr>${ck?`<th class="acc-ck"><input type="checkbox" id="accPageChk" aria-label="${i18n("Выбрать всех")}" title="${i18n("Выбрать всех")}" onchange="accMemPage(this.checked)"></th>`:""}<th>${i18n("Логин")}</th><th>${i18n("Имя")}</th><th>${i18n("Состояние")}</th><th>${i18n("Откуда")}</th><th>${i18n("Роль действует до")}</th><th>${i18n("Другие роли")}</th><th></th></tr>${rows}</table>`;
