@@ -2502,7 +2502,7 @@ registerJumpSource(()=>accRoles().map(r=>({kind:"Роль",title:r.n,sub:`${accR
   go(){goApp("acc");accGo("role:"+r.id)}})));
 registerJumpSource(()=>accUsers().map(u=>({kind:"Пользователь",title:u.login,sub:u.name,icon:"svcs",goId:"user:"+u.id,
   go(){goApp("acc");accUserFind(u.id)}})));
-registerJumpSource(()=>accGroupsAll().map(g=>({kind:"Группа",title:g.n,sub:`${g.src?i18n("Из каталога"):i18n("Вручную")} · ${g.members.length} ${i18n("участников")}`,icon:"svcs",goId:"ug:"+g.id,
+registerJumpSource(()=>accGroupsAll().map(g=>({kind:"Группа пользователей",title:g.n,sub:`${g.src?i18n("Из каталога"):i18n("Вручную")} · ${g.members.length} ${i18n("участников")}`,icon:"svcs",goId:"ug:"+g.id,
   go(){goApp("acc");accGo("ug:"+g.id)}})));
 registerJumpSource(()=>accCats().map(c=>({kind:"Каталог",title:c.n,sub:c.server,icon:"svcs",goId:"cat:"+c.id,
   go(){goApp("acc");accGo("cat:"+c.id)}})));
@@ -6986,7 +6986,7 @@ function treeRoles(){
     `<div class="n ${accUserActive(u)?"":"off"} ${accSel==="user:"+u.id?"on":""}" style="--l:1" data-go="user:${u.id}" onclick="accGo('user:${u.id}')" title="${escHtml(u.name)} · ${i18n("вход:")} ${accAgo(u.last)}"><span class="tw"></span>${ic("acc_user")}<span class="nm">${hlText(u.login,q)}</span>${accUserDiff(u.id)?`<span class="acc-mod">●</span>`:""}${treeTail({})}</div>`).join("");
     if(uf.length>shown.length)h+=`<div class="n" style="--l:1" data-go="acc:users" onclick="accGo('users')"><span class="tw"></span><span class="nm sub">${i18n("и ещё")} ${uf.length-shown.length} — ${i18n("открыть список")}</span>${treeTail({})}</div>`;}
   const ugs=accGroupsAll(),cats=accCats();
-  h+=sec("ugroups","Группы","acc_group",ugs.length,"ugroups");
+  h+=sec("ugroups","Группы пользователей","acc_group",ugs.length,"ugroups");
   if(!open.has("acc-x:ugroups")){
     h+=ugs.filter(g=>matchesText(q,g.n)).map(g=>`<div class="n ${accSel==="ug:"+g.id?"on":""}" style="--l:1" data-go="ug:${g.id}" onclick="accGo('ug:${g.id}')" title="${escHtml(g.src?`${i18n("Из каталога")} ${accCat(g.src.cat)?.n||""}`:i18n("Вручную"))} · ${g.members.length} ${i18n(plural(g.members.length,"участник|участника|участников"))}"><span class="tw"></span>${ic(g.src?"acc_cat":"acc_group")}<span class="nm">${hlText(g.n,q)}</span>${accUGDiff(g.id)?`<span class="acc-mod">●</span>`:""}${treeTail({cnt:treeCntHtml(g.members.length)})}</div>`).join("");
     if(!q||matchesText(q,"Каталоги"))h+=`<div class="n ${accSel==="cats"||accSel.startsWith("cat:")?"on":""}" style="--l:1" data-go="acc:cats" onclick="accGo('cats')"><span class="tw"></span>${ic("acc_cat")}<span class="nm">${i18n("Каталоги")}</span>${treeTail({cnt:treeCntHtml(cats.length)})}</div>`;
@@ -7033,10 +7033,10 @@ function accUI(){
   if(accSel==="compare")return accCmpUI();
   accSel="roles";accRolesUI();
 }
-const ACC_SUB="Роли, пользователи и группы домена. Права выдаются роли на папки устройств (те же, что в «Оборудовании») и на отдельные объекты; пользователь получает наибольшее по всем своим действующим ролям — личным и полученным через группы";
+const ACC_SUB="Роли, пользователи и группы пользователей домена. Права выдаются роли на папки устройств (те же, что в «Оборудовании») и на отдельные объекты; пользователь получает наибольшее по всем своим действующим ролям — личным и полученным через группы";
 function accListTabs(){
   const cur=accSel.startsWith("grp:")?"groups":/^(ugroups|ug:|cats|cat:)/.test(accSel)?"ugroups":accSel;
-  return[["roles","Роли"],["users","Пользователи"],["ugroups","Группы"],["groups","Папки устройств"],["check","Проверка"]].map(([id,x])=>`<button class="tab ${cur===id?"on":""}" onclick="accGo('${id==="groups"?"grp:"+accDom:id}')">${i18n(x)}${id==="check"&&accIssues().length?` <span class="acc-tabcnt warn">${accIssues().length}</span>`:""}</button>`).join("");
+  return[["roles","Роли"],["users","Пользователи"],["ugroups","Группы пользователей"],["groups","Папки устройств"],["check","Проверка"]].map(([id,x])=>`<button class="tab ${cur===id?"on":""}" onclick="accGo('${id==="groups"?"grp:"+accDom:id}')">${i18n(x)}${id==="check"&&accIssues().length?` <span class="acc-tabcnt warn">${accIssues().length}</span>`:""}</button>`).join("");
 }
 function accRolesUI(){
   const rs=accRoles(),ordinary=rs.filter(r=>!r.g.unr);
@@ -7831,7 +7831,7 @@ function accUserGenHtml(u){
     ${card("Одновременные подключения",`<p class="acc-hint">${i18n("Сколько сеансов может быть открыто одновременно; 0 — без лимита. Защищает от передачи одной учётной записи нескольким людям")}</p>
       <div class="g"><div><label>${i18n("Веб-клиент и настольный клиент")}</label><input type="number" min="0" max="99" value="${u.web||0}" onchange="accSetUser('${u.id}','web',this.value,this)"></div><div><label>${i18n("Мобильные приложения")}</label><input type="number" min="0" max="99" value="${u.mobile||0}" onchange="accSetUser('${u.id}','mobile',this.value,this)"></div></div>`)}
     ${card(`${i18n("Роли")} (${srcs.length})`,srcs.length?`<table class="acc-tbl"><tr><th>${i18n("Роль")}</th><th>${i18n("Откуда")}</th><th>${i18n("Функции")}</th><th>${i18n("Расписание и подтверждение")}</th><th>${i18n("Роль действует до")}</th><th></th></tr>${rows}</table>`:`<p class="sub">${i18n("Ролей нет")}</p>`,add)}
-    ${card(`${i18n("Группы")} (${mine.length})`,mine.length?`<table class="acc-tbl"><tr><th>${i18n("Группа")}</th><th>${i18n("Состав")}</th><th>${i18n("Роли группы")}</th><th>${i18n("Срок")}</th><th></th></tr>${grows}</table>`:`<p class="sub">${i18n("Не состоит ни в одной группе")}</p>`,gadd)}`;
+    ${card(`${i18n("Группы пользователей")} (${mine.length})`,mine.length?`<table class="acc-tbl"><tr><th>${i18n("Группа")}</th><th>${i18n("Состав")}</th><th>${i18n("Роли группы")}</th><th>${i18n("Срок")}</th><th></th></tr>${grows}</table>`:`<p class="sub">${i18n("Не состоит ни в одной группе")}</p>`,gadd)}`;
 }
 function accSetUser(uid,k,v,el){
   const u=accUser(uid);if(!u)return;
@@ -7970,15 +7970,15 @@ function accUGroupsUI(){
   const chips=ACC_GFILT.map(([id,t])=>{const n=all.filter(g=>accUGMatch(g,id)).length;
     return`<button type="button" class="acc-filt ${accUGFilt===id?"on":""}" ${n||id==="all"?"":"disabled"} onclick="accUGFilt='${id}';resetPage('accug');accUI()">${i18n(t)} <b>${n}</b></button>`}).join("");
   const items=all.filter(g=>accUGMatch(g,accUGFilt));
-  const body=listCard({key:"accug",how:"acc",title:"Группы",items,
+  const body=listCard({key:"accug",how:"acc",title:"Группы пользователей",items,
     text:g=>[g.n,g.comment,g.src?.dn,accCat(g.src?.cat)?.n,...g.roles.map(id=>accRoleName(id))],
     row:g=>`<tr class="click" onclick="accGo('ug:${g.id}')"><td><button type="button" class="lk">${escHtml(g.n)}</button> ${accSrcChip(g)}${accUGDiff(g.id)?` <span class="acc-mod">●</span>`:""}${g.comment?`<small class="acc-cmt">${escHtml(g.comment)}</small>`:""}</td>
       <td><button type="button" class="lk" onclick="event.stopPropagation();accGo('ug:${g.id}','gmem')">${g.members.length}</button></td>
       <td>${accGRoleChips(g)}</td><td>${accGUntilText(g)}</td><td>${g.src?accSyncHtml(g.src):`<span class="sub">—</span>`}</td></tr>`,
     wrap:rows=>`<table class="acc-tbl"><tr><th>${i18n("Группа")}</th><th>${i18n("Участники")}</th><th>${i18n("Роли")}</th><th>${i18n("Срок")}</th><th>${i18n("Синхронизация")}</th></tr>${rows}</table>`,
     ph:"Поиск по названию, каталогу и роли",unit:"группа|группы|групп",empty:all.length?"Таких групп нет":"Групп нет"});
-  paintMain(mainHd("",i18n("Права"),ACC_SUB,accListTabs(),accActsHtml()+`<button type="button" class="btn s" onclick="accGo('cats')">${i18n("Каталоги")}</button><button type="button" class="btn s pri" onclick="accUgOpen()">${i18n("Новая группа")}</button>`)
-    +`<div class="sc"><p class="acc-hint">${i18n("Группа — только список людей и ролей, своих прав у неё нет. Участники получают роли группы вместе с личными, а доступ считается по наибольшему из всех ролей. Состав либо ведёте вы, либо его берёт из каталога синхронизация")}</p><div class="acc-filts">${chips}</div>${body}</div>`);
+  paintMain(mainHd("",i18n("Права"),ACC_SUB,accListTabs(),accActsHtml()+`<button type="button" class="btn s" onclick="accGo('cats')">${i18n("Каталоги")}</button><button type="button" class="btn s pri" onclick="accUgOpen()">${i18n("Новая группа пользователей")}</button>`)
+    +`<div class="sc"><p class="acc-hint">${i18n("Группа пользователей — только список людей и ролей, своих прав у неё нет. Участники получают роли группы вместе с личными, а доступ считается по наибольшему из всех ролей. Состав либо ведёте вы, либо его берёт из каталога синхронизация")}</p><div class="acc-filts">${chips}</div>${body}</div>`);
 }
 
 // ── Карточка группы ──
@@ -7986,8 +7986,8 @@ function accUGroupUI(g){
   if(!ACC_GTABS.some(t=>t[0]===accTab))accTab="gmem";
   const cat=g.src?accCat(g.src.cat):null,cnt={gmem:g.members.length,grl:g.roles.length},isNew=!accUG(g.id,accSrv());
   const tabsH=ACC_GTABS.map(([id,x])=>`<button class="tab ${accTab===id?"on":""}" onclick="accTab='${id}';accMenuClose();${id==="gmem"?`resetPage('accgm:${g.id}');accGSel.clear();`:""}accUI()">${i18n(x)}${cnt[id]!=null?` <span class="acc-tabcnt ${id==="grl"&&!g.roles.length?"warn":""}">${cnt[id]}</span>`:""}</button>`).join("");
-  const cr=`<button type="button" class="cr-link" onclick="accGo('roles')">${i18n("Права")}</button><span class="cr-sep">›</span><button type="button" class="cr-link" onclick="accGo('ugroups')">${i18n("Группы")}</button>`;
-  const title=`<span class="hd-ic">${ic(g.src?"acc_cat":"acc_group")}</span>${i18n("Группа")} «${escHtml(g.n)}» ${g.src?`<span class="acc-own" title="${escHtml(g.src.dn)}">${i18n("из каталога")} ${escHtml(cat?.n||g.src.cat)}</span>`:`<span class="acc-own">${i18n("вручную")}</span>`}${isNew?` <span class="acc-own">${i18n("в черновике")}</span>`:""}`;
+  const cr=`<button type="button" class="cr-link" onclick="accGo('roles')">${i18n("Права")}</button><span class="cr-sep">›</span><button type="button" class="cr-link" onclick="accGo('ugroups')">${i18n("Группы пользователей")}</button>`;
+  const title=`<span class="hd-ic">${ic(g.src?"acc_cat":"acc_group")}</span>${i18n("Группа пользователей")} «${escHtml(g.n)}» ${g.src?`<span class="acc-own" title="${escHtml(g.src.dn)}">${i18n("из каталога")} ${escHtml(cat?.n||g.src.cat)}</span>`:`<span class="acc-own">${i18n("вручную")}</span>`}${isNew?` <span class="acc-own">${i18n("в черновике")}</span>`:""}`;
   const sub=[g.comment,g.src?`${i18n("группа каталога")} ${g.src.dn}`:""].filter(Boolean).map(escHtml).join(" · ");
   const acts=accActsHtml()+`<button type="button" class="btn s" onclick="accUGMenu(this,'${g.id}')">${i18n("Действия")} ▾</button>`;
   const body={gmem:accGmHtml,grl:accGrlHtml,ghist:g=>accHistoryRows(e=>e.group===g.id,"acchist:"+g.id)}[accTab](g);
@@ -8147,7 +8147,7 @@ function accUgOpen(gid,members){
   accMenuClose();accData();
   const g=gid?accUG(gid):null;
   accUgd={gid:g?.id||"",name:g?.n||"",comment:g?.comment||"",members:members||[],tried:false};
-  accDrawer("accUg",g?"Переименовать группу":"Новая группа");
+  accDrawer("accUg",g?"Переименовать группу":"Новая группа пользователей");
   document.getElementById("accUgSt").innerHTML="";document.getElementById("accUgN").textContent="";
   document.getElementById("accUgBd").innerHTML=`<div class="acc-wz-f"><label>${i18n("Название")}</label><input type="text" value="${escHtml(accUgd.name)}" autocomplete="off" oninput="accUgd.name=this.value;accUgLive()"><div class="fld-err" id="accUgE"></div></div>
     <div class="acc-wz-f"><label>${i18n("Описание")}</label><input type="text" value="${escHtml(accUgd.comment)}" oninput="accUgd.comment=this.value"></div>
@@ -8186,7 +8186,7 @@ function accBulkGrpMenu(el,kind){
   if(kind==="in"){
     html=gs.map(({g,k})=>g.src?`<button type="button" class="mi" disabled title="${lockTitle}">${escHtml(g.n)}<small>${lockTitle}</small></button>`
       :`<button type="button" class="mi" ${k===n?"disabled":""} onclick="accBulkToGroup('${g.id}')">${escHtml(g.n)}<small>${k?`${i18n("уже есть:")} ${k} ${i18n("из")} ${n}`:`${g.members.length} ${plural(g.members.length,"участник|участника|участников")}`}</small></button>`).join("")
-      +`<div class="acc-sep"></div><button type="button" class="mi" onclick="accMenuClose();accUgOpen('',accBulkIds('u'))">${i18n("Новая группа")}…</button>`;
+      +`<div class="acc-sep"></div><button type="button" class="mi" onclick="accMenuClose();accUgOpen('',accBulkIds('u'))">${i18n("Новая группа пользователей")}…</button>`;
   }else{
     const have=gs.filter(x=>x.k);
     html=have.length?have.map(({g,k})=>g.src?`<button type="button" class="mi" disabled title="${lockTitle}">${escHtml(g.n)}<small>${lockTitle}</small></button>`
@@ -8241,7 +8241,7 @@ function accSyncRun(cid,gid){
 
 // ── Каталоги ──
 let accCt=null;
-function accCatsCr(){return`<button type="button" class="cr-link" onclick="accGo('roles')">${i18n("Права")}</button><span class="cr-sep">›</span><button type="button" class="cr-link" onclick="accGo('ugroups')">${i18n("Группы")}</button>`}
+function accCatsCr(){return`<button type="button" class="cr-link" onclick="accGo('roles')">${i18n("Права")}</button><span class="cr-sep">›</span><button type="button" class="cr-link" onclick="accGo('ugroups')">${i18n("Группы пользователей")}</button>`}
 function accCatsUI(){
   const cats=accCats();
   const rows=cats.map(c=>{const k=accGroupsAll().filter(g=>g.src?.cat===c.id).length;
@@ -8552,7 +8552,7 @@ function accCheckUI(){
     return card(`${i18n(title)} (${l.filter(x=>!x.done).length})`,`<div class="acc-issues">${l.map(x=>`<div class="acc-issue sev${x.sev} ${x.done?"done":""}"><span class="acc-issue-dot"></span><button type="button" class="lk" onclick="${x.go}">${x.text}</button>${x.done?`<span class="acc-chip sm">${i18n("решено в черновике")}</span>`:x.fresh?`<span class="acc-chip warn sm">${i18n("появится после применения")}</span>`:""}${x.act&&!x.done?`<button type="button" class="btn s" onclick="${x.act[1]}">${x.act[0]}</button>`:""}</div>`).join("")}</div>`)};
   paintMain(mainHd("",i18n("Права"),ACC_SUB,accListTabs(),accActsHtml())
     +`<div class="sc">${list.length?`<p class="acc-hint">${i18n("Что не используется, истекло или не сходится. Красное мешает людям работать, жёлтое стоит прибрать, серое — на заметку. Действия отсюда идут в черновик")}</p>`:`<div class="nt ok">${i18n("Всё сходится: роли назначены, сроки не истекли, забытых учётных записей нет")}</div>`}
-      ${sec("Пользователи и назначения","user")}${sec("Группы и каталоги","group")}${sec("Роли","role")}</div>`);
+      ${sec("Пользователи и назначения","user")}${sec("Группы пользователей и каталоги","group")}${sec("Роли","role")}</div>`);
 }
 
 // ── Папка ──
@@ -10854,9 +10854,9 @@ function navTitle(){
     if(accSel.startsWith("role:"))t=`${i18n("Роль")} «${accRoleName(accSel.slice(5))}»`;
     else if(accSel.startsWith("user:"))t=accUsers().find(u=>u.id===accSel.slice(5))?.login||"";
     else if(accSel.startsWith("grp:"))t=accGroupName(accSel.slice(4));
-    else if(accSel.startsWith("ug:"))t=`${i18n("Группа")} «${accUGName(accSel.slice(3))}»`;
+    else if(accSel.startsWith("ug:"))t=`${i18n("Группа пользователей")} «${accUGName(accSel.slice(3))}»`;
     else if(accSel.startsWith("cat:"))t=`${i18n("Каталог")} ${accCat(accSel.slice(4))?.n||""}`;
-    else t=i18n({roles:"Роли",users:"Пользователи",ugroups:"Группы",cats:"Каталоги",check:"Проверка",compare:"Сравнение ролей"}[accSel]||"");
+    else t=i18n({roles:"Роли",users:"Пользователи",ugroups:"Группы пользователей",cats:"Каталоги",check:"Проверка",compare:"Сравнение ролей"}[accSel]||"");
   }
   return t?`${sec} › ${t}`:sec;
 }
