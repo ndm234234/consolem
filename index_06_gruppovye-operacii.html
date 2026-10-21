@@ -331,7 +331,16 @@ html[data-theme="light"] .status-pop .mi.on{background:#e8f0ff;color:#1a3a7a}
 main{display:flex;flex-direction:column}
 .hd{padding:16px var(--pad) 0;border-bottom:1px solid var(--ln);background:#0b1018}
 .cr{font-size:13px;color:var(--mu);display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-bottom:2px}.cr:empty{display:none}
-.hd-cr{flex:1;min-width:0;margin:0}
+.hd-cr{flex:1 1 auto;min-width:0;margin:0;flex-wrap:nowrap;overflow:hidden;white-space:nowrap}
+.cr-it{display:inline-flex;align-items:center;gap:5px;flex:none;min-width:0}
+.cr-it[hidden]{display:none}
+.cr-it.cr-last{flex:0 1 auto;overflow:hidden}
+.hd-cr.cr-measure .cr-it.cr-last{flex:none}
+.cr-it.cr-last .cr-cur{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cr-dots{letter-spacing:1px;padding:0 2px}
+/* Кнопки не уходят под путь: путь уступает им место и сворачивается. */
+.hd-act:has(.hd-cr){flex-wrap:nowrap}
+.hd-act:has(.hd-cr)>.btn{flex:none}
 .cr .cr-sep{opacity:.55;user-select:none}
 .cr .cr-link{border:0;background:0;padding:0;color:#88b6ff;cursor:pointer;font:inherit}
 .cr .cr-link:hover{color:#bcd4f8;text-decoration:underline}
@@ -3241,11 +3250,39 @@ function crumbsHtml(id){
   const seen=new Set();
   parts=parts.filter(n=>n&&!seen.has(n.id)&&seen.add(n.id));
   if(parts.length<2)return"";
+  // Каждый уровень — своя обёртка: так путь можно сворачивать посередине,
+  // когда он не влезает в строку с кнопками (fitCrumbs).
   return parts.map((n,i)=>{
     const label=escHtml(locName(n));
-    if(i===parts.length-1)return`<span class="cr-cur">${crumbTitle(n)}</span>`;
-    return`<button type="button" class="cr-link" onclick="pick('${n.id}')">${label}</button><span class="cr-sep">/</span>`;
+    if(i===parts.length-1)return`<span class="cr-it cr-last" data-id="${n.id}" title="${label}"><span class="cr-cur">${crumbTitle(n)}</span></span>`;
+    return`<span class="cr-it" data-id="${n.id}" data-label="${label}"><button type="button" class="cr-link" onclick="pick('${n.id}')">${label}</button><span class="cr-sep">/</span></span>`;
   }).join("");
+}
+// Длинный путь не переносится на вторую строку, а схлопывает середину:
+// «Домен 1 / … / Помещения / 2с. Переговорная». Первый уровень и два
+// последних остаются всегда; скрытые уровни — в меню по клику на «…».
+function fitCrumbs(){
+  const cr=document.querySelector("#main .hd-cr");if(!cr)return;
+  cr.querySelectorAll(".cr-more").forEach(e=>e.remove());
+  const items=[...cr.querySelectorAll(":scope>.cr-it")];
+  items.forEach(e=>{e.hidden=false});
+  // Пока меряем, последний уровень не ужимается: иначе он обрежется раньше,
+  // чем свернётся середина.
+  cr.classList.add("cr-measure");
+  const fits=()=>cr.scrollWidth<=cr.clientWidth+1;
+  try{
+    if(items.length<4||fits())return;
+    const more=document.createElement("span");more.className="cr-it cr-more";
+    more.innerHTML=`<button type="button" class="cr-link cr-dots" title="${i18n("Скрытые уровни пути")}" onclick="crumbsMenu(event)">…</button><span class="cr-sep">/</span>`;
+    items[0].after(more);
+    for(let i=1;i<=items.length-3&&!fits();i++)items[i].hidden=true;
+  }finally{cr.classList.remove("cr-measure")}
+}
+function crumbsMenu(e){
+  e.stopPropagation();
+  const hidden=[...document.querySelectorAll("#main .hd-cr .cr-it[hidden]")];
+  if(!hidden.length)return;
+  bulkOpenMenuAt(e.currentTarget,hidden.map(el=>tctxItem(el.dataset.label,`closeTreeCtx();pick('${el.dataset.id}')`)).join(""));
 }
 function asideAdd(){return{
   rules:`<button class="btn s w" style="margin-top:6px" onclick="toast('Новое правило')">＋ Правило</button>`}[app]||""}
@@ -3522,6 +3559,8 @@ function mainKey(){return`${app}|${bulkActive()&&!bulkPeek?"bulk:"+bulkSelKey():
 function paintMain(html){
   const host=document.getElementById("main");
   if(host)paintInto(host,html,mainKey(),mainSeen);
+  fitCrumbs();
+  if(host&&!host._crumbsRo&&window.ResizeObserver){host._crumbsRo=new ResizeObserver(()=>fitCrumbs());host._crumbsRo.observe(host)}
 }
 function renderTree(){const treeEl=document.getElementById("tree");if(!treeEl)return;
   const fn={hw:treeHw,dev:treeDev,srvs:treeServers,rules:treeRules,acc:treeRoles,sys:treeOpts,log:treeLog}[app];
