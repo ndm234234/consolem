@@ -1178,6 +1178,18 @@ html[data-theme="light"] .busy-chip{background:#dce8f7;color:#2f5fad}
 .cp-group input{margin-top:3px}
 .cp-group small{display:block;color:var(--mu);font-size:11px;margin-top:2px}
 .cp-group.off{opacity:.5;cursor:default}
+.cp-dets{cursor:default}
+.cp-dets-body{flex:1;min-width:0}
+.cp-dets-head{display:block;width:100%;border:0;background:0;color:var(--tx);padding:0;text-align:left;cursor:pointer;font-size:inherit}
+.cp-dets-chev{color:var(--mu);margin-left:6px}
+.cp-dets-head:hover .cp-dets-chev{color:var(--tx)}
+.cp-det-list{margin-top:8px;max-height:240px;overflow:auto;border-top:1px solid var(--ln);padding-top:4px;scrollbar-width:thin}
+.cp-det{display:flex;gap:8px;align-items:flex-start;padding:5px 2px;cursor:pointer;border-radius:5px}
+.cp-det:hover{background:#172a46}
+.cp-det input{margin-top:3px}
+.cp-det-nm{flex:1;min-width:0}
+.cp-det-tag{flex:none;font-size:10px;line-height:1.2;color:#8fb3d9;border:1px solid #2c4a6b;border-radius:99px;padding:2px 7px;margin-top:1px;white-space:nowrap}
+.cp-det-tag.bi{color:#e7c56f;border-color:#6b5a2c}
 .bk-hint-inline{font-size:10px;color:#e6c86a;font-weight:400}
 .cp-sq{margin:6px 0}
 .cp-tools{display:flex;align-items:center;gap:12px;margin:4px 0 6px;font-size:12px}
@@ -12130,6 +12142,16 @@ function bulkChanges(draft){
       (n.devices||(n.devices=[])).push({id:"det"+Date.now()+Math.random().toString(36).slice(2,6),type:"det",name:i18n(kind),kind,sens:"12",online:true,devices:[]});
     },sameModel(n)?null:`${i18n("другая модель")}: ${modelOf(n)||"—"}`)),i18n("зону детекции задают на каждой камере отдельно")+(d.onlyModel?`; ${i18n("только для модели")} ${d.onlyModel}`:""));
   });
+  // Копия конкретных детекторов камеры: программный — на любую модель,
+  // встроенный в камеру — только на ту же. У кого такой уже есть, не трогаем.
+  (d.copyDets||[]).forEach((x,i)=>{
+    const has=n=>camDetectors(n).some(y=>(y.kind||DET_TYPES[0])===x.kind&&locName(y)===x.name);
+    const ops=nodes.filter(n=>n.type==="camera"&&!has(n)).map(n=>mkOp(n,`Детектор «${x.name}»`,"det",()=>{
+      (n.devices||(n.devices=[])).push({id:"det"+Date.now()+Math.random().toString(36).slice(2,6),type:"det",name:x.name,kind:x.kind,sens:x.sens,builtin:x.builtin,online:true,devices:[]});
+    },x.builtin&&modelOf(n)!==d.detModel?`${i18n("встроенный детектор, другая модель")}: ${modelOf(n)||"—"}`:null));
+    step("copyDet:"+i,`Детектор «${x.name}» (${i18n(x.kind)})`,ops,
+      (x.builtin?`${i18n("встроен в камеру — только для модели")} ${d.detModel}`:i18n("считается на сервере — для любой модели"))+`; ${i18n("зону детекции задают на каждой камере отдельно")}`);
+  });
   if(d.rename){
     step("rename",`Имена по шаблону`,nodes.map(n=>mkOp(n,"Переименование","rename",()=>{n.name=bulkName(n,d.rename)})));
   }
@@ -12526,8 +12548,10 @@ function removeToastAction(key){const e=document.getElementById("ttu-"+key);if(e
 
 // ── «Применить к другим…»: от одной камеры к похожим ─────────────────────
 // Путь нынешнего Axxon One и Genetec Copy configuration: настроил одну —
-// повторил на остальных. Общие группы идут на любые камеры среза, видео и
-// детекторы — только на ту же модель; дальше обычный план и очередь.
+// повторил на остальных. Общие группы идут на любые камеры среза, видео —
+// только на ту же модель. Детекторы выбирают поштучно: программный (на
+// сервере) ставится на камеру любой модели, встроенный в камеру — только на
+// такую же модель. Дальше обычный план и очередь.
 let cp=null;
 function bulkCopyBtn(n){
   if(!n||n.type!=="camera"||app!=="hw")return"";
@@ -12535,14 +12559,14 @@ function bulkCopyBtn(n){
 }
 function cpGroups(src){
   const a=arch.find(x=>x.id===src.arch),folders=foldersOfDevice(src.id).filter(f=>f.items.includes(src.id));
-  const dets=[...new Set(camDetectors(src).map(d=>d.kind||DET_TYPES[0]))];
+  const dets=camDetectors(src);
   return[
     {key:"rec",label:"Архив и запись",value:`${a?locName(a):i18n("архив не задан")} · ${i18n(recordModeLabel(src.rec||"none"))} · ${i18n("предзапись")} ${src.pre??5} ${i18n("с")}`,common:true},
     {key:"enabled",label:"Включено",value:src.enabled!==false?i18n("включена"):i18n("выключена"),common:true},
     {key:"folders",label:"Расположение",value:folders.length?folders.map(f=>folderPathName(f.id)).join(", "):i18n("ни в одной папке"),common:true,off:!folders.length},
     {key:"creds",label:"Учётные данные",value:i18n("логин и пароль источника (пароль не показывается)"),common:true},
     {key:"video",label:"Видео",value:`${src.codec||"H.265"} · ${src.res||"1920×1080"} · ${src.fps||25} ${i18n("к/с")} · ${src.bitrate||4096}`,common:false},
-    {key:"dets",label:"Детекторы",value:dets.length?dets.map(k=>i18n(k)).join(", ")+` — ${i18n("без зон")}`:i18n("детекторов нет"),common:false,off:!dets.length}
+    {key:"dets",label:"Детекторы",value:dets.length?"":i18n("детекторов нет"),common:true,off:!dets.length}
   ];
 }
 function cpCandidates(src){
@@ -12563,35 +12587,66 @@ function openCopyDialog(id){
   const f=find(id);if(!f||f.n.type!=="camera")return;
   if(busyIds().size){toast("Очередь ещё выполняется — дождитесь её конца");return}
   const src=f.n;
-  cp={src,groups:new Set(["rec","enabled","folders","video","dets"].filter(k=>!cpGroups(src).find(g=>g.key===k)?.off)),picked:new Set(),filter:"model",q:""};
+  cp={src,groups:new Set(["rec","enabled","folders","video"].filter(k=>!cpGroups(src).find(g=>g.key===k)?.off)),
+    dets:new Set(camDetectors(src).map(d=>d.id)),detsOpen:false,picked:new Set(),filter:"model",q:""};
   renderCopyDialog();
 }
 function renderCopyDialog(){
   if(!cp)return;
   const src=cp.src,all=cpCandidates(src),list=cpFiltered();
   const cnt={model:all.filter(n=>modelOf(n)===modelOf(src)).length,server:all.filter(n=>srv(n.id)?.id===srv(src.id)?.id).length,folder:all.filter(n=>foldersOfDevice(src.id).some(f=>f.items.includes(n.id))).length,all:all.length};
-  const groups=cpGroups(src).map(g=>`<label class="cp-group ${g.off?"off":""}"><input type="checkbox" ${cp.groups.has(g.key)?"checked":""} ${g.off?"disabled":""} onchange="cpToggleGroup('${g.key}',this.checked)"><span><b>${i18n(g.label)}</b>${g.common?"":` <span class="bk-hint-inline">${i18n("только та же модель")}</span>`}<small>${escHtml(g.value)}</small></span></label>`).join("");
+  const groups=cpGroups(src).map(g=>g.key==="dets"&&!g.off?cpDetsGroupHtml(src):`<label class="cp-group ${g.off?"off":""}"><input type="checkbox" ${cp.groups.has(g.key)?"checked":""} ${g.off?"disabled":""} onchange="cpToggleGroup('${g.key}',this.checked)"><span><b>${i18n(g.label)}</b>${g.common?"":` <span class="bk-hint-inline">${i18n("только та же модель")}</span>`}<small>${escHtml(g.value)}</small></span></label>`).join("");
   const chips=[["model","Та же модель"],["server","Тот же сервер"],["folder","Та же папка"],["all","Все камеры"]].map(([k,l])=>`<button type="button" class="stchip ${cp.filter===k?"on":""}" onclick="cp.filter='${k}';renderCopyDialog()"><span class="stchip-lab">${i18n(l)}</span><span class="stchip-cnt">${cnt[k]}</span></button>`).join("");
   const allOn=list.length>0&&list.every(n=>cp.picked.has(n.id));
   const rows=list.map(n=>{
     const same=modelOf(n)===modelOf(src),s=srv(n.id);
-    return`<label class="cp-row"><input type="checkbox" ${cp.picked.has(n.id)?"checked":""} onchange="cpPick('${n.id}',this.checked)"><span class="cp-name">${treeIconHtml(n)} ${escHtml(crumbTitle(n))}</span><span class="cp-meta">${escHtml(serverNameOf(n))} · ${escHtml(modelOf(n)||"—")} · ${escHtml(n.ip||"")}${s&&hasNoSignal(s)?` · <span class="bk-bad">${i18n("сервер без связи")}</span>`:""}</span>${same?"":`<span class="cp-note">${i18n("видео и детекторы не скопируются")}</span>`}</label>`;
+    const lost=same?"":cpModelLoss();
+    return`<label class="cp-row"><input type="checkbox" ${cp.picked.has(n.id)?"checked":""} onchange="cpPick('${n.id}',this.checked)"><span class="cp-name">${treeIconHtml(n)} ${escHtml(crumbTitle(n))}</span><span class="cp-meta">${escHtml(serverNameOf(n))} · ${escHtml(modelOf(n)||"—")} · ${escHtml(n.ip||"")}${s&&hasNoSignal(s)?` · <span class="bk-bad">${i18n("сервер без связи")}</span>`:""}</span>${lost?`<span class="cp-note">${lost} ${i18n("не скопируются")}</span>`:""}</label>`;
   }).join("")||`<div class="empty">${i18n("Ничего не найдено")}</div>`;
-  const wantModel=[...cp.groups].some(k=>k==="video"||k==="dets");
+  const loss=cpModelLoss();
   const other=[...cp.picked].filter(id=>{const n=find(id)?.n;return n&&modelOf(n)!==modelOf(src)}).length;
   openBulkModal(`${i18n("Применить настройки")} «${escHtml(locName(src))}» ${i18n("к другим камерам")}`,
     `<div class="cp-wrap">
       <div class="cp-col"><div class="cp-h">${i18n("Что копировать")}</div>${groups}
-        <p class="sub" style="margin-top:8px">${i18n("Источник")}: ${escHtml(modelOf(src)||"—")}, ${escHtml(serverNameOf(src))}. ${i18n("Общие группы идут на любые камеры, видео и детекторы — только на ту же модель; остальные камеры по этим шагам будут пропущены с причиной.")}</p></div>
+        <p class="sub" style="margin-top:8px">${i18n("Источник")}: ${escHtml(modelOf(src)||"—")}, ${escHtml(serverNameOf(src))}. ${i18n("Общие группы и программные детекторы идут на любые камеры; видео и детекторы, встроенные в камеру, — только на ту же модель, остальные камеры по этим шагам будут пропущены с причиной.")}</p></div>
       <div class="cp-col cp-col-list"><div class="cp-h">${i18n("Кому")}</div>
         <div class="bk-chips">${chips}</div>
         <div class="sq lan-sq cp-sq"><input value="${escHtml(cp.q)}" placeholder="${i18n("Имя, IP, модель, сервер…")}" oninput="cp.q=this.value;renderCopyDialog();this.focus()"></div>
         <div class="cp-tools"><label class="cp-all"><input type="checkbox" ${allOn?"checked":""} ${list.length?"":"disabled"} onchange="cpPickAll(this.checked)"><span>${allOn?i18n("Снять выделение"):i18n("Выбрать всё")} (${list.length})</span></label><span class="sel-cnt">${i18n("Выбрано")}: <b>${cp.picked.size}</b></span></div>
         <div class="cp-list">${rows}</div></div>
-    </div>${wantModel&&other?`<div class="nt bk-warn" style="margin-top:10px">⚠ ${other} ${i18n(plural(other,"камера|камеры|камер"))} ${i18n("другой модели: видео и детекторы к ним не применятся")}</div>`:""}`,
-    `<button type="button" class="btn" onclick="closeBulkModal();cp=null">${i18n("Отмена")}</button><span class="tfoot-gap"></span><button type="button" class="btn pri" onclick="cpShowPlan()" ${cp.picked.size&&cp.groups.size?"":"disabled"}>${i18n("Показать план")} (${cp.picked.size})</button>`,"bbox-wide bbox-copy");
-  requestAnimationFrame(()=>{const i=document.querySelector(".cp-sq input");if(i&&cp.q){i.focus();i.setSelectionRange(i.value.length,i.value.length)}});
+    </div>${loss&&other?`<div class="nt bk-warn" style="margin-top:10px">⚠ ${other} ${i18n(plural(other,"камера|камеры|камер"))} ${i18n("другой модели:")} ${loss} ${i18n("к ним не применятся")}</div>`:""}`,
+    `<button type="button" class="btn" onclick="closeBulkModal();cp=null">${i18n("Отмена")}</button><span class="tfoot-gap"></span><button type="button" class="btn pri" onclick="cpShowPlan()" ${cp.picked.size&&(cp.groups.size||cp.dets.size)?"":"disabled"}>${i18n("Показать план")} (${cp.picked.size})</button>`,"bbox-wide bbox-copy");
+  requestAnimationFrame(()=>{
+    const i=document.querySelector(".cp-sq input");if(i&&cp.q){i.focus();i.setSelectionRange(i.value.length,i.value.length)}
+    const h=document.querySelector(".cp-dets-all");if(h)h.indeterminate=h.dataset.part==="1";
+  });
 }
+// Что не доедет до камеры другой модели: видео и встроенные детекторы.
+function cpModelLoss(){
+  if(!cp)return"";
+  const bits=[];
+  if(cp.groups.has("video"))bits.push(i18n("видео"));
+  const b=camDetectors(cp.src).filter(d=>d.builtin&&cp.dets.has(d.id)).length;
+  if(b)bits.push(`${b} ${i18n(plural(b,"встроенный детектор|встроенных детектора|встроенных детекторов"))}`);
+  return bits.join(` ${i18n("и")} `);
+}
+// Группа «Детекторы» раскрывается списком: копируют один, несколько или все.
+function cpDetsGroupHtml(src){
+  const dets=camDetectors(src),k=dets.filter(d=>cp.dets.has(d.id)).length;
+  const bi=dets.filter(d=>d.builtin).length;
+  const sum=`${i18n("выбрано")} ${k} ${i18n("из")} ${dets.length}`+(bi?` · ${i18n("встроенных в камеру")}: ${bi}`:"");
+  const rows=dets.map(d=>`<label class="cp-det"><input type="checkbox" ${cp.dets.has(d.id)?"checked":""} onchange="cpToggleDet('${d.id}',this.checked)">
+      <span class="cp-det-nm">${escHtml(detTitle(d))}<small>${escHtml(i18n(d.kind||DET_TYPES[0]))} · ${i18n("чувствительность")} ${escHtml(String(d.sens||"12"))}</small></span>
+      ${d.builtin?`<span class="cp-det-tag bi" title="${i18n("Детектор работает в самой камере — переносится только на такую же модель")}">${i18n("в камере · та же модель")}</span>`
+        :`<span class="cp-det-tag" title="${i18n("Детектор считается на сервере — подходит камере любой модели")}">${i18n("на сервере · любая модель")}</span>`}</label>`).join("");
+  return`<div class="cp-group cp-dets ${cp.detsOpen?"open":""}">
+    <input type="checkbox" class="cp-dets-all" ${k===dets.length?"checked":""} data-part="${k&&k<dets.length?1:0}" onchange="cpAllDets(this.checked)" aria-label="${i18n("Все детекторы")}">
+    <span class="cp-dets-body"><button type="button" class="cp-dets-head" aria-expanded="${cp.detsOpen}" onclick="cp.detsOpen=!cp.detsOpen;renderCopyDialog()">
+      <b>${i18n("Детекторы")}</b><span class="cp-dets-chev">${cp.detsOpen?"▾":"▸"}</span><small>${escHtml(sum)} — ${i18n("без зон")}</small></button>
+      ${cp.detsOpen?`<div class="cp-det-list">${rows}</div>`:""}</span></div>`;
+}
+function cpToggleDet(id,on){if(!cp)return;on?cp.dets.add(id):cp.dets.delete(id);renderCopyDialog()}
+function cpAllDets(on){if(!cp)return;cp.dets.clear();if(on)camDetectors(cp.src).forEach(d=>cp.dets.add(d.id));renderCopyDialog()}
 function cpToggleGroup(k,on){if(!cp)return;if(on)cp.groups.add(k);else cp.groups.delete(k);renderCopyDialog()}
 function cpPick(id,on){if(!cp)return;if(on)cp.picked.add(id);else cp.picked.delete(id);renderCopyDialog()}
 function cpPickAll(on){if(!cp)return;cpFiltered().forEach(n=>on?cp.picked.add(n.id):cp.picked.delete(n.id));renderCopyDialog()}
@@ -12605,8 +12660,9 @@ function cpShowPlan(){
   if(g.has("folders"))d.folderAddMany=foldersOfDevice(src.id).filter(f=>f.items.includes(src.id)).map(f=>f.id);
   if(g.has("creds")){d.user=src.user||"admin";d.pass="********"}
   if(g.has("video")){d.codec=src.codec||"H.265";d.res=src.res||"1920×1080";d.fps=String(src.fps||25);d.bitrate=String(src.bitrate||4096)}
-  if(g.has("dets"))d.addDetMany=[...new Set(camDetectors(src).map(x=>x.kind||DET_TYPES[0]))];
-  if(g.has("video")||g.has("dets"))d.onlyModel=modelOf(src);
+  const dets=camDetectors(src).filter(x=>cp.dets.has(x.id));
+  if(dets.length){d.copyDets=dets.map(x=>({name:locName(x),kind:x.kind||DET_TYPES[0],sens:x.sens||"12",builtin:!!x.builtin}));d.detModel=modelOf(src)}
+  if(g.has("video"))d.onlyModel=modelOf(src);
   const ids=[...cp.picked];
   cp=null;closeBulkModal();
   treeSel.clear();ids.forEach(id=>treeSel.add(id));
