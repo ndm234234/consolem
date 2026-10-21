@@ -1115,6 +1115,7 @@ html[data-theme="light"] .bk-warn{background:#fff6d8;border-color:#e2cc84;color:
 html[data-theme="light"] .rs-btn:hover{background:#e7effa}
 html[data-theme="light"] .n-chk{border-color:#8fa4bf}
 .n-chk.dis{opacity:.35;cursor:not-allowed}
+.n-chk.n-chk-ph{visibility:hidden;pointer-events:none}
 .tree.selmode .n-fav,.tree.selmode .n-menu{visibility:hidden;pointer-events:none}
 .n.busy>*{opacity:.6}
 .n.busy>.busy-chip{opacity:1}
@@ -11423,18 +11424,21 @@ function decorateTreeSel(){
       row.querySelector(":scope>.nm")?.after(chip);
     }
     if(app!=="hw")return;
-    let state="";
+    // Место под галочку занято у каждой строки: иначе тома архива, GPU и
+    // прочие неотмечаемые строки стоят левее соседей.
+    let ph=false,state="";
     // Вне режима открытый объект тоже лежит в treeSel, но галочкой его не показываем.
     if(canMultiPick(f.n))state=(on||treeSel.size>1)&&treeSel.has(id)?"on":"";
-    else if(f.n.type==="det"||f.n.type==="found"||f.n.type==="founddev"||f.n.type==="norec"||f.n.type==="nofolder"||f.n.type==="gpu")return;
+    else if(f.n.type==="det"||f.n.type==="found"||f.n.type==="founddev"||f.n.type==="norec"||f.n.type==="nofolder"||f.n.type==="gpu")ph=true;
     else if(on){
       // Тристейт считаем только в режиме: вне его галочка контейнера просто ждёт клика.
-      const d=selDescendants(f.n);if(!d.length)return;
-      const k=d.filter(x=>treeSel.has(x.id)).length;
-      state=k===0?"":k===d.length?"on":"part";
+      const d=selDescendants(f.n);
+      if(!d.length)ph=true;
+      else{const k=d.filter(x=>treeSel.has(x.id)).length;state=k===0?"":k===d.length?"on":"part"}
     }
     const chk=document.createElement("span");
-    chk.className="n-chk"+(state?" "+state:"")+(blockedId(id)?" dis":"");
+    if(!ph&&!on&&!canMultiPick(f.n)&&!selDescendants(f.n).length)ph=true;
+    chk.className="n-chk"+(ph?" n-chk-ph":"")+(state?" "+state:"")+(blockedId(id)?" dis":"");
     chk.setAttribute("role","checkbox");chk.setAttribute("aria-checked",state==="part"?"mixed":state?"true":"false");
     chk.title=blockedId(id)?i18n("Объект в очереди"):canMultiPick(f.n)?i18n("Отметить"):i18n("Отметить всё внутри");
     const tw=row.querySelector(":scope>.tw");
