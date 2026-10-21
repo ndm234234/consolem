@@ -922,6 +922,28 @@ html[data-theme="light"] .n-chk{border-color:#8fa4bf}
 .hd-status .rs-l1{font-size:12px}
 .hd-status .rs-l2{display:inline;font-size:11px;font-weight:400}
 html[data-theme="light"] .busy-chip{background:#dce8f7;color:#2f5fad}
+.bbox-copy{width:min(980px,96vw)}
+.cp-wrap{display:grid;grid-template-columns:minmax(260px,1fr) minmax(320px,1.4fr);gap:18px}
+.cp-h{font-weight:600;font-size:13px;margin-bottom:8px}
+.cp-group{display:flex;gap:10px;align-items:flex-start;padding:8px;border:1px solid var(--ln);border-radius:7px;margin-bottom:6px;cursor:pointer;background:var(--p2)}
+.cp-group input{margin-top:3px}
+.cp-group small{display:block;color:var(--mu);font-size:11px;margin-top:2px}
+.cp-group.off{opacity:.5;cursor:default}
+.bk-hint-inline{font-size:10px;color:#e6c86a;font-weight:400}
+.cp-sq{margin:6px 0}
+.cp-tools{display:flex;align-items:center;gap:12px;margin:4px 0 6px;font-size:12px}
+.cp-all{display:flex;align-items:center;gap:6px;cursor:pointer}
+.cp-list{max-height:44vh;overflow:auto;border:1px solid var(--ln);border-radius:7px}
+.cp-row{display:grid;grid-template-columns:auto 1fr auto;grid-template-areas:"c n note" "c m note";column-gap:10px;align-items:center;padding:6px 10px;border-bottom:1px solid var(--ln);cursor:pointer;font-size:12px}
+.cp-row:last-child{border-bottom:0}
+.cp-row:hover{background:#142033}
+.cp-row input{grid-area:c}
+.cp-name{grid-area:n;display:flex;align-items:center;gap:6px}
+.cp-meta{grid-area:m;color:var(--mu);font-size:11px}
+.cp-note{grid-area:note;font-size:10px;color:#e6c86a;white-space:nowrap}
+.cp-list .empty{padding:20px;text-align:center;color:var(--mu)}
+@media (max-width:900px){.cp-wrap{grid-template-columns:1fr}}
+html[data-theme="light"] .cp-row:hover{background:#eef3fa}
 
 </style>
 <script src="assets/i18n-en.js"></script>
@@ -4128,6 +4150,10 @@ function openTreeCtx(n,xy){
       if(main.length)main.push(tctxSep());
       main.push(tctxItem(i18n("Создать домен"),`addDomain()`,tctxPlusIcon()));
     }
+    if(n.type==="camera"){
+      if(main.length)main.push(tctxSep());
+      main.push(tctxItem(i18n("Применить настройки к другим…"),`closeTreeCtx();openCopyDialog('${n.id}')`,`<span class="tctx-ic">${SEL_IC}</span>`));
+    }
     if(main.length)main.push(tctxSep());
     main.push(tctxItem(i18n("Открыть в новой вкладке"),`ctxOpenNewTab('${n.id}')`,tctxNewTabIcon()));
   }
@@ -4604,7 +4630,7 @@ function gear(){
   const tabsH=tabs.map(([id,x])=>`<button class="tab ${tab===id?"on":""}" onclick="tab='${id}';gear()">${i18n(x)}</button>`).join("");
   // Слева направо — откуда берут устройство: из сети, руками, из файла; дальше
   // собственные действия объекта, а звезда последней и без подписи.
-  const addBtn=lanFoundBtn(n)+lanHeadBtns(n)+inspectorAddBtn(n)+favCardBtn(n)+fullCardBtn();
+  const addBtn=lanFoundBtn(n)+lanHeadBtns(n)+inspectorAddBtn(n)+bulkCopyBtn(n)+favCardBtn(n)+fullCardBtn();
   const scClass=n.type==="unalloc"?"sc sc-unalloc":"sc";
   paintMain(mainHd(crumbsHtml(sel),objectTitle(n),"",tabsH,addBtn,true)+`<div class="${scClass}">${bulkPeekNoteHtml()}${hiddenByFilterNoteHtml()}${objectStatusNotesHtml(n)}${form(n)}</div>`+domainActionsHtml(n));
   if(n.type==="found")renderDeviceWizard();  // панель живёт в разметке, которую только что вставили
@@ -8112,10 +8138,10 @@ function bulkChanges(draft){
     step("enabled",want?"Включить":"Выключить",ops,lic?`${i18n("лицензия")}: ${lic} ${i18n(plural(lic,"камера|камеры|камер"))} ${i18n("сверх лимита не включатся")}`:"");
   }
   if(d.user||d.pass)step("creds","Учётные данные",nodes.filter(n=>n.type==="camera"||n.type==="ipsrv"||n.type==="acfa").map(n=>mkOp(n,"Учётные данные","creds",()=>{if(d.user)n.user=d.user;if(d.pass)n.pass="•".repeat(8)})),i18n("устройство переподключится"));
-  if(d.folderAdd){
-    const f=folderById(d.folderAdd);
-    if(f)step("folderAdd",`В папку «${folderPathName(f.id)}»`,nodes.filter(n=>!f.items.includes(n.id)).map(n=>mkOp(n,"В папку","folder",()=>folderAddDevice(f.id,n.id),null,()=>{f.items=f.items.filter(x=>x!==n.id)})));
-  }
+  [...(d.folderAdd?[d.folderAdd]:[]),...(d.folderAddMany||[])].forEach(fid=>{
+    const f=folderById(fid);
+    if(f)step("folderAdd:"+fid,`В папку «${folderPathName(f.id)}»`,nodes.filter(n=>!f.items.includes(n.id)).map(n=>mkOp(n,"В папку","folder",()=>folderAddDevice(f.id,n.id),null,()=>{f.items=f.items.filter(x=>x!==n.id)})));
+  });
   if(d.folderRemove){
     const f=folderById(d.folderRemove);
     if(f)step("folderRemove",`Из папки «${folderPathName(f.id)}»`,nodes.filter(n=>f.items.includes(n.id)).map(n=>mkOp(n,"Из папки","folder",()=>{f.items=f.items.filter(x=>x!==n.id)},null,()=>folderAddDevice(f.id,n.id))));
@@ -8138,13 +8164,13 @@ function bulkChanges(draft){
   }
   if(d.pre)step("pre",`Предзапись ${d.pre} с`,nodes.filter(n=>n.type==="camera"&&String(n.pre??5)!==String(d.pre)).map(n=>{const prev=n.pre;return mkOp(n,`Предзапись ${d.pre} с`,"rec",()=>{n.pre=Number(d.pre)},null,()=>{n.pre=prev})}));
   const vid=["codec","res","fps","bitrate"].filter(k=>d[k]);
-  if(vid.length)step("video",`Видео: ${vid.map(k=>({codec:"кодек",res:"разрешение",fps:"к/с",bitrate:"битрейт"})[k]).join(", ")}`,nodes.filter(n=>n.type==="camera").map(n=>mkOp(n,"Параметры видео","video",()=>{vid.forEach(k=>n[k]=k==="fps"||k==="bitrate"?Number(d[k]):d[k])})),i18n("поток переоткроется, запись прервётся на секунды"));
-  if(d.addDet){
-    const kind=d.addDet;
-    step("addDet",`Детектор «${i18n(kind)}»`,nodes.filter(n=>n.type==="camera"&&!camDetectors(n).some(x=>(x.kind||DET_TYPES[0])===kind)).map(n=>mkOp(n,`Детектор «${i18n(kind)}»`,"det",()=>{
+  const sameModel=n=>!d.onlyModel||modelOf(n)===d.onlyModel;
+  if(vid.length)step("video",`Видео: ${vid.map(k=>({codec:"кодек",res:"разрешение",fps:"к/с",bitrate:"битрейт"})[k]).join(", ")}`,nodes.filter(n=>n.type==="camera").map(n=>mkOp(n,"Параметры видео","video",()=>{vid.forEach(k=>n[k]=k==="fps"||k==="bitrate"?Number(d[k]):d[k])},sameModel(n)?null:`${i18n("другая модель")}: ${modelOf(n)||"—"}`)),i18n("поток переоткроется, запись прервётся на секунды")+(d.onlyModel?`; ${i18n("только для модели")} ${d.onlyModel}`:""));
+  [...(d.addDet?[d.addDet]:[]),...(d.addDetMany||[])].forEach(kind=>{
+    step("addDet:"+kind,`Детектор «${i18n(kind)}»`,nodes.filter(n=>n.type==="camera"&&!camDetectors(n).some(x=>(x.kind||DET_TYPES[0])===kind)).map(n=>mkOp(n,`Детектор «${i18n(kind)}»`,"det",()=>{
       (n.devices||(n.devices=[])).push({id:"det"+Date.now()+Math.random().toString(36).slice(2,6),type:"det",name:i18n(kind),kind,sens:"12",online:true,devices:[]});
-    })),i18n("зону детекции задают на каждой камере отдельно"));
-  }
+    },sameModel(n)?null:`${i18n("другая модель")}: ${modelOf(n)||"—"}`)),i18n("зону детекции задают на каждой камере отдельно")+(d.onlyModel?`; ${i18n("только для модели")} ${d.onlyModel}`:""));
+  });
   if(d.rename){
     step("rename",`Имена по шаблону`,nodes.map(n=>mkOp(n,"Переименование","rename",()=>{n.name=bulkName(n,d.rename)})));
   }
@@ -8530,6 +8556,101 @@ function toastAction(key,msg,label,fn,ms,hooks){
   tickPending();
 }
 function removeToastAction(key){const e=document.getElementById("ttu-"+key);if(e){clearInterval(e._t);e.remove()}}
+
+
+// ── «Применить к другим…»: от одной камеры к похожим ─────────────────────
+// Путь нынешнего Axxon One и Genetec Copy configuration: настроил одну —
+// повторил на остальных. Общие группы идут на любые камеры среза, видео и
+// детекторы — только на ту же модель; дальше обычный план и очередь.
+let cp=null;
+function bulkCopyBtn(n){
+  if(!n||n.type!=="camera"||app!=="hw")return"";
+  return`<button type="button" class="btn s" title="${i18n("Скопировать настройки этой камеры на другие")}" onclick="openCopyDialog('${n.id}')">${i18n("Применить к другим")}…</button>`;
+}
+function cpGroups(src){
+  const a=arch.find(x=>x.id===src.arch),folders=foldersOfDevice(src.id).filter(f=>f.items.includes(src.id));
+  const dets=[...new Set(camDetectors(src).map(d=>d.kind||DET_TYPES[0]))];
+  return[
+    {key:"rec",label:"Архив и запись",value:`${a?locName(a):i18n("архив не задан")} · ${i18n(recordModeLabel(src.rec||"none"))} · ${i18n("предзапись")} ${src.pre??5} ${i18n("с")}`,common:true},
+    {key:"enabled",label:"Включено",value:src.enabled!==false?i18n("включена"):i18n("выключена"),common:true},
+    {key:"folders",label:"Расположение",value:folders.length?folders.map(f=>folderPathName(f.id)).join(", "):i18n("ни в одной папке"),common:true,off:!folders.length},
+    {key:"creds",label:"Учётные данные",value:i18n("логин и пароль источника (пароль не показывается)"),common:true},
+    {key:"video",label:"Видео",value:`${src.codec||"H.265"} · ${src.res||"1920×1080"} · ${src.fps||25} ${i18n("к/с")} · ${src.bitrate||4096}`,common:false},
+    {key:"dets",label:"Детекторы",value:dets.length?dets.map(k=>i18n(k)).join(", ")+` — ${i18n("без зон")}`:i18n("детекторов нет"),common:false,off:!dets.length}
+  ];
+}
+function cpCandidates(src){
+  const out=[];walkAll(n=>{if(n.type==="camera"&&n.id!==src.id&&!blockedId(n.id))out.push(n)});
+  return out;
+}
+function cpFiltered(){
+  const q=cp.q.trim().toLowerCase(),src=cp.src;
+  return cpCandidates(src).filter(n=>{
+    if(cp.filter==="model"&&modelOf(n)!==modelOf(src))return false;
+    if(cp.filter==="server"&&srv(n.id)?.id!==srv(src.id)?.id)return false;
+    if(cp.filter==="folder"&&!foldersOfDevice(src.id).some(f=>f.items.includes(n.id)))return false;
+    if(!q)return true;
+    return[locName(n),n.ip,modelOf(n),serverNameOf(n)].join(" ").toLowerCase().includes(q);
+  });
+}
+function openCopyDialog(id){
+  const f=find(id);if(!f||f.n.type!=="camera")return;
+  if(busyIds().size){toast("Очередь ещё выполняется — дождитесь её конца");return}
+  const src=f.n;
+  cp={src,groups:new Set(["rec","enabled","folders","video","dets"].filter(k=>!cpGroups(src).find(g=>g.key===k)?.off)),picked:new Set(),filter:"model",q:""};
+  renderCopyDialog();
+}
+function renderCopyDialog(){
+  if(!cp)return;
+  const src=cp.src,all=cpCandidates(src),list=cpFiltered();
+  const cnt={model:all.filter(n=>modelOf(n)===modelOf(src)).length,server:all.filter(n=>srv(n.id)?.id===srv(src.id)?.id).length,folder:all.filter(n=>foldersOfDevice(src.id).some(f=>f.items.includes(n.id))).length,all:all.length};
+  const groups=cpGroups(src).map(g=>`<label class="cp-group ${g.off?"off":""}"><input type="checkbox" ${cp.groups.has(g.key)?"checked":""} ${g.off?"disabled":""} onchange="cpToggleGroup('${g.key}',this.checked)"><span><b>${i18n(g.label)}</b>${g.common?"":` <span class="bk-hint-inline">${i18n("только та же модель")}</span>`}<small>${escHtml(g.value)}</small></span></label>`).join("");
+  const chips=[["model","Та же модель"],["server","Тот же сервер"],["folder","Та же папка"],["all","Все камеры"]].map(([k,l])=>`<button type="button" class="stchip ${cp.filter===k?"on":""}" onclick="cp.filter='${k}';renderCopyDialog()"><span class="stchip-lab">${i18n(l)}</span><span class="stchip-cnt">${cnt[k]}</span></button>`).join("");
+  const allOn=list.length>0&&list.every(n=>cp.picked.has(n.id));
+  const rows=list.map(n=>{
+    const same=modelOf(n)===modelOf(src),s=srv(n.id);
+    return`<label class="cp-row"><input type="checkbox" ${cp.picked.has(n.id)?"checked":""} onchange="cpPick('${n.id}',this.checked)"><span class="cp-name">${treeIconHtml(n)} ${escHtml(crumbTitle(n))}</span><span class="cp-meta">${escHtml(serverNameOf(n))} · ${escHtml(modelOf(n)||"—")} · ${escHtml(n.ip||"")}${s&&hasNoSignal(s)?` · <span class="bk-bad">${i18n("сервер без связи")}</span>`:""}</span>${same?"":`<span class="cp-note">${i18n("видео и детекторы не скопируются")}</span>`}</label>`;
+  }).join("")||`<div class="empty">${i18n("Ничего не найдено")}</div>`;
+  const wantModel=[...cp.groups].some(k=>k==="video"||k==="dets");
+  const other=[...cp.picked].filter(id=>{const n=find(id)?.n;return n&&modelOf(n)!==modelOf(src)}).length;
+  openBulkModal(`${i18n("Применить настройки")} «${escHtml(locName(src))}» ${i18n("к другим камерам")}`,
+    `<div class="cp-wrap">
+      <div class="cp-col"><div class="cp-h">${i18n("Что копировать")}</div>${groups}
+        <p class="sub" style="margin-top:8px">${i18n("Источник")}: ${escHtml(modelOf(src)||"—")}, ${escHtml(serverNameOf(src))}. ${i18n("Общие группы идут на любые камеры, видео и детекторы — только на ту же модель; остальные камеры по этим шагам будут пропущены с причиной.")}</p></div>
+      <div class="cp-col cp-col-list"><div class="cp-h">${i18n("Кому")}</div>
+        <div class="bk-chips">${chips}</div>
+        <div class="sq lan-sq cp-sq"><input value="${escHtml(cp.q)}" placeholder="${i18n("Имя, IP, модель, сервер…")}" oninput="cp.q=this.value;renderCopyDialog();this.focus()"></div>
+        <div class="cp-tools"><label class="cp-all"><input type="checkbox" ${allOn?"checked":""} ${list.length?"":"disabled"} onchange="cpPickAll(this.checked)"><span>${allOn?i18n("Снять выделение"):i18n("Выбрать всё")} (${list.length})</span></label><span class="sel-cnt">${i18n("Выбрано")}: <b>${cp.picked.size}</b></span></div>
+        <div class="cp-list">${rows}</div></div>
+    </div>${wantModel&&other?`<div class="nt bk-warn" style="margin-top:10px">⚠ ${other} ${i18n(plural(other,"камера|камеры|камер"))} ${i18n("другой модели: видео и детекторы к ним не применятся")}</div>`:""}`,
+    `<button type="button" class="btn" onclick="closeBulkModal();cp=null">${i18n("Отмена")}</button><span class="tfoot-gap"></span><button type="button" class="btn pri" onclick="cpShowPlan()" ${cp.picked.size&&cp.groups.size?"":"disabled"}>${i18n("Показать план")} (${cp.picked.size})</button>`,"bbox-wide bbox-copy");
+  requestAnimationFrame(()=>{const i=document.querySelector(".cp-sq input");if(i&&cp.q){i.focus();i.setSelectionRange(i.value.length,i.value.length)}});
+}
+function cpToggleGroup(k,on){if(!cp)return;if(on)cp.groups.add(k);else cp.groups.delete(k);renderCopyDialog()}
+function cpPick(id,on){if(!cp)return;if(on)cp.picked.add(id);else cp.picked.delete(id);renderCopyDialog()}
+function cpPickAll(on){if(!cp)return;cpFiltered().forEach(n=>on?cp.picked.add(n.id):cp.picked.delete(n.id));renderCopyDialog()}
+// Выбранные камеры становятся выборкой, группы — черновиком: дальше тот же
+// план, та же очередь и тот же отчёт, что у карточки выборки.
+function cpShowPlan(){
+  if(!cp||!cp.picked.size)return;
+  const src=cp.src,g=cp.groups,d={};
+  if(g.has("rec")){d.arch=src.arch||"__none__";d.rec=src.rec||"none";d.pre=String(src.pre??5)}
+  if(g.has("enabled"))d.enabled=src.enabled!==false?"on":"off";
+  if(g.has("folders"))d.folderAddMany=foldersOfDevice(src.id).filter(f=>f.items.includes(src.id)).map(f=>f.id);
+  if(g.has("creds")){d.user=src.user||"admin";d.pass="********"}
+  if(g.has("video")){d.codec=src.codec||"H.265";d.res=src.res||"1920×1080";d.fps=String(src.fps||25);d.bitrate=String(src.bitrate||4096)}
+  if(g.has("dets"))d.addDetMany=[...new Set(camDetectors(src).map(x=>x.kind||DET_TYPES[0]))];
+  if(g.has("video")||g.has("dets"))d.onlyModel=modelOf(src);
+  const ids=[...cp.picked];
+  cp=null;closeBulkModal();
+  treeSel.clear();ids.forEach(id=>treeSel.add(id));
+  selMode=true;bulkPeek=false;bulkDraft=d;
+  ids.forEach(id=>expandTo(id));
+  aside();tab="gen";gear();
+  const ch=bulkChanges();
+  if(!ch.length){toast("У выбранных камер уже такие настройки");return}
+  bulkShowPlan();
+}
 
 seedFound();   // выдача поиска по доменам: сеть у каждого своя
 syncLocalePack();applyStaticUi();
