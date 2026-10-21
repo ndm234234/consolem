@@ -1351,8 +1351,8 @@ const GROUP_RU={folder:"По папкам",server:"По серверам"};
 const GROUP_EN={folder:"By folder",server:"By server"};
 const GROUP={...GROUP_RU};
 const GROUP_IC={folder:"folder",server:"server"};
-const GROUP_HINT_RU={folder:"Домен → папки → объекты",server:"Домен → серверы → хранилища с камерами и службы"};
-const GROUP_HINT_EN={folder:"Domain → folders → objects",server:"Domain → servers → storage with cameras, and services"};
+const GROUP_HINT_RU={folder:"Домен → папки → объекты",server:"Домен → серверы → камеры, хранилища и службы"};
+const GROUP_HINT_EN={folder:"Domain → folders → objects",server:"Domain → servers → cameras, storage and services"};
 const GROUP_HINT={...GROUP_HINT_RU};
 const TVIEW_RU={cam:"Камеры и видеоустройства",acfa:"ACFA-устройства"};
 const TVIEW_EN={cam:"Cameras and video devices",acfa:"ACFA devices"};
@@ -3186,7 +3186,8 @@ function selShownAt(id,ctx){
 // Под хранилищем камера (и регистратор) нужны ради записи — открываем сразу
 // вкладку «Архив»; под сервером — обычная карточка.
 function archCtxTab(n,ctx){return ctx?.startsWith("arch:")&&(n.type==="camera"||n.type==="ipsrv")?"rec":null}
-function childSelCtx(n){return n.type==="server"?"srv:"+n.id:n.type==="archive"?"arch:"+n.id:null}
+// Под хранилищем камер в дереве нет: его галочка отмечает их там, где они стоят.
+function childSelCtx(n){return n.type==="server"?"srv:"+n.id:null}
 // Отмечен ли объект внутри контейнера: место различаем только у камер и
 // регистраторов, остальное (датчики, реле камеры) — по самому факту отметки.
 function selShownIn(x,cc){return cc&&(x.type==="camera"||x.type==="ipsrv")?selShownAt(x.id,cc):treeSel.has(x.id)}
@@ -4582,9 +4583,8 @@ function srow(s,l=1,bare=false){
   const devs=offline?[]:(s.devices||[]).filter(d=>d.type!=="det");
   const gpu=offline||slice==="acfa"?null:serverGpu(s);
   const svcHtml=devs.filter(d=>!q||matchesSearch(d,q)).map(d=>svcrow(d,l+1)).join("");
-  // Камеры стоят под сервером и ещё раз под своим хранилищем: по серверу
-  // видно все подключённые к нему камеры (и без записи, и на сетевом
-  // хранилище), по хранилищу — что именно в него пишется.
+  // Камеры стоят под сервером (и без записи, и на сетевом хранилище);
+  // под хранилищем их в дереве нет — только счётчик.
   const cams=offline?[]:serverCameras(s.id);
   const kidsHtml=(srvSlice?"":recordedCameraRows(cams,l+1,"srv:"+s.id))
     +archs.map(a=>arow(a,l+1)).join("")
@@ -4904,15 +4904,15 @@ function gpurow(sv,l){
   if(op)h+=children;
   return h;
 }
-// Хранилище в дереве: под ним камеры, которые в него пишут. Тома в дереве
-// не нужны — они в карточке хранилища. В срезах «Серверы» и «Хранилища»
-// хранилище — строка описи без детей.
+// Хранилище в дереве — строка без детей: камеры стоят под сервером, а что
+// пишется в хранилище, видно по счётчику и во вкладке «Устройства». Тома —
+// в карточке хранилища.
 function arow(a,l){
   if(slice==="acfa"||slice==="det")return"";
   const q=qval(),inventory=slice==="srv"||slice==="arch";
   const allCams=archCameras(a.id),cams=allCams.filter(selfInView);
   const selfHit=matchesStatus(a)&&matchesSearch(a,q);
-  const children=inventory?"":recordedCameraRows(allCams,l+1,"arch:"+a.id);
+  const children="";
   if(!selfHit&&!children)return"";
   const hasKids=!!children;
   const op=hasKids&&(open.has(a.id)||autoExpand());
