@@ -12042,13 +12042,22 @@ function bulkDetHtml(nodes,st){
   return card("Детекторы",`<div class="g">${bkSelect("Добавить детектор всем","addDet",DET_TYPES.map(k=>[k,i18n(k)]),null,kind?`<div class="bk-hint">${i18n("нет у")} ${missing} ${i18n("из")} ${nodes.length} — ${i18n("добавится только им")}</div>`:"")}</div>${have}
     <p class="sub">${i18n("Зоны детекции массово не задаются: после добавления зону рисуют на каждой камере.")}</p>`);
 }
+// «Убрать» снимает объект из выборки, где бы в дереве он ни был отмечен:
+// selToggle без места строки принимал камеру, отмеченную под сервером, за
+// неотмеченную и отмечал её заново.
+function bulkRemove(id){
+  treeSel.delete(id);
+  if(treeAnchor===id)treeAnchor=null;
+  if(sel===id&&treeSel.size)sel=[...treeSel][0];
+  afterSelChange(null);
+}
 function bulkListCard(nodes){
   return listCard({
     key:"bulk:list",
     title:"Состав выборки",
     items:nodes,
     text:n=>[locName(n),n.ip,modelOf(n),serverNameOf(n)],
-    row:n=>`<div class="it" onclick="pick('${n.id}')">${treeIconHtml(n)}<span>${escHtml(crumbTitle(n))}<small>${escHtml([serverNameOf(n),modelOf(n),n.ip].filter(Boolean).join(" · "))}</small></span>${bdg(n)}<button type="button" class="btn s" title="${i18n("Убрать из выборки")}" onclick="event.stopPropagation();selToggle('${n.id}')">${i18n("Убрать")}</button></div>`,
+    row:n=>`<div class="it" onclick="pick('${n.id}')">${treeIconHtml(n)}<span>${escHtml(crumbTitle(n))}<small>${escHtml([serverNameOf(n),modelOf(n),n.ip].filter(Boolean).join(" · "))}</small></span>${bdg(n)}<button type="button" class="btn s" title="${i18n("Убрать из выборки")}" onclick="event.stopPropagation();bulkRemove('${n.id}')">${i18n("Убрать")}</button></div>`,
     empty:"Выборка пуста",
     ph:"Имя, IP, модель, сервер…",
     unit:"объект|объекта|объектов"
