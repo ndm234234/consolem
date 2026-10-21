@@ -381,6 +381,7 @@ h1{margin:4px 0 10px;font-size:20px;display:flex;align-items:center;gap:10px}
 .ici-sms{color:#4fc4a0}
 .ici-ptz{color:#7eb0e8}
 .ici-storage{color:#6a9cbc}
+.ici-vol{color:#6a9cbc;opacity:.8}
 .ici-search{color:var(--bl)}
 .sub{color:var(--mu);font-size:13px;margin:0 0 10px}
 .tabs{display:flex;gap:16px;flex-wrap:wrap}.tab{background:0;border:0;color:var(--mu);padding:9px 0;border-bottom:2px solid transparent}
@@ -1308,17 +1309,18 @@ IC.sec_rules=svgIc(`<path fill="currentColor" d="M8.9 1.4 3.2 9h3.4l-1.5 5.6L12.
 IC.sec_acc=svgIc(`<circle cx="8" cy="5.2" r="2.7" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M2.9 14c0-2.8 2.3-4.4 5.1-4.4s5.1 1.6 5.1 4.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>`);
 IC.sec_sys=svgIc(`<circle cx="8" cy="8" r="2.4" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 1.6v2M8 12.4v2M1.6 8h2M12.4 8h2M3.5 3.5l1.4 1.4M11.1 11.1l1.4 1.4M12.5 3.5l-1.4 1.4M4.9 11.1l-1.4 1.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>`);
 IC.sec_log=svgIc(`<path d="M2.6 4.2h10.8M2.6 8h10.8M2.6 11.8h7.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>`);
-IC.archive=IC.storage;IC.net=IC.storage;IC.norec=IC.unalloc;IC.nofolder=IC.unalloc;IC.found=IC.connect;IC.founddev=IC.camera;
+IC.archive=IC.storage;
+IC.vol=svgIc(`<rect x="1.5" y="4.5" width="13" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="11.6" cy="8" r="1.1" fill="currentColor"/><path d="M4 8h4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>`);IC.net=IC.storage;IC.norec=IC.unalloc;IC.nofolder=IC.unalloc;IC.found=IC.connect;IC.founddev=IC.camera;
 const IC_OVERLAY_R="4.65";
 const IC_NOSIG_BADGE=`<svg class="ici-overlay-svg" viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="${IC_OVERLAY_R}" fill="#f0646a"/><path d="M3.4 3.4 6.6 6.6M6.6 3.4 3.4 6.6" stroke="#fff" stroke-width="1.35" stroke-linecap="round"/></svg>`;
 const IC_RULETMP_BADGE=`<svg class="ici-overlay-svg" viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="${IC_OVERLAY_R}" fill="#6a7f9a"/><path d="M5 5V2.25" stroke="#fff" stroke-width="1.35" stroke-linecap="round"/><path d="M5 5h2.55" stroke="#fff" stroke-width="1.15" stroke-linecap="round"/></svg>`;
 function ic(t){return `<span class="ici ici-${t||"x"}">${IC[t]||"•"}</span>`}
 const LB_RU={domain:"Домен",unalloc:"Нераспределённые серверы",server:"Сервер",camera:"Камера",ipsrv:"IP-сервер",channel:"Канал",mic:"Микрофон",sensor:"Датчик",relay:"Реле",spk:"Динамик",
   det:"Детектор",eventsrc:"Источник событий",acfa:"ACFA",acfa_sensor:"Датчик ACFA",acfa_lock:"Замок",acfa_fence:"Шлейф",
-  export:"Агент экспорта",email:"Email-оповещатель",sms:"SMS-оповещатель",ptz:"PTZ",storage:"Встроенное хранилище"};
+  export:"Агент экспорта",email:"Email-оповещатель",sms:"SMS-оповещатель",ptz:"PTZ",storage:"Встроенное хранилище",archive:"Хранилище",vol:"Том"};
 const LB_EN={domain:"Domain",unalloc:"Unassigned servers",server:"Server",camera:"Camera",ipsrv:"IP server",channel:"Channel",mic:"Microphone",sensor:"Sensor",relay:"Relay",spk:"Speaker",
   det:"Detector",eventsrc:"Event source",acfa:"ACFA",acfa_sensor:"ACFA sensor",acfa_lock:"Lock",acfa_fence:"Loop",
-  export:"Export agent",email:"Email notifier",sms:"SMS notifier",ptz:"PTZ",storage:"Built-in storage"};
+  export:"Export agent",email:"Email notifier",sms:"SMS notifier",ptz:"PTZ",storage:"Built-in storage",archive:"Storage",vol:"Volume"};
 const LB={...LB_RU};
 const SYS=new Set(["export","email","sms"]);
 const IPSUB={nvr:"NVR / видеорегистратор",io:"I/O (датчики/реле)",sip:"SIP / аудио",mic:"Микрофоны"};
@@ -1327,8 +1329,8 @@ const CATS={video:{label:"Видео",icon:"◉"},io:{label:"Ввод-вывод
 // Оси независимы: у камер осмысленны обе раскладки, у ACFA только папки, у
 // служб и серверов только серверы. Новый срез добавляется строкой в пяти
 // константах ниже — и больше нигде.
-const SLICE_RU={all:"Оборудование",cam:"Камеры",acfa:"ОПС/СКД",srv:"Серверы",arch:"Архивы",det:"Детекторы"};
-const SLICE_EN={all:"Equipment",cam:"Cameras",acfa:"ACFA",srv:"Servers",arch:"Archives",det:"Detectors"};
+const SLICE_RU={all:"Оборудование",cam:"Камеры",acfa:"ОПС/СКД",srv:"Серверы",arch:"Хранилища",det:"Детекторы"};
+const SLICE_EN={all:"Equipment",cam:"Cameras",acfa:"ACFA",srv:"Servers",arch:"Storage",det:"Detectors"};
 const SLICE={...SLICE_RU};
 const SLICE_SW_RU={...SLICE_RU};
 const SLICE_SW_EN={...SLICE_EN};
@@ -1345,8 +1347,8 @@ const GROUP_RU={folder:"По папкам",server:"По серверам"};
 const GROUP_EN={folder:"By folder",server:"By server"};
 const GROUP={...GROUP_RU};
 const GROUP_IC={folder:"folder",server:"server"};
-const GROUP_HINT_RU={folder:"Домен → папки → объекты",server:"Домен → серверы → камеры, архивы и службы"};
-const GROUP_HINT_EN={folder:"Domain → folders → objects",server:"Domain → servers → cameras, archives and services"};
+const GROUP_HINT_RU={folder:"Домен → папки → объекты",server:"Домен → серверы → хранилища с камерами и службы"};
+const GROUP_HINT_EN={folder:"Domain → folders → objects",server:"Domain → servers → storage with cameras, and services"};
 const GROUP_HINT={...GROUP_HINT_RU};
 const TVIEW_RU={cam:"Камеры и видеоустройства",acfa:"ACFA-устройства"};
 const TVIEW_EN={cam:"Cameras and video devices",acfa:"ACFA devices"};
@@ -1717,6 +1719,7 @@ function nodeDomainId(n){
   if(n.domainId)return n.domainId;
   if(n.type==="folder")return folderDomain(n.id);
   if(n.type==="archive")return archDomainId(n);
+  if(n.type==="vol")return archDomainId(archById(n.archId));
   if(n.type==="server")return SERVER_DOMAIN[n.id]||domainOf(n.id)?.id||unallocDomainOf(n.id);
   if(n.type==="gpu")return SERVER_DOMAIN[n.serverId]||null;
   if(DEVICE_DOMAIN[n.id])return DEVICE_DOMAIN[n.id];
@@ -1825,30 +1828,45 @@ function unfolderedDevices(did){
   walkFolders(f=>{if(f.domain===did||folderDomain(f.id)===did)f.items.forEach(id=>inF.add(id))});
   return devicePool.filter(d=>DEVICE_DOMAIN[d.id]===did&&!inF.has(d.id));
 }
-// Архив живёт на сервере — это и есть единственная связь камеры с сервером.
-// Запись не обязана идти на сервер той же площадки: КПП пишется в офисный архив.
+// Хранилище живёт на сервере — это и есть единственная связь камеры с сервером.
+// Запись не обязана идти на сервер той же площадки: КПП пишется в офисное хранилище.
+// Хранилище — объект: владелец (сервер или домен), срок хранения, шифрование
+// и тома. Камера привязывается к хранилищу, а не к тому; том — путь, объём, занято.
 const arch=[
-  {id:"a1",type:"archive",name:"Архив — Офис",server:"s1",disk:"D:",size:"4 ТБ",used:"68%",days:30,enc:true},
-  {id:"a2",type:"archive",name:"Архив — Склад",server:"s2",disk:"E:",size:"8 ТБ",used:"42%",days:14,enc:false},
-  {id:"a3",type:"archive",name:"Архив — Филиал",server:"s3",disk:"D:",size:"2 ТБ",used:"55%",days:14,enc:false},
-  {id:"a4",type:"archive",name:"Архив — Цех",server:"s4",disk:"E:",size:"6 ТБ",used:"31%",days:21,enc:true},
-  {id:"a5",type:"archive",name:"Архив — ТЦ «Север»",server:"s8",disk:"D:",size:"12 ТБ",used:"47%",days:30,enc:false},
-  {id:"a6",type:"archive",name:"Архив — Логистика",server:"s9",disk:"E:",size:"8 ТБ",used:"61%",days:14,enc:false},
-  // Сетевые тома принадлежат домену, а не конкретному серверу
-  {id:"a7",type:"archive",name:"Сетевой архив — NAS",domain:"d1",disk:"\\\\nas01\\vms",size:"48 ТБ",used:"37%",days:60,enc:true},
-  {id:"a8",type:"archive",name:"Сетевой архив — Склад",domain:"d2",disk:"\\\\nas02\\wh",size:"24 ТБ",used:"12%",days:45,enc:false}
+  {id:"a1",type:"archive",name:"Хранилище — Офис",server:"s1",days:30,enc:true,vols:[["D:","4 ТБ","68%"]]},
+  {id:"a2",type:"archive",name:"Хранилище — Склад",server:"s2",days:14,enc:false,vols:[["E:","8 ТБ","42%"],["F:","8 ТБ","23%"]]},
+  {id:"a3",type:"archive",name:"Хранилище — Филиал",server:"s3",days:14,enc:false,vols:[["D:","2 ТБ","55%"]]},
+  {id:"a4",type:"archive",name:"Хранилище — Цех",server:"s4",days:21,enc:true,vols:[["E:","6 ТБ","31%"]]},
+  {id:"a5",type:"archive",name:"Хранилище — ТЦ «Север»",server:"s8",days:30,enc:false,vols:[["D:","12 ТБ","47%"],["E:","12 ТБ","19%"]]},
+  {id:"a6",type:"archive",name:"Хранилище — Логистика",server:"s9",days:14,enc:false,vols:[["E:","8 ТБ","61%"]]},
+  // Сетевые хранилища принадлежат домену, а не конкретному серверу
+  {id:"a7",type:"archive",name:"Сетевое хранилище — NAS",domain:"d1",days:60,enc:true,vols:[["\\\\nas01\\vms","48 ТБ","37%"],["\\\\nas01\\vms2","48 ТБ","8%"]]},
+  {id:"a8",type:"archive",name:"Сетевое хранилище — Склад",domain:"d2",days:45,enc:false,vols:[["\\\\nas02\\wh","24 ТБ","12%"]]}
 ];
 // Тома у крупного узла считают десятками, а сетевых хранилищ в домене столько
 // же, сколько площадок: и то, и другое — списки, которые листают.
 (()=>{
   const VOL=["E:","F:","G:","H:","I:","J:","K:","L:","M:","N:","O:"];
-  VOL.forEach((disk,i)=>arch.push({id:"a1v"+i,type:"archive",name:"Архив — Офис, том "+(i+2),server:"s1",
-    disk,size:[2,4,6,8,12][i%5]+" ТБ",used:(17+i*6)+"%",days:[7,14,21,30,60][i%5],enc:i%3===0}));
+  VOL.forEach((disk,i)=>arch[0].vols.push([disk,[2,4,6,8,12][i%5]+" ТБ",(17+i*6)+"%"]));
   ["Резерв","Долгосрочный","Тревоги","Проходная","Парковка","Цех","КПП","Ангар","Склад ЗИП","Экспорт","Отчётность"]
-    .forEach((name,i)=>arch.push({id:"a7n"+i,type:"archive",name:"Сетевой архив — "+name,domain:"d1",
-      disk:"\\\\nas0"+(1+i%3)+"\\"+["vms","arc","alarm","gate","park","shop","kpp","hangar","zip","exp","rep"][i],
-      size:[8,12,24,36,48][i%5]+" ТБ",used:(9+i*7)+"%",days:[14,30,45,60,90][i%5],enc:i%2===0}));
+    .forEach((name,i)=>arch.push({id:"a7n"+i,type:"archive",name:"Сетевое хранилище — "+name,domain:"d1",
+      days:[14,30,45,60,90][i%5],enc:i%2===0,
+      vols:[["\\\\nas0"+(1+i%3)+"\\"+["vms","arc","alarm","gate","park","shop","kpp","hangar","zip","exp","rep"][i],[8,12,24,36,48][i%5]+" ТБ",(9+i*7)+"%"]]}));
 })();
+let _vseq=0;
+function addVol(a,disk,size,used){
+  const v={id:a.id+":v"+(++_vseq),type:"vol",name:disk,disk,size,used:used||"0%",archId:a.id,online:true};
+  (a.vols||(a.vols=[])).push(v);return v;
+}
+arch.forEach(a=>{const src=a.vols||[];a.vols=[];src.forEach(([d,sz,u])=>addVol(a,d,sz,u))});
+function archVols(a){return a?.vols||[]}
+function volById(id){if(typeof id!=="string"||!id.includes(":v"))return null;for(const a of arch){const v=(a.vols||[]).find(x=>x.id===id);if(v)return v}return null}
+function sizeTb(str){const m=/([\d.,]+)\s*(ТБ|ГБ|TB|GB)/.exec(str||"");if(!m)return 0;const n=parseFloat(m[1].replace(",","."));return/Г|G/.test(m[2])?n/1024:n}
+function fmtTb(n){return n>=1?String(Math.round(n*10)/10).replace(".",",")+" "+i18n("ТБ"):Math.round(n*1024)+" "+i18n("ГБ")}
+function archSizeTb(a){return archVols(a).reduce((t,v)=>t+sizeTb(v.size),0)}
+function archSize(a){return fmtTb(archSizeTb(a))}
+function archUsed(a){const t=archSizeTb(a);if(!t)return"0%";const u=archVols(a).reduce((x,v)=>x+sizeTb(v.size)*(parseFloat(v.used)||0)/100,0);return Math.round(u/t*100)+"%"}
+function archDiskLabel(a){const v=archVols(a);return v.length===1?v[0].disk:`${v.length} ${i18n(plural(v.length,"том|тома|томов"))}`}
 // Камеры площадок без архива (Ангар, Парковка, Резервный узел) не пишутся вовсе
 const RECORDS_TO={s1:"a1",s5:"a1",s2:"a2",s10:"a2",s3:"a3",s4:"a4",s8:"a5",s9:"a6",s7:"a7"};
 Object.entries(srvDevices).forEach(([sid,list])=>{
@@ -1970,6 +1988,7 @@ function find(id){
   let o;walkAll((n,p)=>{if(n.id===id)o={n,p}});
   if(!o){const f=folderById(id);if(f)o={n:f,p:folderParent(id)}}
   if(!o){const a=archById(id);if(a)o={n:a,p:archOwner(a)}}
+  if(!o){const v=volById(id);if(v)o={n:v,p:archById(v.archId)}}
   if(!o&&id.startsWith("gpu:")){const sv=servers.find(x=>x.id===id.slice(4));if(sv&&serverGpu(sv))o={n:gpuNode(sv),p:sv}}
   if(!o&&id.startsWith("norec:")){const d=domains.find(x=>x.id===id.slice(6));if(d)o={n:norecNode(d.id),p:d}}
   if(!o&&id.startsWith("nofolder:")){const d=domains.find(x=>x.id===id.slice(9));if(d)o={n:nofolderNode(d.id),p:d}}
@@ -2201,7 +2220,7 @@ function deleteDomain(id){
   const srvN=(d.servers||[]).length,unN=(d.unallocServers||[]).length;
   const devN=domainDeviceCount(d),fldN=domainFolderCount(id),arcN=domainArchives(id).length;
   const items=[[srvN,"серверов в домене"],[unN,"нераспределённых серверов"],[devN,"устройств на серверах"],
-    [fldN,"папок"],[arcN,"сетевых архивов"]].filter(([n])=>n>0);
+    [fldN,"папок"],[arcN,"сетевых хранилищ"]].filter(([n])=>n>0);
   const body=`<p>${i18n("Будет удалён домен")} «${escHtml(locName(d))}».</p>`+
     (items.length
       ?`<div class="dom-del-list">${items.map(([n,l])=>`<div><span>${i18n(l)}</span><b>${n}</b></div>`).join("")}</div>
@@ -2365,7 +2384,7 @@ function addContext(){
 function isSvc(n){return SYS.has(n.type)||!!n.server}
 function treeKind(n){
   if(n.type==="det"||n.type==="domain"||n.type==="unalloc"||n.type==="folder")return null;
-  if(n.type==="archive"||n.type==="norec"||n.type==="nofolder"||n.type==="gpu")return null;
+  if(n.type==="archive"||n.type==="vol"||n.type==="norec"||n.type==="nofolder"||n.type==="gpu")return null;
   if(n.type==="found"||n.type==="founddev")return null;
   if(ACFA_NODE_IDS.has(n.id))return"acfa";
   if(isSvc(n))return"sys";
@@ -2505,7 +2524,7 @@ function treeRowMeta(n,q,shownLen,expanded,ctx){
 // службы; срез «Все» берёт их все, остальные по одному, а срез «Серверы»
 // показывает не устройства, а состав сервера.
 function inSlice(n){
-  if(slice==="arch")return n.type==="archive"||(n.type==="server"&&!isUnallocated(n.id));
+  if(slice==="arch")return n.type==="archive"||n.type==="vol"||(n.type==="server"&&!isUnallocated(n.id));
   if(slice==="det")return n.type==="camera"||n.type==="det";
   const k=treeKind(n);
   if(!k)return false;
@@ -2592,7 +2611,7 @@ function expandTo(id,ctx){
   if(sv){open.add(sv.id);const dom=domainOf(sv.id);if(dom)open.add(dom.id)}
   else if(did)open.add(norecId(did));
   let node=find(id)?.n;
-  if(node&&node.type==="camera"&&node.arch&&!archServer(archById(node.arch)))open.add(node.arch);
+  if(node&&node.type==="camera"&&node.arch)open.add(node.arch);
   // Детектор виден в ветке GPU того сервера, где он считается
   if(node&&node.type==="det"){
     const cam=find(id)?.p,sid=cam?detServerId(cam,node):null;
@@ -2703,13 +2722,14 @@ registerJumpSource(()=>{                          // объекты дерева
   const out=[];
   walkAll(n=>{if(n.type==="det"||isFav(n.id))return;out.push(jumpNodeTarget(n))});
   flatFolders().forEach(f=>{if(!isFav(f.id))out.push(jumpNodeTarget(f))});
-  arch.forEach(a=>{if(!isFav(a.id))out.push(jumpNodeTarget(a))});
+  arch.forEach(a=>{if(!isFav(a.id))out.push(jumpNodeTarget(a));archVols(a).forEach(v=>{if(!isFav(v.id))out.push(jumpNodeTarget(v))})});
   return out;
 });
 function jumpNodeTarget(n){
-  const kind=n.type==="folder"?"Папка":n.type==="archive"?"Архив":LB[n.type]||i18n("Объект");
+  const kind=n.type==="folder"?"Папка":n.type==="archive"?"Хранилище":n.type==="vol"?"Том":LB[n.type]||i18n("Объект");
   const sub=n.type==="folder"?folderFullName(n.id)
-    :n.type==="archive"?(archServer(n)?locName(archServer(n)):i18n("Сетевой том"))
+    :n.type==="archive"?(archServer(n)?locName(archServer(n)):`${i18n("Сетевое")} · ${locName(archDomain(n))}`)
+    :n.type==="vol"?locName(archById(n.archId))
     :n.type==="domain"||n.type==="server"||n.type==="unalloc"?i18n("Инфраструктура")
     :(foldersOfDevice(n.id)[0]?folderPathName(foldersOfDevice(n.id)[0].id):i18n("Без папки"));
   // Тип в сопоставление не идёт: дерево по нему не ищет, и слово «камера»
@@ -2723,12 +2743,12 @@ function jumpToNode(n){
   const wasFiltered=hasActiveFilters();
   if(wasFiltered)clearGearFilters();
   goApp("hw");
-  if(n.type!=="domain"&&n.type!=="server"&&n.type!=="unalloc"&&n.type!=="folder"&&n.type!=="archive"){
+  if(n.type!=="domain"&&n.type!=="server"&&n.type!=="unalloc"&&n.type!=="folder"&&n.type!=="archive"&&n.type!=="vol"){
     const k=treeKind(n);
     if(k&&!inSlice(n))slice=k==="sys"?"srv":k;
     syncViews();
   }
-  if(n.type==="archive"&&!["cam","srv","arch"].includes(slice)){slice="srv";syncViews()}
+  if((n.type==="archive"||n.type==="vol")&&!["all","cam","srv","arch"].includes(slice)){slice="srv";syncViews()}
   if(n.type==="server"&&group()!=="server")groupBy[slice]=sliceGroups().includes("server")?"server":group();
   if(n.type==="folder"&&group()!=="folder")groupBy[slice]=sliceGroups().includes("folder")?"folder":group();
   treeMatchCache.clear();searchMatchCache.clear();
@@ -3881,7 +3901,7 @@ function setGroup(g){
 // Выбранный объект переживает смену осей, пока он в них существует.
 function keepSelectionInSlice(){
   const f=find(sel);
-  const KEEP=["domain","unalloc","server","folder","archive","norec","nofolder","gpu","found","founddev","det"];
+  const KEEP=["domain","unalloc","server","folder","archive","vol","norec","nofolder","gpu","found","founddev","det"];
   if(f&&(KEEP.includes(f.n.type)||selfInView(f.n)))return;
   const hit=firstMatching();
   if(hit)sel=hit.id;else sel=domains[0]?.id||sel;
@@ -4108,7 +4128,7 @@ function canInspectorAdd(n){
   if(n.type==="server")return !isUnallocated(n.id);
   // У папки, архива и панели найденных заведение разложено на отдельные
   // кнопки рядом — общий «Добавить устройство» там больше не нужен.
-  if(n.type==="folder"||n.type==="archive"||n.type==="found"||n.type==="founddev")return false;
+  if(n.type==="folder"||n.type==="archive"||n.type==="vol"||n.type==="found"||n.type==="founddev")return false;
   return app==="hw";
 }
 // Первой кнопкой — откуда берут устройства чаще всего: из того, что видно в сети.
@@ -4159,17 +4179,17 @@ function inspectorAddBtn(n){
   const act=n.type==="domain"?"openW('server')":(n.type==="server"?"openW('svc')":"openW()");
   return archHeadBtn(n)+`<button class="btn s" onclick="${act}">＋ ${lb}</button>`;
 }
-// Архив создают на сервере (физический том) или на домене (сетевой).
+// Хранилище создают на сервере (локальное) или на домене (сетевое).
 function archHeadBtn(n){
   if(!n||(n.type!=="server"&&n.type!=="domain"))return"";
   if(n.type==="server"&&isUnallocated(n.id))return"";
-  const net=n.type==="domain",lb=net?i18n("Сетевой архив"):i18n("Архив");
-  return`<button type="button" class="btn s" title="${net?i18n("Создать сетевой архив домена"):i18n("Создать архив на этом сервере")}" onclick="addArchive('${n.id}')">＋ ${lb}</button>`;
+  const net=n.type==="domain",lb=net?i18n("Сетевое хранилище"):i18n("Хранилище");
+  return`<button type="button" class="btn s" title="${net?i18n("Создать сетевое хранилище домена"):i18n("Создать хранилище на этом сервере")}" onclick="addArchive('${n.id}')">＋ ${lb}</button>`;
 }
 function canWizardAdd(n){return n&&(n.type==="domain"||n.type==="server")}
 function canTreeCtx(n){
   if(!n||n.type==="det")return false;
-  if(n.type==="domain"||n.type==="server"||n.type==="unalloc"||n.type==="folder"||n.type==="archive")return true;
+  if(n.type==="domain"||n.type==="server"||n.type==="unalloc"||n.type==="folder"||n.type==="archive"||n.type==="vol")return true;
   return treeKind(n)===tview;
 }
 function canTreeCtxAdd(n){
@@ -4180,7 +4200,7 @@ function canTreeCtxAdd(n){
 }
 function canTreeCtxDelete(n){
   if(!n)return false;
-  if(n.type==="archive")return false;   // у архива своё удаление — deleteArchive
+  if(n.type==="archive"||n.type==="vol")return false;   // у хранилища и тома своё удаление
   if(n.type==="ipsrv"||n.type==="camera"||n.type==="acfa")return true;
   return isSvc(n);
 }
@@ -4353,6 +4373,8 @@ function openTreeCtx(n,xy){
       addItems.push(tctxItem(i18n("Добавить найденные"),`closeTreeCtx();lanShowFound('${n.id}')`,tctxPlusIcon()));
       addItems.push(tctxItem(i18n("Добавить вручную"),`closeTreeCtx();lanOpenWizard('manual')`,tctxPlusIcon()));
       addItems.push(tctxItem(i18n("Добавить из файла"),`closeTreeCtx();lanOpenWizard('csv')`,tctxPlusIcon()));
+      addItems.push(tctxSep());
+      addItems.push(tctxItem(i18n("Добавить том"),`closeTreeCtx();addVolume('${n.id}')`,tctxPlusIcon()));
     }else if(n.type==="domain"){
       // Всё, что заводит карточка домена: устройства — тремя путями, как у
       // архива, дальше то, из чего домен состоит. Раскладка больше не решает,
@@ -4365,16 +4387,16 @@ function openTreeCtx(n,xy){
       addItems.push(tctxItem(i18n("Добавить сервер"),`closeTreeCtx();openW('server')`,tctxPlusIcon()));
       addItems.push(tctxItem(i18n("Добавить серверы по IP"),`closeTreeCtx();openFindServerByIp('${n.id}')`,tctxPlusIcon()));
       addItems.push(tctxItem(i18n("Создать папку"),`addSubfolder(null,'${n.id}')`,tctxPlusIcon()));
-      addItems.push(tctxItem(i18n("Создать сетевой архив"),`closeTreeCtx();addArchive('${n.id}')`,tctxPlusIcon()));
+      addItems.push(tctxItem(i18n("Создать сетевое хранилище"),`closeTreeCtx();addArchive('${n.id}')`,tctxPlusIcon()));
     }else if(n.type==="server"&&!isUnallocated(n.id)){
       // Как у домена: всё, что заводит карточка сервера. Устройства — тремя
-      // путями, дальше службы и архив (физический том этого сервера).
+      // путями, дальше службы и хранилище этого сервера.
       addItems.push(tctxItem(i18n("Добавить найденные"),`closeTreeCtx();lanShowFound('${n.id}')`,tctxPlusIcon()));
       addItems.push(tctxItem(i18n("Добавить вручную"),`closeTreeCtx();lanOpenWizard('manual')`,tctxPlusIcon()));
       addItems.push(tctxItem(i18n("Добавить из файла"),`closeTreeCtx();lanOpenWizard('csv')`,tctxPlusIcon()));
       addItems.push(tctxSep());
       addItems.push(tctxItem(addTreeLabel(n),`closeTreeCtx();openW('svc')`,tctxPlusIcon()));
-      addItems.push(tctxItem(i18n("Создать архив"),`closeTreeCtx();addArchive('${n.id}')`,tctxPlusIcon()));
+      addItems.push(tctxItem(i18n("Создать хранилище"),`closeTreeCtx();addArchive('${n.id}')`,tctxPlusIcon()));
     }else if(canTreeCtxAdd(n)){
       const lb=addTreeLabel(n);
       const act=n.type==="server"?`closeTreeCtx();openW('svc')`:"closeTreeCtx();openW()";
@@ -4396,7 +4418,8 @@ function openTreeCtx(n,xy){
         rest.push(tctxItem(i18n("Убрать все объекты"),`clearFolder('${n.id}')`));
         rest.push(tctxItem(i18n("Удалить папку"),`deleteFolder('${n.id}')`));
       }
-      if(n.type==="archive")rest.push(tctxItem(i18n("Удалить архив"),`deleteArchive('${n.id}')`));
+      if(n.type==="archive")rest.push(tctxItem(i18n("Удалить хранилище"),`deleteArchive('${n.id}')`));
+      if(n.type==="vol")rest.push(tctxItem(i18n("Удалить том"),`deleteVolume('${n.id}')`));
     }
     if(n.type==="domain"){
       rest.push(tctxItem(i18n("Удалить домен"),`deleteDomain('${n.id}')`,null,!canDeleteDomain()));
@@ -4486,11 +4509,10 @@ function srow(s,l=1,bare=false){
   const devs=offline?[]:(s.devices||[]).filter(d=>d.type!=="det");
   const gpu=offline||slice==="acfa"?null:serverGpu(s);
   const svcHtml=devs.filter(d=>!q||matchesSearch(d,q)).map(d=>svcrow(d,l+1)).join("");
-  // Архивы, NVR и отдельные камеры — соседи под сервером. Собираем камеры
-  // всех его архивов до группировки, чтобы один NVR не повторялся по томам.
+  // Под сервером — его хранилища, GPU и службы. Камеры стоят внутри своего
+  // хранилища: именно через него они и попадают на сервер.
   const cams=archs.flatMap(a=>archCameras(a.id));
-  const kidsHtml=(srvSlice?"":recordedCameraRows(cams,l+1,"srv:"+s.id))
-    +archs.map(a=>arowFlat(a,l+1)).join("")
+  const kidsHtml=archs.map(a=>arow(a,l+1)).join("")
     +(gpu?gpurow(s,l+1):"")+svcHtml;
   if(!srvHit&&!kidsHtml)return"";
   const cnt=srvSlice?devs.length:cams.length;
@@ -4505,9 +4527,7 @@ function drow(d){
   const q=qval();
   const offline=hasNoSignal(d);
   const selfHit=matchesStatus(d)&&matchesSearch(d,q);
-  const netHtml=offline?"":(slice==="srv"
-    ?domainArchives(d.id).map(a=>arowFlat(a,1)).join("")
-    :domainArchives(d.id).map(a=>arow(a,1)).filter(Boolean).join(""));
+  const netHtml=offline?"":domainArchives(d.id).map(a=>arow(a,1)).join("");
   const childHtml=(offline?"":d.servers.map(s=>srow(s,1)).filter(Boolean).join(""))+netHtml;
   // ОПС/СКД не записываются в архив: без сервера они остаются под доменом.
   const acfaHtml=slice==="acfa"&&!offline?devicePool.filter(n=>deviceDomain(n.id)===d.id&&!srv(n.id)&&hasTreeIn(n)&&(!q||vis(n,q))).map(n=>nrow(n,1)).join(""):"";
@@ -4761,11 +4781,11 @@ function treeArchives(){
   return scopedDomains().map(d=>{
     const serverRows=d.servers.map(s=>{
       const list=serverArchives(s.id).filter(matchesStatus);
-      const children=list.map(a=>arowFlat(a,2)).join("");
+      const children=list.map(a=>arow(a,2)).join("");
       if(!children&&!(matchesStatus(s)&&matchesSearch(s,q)))return"";
       return sliceBranchRow(s,1,children,sliceParentCount(s.id));
     }).join("");
-    const network=domainArchives(d.id).filter(matchesStatus).map(a=>arowFlat(a,1)).join("");
+    const network=domainArchives(d.id).filter(matchesStatus).map(a=>arow(a,1)).join("");
     const children=serverRows+network;
     return children||retainEmptySliceParents()||(matchesStatus(d)&&matchesSearch(d,q))?sliceBranchRow(d,0,children,sliceParentCount(d.id)):"";
   }).join("");
@@ -4809,30 +4829,32 @@ function gpurow(sv,l){
   if(op)h+=children;
   return h;
 }
-// Локальный архив — строка описи; его камеры показаны под сервером.
-function arowFlat(a,l){
-  if(slice==="cam"||slice==="acfa")return"";
-  const q=qval(),cams=archCameras(a.id);
-  if(!matchesStatus(a)||!matchesSearch(a,q))return"";
-  return`<div class="n srv ${sel===a.id?"on":""}${treeRenameId===a.id?" renaming":""}" style="--l:${l}"${treeRowPick(a.id)}${treeCtxAttr(a.id)}>
-    <span class="tw"></span>${ic("storage")}${treeRenameId===a.id?treeNameCell(a,q):`<span class="nm">${hlText(locName(a),q)}</span>`}
-    ${treeTail({tags:`<span class="tag">${archIsNetwork(a)?i18n("сетевой"):i18n("локальный")}</span>`,cnt:treeCntHtml(cams.length),acts:a.id})}</div>`;
-}
+// Хранилище в дереве: под ним тома, затем камеры, которые в него пишут.
+// В срезах «Серверы» и «Хранилища» — опись: только тома.
 function arow(a,l){
-  if(slice==="acfa")return"";
-  const q=qval();
-  const allCams=archCameras(a.id),cams=allCams.filter(selfInView);
-  if(slice==="cam")return recordedCameraRows(allCams,l,"arch:"+a.id);
-  const children=recordedCameraRows(allCams,l+1,"arch:"+a.id);
+  if(slice==="acfa"||slice==="det")return"";
+  const q=qval(),inventory=slice==="srv"||slice==="arch";
+  const allCams=inventory?[]:archCameras(a.id),cams=allCams.filter(selfInView);
   const selfHit=matchesStatus(a)&&matchesSearch(a,q);
+  const vols=archVols(a).filter(v=>!q||selfHit||matchesSearch(v,q));
+  const volRows=vols.map(v=>vrow(v,l+1)).join("");
+  const camRows=inventory?"":recordedCameraRows(allCams,l+1,"arch:"+a.id);
+  const children=volRows+camRows;
   if(!selfHit&&!children)return"";
   const hasKids=!!children;
   const op=hasKids&&(open.has(a.id)||autoExpand());
-  let h=`<div class="n srv ${sel===a.id?"on":""}${sliceParentClass(a.id)}${treeRenameId===a.id?" renaming":""}" style="--l:${l}"${treeRowPick(a.id)}${treeCtxAttr(a.id)}${treeExpandMeta(a.id,"srv",hasKids)}>
+  const cnt=inventory?archVols(a).length:(hasSliceContext()?sliceParentCount(a.id):cams.length);
+  let h=`<div class="n srv stor ${sel===a.id?"on":""}${inventory?"":sliceParentClass(a.id)}${treeRenameId===a.id?" renaming":""}" style="--l:${l}"${treeRowPick(a.id)}${treeCtxAttr(a.id)}${treeExpandMeta(a.id,"srv",hasKids)}>
     ${treeChevron(a.id,"srv",hasKids,op)}
-    ${ic("storage")}${treeRenameId===a.id?treeNameCell(a,q):`<span class="nm">${hlText(locName(a),selfHit?q:"")}</span>`}${treeTail({cnt:treeCntHtml(hasSliceContext()?sliceParentCount(a.id):cams.length),acts:a.id})}</div>`;
+    ${ic("storage")}${treeRenameId===a.id?treeNameCell(a,q):`<span class="nm">${hlText(locName(a),selfHit?q:"")}</span>`}${treeTail({tags:`<span class="tag">${archIsNetwork(a)?i18n("сетевое"):i18n("локальное")}</span>`,cnt:treeCntHtml(cnt),acts:a.id})}</div>`;
   if(op)h+=children;
   return h;
+}
+// Том — лист хранилища: путь, объём, занято.
+function vrow(v,l){
+  const q=qval();
+  return`<div class="n vol ${sel===v.id?"on":""}" style="--l:${l}"${treeRowPick(v.id)}${treeCtxAttr(v.id)}>
+    <span class="tw"></span>${ic("vol")}<span class="nm">${hlText(locName(v),q)}</span>${treeTail({tags:`<span class="tag">${escHtml(v.size)}</span><span class="tag">${escHtml(v.used)}</span>`,acts:v.id})}</div>`;
 }
 // Камеры, для которых запись не настроена: сервера у них нет вовсе
 function norow(d,l){
@@ -4869,6 +4891,7 @@ function tabsFor(n){
   if(n.type==="server"&&isUnallocated(n.id))return[];
   if(n.type==="server")return[["gen","Общие"],["cams","Устройства"],["svc","Службы"],["disk","Хранилище"],["net","Сеть"]];
   if(n.type==="archive")return[["gen","Хранилище"],["cams","Устройства"]];
+  if(n.type==="vol")return[];
   if(n.type==="norec"||n.type==="nofolder"||n.type==="gpu"||n.type==="det")return[];
   if(n.type==="found"||n.type==="founddev")return[];
 
@@ -6035,17 +6058,42 @@ function form(n){
   if(n.type==="found")return foundCardHtml(n.domainId);
   if(n.type==="founddev")return foundDeviceCardHtml(n);
   if(n.type==="archive"){
-    const sv=archServer(n),cams=archCameras(n.id),net=archIsNetwork(n);
+    const sv=archServer(n),cams=archCameras(n.id),net=archIsNetwork(n),vols=archVols(n);
     if(tab==="cams")return lanCardHtml(n);
-    return card("Параметры архива",`<div class="nt ${net?"":"ok"}">${archOwnerLine(n)}</div>
-      <div class="g" style="margin-top:10px">${fld("Имя",locName(n))}${fld(net?"Сетевой путь":"Диск",n.disk)}${fld("Объём",n.size)}${fld("Срок, дн",n.days,"number")}</div>
+    return card("Параметры хранилища",`<div class="nt ${net?"":"ok"}">${archOwnerLine(n)}</div>
+      <div class="g" style="margin-top:10px">${fld("Имя",locName(n))}${fld("Срок, дн",n.days,"number")}</div>
       <div class="ln"><div>${i18n("Шифрование")}</div><div class="sw ${n.enc?"on":""}" onclick="this.classList.toggle('on');setD(true)"></div></div>
       <div class="mx" style="margin-top:10px">
         <button type="button" class="mc" onclick="goTab('cams')"><span>${i18n("Камер пишется")}</span><b>${cams.length}</b></button>
-        <div class="mc"><span>${i18n("Занято")}</span><b>${n.used}</b></div>
+        <div class="mc"><span>${i18n("Томов")}</span><b>${vols.length}</b></div>
+        <div class="mc"><span>${i18n("Объём")}</span><b>${archSize(n)}</b></div>
+        <div class="mc"><span>${i18n("Занято")}</span><b>${archUsed(n)}</b></div>
       </div>
-      <p class="sub" style="margin-top:10px">${net?i18n("Камеры сетевого тома не закреплены за сервером — запись ведёт любой сервер домена.")
-        :`${i18n("Сервер:")} <b>${escHtml(sv?locName(sv):"—")}</b>. ${i18n("Камера попадает под сервер именно через архив.")}`}</p>`);
+      <p class="sub" style="margin-top:10px">${net?i18n("Камеры сетевого хранилища не закреплены за сервером — запись ведёт любой сервер домена.")
+        :`${i18n("Сервер:")} <b>${escHtml(sv?locName(sv):"—")}</b>. ${i18n("Камера попадает под сервер именно через хранилище.")}`}</p>`)+
+      listCard({
+        key:"avol:"+n.id,
+        title:"Тома",
+        items:vols,
+        text:v=>[v.disk,v.size],
+        row:v=>`<div class="it" onclick="pick('${v.id}')"><span>${ic("vol")}</span><span>${escHtml(v.disk)}<small>${escHtml(v.size)} · ${i18n("занято")} ${escHtml(v.used)}</small></span></div>`,
+        empty:"Томов нет — записывать некуда",
+        ph:"Путь…",
+        unit:"том|тома|томов",
+        head:`<button type="button" class="btn s" onclick="addVolume('${n.id}')">＋ ${i18n("Том")}</button>`
+      })+
+      `<p class="sub">${i18n("Срок хранения и шифрование — на хранилище, тома только хранят записи. Камеры привязаны к хранилищу и в дереве стоят под ним.")}</p>`;
+  }
+  if(n.type==="vol"){
+    const a=archById(n.archId),net=archIsNetwork(a);
+    return card("Том хранилища",`<div class="nt ok">${i18n("Том хранилища")} <button type="button" class="lk" onclick="pick('${a.id}')"><b>${escHtml(locName(a))}</b></button></div>
+      <div class="g" style="margin-top:10px">${fld(net?"Сетевой путь":"Диск",n.disk)}${fld("Объём",n.size)}</div>
+      <div class="mx" style="margin-top:10px">
+        <div class="mc"><span>${i18n("Занято")}</span><b>${escHtml(n.used)}</b></div>
+        <div class="mc"><span>${i18n("Томов в хранилище")}</span><b>${archVols(a).length}</b></div>
+      </div>
+      <p class="sub" style="margin-top:10px">${i18n("Срок хранения и шифрование задаются на хранилище; у тома только путь и объём.")}</p>
+      <button type="button" class="btn s" style="margin-top:10px" onclick="deleteVolume('${n.id}')">${i18n("Удалить том")}</button>`);
   }
   if(n.type==="gpu"){
     const sv=servers.find(x=>x.id===n.serverId),g=n.gpu||{};
@@ -6126,14 +6174,14 @@ function form(n){
     if(tab==="srvs")return domainServersCard(n)+
       listCard({
         key:"darc:"+n.id,
-        title:"Сетевые архивы домена",
+        title:"Сетевые хранилища домена",
         items:domainArchives(n.id),
-        text:a=>[locName(a),a.disk,a.size],
-        row:a=>`<div class="it" onclick="pick('${a.id}')"><span>${ic("storage")}</span><span>${escHtml(locName(a))}<small>${escHtml(a.disk)} · ${a.size} · ${archCameras(a.id).length} ${i18n("камер")}</small></span></div>`,
-        empty:"Сетевых архивов нет",
-        ph:"Имя или диск…",
-        unit:"архив|архива|архивов",
-        head:`<button type="button" class="btn s" onclick="addArchive('${n.id}')">＋ ${i18n("Сетевой архив")}</button>`
+        text:a=>[locName(a),...archVols(a).map(v=>v.disk),archSize(a)],
+        row:a=>`<div class="it" onclick="pick('${a.id}')"><span>${ic("storage")}</span><span>${escHtml(locName(a))}<small>${escHtml(archDiskLabel(a))} · ${archSize(a)} · ${archCameras(a.id).length} ${i18n("камер")}</small></span></div>`,
+        empty:"Сетевых хранилищ нет",
+        ph:"Имя или путь…",
+        unit:"хранилище|хранилища|хранилищ",
+        head:`<button type="button" class="btn s" onclick="addArchive('${n.id}')">＋ ${i18n("Сетевое хранилище")}</button>`
       });
     const hw=n.servers.reduce((a,s)=>a+(s.devices||[]).filter(x=>x.type!=="det").length,0);// службы серверов домена
     const unN=(n.unallocServers||[]).length,arcN=domainArchives(n.id).length;
@@ -6144,7 +6192,7 @@ function form(n){
         <button type="button" class="mc" onclick="goTab('srvs')"><span>${i18n("Серверов")}</span><b>${n.servers.length}</b></button>
         <button type="button" class="mc" onclick="pick('${unallocId(n.id)}')"><span>${i18n("Нераспределённых")}</span><b>${unN}</b></button>
         <button type="button" class="mc" onclick="goTab('srvs')"><span>${i18n("Служб на серверах")}</span><b>${hw}</b></button>
-        <button type="button" class="mc" onclick="goTab('srvs')"><span>${i18n("Сетевых архивов")}</span><b>${arcN}</b></button>
+        <button type="button" class="mc" onclick="goTab('srvs')"><span>${i18n("Сетевых хранилищ")}</span><b>${arcN}</b></button>
         <button type="button" class="mc" onclick="setSlice('cam');setGroup('folder');pick('${n.id}')"><span>${i18n("Папок")}</span><b>${fldN}</b></button>
         <button type="button" class="mc" onclick="setSlice('cam');setGroup('folder');pick('${n.id}')"><span>${i18n("Устройств")}</span><b>${devN}</b></button>
       </div>`)+
@@ -6152,7 +6200,7 @@ function form(n){
         <button type="button" class="btn s" onclick="openW('server')">＋ ${i18n("Сервер")}</button>
         <button type="button" class="btn s" onclick="openFindServerByIp('${n.id}')">${i18n("Добавить серверы по IP")}</button>
         <button type="button" class="btn s" onclick="addSubfolder(null,'${n.id}')">＋ ${i18n("Папка")}</button>
-        <button type="button" class="btn s" onclick="addArchive('${n.id}')">＋ ${i18n("Сетевой архив")}</button>
+        <button type="button" class="btn s" onclick="addArchive('${n.id}')">＋ ${i18n("Сетевое хранилище")}</button>
         <span style="flex:1"></span>
         <button type="button" class="btn s" onclick="addDomain()">＋ ${i18n("Домен")}</button>
         <button type="button" class="btn s danger" onclick="deleteDomain('${n.id}')" ${canDeleteDomain()?"":"disabled title=\""+i18n("Последний домен удалить нельзя")+"\""}>${i18n("Удалить домен")}</button>
@@ -6166,21 +6214,20 @@ function form(n){
         <button type="button" class="btn pri" style="margin-top:12px;width:100%" onclick="addToDomain('${n.id}','${domId}')">${i18n("Добавить в домен")}</button>`);
     }
     if(tab==="disk"){
-      const on=arch.filter(a=>a.server===n.id),recCams=[];
+      const on=serverArchives(n.id),recCams=[];
       walkAll(x=>{if(x.type==="camera"&&srv(x.id)?.id===n.id)recCams.push(x)});
-      return card("Диски",`<div class="g">${fld("Том","D:")}${fld("Занято",n.disk+"%")}${sl("RAID",["RAID 1","RAID 5"])}${fld("Срок по умолчанию, дн","30","number")}</div>
-      <p class="sub">Камеры наследуют политику тома. Исключения — на камере, вкладка «Архив».</p>`)+
-      listCard({
+      return listCard({
         key:"sarc:"+n.id,
-        title:"Архивы сервера",
+        title:"Хранилища сервера",
         items:on,
-        text:a=>[locName(a),a.disk,a.size],
-        row:a=>`<div class="it" onclick="pick('${a.id}')"><span>${ic("storage")}</span><span>${escHtml(locName(a))}<small>${escHtml(a.disk)} · ${a.size} · ${a.days} дн. · ${archCameras(a.id).length} ${i18n("камер")}</small></span></div>`,
-        empty:"Нет архивов",
-        ph:"Имя или диск…",
-        unit:"архив|архива|архивов",
-        head:`<button type="button" class="btn s" onclick="addArchive('${n.id}')">＋ ${i18n("Архив")}</button>`
+        text:a=>[locName(a),...archVols(a).map(v=>v.disk),archSize(a)],
+        row:a=>`<div class="it" onclick="pick('${a.id}')"><span>${ic("storage")}</span><span>${escHtml(locName(a))}<small>${escHtml(archDiskLabel(a))} · ${archSize(a)} · ${i18n("занято")} ${archUsed(a)} · ${a.days} ${i18n("дн.")} · ${archCameras(a.id).length} ${i18n("камер")}</small></span></div>`,
+        empty:"Хранилищ нет — камеры сервера не пишутся",
+        ph:"Имя или путь…",
+        unit:"хранилище|хранилища|хранилищ",
+        head:`<button type="button" class="btn s" onclick="addArchive('${n.id}')">＋ ${i18n("Хранилище")}</button>`
       })+
+      `<p class="sub">${i18n("Хранилище — объект сервера: срок хранения, шифрование и тома. Камеры привязываются к хранилищу; исключения по сроку — на камере, вкладка «Архив».")}</p>`+
       listCard({
         key:"srec:"+n.id,
         title:"Камеры, которые пишутся на этот сервер",
@@ -6914,7 +6961,7 @@ function accObjGroups(id,dom){
 }
 const accCamGroups=accObjGroups;
 function accDomName(dom){return escHtml(domainLabel(dom))}
-function accObjKind(n){return{camera:"Камера",mic:"Микрофон",spk:"Динамик",sensor:"Датчик",relay:"Реле",eventsrc:"POS / источник событий",archive:"Архив",videowall:"Видеостена",plugin:"Плагин",macro:"Макрокоманда"}[n.type]||LB[n.type]||n.type}
+function accObjKind(n){return{camera:"Камера",mic:"Микрофон",spk:"Динамик",sensor:"Датчик",relay:"Реле",eventsrc:"POS / источник событий",archive:"Хранилище",videowall:"Видеостена",plugin:"Плагин",macro:"Макрокоманда"}[n.type]||LB[n.type]||n.type}
 function accObjIc(n){return ic(n.type==="videowall"?"videowall":n.type==="plugin"?"plugin":n.type==="macro"?"macro":n.type)}
 
 // ── Расчёт: права на папки и итоговый доступ ──
@@ -9687,7 +9734,7 @@ function flashSetting(){
 // Смена оператора — это не три события, а лента: её листают и по ней ищут.
 const LOG_EVENTS=[
   ["Аудит","Вход root с 10.20.1.5"],["Тревога","ACFA · Датчик 0 — вскрытие"],["Инфо","POS Retalix: ОТМЕНА чека 4417"],
-  ["Аудит","Изменён архив «Архив — Офис»"],["Тревога","Движение · Главный вход в нерабочее время"],
+  ["Аудит","Изменено хранилище «Хранилище — Офис»"],["Тревога","Движение · Главный вход в нерабочее время"],
   ["Инфо","Сервер — Цех: синхронизация времени"],["Аудит","Добавлен пользователь guard13"],
   ["Тревога","Нет связи с «Сервер — КПП»"],["Инфо","Экспорт завершён: 00:04:12"],
   ["Аудит","Изменены права роли «Оператор»"],["Тревога","Пересечение линии · Периметр 2"],
@@ -10169,36 +10216,63 @@ function addArchive(ownerId){
   const f=find(ownerId);if(!f)return;
   const net=f.n.type==="domain";
   const a={id:"a"+(++_aseq),type:"archive",
-    name:net?i18n("Новый сетевой архив"):i18n("Новый архив"),
-    disk:net?"\\\\nas\\share":"D:",size:"1 ТБ",used:"0%",days:14,enc:false};
+    name:net?i18n("Новое сетевое хранилище"):i18n("Новое хранилище"),days:14,enc:false,vols:[]};
   if(net)a.domain=f.n.id;else a.server=f.n.id;
+  addVol(a,net?"\\\\nas\\share":"D:","1 ТБ","0%");
   arch.push(a);
   open.add(ownerId);sel=a.id;tab="gen";setD(true);
-  toast(net?i18n("Сетевой архив создан"):i18n("Архив создан"));
+  toast(net?i18n("Сетевое хранилище создано"):i18n("Хранилище создано"));
   paint();
 }
-// Камеры удалённого архива не удаляются: они остаются в системе и уходят в
+function addVolume(archId){
+  const a=archById(archId);if(!a)return;
+  const net=archIsNetwork(a),taken=new Set(archVols(a).map(v=>v.disk));
+  let disk;
+  if(net){let i=1;do{disk="\\\\nas\\vol"+i++}while(taken.has(disk))}
+  else disk="DEFGHIJKLMNOPQRSTUVWXYZ".split("").map(c=>c+":").find(c=>!taken.has(c))||"Z:";
+  const v=addVol(a,disk,"1 ТБ","0%");
+  open.add(a.id);sel=v.id;tab="gen";setD(true);
+  toast(i18n("Том добавлен"));
+  paint();
+}
+// Том удаляется вместе с записями на нём; камеры остаются привязаны к
+// хранилищу. Если том последний — хранилищу некуда писать, об этом и говорим.
+function deleteVolume(id){
+  closeTreeCtx();
+  const v=volById(id),a=v&&archById(v.archId);if(!v||!a)return;
+  const last=archVols(a).length===1,n=archCameras(a.id).length;
+  askConfirm("Удалить том",`${i18n("Том")} «${escHtml(v.disk)}» ${i18n("хранилища")} «${escHtml(locName(a))}» ${i18n("будет удалён вместе с записями на нём.")}`,
+    last&&n?`${i18n("Это последний том: хранилищу будет некуда писать, камер:")} ${n}.`:"",
+    "Удалить",()=>{
+      a.vols.splice(a.vols.indexOf(v),1);
+      if(sel===id){sel=a.id;tab="gen"}
+      setD(false);
+      toast(i18n("Том удалён"));
+      paint();
+    },{rawMsg:true});
+}
+// Камеры удалённого хранилища не удаляются: они остаются в системе и уходят в
 // «Без записи» (режим записи помнят — при новом архиве его не надо задавать
 // заново). Поэтому подтверждение называет, сколько камер перестанет писать.
 function deleteArchive(id){
   closeTreeCtx();
   const a=arch.find(x=>x.id===id);if(!a)return;
   const n=archCameras(id).length;
-  askConfirm("Удалить архив",`${i18n("Архив")} «${locName(a)}» ${i18n("будет удалён.")}`,
+  askConfirm("Удалить хранилище",`${i18n("Хранилище")} «${locName(a)}» ${i18n("будет удалено вместе с томами.")}`,
     n?`${i18n("Перестанут писать камер:")} ${n}. ${i18n("Сами камеры останутся в системе — в разделе «Без записи».")}`:"",
     "Удалить",()=>{
       walkAll(c=>{if(c.type==="camera"&&c.arch===id)c.arch=""});
       arch.splice(arch.indexOf(a),1);
       if(sel===id){sel=a.server||a.domain||sel;tab="gen"}
       open.delete(id);setD(false);
-      toast(i18n("Архив удалён"));
+      toast(i18n("Хранилище удалено"));
       paint();
     },{rawMsg:true});
 }
 function archOwnerLine(a){
   const sv=archServer(a),dm=archDomain(a);
-  if(sv)return`${i18n("Физический том сервера")} <b>${escHtml(locName(sv))}</b>`;
-  if(dm)return`${i18n("Сетевой том домена")} <b>${escHtml(locName(dm))}</b> — ${i18n("доступен любому серверу домена, запись не привязана к конкретному серверу.")}`;
+  if(sv)return`${i18n("Хранилище сервера")} <b>${escHtml(locName(sv))}</b>`;
+  if(dm)return`${i18n("Сетевое хранилище домена")} <b>${escHtml(locName(dm))}</b> — ${i18n("доступно любому серверу домена, запись не привязана к конкретному серверу.")}`;
   return i18n("Владелец не задан");
 }
 function nvrRecCardHtml(n){
@@ -11450,7 +11524,7 @@ function decorateTreeSel(){
     let ph=false,state="";
     // Вне режима открытый объект тоже лежит в treeSel, но галочкой его не показываем.
     if(canMultiPick(f.n))state=(on||treeSel.size>1)&&treeSel.has(id)?"on":"";
-    else if(f.n.type==="det"||f.n.type==="found"||f.n.type==="founddev"||f.n.type==="norec"||f.n.type==="nofolder"||f.n.type==="gpu")ph=true;
+    else if(f.n.type==="det"||f.n.type==="vol"||f.n.type==="found"||f.n.type==="founddev"||f.n.type==="norec"||f.n.type==="nofolder"||f.n.type==="gpu")ph=true;
     else if(on){
       // Тристейт считаем только в режиме: вне его галочка контейнера просто ждёт клика.
       const d=selDescendants(f.n);
