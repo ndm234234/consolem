@@ -4807,11 +4807,18 @@ function treeHw(){
 // ── Дерево «Сервера» ──────────────────────────────────────────────────────
 // Режим «Камеры»: домен → сервер → NVR / камеры, которые на него пишутся.
 // Режим «Службы»: домен → сервер → службы сервера.
+// Камера под сервером раскрывается так же, как в папках: реле, датчики,
+// микрофоны и динамики — её дочерние строки, а не только в раскладке по папкам.
 function scamrow(n,l,ctx){
   const q=qval();
-  if(!selfInView(n)||!matchesSearch(n,q))return"";
-  return `<div class="n ${rowOn(n.id,ctx)}" style="--l:${l}"${treeRowPick(n.id,ctx)}>
-    <span class="tw"></span>${treeIconHtml(n)}<span class="nm">${displayNameHtml(n,q)}</span>${treeRowMeta(n,q,0,false,ctx)}</div>`;
+  if(q?!vis(n,q):!hasTreeIn(n))return"";
+  const shown=treeKids(n).filter(d=>!q||vis(d,q)),hasKids=shown.length>0;
+  const op=hasKids&&(open.has(n.id)||autoExpand());
+  const childOff=canToggleEnabled(n)&&nodeStatus(n).off;
+  let h=`<div class="n ${rowOn(n.id,ctx)} ${childOff?"off":""}${treeRenameId===n.id?" renaming":""}" style="--l:${l}"${treeRowPick(n.id,ctx)}${treeCtxAttr(n.id)}${treeExpandMeta(n.id,"node",hasKids)}>
+    ${treeChevron(n.id,"node",hasKids,op)}${treeIconHtml(n)}<span class="nm">${treeNameCell(n,q)}</span>${treeRowMeta(n,q,shown.length,op,ctx)}</div>`;
+  if(op)h+=shown.map(x=>nrow(x,l+1)).join("");
+  return h;
 }
 // Камеры регистратора показываем под ним: репликация встроенного архива
 // настраивается на NVR сразу для всех его камер
@@ -4831,16 +4838,18 @@ function recordedCameraRows(cams,l,ctx){
 }
 function nvrrow(owner,cams,l,ctx){
   const q=qval();
-  cams=cams.filter(selfInView);
-  const vis=cams.filter(c=>matchesSearch(c,q));
+  cams=cams.filter(hasTreeIn);
+  const vis=cams.filter(c=>!q||globalThis.vis(c,q));
+  // Кроме камер у регистратора каналы с датчиками и реле — как в папках.
+  const rest=treeKids(owner).filter(d=>d.type!=="camera"&&(!q||globalThis.vis(d,q)));
   const selfHit=selfInView(owner)&&matchesSearch(owner,q);
-  if(!selfHit&&!vis.length)return"";
-  const hasKids=!!vis.length,op=hasKids&&(open.has(owner.id)||autoExpand());
+  if(!selfHit&&!vis.length&&!rest.length)return"";
+  const hasKids=!!(vis.length||rest.length),op=hasKids&&(open.has(owner.id)||autoExpand());
   const edge=edgeStorage(owner);
   let h=`<div class="n srv ${rowOn(owner.id,ctx)}${sliceParentClass(owner.id)}" style="--l:${l}"${treeRowPick(owner.id,ctx)}${treeExpandMeta(owner.id,"srv",hasKids)}>
     ${treeChevron(owner.id,"srv",hasKids,op)}
     ${treeIconHtml(owner)}<span class="nm">${displayNameHtml(owner,q)}</span>${treeTail({tags:edge?`<span class="n-tail"><span class="cnt" title="${i18n("Встроенное хранилище")}">${ic("storage")}</span></span>`:"",cnt:treeCntHtml(hasSliceContext()?sliceParentCount(owner.id):cams.length),acts:owner.id,ctx})}</div>`;
-  if(op)h+=(q?vis:cams).map(c=>scamrow(c,l+1,ctx)).join("");
+  if(op)h+=(q?vis:cams).map(c=>scamrow(c,l+1,ctx)).join("")+rest.map(d=>nrow(d,l+1)).join("");
   return h;
 }
 function gdetrow(d,l,ctx,parentHit=false){
