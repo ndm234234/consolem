@@ -104,6 +104,11 @@ aside,main{min-height:0;overflow:hidden}aside{background:#0b1018;border-right:1p
 .ph-cnt{flex:none;min-width:18px;padding:1px 5px;border-radius:99px;background:#1c2a3e;color:#a7b9cf;font-size:10px;font-weight:600;line-height:1.4;font-variant-numeric:tabular-nums}
 .ph-choice.on .ph-cnt{background:#2b4a70;color:#d8e9ff}
 .ph-chevron{font-size:9px;opacity:.7}
+.domain-switch-label,.domain-menu-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.domain-switch{align-self:center;width:calc(100% + 12px);gap:2px;padding:0 2px}
+.domain-switch-icon{display:inline-flex;flex:none}
+.domain-switch-label{max-width:100%;flex:1}
+.domain-menu-label{flex:1}
 .st-dot{flex:none;display:inline-block;width:8px;height:8px;margin:0 3px;border-radius:50%;background:#8fa4bf}
 .st-dot.st-all{background:transparent;box-shadow:inset 0 0 0 1.5px #8fa4bf}
 .st-dot.st-run{background:#3ecf8e}.st-dot.st-nosignal{background:#ff6b73}
@@ -848,6 +853,7 @@ html[data-theme="light"] .dev-bulk-badge{background:#d6e4f8;color:#2f5fad}
 <body>
 <div class="app">
 <div class="ws" id="ws"><nav class="rail" id="rail" aria-label="Разделы">
+  <button type="button" class="ph-choice domain-switch" id="domainBtn" title="Все домены" aria-haspopup="menu" aria-controls="domainPop" aria-expanded="false" onclick="toggleDomainPop(event)"><span class="domain-switch-icon" aria-hidden="true"></span><span class="asw-lb domain-switch-label">Все домены</span><span class="ph-chevron" aria-hidden="true">▾</span></button>
   <div class="rail-tabs" role="tablist" aria-label="Разделы"></div>
   <div class="umenu" id="umenu">
     <button type="button" class="ubtn" id="ubtn" onclick="toggleUserMenu(event)" title="root" aria-label="root" aria-haspopup="menu" aria-controls="upop" aria-expanded="false">
@@ -888,6 +894,7 @@ html[data-theme="light"] .dev-bulk-badge{background:#d6e4f8;color:#2f5fad}
 </header>
 <main id="main"></main></div>
 </div>
+<div id="domainMenuHost"></div>
 <div class="jump" id="jump" onclick="if(event.target===this)closeJump()">
   <div class="jbox" onclick="event.stopPropagation()">
     <input id="jq" data-i18n-placeholder="Перейти к объекту…  (камера, датчик, сервер)" placeholder="Перейти к объекту…  (камера, датчик, сервер)" oninput="jumpList()" autofocus>
@@ -1114,6 +1121,7 @@ function syncViews(){
   sview="cam";
 }
 let detSel=null,sview="cam",selFolder=null,logFilt="all",asideW=asideWidthDefault(),recent=[],treeQ="",strictIdSearch=false,filtPop=false,typesExpanded=false,treeRenameId=null,treeRenameField="name";
+let domainFilter="",domainPop=false;
 const treeSel=new Set();
 let treeAnchor=null;
 const statusFilts=new Set();
@@ -1371,6 +1379,20 @@ function deviceDomain(id){
   const root=path(id)[0];
   return DEVICE_DOMAIN[root?.id||id]||null;
 }
+function nodeDomainId(n){
+  if(!n)return null;
+  if(n.type==="domain")return n.id;
+  if(n.domainId)return n.domainId;
+  if(n.type==="folder")return folderDomain(n.id);
+  if(n.type==="archive")return archDomainId(n);
+  if(n.type==="server")return SERVER_DOMAIN[n.id]||domainOf(n.id)?.id||unallocDomainOf(n.id);
+  if(n.type==="gpu")return SERVER_DOMAIN[n.serverId]||null;
+  if(DEVICE_DOMAIN[n.id])return DEVICE_DOMAIN[n.id];
+  const root=path(n.id)[0]||n;
+  return(root.type==="domain"?root.id:DEVICE_DOMAIN[root.id])||root.domainId||root.domain||SERVER_DOMAIN[root.id]||null;
+}
+function matchesDomain(n){return!domainFilter||nodeDomainId(n)===domainFilter}
+function scopedDomains(){return domains.filter(matchesDomain)}
 let _fseq=0;
 function mkFolder(name,items,kids,domain){return{id:"f"+(++_fseq),type:"folder",name,domain:domain||null,items:items||[],folders:kids||[]}}
 function _ids(list){return(list||[]).map(d=>d.id)}
@@ -1803,9 +1825,11 @@ function createDomain(name){
 function addDomain(){
   closeTreeCtx();
   const d=createDomain(freeDomainName());
+  if(domainFilter)domainFilter=d.id;
   resetTreeSel(d.id);
   sel=d.id;tab="gen";setD(false);editClear();
   treeRenameId=d.id;treeRenameField="name";
+  if(domainFilter)aside();
   paint();
   requestAnimationFrame(()=>{const el=document.querySelector(".nm-inp");if(el){el.focus();el.select&&el.select()}});
   return d;
@@ -1863,7 +1887,9 @@ function deleteDomain(id){
     delete unallocPick[id];
     treeMatchCache.clear();searchMatchCache.clear();
     const next=to||domains[0].id;
+    if(domainFilter===id)domainFilter=next;
     resetTreeSel(next);sel=next;tab="gen";setD(false);editClear();expandTo(next);
+    aside();
     toast("Домен удалён");paint();
   },{html:true});
 }
@@ -2158,9 +2184,9 @@ function inSlice(n){
 }
 function selfInView(n){
   if(n.type==="domain"||n.type==="unalloc"||n.type==="folder")return false;
-  return inSlice(n)&&matchesType(n)&&matchesStatus(n);
+  return matchesDomain(n)&&inSlice(n)&&matchesType(n)&&matchesStatus(n);
 }
-function filtKey(){return[...typeFilts].sort().join(",")+"|"+[...searchFields].sort().join(",")+"|"+[...statusFilts].sort().join(",")+"|"+strictIdSearch}
+function filtKey(){return[...typeFilts].sort().join(",")+"|"+[...searchFields].sort().join(",")+"|"+[...statusFilts].sort().join(",")+"|"+strictIdSearch+"|"+domainFilter}
 function hasTreeIn(n){
   const key=slice+"|"+group()+"|"+filtKey()+"|"+n.id;if(treeMatchCache.has(key))return treeMatchCache.get(key);
   if(n.type==="det"&&slice!=="det")return false;
@@ -2246,7 +2272,7 @@ function pushRecent(id){recent=recent.filter(x=>x!==id);recent.unshift(id);if(re
 function setFocus(id,keepSel){if(!keepSel){const s=servers.find(x=>x.id===id);sel=s?.devices?.find(d=>treeKind(d)===tview)?.id||id}expandTo(sel);paint()}
 function clearGearFilters(keepSearch=false){
   typeFilts.clear();statusFilts.clear();
-  if(!keepSearch){searchFields.clear();treeQ="";strictIdSearch=false}
+  if(!keepSearch){searchFields.clear();treeQ="";strictIdSearch=false;domainFilter="";domainPop=false}
 }
 // В быстром поиске показываем папку объекта (для доменов/серверов — сам узел)
 function jumpScope(n){
@@ -2505,6 +2531,7 @@ const ESC_LAYERS=[
   {is:()=>document.getElementById("tctx")?.classList.contains("open"),off:closeTreeCtx},
   {is:()=>document.getElementById("upop")?.classList.contains("open"),off:closeUserMenu},
   {is:()=>filtPop,off:()=>closeFiltPop()},
+  {is:()=>domainPop,off:()=>closeDomainPop()},
   {is:()=>document.getElementById("gopop")?.classList.contains("open"),
    off(){goClose();document.getElementById("gq")?.blur()}},
   // Список убран, а дерево осталось сужённым — Esc снимает и сужение.
@@ -2575,6 +2602,7 @@ function runConfirmOk(){
 function setD(v){dirty=v}
 const appSel={dev:null,srvs:"d1"};
 function setApp(a){
+  domainPop=false;
   if(a==="dev"||a==="srvs"){                 // старые адреса разделов
     slice=a==="srvs"?"srv":"cam";syncViews();a="hw";
   }
@@ -2825,8 +2853,11 @@ function cancelTreeRename(){
 // Когда действует запрос или фильтр, ветки с попаданиями раскрываются сами:
 // иначе результат поиска приходится искать второй раз, уже мышкой.
 function autoExpand(){return!!qval()||!!typeFilts.size||!!statusFilts.size}
-function hasActiveFilters(){return!!typeFilts.size||!!searchFields.size||!!statusFilts.size||!!treeQ.trim()}
-function walkSliceObjects(fn){walkAll(fn);if(slice==="arch")arch.forEach(n=>fn(n,archOwner(n)))}
+function hasActiveFilters(){return!!domainFilter||!!typeFilts.size||!!searchFields.size||!!statusFilts.size||!!treeQ.trim()}
+function walkSliceObjects(fn){
+  const visit=(n,p)=>{if(matchesDomain(n))fn(n,p)};
+  walkAll(visit);if(slice==="arch")arch.forEach(n=>visit(n,archOwner(n)));
+}
 function countFiltered(){
   const q=qval();let n=0;
   walkSliceObjects((node,p)=>{if(slice==="det"){if(matchesStatus(node)&&detSliceHit(node,p,q))n++;return}
@@ -2849,6 +2880,7 @@ function selectionHiddenByFilter(){
   const f=find(sel);
   if(!f||!hasActiveFilters())return false;
   const n=f.n;
+  if(!matchesDomain(n))return true;
   if(["domain","unalloc","server","folder","archive","norec","nofolder","gpu","found","founddev"].includes(n.type))return false;
   return!selfInView(n)||(qval()&&!matchesSearch(n,qval()));
 }
@@ -2865,6 +2897,7 @@ function applyFiltersFromState(){
   treeMatchCache.clear();searchMatchCache.clear();updateFiltChrome();renderTree();gear();
 }
 function updateFiltChrome(){
+  syncDomainChrome();
   const btn=document.getElementById("filtBtn"),tags=document.getElementById("filtTags"),hint=document.getElementById("filtHint");
   if(btn){
     const st=curStatus();
@@ -2917,9 +2950,9 @@ function firstMatching(){
   let hit;walkSliceObjects(n=>{if(!hit&&(n.type!=="det"||slice==="det")&&selfInView(n))hit=n});
   return hit;
 }
-function placeFiltPop(){
-  const btn=document.getElementById("filtBtn"),pop=document.getElementById("filtPop");
-  if(!btn||!pop||!filtPop)return;
+function placeChoicePop(buttonId,menuId){
+  const btn=document.getElementById(buttonId),pop=document.getElementById(menuId);
+  if(!btn||!pop)return;
   const br=btn.getBoundingClientRect(),w=Math.min(260,window.innerWidth-16);
   const left=Math.max(8,Math.min(Math.round(br.left),window.innerWidth-w-8));
   pop.style.width=w+"px";
@@ -2928,19 +2961,36 @@ function placeFiltPop(){
   if(top+h>window.innerHeight-8)top=Math.max(8,Math.round(br.top-h-4));
   pop.style.left=left+"px";pop.style.top=top+"px";
 }
+function placeFiltPop(){if(filtPop)placeChoicePop("filtBtn","filtPop")}
+function placeDomainPop(){
+  const button=document.getElementById("domainBtn"),menu=document.getElementById("domainPop"),rail=document.getElementById("rail");
+  if(!domainPop||!button||!menu||!rail)return;
+  const b=button.getBoundingClientRect(),r=rail.getBoundingClientRect(),width=Math.min(260,innerWidth-16);
+  menu.style.width=width+"px";
+  menu.style.left=Math.max(8,Math.min(Math.round(r.right+8),innerWidth-width-8))+"px";
+  menu.style.top=Math.max(8,Math.min(Math.round(b.top),innerHeight-menu.offsetHeight-8))+"px";
+}
 function closeFiltPop(){if(!filtPop)return;filtPop=false;aside()}
+function closeDomainPop(){if(!domainPop)return;domainPop=false;renderDomainMenu()}
 function toggleFiltPop(e){
   if(e)e.stopPropagation();
+  closeDomainPop();
   filtPop=!filtPop;aside();
   if(filtPop)document.querySelector('#filtPop [aria-checked="true"]')?.focus({preventScroll:true});
 }
 function statusMenuKey(e){
+  choiceMenuKey(e,"filtPop",closeFiltPop,"filtBtn");
+}
+function domainMenuKey(e){
+  choiceMenuKey(e,"domainPop",closeDomainPop,"domainBtn");
+}
+function choiceMenuKey(e,menuId,closeMenu,buttonId){
   if(e.key==="Escape"){
-    e.preventDefault();e.stopPropagation();closeFiltPop();document.getElementById("filtBtn")?.focus();return;
+    e.preventDefault();e.stopPropagation();closeMenu();document.getElementById(buttonId)?.focus();return;
   }
   if(!["ArrowDown","ArrowUp","Home","End"].includes(e.key))return;
   e.preventDefault();e.stopPropagation();
-  const items=[...document.querySelectorAll('#filtPop [role="menuitemradio"]')];
+  const items=[...document.querySelectorAll(`#${menuId} [role="menuitemradio"]`)];
   const i=items.indexOf(document.activeElement);
   const next=e.key==="Home"?0:e.key==="End"?items.length-1:(i+(e.key==="ArrowDown"?1:-1)+items.length)%items.length;
   items[next]?.focus();
@@ -2950,7 +3000,7 @@ function statusMenuKey(e){
 function typeCount(t){
   const q=qval();let n=0;
   walkAll(node=>{
-    if(node.type!==t||!inSlice(node)||!matchesStatus(node))return;
+    if(node.type!==t||!matchesDomain(node)||!inSlice(node)||!matchesStatus(node))return;
     if(t==="spk"){
       if(slice==="cam"&&node.server)return;
     }
@@ -3022,6 +3072,12 @@ function onFiltOutside(e){
   if(pop&&pop.contains(e.target)||btn&&btn.contains(e.target))return;
   closeFiltPop();
 }
+function onDomainOutside(e){
+  if(!domainPop)return;
+  const pop=document.getElementById("domainPop"),btn=document.getElementById("domainBtn");
+  if(pop&&pop.contains(e.target)||btn&&btn.contains(e.target))return;
+  closeDomainPop();
+}
 // inCrumb: путь уже заканчивается именем объекта, и повторять его крупной
 // строкой ниже незачем. У страниц разделов первая строка — название раздела,
 // а не путь, поэтому там заголовок остаётся.
@@ -3088,6 +3144,21 @@ function filtPopHtml(){
     ${["",...STATUS_FILTERS.map(x=>x[0])].map(id=>`<button type="button" class="mi ${st===id?"on":""}" role="menuitemradio" aria-checked="${st===id}" data-status="${id}" onclick="pickStatus('${id}')"><span class="st-dot st-${id||"all"}" aria-hidden="true"></span><span>${statusLabel(id)}</span><span class="filt-status-cnt">${statusCount(id)}</span><span class="status-tick" aria-hidden="true">${st===id?"✓":""}</span></button>`).join("")}
   </div>`;
 }
+function domainPopHtml(){
+  if(!domainPop)return"";
+  return`<div class="filt-pop status-pop open" id="domainPop" role="menu" aria-label="${i18n("Домен")}" onclick="event.stopPropagation()" onkeydown="domainMenuKey(event)">
+    ${["",...domains.map(d=>d.id)].map(id=>`<button type="button" class="mi ${domainFilter===id?"on":""}" role="menuitemradio" aria-checked="${domainFilter===id}" data-domain="${id}" onclick="pickDomain('${id}')">${ic("domain")}<span class="domain-menu-label" title="${escHtml(domainLabel(id))}">${escHtml(domainLabel(id))}</span><span class="filt-status-cnt">${domainCount(id)}</span><span class="status-tick" aria-hidden="true">${domainFilter===id?"✓":""}</span></button>`).join("")}
+  </div>`;
+}
+function renderDomainMenu(){
+  const host=document.getElementById("domainMenuHost");
+  const html=domainPopHtml();
+  if(host&&host.innerHTML!==html)host.innerHTML=html;
+  syncDomainChrome();
+  document.removeEventListener("click",onDomainOutside);
+  window.removeEventListener("resize",placeDomainPop);
+  if(domainPop){placeDomainPop();document.addEventListener("click",onDomainOutside);window.addEventListener("resize",placeDomainPop)}
+}
 function appSwitchHtml(){
   return APPS_LIST.map(a=>
     `<button type="button" class="asw ${app===a.id?"on":""}" data-a="${a.id}" role="tab" aria-selected="${app===a.id?"true":"false"}" title="${i18n(a.label)}" onclick="goApp('${a.id}')">${ic(a.ic)}<span class="asw-lb">${i18n(a.label)}</span></button>`
@@ -3106,6 +3177,7 @@ function renderRail(){
     tabs.innerHTML=appSwitchHtml();
   }
   syncRail();
+  renderDomainMenu();
   placeUserMenu();
 }
 function syncRail(){
@@ -3117,6 +3189,7 @@ function syncRail(){
 }
 function toggleRail(){
   closeUserMenu();
+  closeDomainPop();
   railHidden=!railHidden;
   try{localStorage.setItem(RAIL_KEY,railHidden?"1":"0")}catch(e){}
   syncRail();
@@ -3344,6 +3417,36 @@ function renderTree(){const treeEl=document.getElementById("tree");if(!treeEl)re
 // Срезы, группировка и статус — один набор кнопок.
 // «Папки» переключаются независимо от выбранного среза.
 function curStatus(){return statusFilts.size?[...statusFilts][0]:""}
+function domainLabel(id=domainFilter){return id?locName(domains.find(d=>d.id===id)||{name:i18n("Все домены")}):i18n("Все домены")}
+function syncDomainChrome(){
+  const button=document.getElementById("domainBtn");if(!button)return;
+  document.getElementById("domainPop")?.classList.toggle("open",domainPop);
+  button.classList.toggle("on",domainPop||!!domainFilter);
+  button.setAttribute("aria-expanded",String(domainPop));
+  button.title=domainLabel();
+  const label=button.querySelector(".domain-switch-label");if(label)label.textContent=domainLabel();
+  const icon=button.querySelector(".domain-switch-icon");if(icon&&!icon.firstChild)icon.innerHTML=ic("domain");
+}
+function domainCount(id){
+  const previous=domainFilter;domainFilter=id;
+  try{return countFiltered()}finally{domainFilter=previous}
+}
+function toggleDomainPop(e){
+  if(e)e.stopPropagation();
+  if(filtPop)closeFiltPop();
+  domainPop=!domainPop;renderDomainMenu();
+  if(domainPop)document.querySelector('#domainPop [aria-checked="true"]')?.focus({preventScroll:true});
+}
+function pickDomain(id){
+  if(id&&!domains.some(d=>d.id===id))return;
+  domainFilter=id;domainPop=false;
+  renderDomainMenu();
+  if(id)open.add(id);
+  treeSel.clear();treeAnchor=null;
+  if(app==="hw"){applyFiltersFromState();aside()}
+  else{treeMatchCache.clear();searchMatchCache.clear();paint()}
+  document.getElementById("domainBtn")?.focus({preventScroll:true});
+}
 function statusLabel(id){return id?i18n((STATUS_FILTERS.find(x=>x[0]===id)||[])[1]||id):i18n("Все статусы")}
 function statusCount(id){
   const q=qval();let n=0;
@@ -3385,7 +3488,7 @@ function setSlice(v){
   if(!SLICE_GROUPS[v]||slice===v)return;
   slice=v;syncViews();
   // При смене среза сохраняем запрос и поля, по которым он ищется.
-  clearGearFilters(true);filtPop=false;typesExpanded=false;tab="gen";
+  clearGearFilters(true);filtPop=false;closeDomainPop();typesExpanded=false;tab="gen";
   treeMatchCache.clear();searchMatchCache.clear();treeSel.clear();treeAnchor=null;
   expandSliceBranches();
   keepSelectionInSlice();
@@ -3654,6 +3757,7 @@ function fullCardBtn(){
 }
 function setMainFull(v){
   v=!!v;if(mainFull===v)return;
+  if(v)closeDomainPop();
   mainFull=v;
   document.getElementById("ws")?.classList.toggle("full",mainFull);
   paint();
@@ -4199,7 +4303,7 @@ function addFolderRow(level,domainId){
   return `<div class="n n-add" style="--l:${level}" onclick="event.stopPropagation();addSubfolder(null,'${domainId}')" title="${i18n("Добавить папку")}">
     <span class="tw"></span><span class="nm">＋ ${i18n("Папка")}</span></div>`;
 }
-function treeDev(){return domains.map(d=>dfrow(d)).join("")}
+function treeDev(){return scopedDomains().map(d=>dfrow(d)).join("")}
 // Одно дерево на весь раздел: срез решает, что показать, группировка — как
 // разложить. Домены — верхний уровень в обеих раскладках.
 function treeHw(){
@@ -4279,7 +4383,7 @@ function sliceBranchRow(n,l,children,count,ctx){
 }
 function treeArchives(){
   const q=qval();
-  return domains.map(d=>{
+  return scopedDomains().map(d=>{
     const serverRows=d.servers.map(s=>{
       const list=serverArchives(s.id).filter(matchesStatus);
       const children=list.map(a=>arowFlat(a,2)).join("");
@@ -4300,7 +4404,7 @@ function treeDetectors(){
     const children=(f.folders||[]).map(x=>folderRow(x,l+1)).join("")+rows(direct,l+1,"f:"+f.id);
     return branch(f,l,children);
   }
-  return domains.map(d=>{
+  return scopedDomains().map(d=>{
     let children="";
     if(group()==="folder"){
       children=domainFolders(d.id).map(f=>folderRow(f,1)).join("");
@@ -4370,7 +4474,7 @@ function norow(d,l){
   if(op)h+=vis.map(c=>scamrow(c,l+1,"norec:"+d.id)).join("");
   return h;
 }
-function treeServers(){return domains.map(d=>drow(d)).join("")}
+function treeServers(){return scopedDomains().map(d=>drow(d)).join("")}
 function treeRules(){const q=qval();return rules.filter(r=>matchesText(q,r.name)).map(r=>
   `<div class="n ${rule===r.id?"on":""}" data-go="rule:${r.id}" onclick="rule='${r.id}';tab='gen';paint()" title="${escHtml(ruleSummary(r))}"><span class="tw"></span><span class="ici">${r.on?"●":"○"}</span><span class="nm">${hlText(r.name,q)}</span>${treeTail({cnt:treeCntHtml(r.then.length)})}</div>`).join("")}
 // Строка списка говорит то же, что карточка, одним предложением: сколько
@@ -7575,7 +7679,7 @@ function wnx(){
   open.add(parent.id);sel=id;tab="gen";treeMatchCache.clear();searchMatchCache.clear();
   document.getElementById("wiz").classList.remove("open");toast(name+" добавлен");paint();
 }
-function paint(){renderRail();syncGoInput();if(_lastApp!==app){aside();_lastApp=app}else renderTree();renderFavs();
+function paint(){renderRail();syncGoInput();if(_lastApp!==app){aside();_lastApp=app}else renderTree();syncDomainChrome();renderFavs();
   const ui={hw:gear,dev:gear,srvs:gear,rules:rulesUI,acc:accUI,sys:sysUI,log:logUI};
   (ui[app]||gear)();
   syncHeaderLoad();
@@ -7585,7 +7689,7 @@ const rsz=document.getElementById("rsz");let drag=false;
 rsz.onmousedown=e=>{drag=true;rsz.classList.add("on");e.preventDefault()};
 window.onmousemove=e=>{if(!drag)return;
   const left=document.getElementById("aside")?.getBoundingClientRect().left||0;
-  setAsideWidth(e.clientX-left,false);if(filtPop)placeFiltPop()};
+  setAsideWidth(e.clientX-left,false);if(filtPop)placeFiltPop();if(domainPop)placeDomainPop()};
 window.onmouseup=()=>{if(drag)setAsideWidth(asideW,true);drag=false;rsz.classList.remove("on")};
 document.onkeydown=e=>{
   if((e.ctrlKey||e.metaKey)&&(e.key==="k"||e.key==="K")){e.preventDefault();focusGo();return}

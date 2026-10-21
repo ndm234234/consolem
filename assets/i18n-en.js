@@ -354,6 +354,7 @@ window.I18N_EN={
 "Развернуть панель на весь экран":"Expand panel to full screen","Свернуть панель":"Collapse panel",
 "Скрыть разделы":"Hide sections","Показать разделы":"Show sections",
 "Все статусы":"All statuses",
+"Все домены":"All domains",
 "Добавить найденные":"Add discovered","Удалить архив":"Delete archive","будет удалён.":"will be deleted.",
 "Перестанут писать камер:":"Cameras that will stop recording:","Сами камеры останутся в системе — в разделе «Без записи».":"The cameras stay in the system, under “Not recording”.","Архив удалён":"Archive deleted",
 "Создать сетевой архив":"Create network archive","Создать архив":"Create archive"
