@@ -268,6 +268,20 @@ html[data-theme="light"] .status-pop .mi.on{background:#e8f0ff;color:#1a3a7a}
 .tctx button:disabled{opacity:.42;cursor:default}
 .tctx button:disabled:hover{background:transparent}
 .tctx-sep{height:1px;margin:4px 0;background:var(--ln)}
+.pf-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.pf-chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--ln);background:var(--p2);color:var(--tx);border-radius:99px;padding:3px 10px 3px 8px;font-size:12px;cursor:pointer}
+.pf-chip b{color:var(--mu);font-weight:500}
+.pf-chip:hover{border-color:#3d5878}
+.pf-chip.on{border-color:var(--bl);background:#16304f}
+.pf-chip.on b{color:var(--tx)}
+.pf-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-height:28px;margin-bottom:6px}
+.pf-tbl{width:100%}
+.pf-tbl .pf-c{width:34px;text-align:center}
+.pf-tbl tr.pf-on td{background:#132640}
+.pf-nm{display:inline-flex;align-items:center;gap:6px;border:0;background:0;color:var(--tx);padding:0;font-size:inherit;cursor:pointer;text-align:left}
+.pf-nm:hover span{text-decoration:underline}
+.pf-st{font-size:11px}
+.pf-st.ok{color:#7fc79a}.pf-st.bad{color:#f08a8a}.pf-st.off{color:var(--mu)}
 .tctx-ic{display:inline-flex;width:16px;height:16px;flex:none;align-items:center;justify-content:center}
 .tctx-plus{color:var(--bl);font-size:15px;font-weight:500;line-height:1}
 .tctx-search{color:var(--bl);position:relative}
@@ -1369,7 +1383,7 @@ const SVIEW_SW_RU={cam:"Камеры",sys:"Службы"};
 const SVIEW_SW_EN={cam:"Cameras",sys:"Services"};
 const SVIEW_SW={...SVIEW_SW_RU};
 const SVIEW_IC={cam:"camera",sys:"svcs"};
-const TF_CAM=[["ipsrv","IP-сервер"],["eventsrc","Источник событий"],["camera","Камера"],["mic","Микрофон"],["spk","Динамик"],["channel","Канал"],["sensor","Датчик"],["relay","Реле"],["ptz","PTZ"],["storage","Встроенное хранилище"]];
+const TF_CAM=[["ipsrv","IP-сервер"],["eventsrc","Источник событий"],["camera","Камера"],["mic","Микрофон"],["spk","Динамик"],["channel","Канал"],["sensor","Датчик"],["relay","Реле"],["ptz","PTZ"]];
 const TF_ACFA=[["acfa","ACFA-устройства"],["acfa_sensor","Датчики"],["acfa_lock","Замки"],["acfa_fence","Шлейфы"],["relay","Реле"]];
 const TF_SVC=[["email","Email-оповещатели"],["sms","SMS-оповещатели"],["export","Агенты экспорта"],["spk","Динамики сервера"]];
 const TYPE_FILTERS={
@@ -2585,6 +2599,9 @@ function inSlice(n){
 }
 function selfInView(n){
   if(n.type==="domain"||n.type==="unalloc"||n.type==="folder")return false;
+  // Встроенное хранилище — часть записи камеры, а не объект дерева: оно на
+  // вкладке «Архив» камеры или регистратора.
+  if(n.type==="storage")return false;
   return matchesDomain(n)&&inSlice(n)&&matchesType(n)&&matchesStatus(n);
 }
 function filtKey(){return[...typeFilts].sort().join(",")+"|"+[...searchFields].sort().join(",")+"|"+[...statusFilts].sort().join(",")+"|"+strictIdSearch+"|"+domainFilter}
@@ -3192,7 +3209,7 @@ function childSelCtx(n){return n.type==="server"?"srv:"+n.id:null}
 // регистраторов, остальное (датчики, реле камеры) — по самому факту отметки.
 function selShownIn(x,cc){return cc&&(x.type==="camera"||x.type==="ipsrv")?selShownAt(x.id,cc):treeSel.has(x.id)}
 function canMultiPick(n){
-  return n&&n.type!=="domain"&&n.type!=="server"&&n.type!=="unalloc"&&n.type!=="det"&&n.type!=="folder"&&treeKind(n)===tview;
+  return n&&n.type!=="domain"&&n.type!=="storage"&&n.type!=="server"&&n.type!=="unalloc"&&n.type!=="det"&&n.type!=="folder"&&treeKind(n)===tview;
 }
 function treeRowHi(id,ctx){
   const on=sel===id&&sameCtx(ctx),mark=selShownAt(id,ctx);
@@ -4059,7 +4076,7 @@ function togglePropsIpsOpen(id,e){
 }
 function ipsrvObjTreeHtml(root){
   function row(node,depth,isRoot){
-    const ch=(node.devices||[]).filter(d=>d.type!=="det");
+    const ch=(node.devices||[]).filter(d=>d.type!=="det"&&d.type!=="storage");
     const hasKids=ch.length>0;
     const expanded=depth===0||propsIpsOpen.has(node.id);
     const pad=8+depth*14;
@@ -4502,6 +4519,11 @@ function openTreeCtx(n,xy){
     if(n.type==="unalloc")rest.push(tctxItem(i18n("Обновить"),`refreshUnalloc('${n.domainId}')`));
     if(canTreeCtxDelete(n))rest.push(tctxItem(i18n("Удалить"),`deleteTreeNode('${n.id}')`));
     main=[...parts];
+    const mark=markInsideItems(n);
+    if(mark.length){
+      if(main.length)main.push(tctxSep());
+      main.push(...mark);
+    }
     if(addItems.length){
       if(main.length)main.push(tctxSep());
       main.push(...addItems);
@@ -4965,7 +4987,7 @@ function tabsFor(n){
   if(n.type==="found"||n.type==="founddev")return[];
 
   if(n.type==="folder")return[["gen","Состав"],["tbl","Таблица"],["lan","Все устройства сети"]];
-  if(n.type==="camera")return[["gen","Подключение"],["vid","Видео"],["rec","Архив"],["det","Детекторы"],["acc","Доступ"]];
+  if(n.type==="camera")return[["gen","Подключение"],["vid","Видео"],["rec","Архив"],["det","Детекторы"],["io","Периферия"],["acc","Доступ"]];
   if(n.type==="ipsrv")return ipsrvCameras(n).length?[["gen","Подключение"],["rec","Архив"],["kids","Дочерние"]]:[["gen","Подключение"],["kids","Дочерние"]];
   if(n.type==="channel")return[["gen","Основные"],["kids","Дочерние"]];
   if(n.type==="eventsrc")return[["gen","Подключение"],["overlay","Титры"],["words","Подсветка"]];
@@ -5139,6 +5161,94 @@ function childListCard(n,o={}){
     unit:o.unit||"объект|объекта|объектов",
     head:o.head||""
   });
+}
+// ── Периферия камеры ──────────────────────────────────────────────────────
+// Списком, как вкладка Peripherals у Genetec и Setup у Avigilon: всё сразу
+// видно, включают и выключают пачкой, а в дерево отдают, когда нужна
+// групповая правка. Отметка в списке своя и живёт, пока открыта камера.
+let periphSel={owner:null,ids:new Set()};
+function periphItems(n){return(n.devices||[]).filter(d=>d.type!=="det"&&d.type!=="storage")}
+function periphIds(n){
+  if(periphSel.owner!==n.id)periphSel={owner:n.id,ids:new Set()};
+  const items=periphItems(n);
+  [...periphSel.ids].forEach(id=>{if(!items.some(d=>d.id===id))periphSel.ids.delete(id)});
+  return periphSel.ids;
+}
+function periphTypes(items){return[...new Set(items.map(d=>d.type))].sort((a,b)=>markTypeRank(a)-markTypeRank(b))}
+function periphStateHtml(d){
+  if(d.enabled===false)return`<span class="pf-st off">${i18n("выключен")}</span>`;
+  if(d.online===false)return`<span class="pf-st bad">${i18n("нет сигнала")}</span>`;
+  return`<span class="pf-st ok">${i18n("работает")}</span>`;
+}
+function periphCardHtml(n){
+  const items=periphItems(n),ids=periphIds(n);
+  if(!items.length)return card("Периферия",`<p class="sub">${i18n("У камеры нет датчиков, реле, микрофонов и динамиков.")}</p>`);
+  const chips=periphTypes(items).map(t=>{
+    const of=items.filter(d=>d.type===t),all=of.every(d=>ids.has(d.id));
+    return`<button type="button" class="pf-chip${all?" on":""}" title="${all?i18n("Снять выбор"):i18n("Выбрать все такого типа")}" onclick="periphPickType('${n.id}','${t}')">${ic(t)}${escHtml(markTypeLabel(t))} <b>${of.length}</b></button>`;
+  }).join("");
+  const k=ids.size,allOn=k===items.length;
+  const bar=k?`<span class="sub">${i18n("Выбрано:")} <b>${k}</b></span>
+      <button class="btn s" onclick="periphBulkEnable('${n.id}',true)">${i18n("Включить")}</button>
+      <button class="btn s" onclick="periphBulkEnable('${n.id}',false)">${i18n("Выключить")}</button>
+      <button class="btn s" onclick="periphToTree('${n.id}')">${i18n("Отметить в дереве")}</button>
+      <button class="lk" onclick="periphClear('${n.id}')">${i18n("Снять")}</button>`
+    :`<span class="sub">${i18n("Отметьте строки или нажмите тип — выберутся все объекты этого типа.")}</span>`;
+  const rows=items.map(d=>{
+    const on=d.enabled!==false,chk=ids.has(d.id);
+    return`<tr class="${chk?"pf-on":""}">
+      <td class="pf-c"><input type="checkbox" ${chk?"checked":""} onchange="periphToggle('${n.id}','${d.id}')" aria-label="${escHtml(locName(d))}"></td>
+      <td><button type="button" class="pf-nm" onclick="pick('${d.id}')">${ic(d.type)}<span>${escHtml(locName(d))}</span></button></td>
+      <td class="sub">${escHtml(i18n(LB[d.type]||d.type))}</td>
+      <td>${periphStateHtml(d)}</td>
+      <td class="pf-c"><div class="sw ${on?"on":""}" role="switch" aria-checked="${on}" title="${on?i18n("Выключить"):i18n("Включить")}" onclick="periphEnable('${d.id}')"></div></td></tr>`;
+  }).join("");
+  return card("Периферия",`<div class="pf-chips">${chips}</div>
+    <div class="pf-bar">${bar}</div>
+    <table class="pf-tbl"><tr><th class="pf-c"><input type="checkbox" ${allOn?"checked":""} onchange="periphAll('${n.id}',this.checked)" aria-label="${i18n("Выбрать все")}"></th><th>${i18n("Имя")}</th><th>${i18n("Тип")}</th><th>${i18n("Состояние")}</th><th class="pf-c">${i18n("Вкл.")}</th></tr>${rows}</table>
+    <p class="sub" style="margin-top:8px">${i18n("Галочка камеры в дереве периферию не отмечает. Чтобы править её вместе с периферией других камер — «Отметить в дереве» или пункт «Отметить внутри» в меню сервера, папки или камеры.")}</p>`,
+    `<span class="sub" style="font-weight:400">${items.length}</span>`);
+}
+// Сводка на первой вкладке: сколько чего, а сам список — во вкладке «Периферия».
+function periphSummaryHtml(n){
+  const items=periphItems(n);if(!items.length)return"";
+  const parts=periphTypes(items).map(t=>`${markTypeLabel(t)} ${items.filter(d=>d.type===t).length}`).join(" · ");
+  const off=items.filter(d=>d.enabled===false).length;
+  return card("Периферия",`<div class="it" onclick="goTab('io')"><span>${ic(items[0].type)}</span><span>${escHtml(parts)}<small>${off?`${i18n("выключено:")} ${off} · `:""}${i18n("открыть список →")}</small></span></div>`);
+}
+function periphCam(id){const f=find(id);return f?f.n:null}
+function periphToggle(cid,id){const n=periphCam(cid);if(!n)return;const ids=periphIds(n);ids.has(id)?ids.delete(id):ids.add(id);gear()}
+function periphAll(cid,on){const n=periphCam(cid);if(!n)return;const ids=periphIds(n);ids.clear();if(on)periphItems(n).forEach(d=>ids.add(d.id));gear()}
+function periphClear(cid){periphAll(cid,false)}
+function periphPickType(cid,t){
+  const n=periphCam(cid);if(!n)return;
+  const ids=periphIds(n),of=periphItems(n).filter(d=>d.type===t);
+  const all=of.every(d=>ids.has(d.id));
+  of.forEach(d=>all?ids.delete(d.id):ids.add(d.id));
+  gear();
+}
+function periphEnable(id){
+  const f=find(id);if(!f)return;
+  f.n.enabled=f.n.enabled===false;
+  setD(true);applyFiltersFromState();
+}
+function periphBulkEnable(cid,on){
+  const n=periphCam(cid);if(!n)return;
+  const list=periphItems(n).filter(d=>periphIds(n).has(d.id));
+  list.forEach(d=>d.enabled=on);
+  setD(true);
+  toast(`${on?i18n("Включено:"):i18n("Выключено:")} ${list.length}`);
+  applyFiltersFromState();
+}
+function periphToTree(cid){
+  const n=periphCam(cid);if(!n)return;
+  const list=periphItems(n).filter(d=>periphIds(n).has(d.id)&&canMultiPick(d));
+  if(!list.length){toast("Отмеченные объекты в дереве не отмечаются");return}
+  selMode=true;treeSel.clear();
+  list.forEach(d=>{treeSel.add(d.id,null);expandTo(d.id)});
+  open.add(n.id);
+  treeAnchor=list[0].id;
+  afterSelChange(list[0].id,null);
 }
 // ── Копирование в буфер ────────────────────────────────────────────────────
 const IC_COPY=`<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 3.5v-1a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`;
@@ -6336,7 +6446,7 @@ function form(n){
       <p class="sub">${i18n("Устройства не привязаны к серверу — они в разделе")} <button class="lk" onclick="goApp('hw')">${i18n("Устройства")}</button>. ${i18n("Сервер появляется у камеры только через архив, на котором ведётся запись.")}</p>`)}
   if(n.type==="ipsrv"){
     if(tab==="rec")return nvrRecCardHtml(n);
-    if(tab==="kids")return childListCard(n,{head:`<button class="btn s" onclick="openW()">＋</button>`})+
+    if(tab==="kids")return childListCard(n,{filter:d=>d.type!=="storage",head:`<button class="btn s" onclick="openW()">＋</button>`})+
       (n.subtype==="nvr"?`<p class="sub">NVR отображается как IP-сервер с камерами и каналами. Под каналом — датчики и реле.</p>`:
       n.subtype==="io"?`<p class="sub">I/O-устройство без камер: датчики и реле под каналом.</p>`:
       n.subtype==="sip"||n.subtype==="mic"?`<p class="sub">Аудио-устройство: микрофоны и/или динамики без видеоканалов.</p>`:"");
@@ -6379,6 +6489,7 @@ function form(n){
       <div class="g" style="margin-top:10px">${sl("Кодек",["H.265","H.264"])}${sl("Разрешение",["1920×1080","4K"])}${fld("к/с","25","number")}${fld("Битрейт","4096","number")}</div>
       <p class="sub">${i18n("Детекторы видеоаналитики — на вкладке")} <button class="lk" onclick="goTab('det')">${i18n("Детекторы")}</button>.</p>`);
     if(tab==="det")return camDetectorsHtml(n);
+    if(tab==="io")return periphCardHtml(n);
     if(tab==="acc")return accCamAccessHtml(n);
     if(tab==="rec"){
       const as=archServer(a),noRec=!isRecording(n),edge=edgeStorage(n);
@@ -6387,8 +6498,7 @@ function form(n){
       return card("Архив камеры",`${head}
       <div class="g">${camArchSelectHtml(n)}${camRecSelectHtml(n)}${n.rec==="replica"?fldRo("Предзапись, с","—"):fld("Предзапись, с","5","number")}</div>
       ${archChoicesNote(n)}
-      ${edge?`<p class="sub">${i18n("Встроенное хранилище:")} <b>${escHtml(edge.size||locName(edge))}</b></p>`
-        :`<p class="sub">${i18n("Встроенное хранилище не найдено — репликация недоступна.")}</p>`}
+      ${edge?"":`<p class="sub">${i18n("Встроенное хранилище не найдено — репликация недоступна.")}</p>`}
       ${n.rec==="replica"?`<div class="nt">${i18n("Сервер периодически забирает записи со встроенного хранилища камеры. Постоянный поток на сервер не идёт: канал нагружается только на время репликации, а пропуски в архиве восполняются после обрыва связи.")}</div>`:""}
       <p class="sub">${noRec?(cameraTreeServer(n.id)?i18n("Назначьте архив, чтобы включить запись. Без архива камера остаётся под своим сервером, просто не пишется.")
           :i18n("Назначьте архив, чтобы включить запись. Камера ещё не подключена к серверу — подключится к серверу выбранного архива."))
@@ -6396,14 +6506,14 @@ function form(n){
         :i18n("Архив — сетевое хранилище домена: пишет в него сервер камеры.")}</p>
       ${ipsrvOwnerNode(n)?`<p class="sub">${i18n("Камера входит в регистратор")} <button class="lk" onclick="pick('${ipsrvOwnerNode(n).id}');goTab('rec')">${escHtml(locName(ipsrvOwnerNode(n)))}</button> — ${i18n("там режим задаётся сразу для всех его камер.")}</p>`:""}
       ${as?`<p class="sub"><button class="lk" onclick="goApp('hw');setSrvView('cam');pick('${a.id}')">${i18n("Показать архив в разделе «Сервера» →")}</button></p>`:""}`)
-      +(n.rec==="motion"?camRecDetsHtml(n):"");
+      +edgeStorageCardHtml(n)+(n.rec==="motion"?camRecDetsHtml(n):"");
     }
     const ips=ipsrvOwnerNode(n);
     const underIpsrv=!!ips;
     const camIdFld=fldRo("ID",deviceIdentifierValue(n)||"—");
     const vchFld=underIpsrv?fldRo("Номер видеоканала",ipsrvCameraVideoChannel(n,ips)):"";
     return card("Идентификация объекта",`${bdg(n)}${enabledToggleHtml(n)}<div class="g" style="margin-top:10px">${fld("Имя",n.name)}${fld("Короткое имя",n.short??"")}${camIdFld}${vchFld}</div>`)
-      +card("Подключение",`<div class="g">${fld("IP",n.ip)}${fld("Производитель",n.vendor||"")}${fld("Модель",n.model||"")}${fld("RTSP",`rtsp://${n.ip}:554/main`)}</div>`)+deviceFoldersCardHtml(n)+childListCard(n,{title:"Дочерние",filter:d=>d.type!=="det"})}
+      +card("Подключение",`<div class="g">${fld("IP",n.ip)}${fld("Производитель",n.vendor||"")}${fld("Модель",n.model||"")}${fld("RTSP",`rtsp://${n.ip}:554/main`)}</div>`)+deviceFoldersCardHtml(n)+periphSummaryHtml(n)}
   if(n.type==="det"){
     const cam=find(n.id)?.p;
     return detZoneCardHtml(cam,n)+card("Параметры",`<div class="g">${fld("Имя",locName(n))}${sl("Тип",DET_TYPES,n.kind||DET_TYPES[0])}${fld("Чувствительность",n.sens||"12")}${cam?detServerSelectHtml(cam,n):""}</div>
@@ -10242,6 +10352,27 @@ function recordModeLabel(rec){
 }
 // Репликация возможна, только если у камеры есть встроенное хранилище (SD/eMMC)
 function edgeStorage(n){return(n?.devices||[]).find(d=>d.type==="storage")||null}
+// Встроенное хранилище — не объект дерева, а часть записи устройства, как
+// edge storage у Milestone и edge recording у Genetec: объём, состояние и
+// выгрузка записей в хранилище сервера.
+function edgeStorageCardHtml(owner){
+  const e=edgeStorage(owner);if(!e)return"";
+  const nvr=owner.type==="ipsrv";
+  const rep=nvr?ipsrvCameras(owner).some(c=>c.rec==="replica"):owner.rec==="replica";
+  const state=e.online===false?i18n("нет связи"):e.enabled===false?i18n("выключено"):i18n("доступно");
+  return card("Встроенное хранилище",`<div class="mx">
+      <div class="mc"><span>${i18n("Объём")}</span><b>${escHtml(e.size||"—")}</b></div>
+      <div class="mc"><span>${i18n("Состояние")}</span><b>${state}</b></div>
+      <div class="mc"><span>${i18n("Репликация")}</span><b>${rep?i18n("идёт"):i18n("не настроена")}</b></div>
+    </div>
+    ${enabledToggleHtml(e)}
+    <p class="sub">${i18n(nvr?"Диск внутри регистратора. Записи с него забирает сервер в режиме «Репликация встроенного архива» — сразу для всех камер регистратора."
+      :"Карта памяти внутри камеры. Записи с неё забирает сервер в режиме «Репликация встроенного архива», а после обрыва связи — восполняет пропуски в архиве.")}</p>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+      <button class="btn s" onclick="toast(i18n('Выгрузка записей поставлена в очередь'))">${i18n("Выгрузить записи за период…")}</button>
+      <button class="btn s" onclick="toast(i18n('Форматирование — после подтверждения на устройстве'))">${i18n("Форматировать")}</button>
+    </div>`);
+}
 function camRecSelectHtml(n){
   const has=!!edgeStorage(n),cur=n.rec||"none";
   return `<div><label>${i18n("Режим")}</label><select onchange="setCamRec('${n.id}',this.value)">${
@@ -10368,7 +10499,7 @@ function nvrRecCardHtml(n){
     ${archChoicesNote(n)}
     <p class="sub">${i18n("Настройка применяется сразу ко всем камерам регистратора. Отдельную камеру можно переопределить в её карточке, вкладка «Архив».")}</p>`,
     `<span class="sub" style="font-weight:400">${cams.length}</span>`)+
-    card("Камеры регистратора",table);
+    edgeStorageCardHtml(n)+card("Камеры регистратора",table);
 }
 // Камера под сервером пишет только на этот сервер: в его хранилища или в
 // сетевые хранилища домена. Хранилище другого сервера её туда не переносит.
@@ -11586,14 +11717,15 @@ function selCandidates(){
   return out;
 }
 // Отмечаемые потомки контейнера: сервер, регистратор, папка, домен, архив.
-function selDescendants(n){
+// withParts — вместе с начинкой камер (для «Отметить внутри» по типу).
+function selDescendants(n,withParts){
   const q=qval(),out=[],seen=new Set(),busy=busyIds();
   // Начинка камеры и регистратора (датчики, реле, микрофоны, встроенное
   // хранилище, каналы) в групповую выборку не идёт — её отмечают поштучно.
   const dev=x=>x.type==="camera"||x.type==="ipsrv"||x.type==="channel";
   const visit=(x,inDev)=>{
     if(!x||seen.has(x.id))return;seen.add(x.id);
-    const part=inDev&&x.type!=="camera";
+    const part=inDev&&x.type!=="camera"&&!withParts;
     if(x!==n&&!part&&canMultiPick(x)&&selfInView(x)&&matchesSearch(x,q)&&!busy.has(x.id)&&!pendingDelHas(x.id))out.push(x);
     kids(x).forEach(k=>visit(k,inDev||dev(x)));
     // Сервер и хранилище отмечают всё, что под ними в дереве: регистраторы
@@ -11608,6 +11740,37 @@ function selDescendants(n){
     }
   };
   visit(n,false);return out;
+}
+// «Отметить внутри» по типу — как узлы Cameras / Inputs / Outputs у Milestone
+// и однотипные группы: галочка контейнера берёт камеры и регистраторы, а
+// реле, датчики и прочую начинку отмечают отсюда — все сразу, но одного типа.
+const MARK_TYPE_ORDER=["camera","ipsrv","channel","relay","sensor","mic","spk","ptz","eventsrc"];
+const MARK_TYPE_RU={camera:"Камеры",ipsrv:"IP-серверы",channel:"Каналы",relay:"Реле",sensor:"Датчики",mic:"Микрофоны",spk:"Динамики",ptz:"PTZ",eventsrc:"Источники событий"};
+function markTypeLabel(t){return i18n(MARK_TYPE_RU[t]||LB[t]||t)}
+function markTypeRank(t){const i=MARK_TYPE_ORDER.indexOf(t);return i<0?99:i}
+function insideByType(n){
+  const by=new Map();
+  selDescendants(n,true).forEach(x=>{if(!by.has(x.type))by.set(x.type,[]);by.get(x.type).push(x)});
+  return[...by.entries()].sort((a,b)=>markTypeRank(a[0])-markTypeRank(b[0]));
+}
+function markInsideItems(n){
+  if(app!=="hw")return[];
+  const groups=insideByType(n);if(!groups.length)return[];
+  return[`<div class="tctx-head">${i18n("Отметить внутри")}</div>`,
+    ...groups.map(([t,list])=>tctxItem(`${markTypeLabel(t)} (${list.length})`,`markInside('${n.id}','${t}')`,`<span class="tctx-ic">${ic(t)}</span>`))];
+}
+function markInside(id,type){
+  closeTreeCtx();
+  const f=find(id);if(!f)return;
+  const list=selDescendants(f.n,true).filter(x=>x.type===type);
+  if(!list.length){toast("Здесь нечего отметить");return}
+  const cc=childSelCtx(f.n),at=x=>cc&&(x.type==="camera"||x.type==="ipsrv")?cc:null;
+  selMode=true;treeSel.clear();
+  list.forEach(x=>{treeSel.add(x.id,at(x));expandTo(x.id,at(x))});
+  open.add(f.n.id);
+  treeAnchor=list[0].id;
+  toast(`${i18n("Отмечено:")} ${markTypeLabel(type).toLowerCase()} — ${list.length}`);
+  afterSelChange(list[0].id,at(list[0]));
 }
 function decorateTreeSel(){
   const treeEl=document.getElementById("tree");if(!treeEl)return;
