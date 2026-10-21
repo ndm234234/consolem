@@ -1462,7 +1462,15 @@ function syncViews(){
 }
 let detSel=null,sview="cam",selFolder=null,logFilt="all",asideW=asideWidthDefault(),recent=[],treeQ="",strictIdSearch=false,filtPop=false,typesExpanded=false,treeRenameId=null,treeRenameField="name";
 let domainFilter="",domainPop=false;
-const treeSel=new Set();
+// Галочка стоит на конкретном вхождении объекта: камера есть и под сервером,
+// и под хранилищем — это одно устройство, но отмечено оно там, где щёлкнули.
+// selWhere помнит контекст строки; null — место не задано (основное вхождение).
+const selWhere=new Map();
+const treeSel=new (class extends Set{
+  add(id,ctx){if(ctx!==undefined||!this.has(id))selWhere.set(id,ctx||null);return super.add(id)}
+  delete(id){selWhere.delete(id);return super.delete(id)}
+  clear(){selWhere.clear();super.clear()}
+})();
 let treeAnchor=null;
 const statusFilts=new Set();
 const STATUS_FILTERS_RU=[["run","Работает"],["nosignal","Нет сигнала"],["off","Выключено"],["license","Лицензия превышена"]];
@@ -1869,15 +1877,47 @@ function archUsed(a){const t=archSizeTb(a);if(!t)return"0%";const u=archVols(a).
 function archDiskLabel(a){const v=archVols(a);return v.length===1?v[0].disk:`${v.length} ${i18n(plural(v.length,"том|тома|томов"))}`}
 // Камеры площадок без архива (Ангар, Парковка, Резервный узел) не пишутся вовсе
 const RECORDS_TO={s1:"a1",s5:"a1",s2:"a2",s10:"a2",s3:"a3",s4:"a4",s8:"a5",s9:"a6",s7:"a7"};
+// Камера и регистратор подключены к своему серверу независимо от записи:
+// хранилище — только куда пишется видео. Без хранилища камера остаётся под
+// сервером (и в «Без записи»), а не пропадает из дерева.
 Object.entries(srvDevices).forEach(([sid,list])=>{
   const aid=RECORDS_TO[sid]||null;
   walk(n=>{
+    if(n.type==="camera"||n.type==="ipsrv")n.srvId=sid;
     if(n.type!=="camera")return;
     if(aid){n.arch=aid;if(!n.rec||n.rec==="none")n.rec="always"}// режим, заданный в данных, сохраняется
     else{n.arch=null;n.rec="none"}
   },list,null);
 });
 function archById(id){return arch.find(a=>a.id===id)||null}
+// Камера без сервера (добавлена без него) подключается к серверу первого
+// своего хранилища — дальше сервер остаётся с ней и без записи.
+function bindArchServer(n){
+  if(!n||n.srvId||(n.type!=="camera"&&n.type!=="ipsrv"))return;
+  const s=archServer(archById(n.arch));if(s)n.srvId=s.id;
+}
+// Перед сменой хранилища: сервер, который у камеры уже есть (в т.ч. через
+// регистратор или прежнее хранилище), закрепляется за ней.
+function pinCamServer(n){
+  if(!n||n.srvId||(n.type!=="camera"&&n.type!=="ipsrv"))return;
+  const s=srv(n.id);if(s)n.srvId=s.id;
+}
+// Новое устройство на сервере: сервер получают оно и камеры внутри него
+function setDevServer(node,sid){
+  walk(x=>{if(x.type==="camera"||x.type==="ipsrv")x.srvId=sid},[node],null);
+}
+// Сервер камеры без поиска по дереву: свой, иначе — через хранилище записи
+function camSrvId(n){return n.srvId||(isRecording(n)?archById(n.arch)?.server:null)||null}
+// Камера внутри регистратора наследует его сервер
+function serverCameras(sid){
+  const via=new Map(),out=[];
+  walkAll((n,p)=>{
+    const s=((n.type==="camera"||n.type==="ipsrv")&&n.srvId)||(p&&via.get(p.id))||null;
+    if(s)via.set(n.id,s);
+    if(n.type==="camera"&&(s||camSrvId(n))===sid)out.push(n);
+  });
+  return out;
+}
 // GPU — один на сервер; на нём считаются детекторы назначенных камер
 const SERVER_GPU={
   s1:{model:"NVIDIA RTX A2000",mem:"12 ГБ",load:38},
@@ -2003,12 +2043,14 @@ function norecId(did){return"norec:"+did}
 function norecNode(did){return{id:norecId(did),type:"norec",name:"Без записи",domainId:did,online:true}}
 function norecList(did){return unrecordedCameras(did)}
 function cam(id){let x;walkAll(n=>{if(n.id===id)x=n});return x}
-// Сервер устройства — только через архив, на котором ведётся запись (у служб — владелец)
+// Сервер устройства: у камеры и регистратора — тот, к которому они подключены;
+// у прочих — через архив, на котором ведётся запись (у служб — владелец)
 function srv(id){
   let f=find(id);
   while(f){
     const n=f.n;
     if(n.type==="server")return n;
+    if(n.srvId&&(n.type==="camera"||n.type==="ipsrv")){const s=servers.find(x=>x.id===n.srvId);if(s)return s}
     if(n.arch&&n.rec&&n.rec!=="none"){
       const a=arch.find(x=>x.id===n.arch),s=a&&servers.find(x=>x.id===a.server);
       if(s)return s;
@@ -3124,20 +3166,37 @@ function sameCtx(ctx){
   return(chosen||"")===(normalizeTreeCtx(ctx)||"");
 }
 function rowOn(id,ctx){return sel===id&&sameCtx(ctx)?"on":""}
+// Отмечен ли объект именно в этой строке. Место не задано — галочка у
+// основного вхождения: камера с сервером отмечена под сервером, не под хранилищем.
+function selShownAt(id,ctx){
+  if(!treeSel.has(id))return false;
+  const w=selWhere.get(id)??null;
+  if(w!==null)return w===(normalizeTreeCtx(ctx)||null);
+  return!ctx?.startsWith("arch:")||!cameraTreeServer(id);
+}
+// Контекст, который получают строки внутри контейнера: камеры сервера и
+// хранилища различаются, остальное — без контекста.
+// Под хранилищем камера (и регистратор) нужны ради записи — открываем сразу
+// вкладку «Архив»; под сервером — обычная карточка.
+function archCtxTab(n,ctx){return ctx?.startsWith("arch:")&&(n.type==="camera"||n.type==="ipsrv")?"rec":null}
+function childSelCtx(n){return n.type==="server"?"srv:"+n.id:n.type==="archive"?"arch:"+n.id:null}
+// Отмечен ли объект внутри контейнера: место различаем только у камер и
+// регистраторов, остальное (датчики, реле камеры) — по самому факту отметки.
+function selShownIn(x,cc){return cc&&(x.type==="camera"||x.type==="ipsrv")?selShownAt(x.id,cc):treeSel.has(x.id)}
 function canMultiPick(n){
   return n&&n.type!=="domain"&&n.type!=="server"&&n.type!=="unalloc"&&n.type!=="det"&&n.type!=="folder"&&treeKind(n)===tview;
 }
 function treeRowHi(id,ctx){
-  const on=sel===id&&sameCtx(ctx),mark=treeSel.has(id);
+  const on=sel===id&&sameCtx(ctx),mark=selShownAt(id,ctx);
   if(on&&mark)return"on mark";
   if(on)return"on";
   if(mark)return"mark";
   return"";
 }
-function resetTreeSel(id){
+function resetTreeSel(id,ctx){
   treeSel.clear();
   const f=id?find(id):null;
-  if(f&&canMultiPick(f.n)){treeSel.add(id);treeAnchor=id}
+  if(f&&canMultiPick(f.n)){treeSel.add(id,ctx);treeAnchor=id}
   else treeAnchor=id||null;
 }
 function visibleMultiIds(){
@@ -3145,15 +3204,19 @@ function visibleMultiIds(){
     const f=find(id);return f&&canMultiPick(f.n);
   });
 }
-function applyShiftRange(id){
-  const ids=visibleMultiIds();
+// Диапазон — по строкам, а не по id: камера может стоять в дереве дважды,
+// и галочка встаёт на первое её вхождение, попавшее в диапазон.
+function applyShiftRange(id,ctx){
+  const rows=[...document.querySelectorAll("#tree .n[data-pick]")].filter(el=>{const f=find(el.dataset.pick);return f&&canMultiPick(f.n)});
+  const ids=rows.map(el=>el.dataset.pick);
+  const at=(x,c)=>{const i=rows.findIndex(el=>el.dataset.pick===x&&(el.dataset.ctx||null)===(c||null));return i<0?ids.indexOf(x):i};
   let from=treeAnchor&&ids.includes(treeAnchor)?treeAnchor:null;
   if(!from)from=ids.includes(sel)?sel:id;
-  const a=ids.indexOf(from),b=ids.indexOf(id);
+  const a=at(from,from===sel?selCtx:selWhere.get(from)),b=at(id,ctx);
   treeSel.clear();
-  if(a<0||b<0){treeSel.add(id);treeAnchor=from||id;return}
+  if(a<0||b<0){treeSel.add(id,ctx);treeAnchor=from||id;return}
   const lo=Math.min(a,b),hi=Math.max(a,b);
-  ids.slice(lo,hi+1).forEach(x=>treeSel.add(x));
+  rows.slice(lo,hi+1).forEach(el=>{if(!treeSel.has(el.dataset.pick))treeSel.add(el.dataset.pick,el.dataset.ctx)});
 }
 function treeNameCell(n,q){
   if(treeRenameId===n.id){
@@ -3893,6 +3956,8 @@ function setSlice(v){
 function setGroup(g){
   if(!sliceGroups().includes(g)||group()===g)return;
   groupBy[slice]=g;
+  // В другой группировке прежних строк нет — отметки встают на основные вхождения
+  selWhere.forEach((_,k)=>selWhere.set(k,null));
   treeMatchCache.clear();searchMatchCache.clear();
   expandSliceBranches();
   keepSelectionInSlice();
@@ -3933,23 +3998,24 @@ function pick(id,opts){
   closeTreeCtx();
   const f=find(id);if(!f)return;
   const range=!!opts?.range,additive=!!opts?.additive,multi=range||additive;
+  const ctx=normalizeTreeCtx(opts?.ctx);
   if(range&&canMultiPick(f.n)){
     const ids=visibleMultiIds();
     if(!treeAnchor||!ids.includes(treeAnchor))treeAnchor=ids.includes(sel)?sel:id;
-    applyShiftRange(id);
+    applyShiftRange(id,ctx);
   }else if(additive&&canMultiPick(f.n)){
     const ids=visibleMultiIds();
-    if(!treeSel.size&&ids.includes(sel))treeSel.add(sel);
-    if(treeSel.has(id)&&treeSel.size>1)treeSel.delete(id);
-    else treeSel.add(id);
+    if(!treeSel.size&&ids.includes(sel))treeSel.add(sel,selCtx);
+    if(selShownAt(id,ctx)&&treeSel.size>1)treeSel.delete(id);
+    else treeSel.add(id,ctx);
     treeAnchor=id;
   }else if(selMode&&treeSel.size>1)bulkPeek=true;
-  else resetTreeSel(id);
-  selCtx=normalizeTreeCtx(opts?.ctx);
+  else resetTreeSel(id,ctx);
+  selCtx=ctx;
   if(selCtx&&selCtx.startsWith("f:"))selFolder=selCtx.slice(2);
   if(f.n.type==="folder")selFolder=id;
   else{const own=foldersOfDevice(path(id)[0].id);if(own.length&&!own.some(x=>x.id===selFolder))selFolder=own[0].id}
-  pushRecent(id);sel=id;tab="gen";setD(false);editClear();expandTo(id,selCtx);
+  pushRecent(id);sel=id;tab=archCtxTab(f.n,selCtx)||"gen";setD(false);editClear();expandTo(id,selCtx);
   if(multi&&canMultiPick(f.n)){
     bulkPeek=false;
     // Ctrl/Shift-выбор включает режим галочек: выборка должна быть видна.
@@ -4510,9 +4576,9 @@ function srow(s,l=1,bare=false){
   const gpu=offline||slice==="acfa"?null:serverGpu(s);
   const svcHtml=devs.filter(d=>!q||matchesSearch(d,q)).map(d=>svcrow(d,l+1)).join("");
   // Камеры стоят под сервером и ещё раз под своим хранилищем: по серверу
-  // видно всё, что на нём пишется, по хранилищу — что именно в него. Камеры
-  // всех хранилищ собираем до группировки, чтобы один NVR не повторялся.
-  const cams=archs.flatMap(a=>archCameras(a.id));
+  // видно все подключённые к нему камеры (и без записи, и на сетевом
+  // хранилище), по хранилищу — что именно в него пишется.
+  const cams=offline?[]:serverCameras(s.id);
   const kidsHtml=(srvSlice?"":recordedCameraRows(cams,l+1,"srv:"+s.id))
     +archs.map(a=>arow(a,l+1)).join("")
     +(gpu?gpurow(s,l+1):"")+svcHtml;
@@ -4851,7 +4917,8 @@ function arow(a,l){
   if(op)h+=children;
   return h;
 }
-// Камеры, для которых запись не настроена: сервера у них нет вовсе
+// Камеры, для которых запись не настроена: сводный список по домену (под своим
+// сервером они тоже стоят)
 function norow(d,l){
   const q=qval(),cams=norecList(d.id).filter(selfInView),vis=cams.filter(c=>matchesSearch(c,q));
   const n=norecNode(d.id);
@@ -5544,6 +5611,8 @@ function lanBind(key,opts={}){
     // У найденного архив и режим заданы в самой строке — не переспрашиваем.
     if(r.kind==="net"){if(!node.arch)node.arch=lan.arch}
     else{node.arch=lan.arch;node.rec=lan.rec||"always"}
+    if(n.type==="server"&&!node.srvId)setDevServer(node,n.id);
+    bindArchServer(node);
   }
   lan.sel.delete(key);
   treeMatchCache.clear();searchMatchCache.clear();paint();
@@ -6209,8 +6278,7 @@ function form(n){
         <button type="button" class="btn pri" style="margin-top:12px;width:100%" onclick="addToDomain('${n.id}','${domId}')">${i18n("Добавить в домен")}</button>`);
     }
     if(tab==="disk"){
-      const on=serverArchives(n.id),recCams=[];
-      walkAll(x=>{if(x.type==="camera"&&srv(x.id)?.id===n.id)recCams.push(x)});
+      const on=serverArchives(n.id),recCams=serverCameras(n.id).filter(isRecording);
       return listCard({
         key:"sarc:"+n.id,
         title:"Хранилища сервера",
@@ -6247,7 +6315,7 @@ function form(n){
       })+
       `<p class="sub">Email, SMS, агент экспорта и динамик. В дереве — вкладка «Службы».</p>`;
     const svc=(n.devices||[]).filter(d=>isSvc(d)).length;
-    const recCams=[];walkAll(x=>{if(x.type==="camera"&&srv(x.id)?.id===n.id)recCams.push(x)});
+    const recCams=serverCameras(n.id).filter(isRecording);
     return card("Общие",`${bdg(n)}${n.online===false?` <span class="sub">${i18n("нет связи")}</span>`:` <span class="sub">${i18n("ведёт запись и службы")}</span>`}
       <div class="g" style="margin-top:10px">${fld("Имя",locName(n))}${fld("IP",n.ip)}${sl("Роль",[n.role||"Узел","Резервный"])}</div>
       ${serverLoadHtml(n)}
@@ -6307,7 +6375,7 @@ function form(n){
     if(tab==="acc")return accCamAccessHtml(n);
     if(tab==="rec"){
       const as=archServer(a),noRec=!isRecording(n),edge=edgeStorage(n);
-      const head=noRec?`<div class="nt">${i18n("Запись не настроена — камера не привязана ни к одному серверу.")}</div>`
+      const head=noRec?`<div class="nt">${i18n("Запись не настроена — архив не назначен.")}</div>`
         :`<div class="nt ok">${i18n("Архив «")}${escHtml(locName(a))}${i18n("», срок ")}${a.days} ${i18n("дн.")}</div>`;
       return card("Архив камеры",`${head}
       <div class="g">${camArchSelectHtml(n)}${camRecSelectHtml(n)}${n.rec==="replica"?fldRo("Предзапись, с","—"):fld("Предзапись, с","5","number")}</div>
@@ -6315,8 +6383,10 @@ function form(n){
       ${edge?`<p class="sub">${i18n("Встроенное хранилище:")} <b>${escHtml(edge.size||locName(edge))}</b></p>`
         :`<p class="sub">${i18n("Встроенное хранилище не найдено — репликация недоступна.")}</p>`}
       ${n.rec==="replica"?`<div class="nt">${i18n("Сервер периодически забирает записи со встроенного хранилища камеры. Постоянный поток на сервер не идёт: канал нагружается только на время репликации, а пропуски в архиве восполняются после обрыва связи.")}</div>`:""}
-      <p class="sub">${noRec?i18n("Назначьте архив, чтобы включить запись. Сервер определится архивом автоматически.")
-        :`${i18n("Архив размещён на сервере")} <b>${escHtml(as?locName(as):"—")}</b>. ${i18n("Это единственная связь камеры с сервером: без записи камера серверу не принадлежит.")}`}</p>
+      <p class="sub">${noRec?(cameraTreeServer(n.id)?i18n("Назначьте архив, чтобы включить запись. Без архива камера остаётся под своим сервером, просто не пишется.")
+          :i18n("Назначьте архив, чтобы включить запись. Камера ещё не подключена к серверу — подключится к серверу выбранного архива."))
+        :as?`${i18n("Архив размещён на сервере")} <b>${escHtml(locName(as))}</b>.`
+        :i18n("Архив — сетевое хранилище домена: пишет в него сервер камеры.")}</p>
       ${ipsrvOwnerNode(n)?`<p class="sub">${i18n("Камера входит в регистратор")} <button class="lk" onclick="pick('${ipsrvOwnerNode(n).id}');goTab('rec')">${escHtml(locName(ipsrvOwnerNode(n)))}</button> — ${i18n("там режим задаётся сразу для всех его камер.")}</p>`:""}
       ${as?`<p class="sub"><button class="lk" onclick="goApp('hw');setSrvView('cam');pick('${a.id}')">${i18n("Показать архив в разделе «Сервера» →")}</button></p>`:""}`)
       +(n.rec==="motion"?camRecDetsHtml(n):"");
@@ -10186,9 +10256,11 @@ function setNvrArch(id,v){
   const cams=ipsrvCameras(f.n);
   if(v==="__mixed__")return;
   cams.forEach(c=>{
+    pinCamServer(c);
     c.arch=v||null;
     if(!v)c.rec="none";
     else if(!c.rec||c.rec==="none")c.rec="always";
+    bindArchServer(c);
   });
   treeMatchCache.clear();searchMatchCache.clear();setD(true);
   toast(v?`${i18n("Архив назначен камерам:")} ${cams.length}`:i18n("Запись отключена для всех камер регистратора"));
@@ -10201,7 +10273,7 @@ function setNvrRec(id,v){
   cams.forEach(c=>{
     c.rec=v;
     if(v==="motion")c.recDets=camDetectors(c).map(d=>d.id);
-    if(v!=="none"&&!c.arch)c.arch=arch[0]?.id||null;
+    if(v!=="none"&&!c.arch){pinCamServer(c);c.arch=archChoicesFor(c)[0]?.id||null;bindArchServer(c)}
   });
   treeMatchCache.clear();searchMatchCache.clear();setD(true);
   toast(`${i18n("Режим записи задан камерам:")} ${cams.length}`);
@@ -10315,14 +10387,16 @@ function camArchSelectHtml(n){
 function setCamRec(id,v){
   const f=find(id);if(!f)return;
   f.n.rec=v;
-  if(v!=="none"&&!f.n.arch)f.n.arch=arch[0]?.id||null;
+  if(v!=="none"&&!f.n.arch){pinCamServer(f.n);f.n.arch=archChoicesFor(f.n)[0]?.id||null;bindArchServer(f.n)}
   treeMatchCache.clear();searchMatchCache.clear();setD(true);paint();
 }
 function setCamArch(id,v){
   const f=find(id);if(!f)return;
+  pinCamServer(f.n);
   f.n.arch=v||null;
   if(!v)f.n.rec="none";
   else if(!f.n.rec||f.n.rec==="none")f.n.rec="always";
+  bindArchServer(f.n);
   treeMatchCache.clear();searchMatchCache.clear();setD(true);paint();
 }
 function foundRecordOptions(r){
@@ -10475,6 +10549,8 @@ function deviceNodeFromData(r,server,opts={}){
     node.templateId=template.id;node.firmware=template.firmware||"как у шаблона";node.streamProfile=template.streamProfile||"как у шаблона";node.buffering=template.buffering||"как у шаблона";
   }
   if(r.arch)node.arch=r.arch;
+  if(s?.type==="server"&&(node.type==="camera"||node.type==="ipsrv"))node.srvId=s.id;
+  else bindArchServer(node);
   node.rec=r.arch&&r.record==="always"?"always":r.arch&&r.record==="motion"?"motion":"none";
   if(r.lat!=""&&r.lat!=null)node.lat=r.lat;else node.lat="0";
   if(r.lon!=""&&r.lon!=null)node.lon=r.lon;else node.lon="0";
@@ -10829,6 +10905,7 @@ function commitManualDevice(disabled){
   else if(m.type==="acfa")node={...common,type:"acfa"};
   else node={...common,type:"camera",arch:m.arch||null,rec:m.record==="always"?"always":m.record==="motion"?"motion":"none",lat:m.lat,lon:m.lon,azimuth:m.azimuth};
   if(node.type==="camera"&&m.record==="motion")node.devices.push({id:node.id+"det",type:"det",name:"Детектор движения",online:true,builtin:["Hikvision","Dahua","Axis"].includes(m.vendor)});
+  if(s.type==="server")setDevServer(node,s.id);else bindArchServer(node);
   s.devices.push(node);if(node.type==="camera")assignDeviceFolder(node.id,m.group);if(node.type==="acfa")remakeAcfa();
   open.add(s.id);treeMatchCache.clear();searchMatchCache.clear();wizd.manualAddedId=node.id;
   paint();renderDeviceWizard();
@@ -11508,7 +11585,7 @@ function selDescendants(n){
     if(!x||seen.has(x.id))return;seen.add(x.id);
     if(x!==n&&canMultiPick(x)&&selfInView(x)&&matchesSearch(x,q)&&!busy.has(x.id)&&!pendingDelHas(x.id))out.push(x);
     kids(x).forEach(visit);
-    if(x.type==="server"&&!isUnallocated(x.id))serverArchives(x.id).forEach(a=>archCameras(a.id).forEach(visit));
+    if(x.type==="server"&&!isUnallocated(x.id))serverCameras(x.id).forEach(visit);
     if(x.type==="archive")archCameras(x.id).forEach(visit);
   };
   visit(n);return out;
@@ -11521,7 +11598,7 @@ function decorateTreeSel(){
   treeEl.querySelectorAll(".n.pending,.n.busy").forEach(el=>el.classList.remove("pending","busy"));
   treeEl.querySelectorAll(".n[data-pick]").forEach(row=>{
     const id=row.dataset.pick,f=find(id);if(!f)return;
-    const multi=treeSel.size>1&&treeSel.has(id)&&canMultiPick(f.n);
+    const multi=treeSel.size>1&&selShownAt(id,row.dataset.ctx)&&canMultiPick(f.n);
     row.classList.toggle("mark",multi);
     if(pendingDelHas(id)){
       row.classList.add("pending");
@@ -11537,13 +11614,13 @@ function decorateTreeSel(){
     // прочие неотмечаемые строки стоят левее соседей.
     let ph=false,state="";
     // Вне режима открытый объект тоже лежит в treeSel, но галочкой его не показываем.
-    if(canMultiPick(f.n))state=(on||treeSel.size>1)&&treeSel.has(id)?"on":"";
+    if(canMultiPick(f.n))state=(on||treeSel.size>1)&&selShownAt(id,row.dataset.ctx)?"on":"";
     else if(f.n.type==="det"||f.n.type==="vol"||f.n.type==="found"||f.n.type==="founddev"||f.n.type==="norec"||f.n.type==="nofolder"||f.n.type==="gpu")ph=true;
     else if(on){
       // Тристейт считаем только в режиме: вне его галочка контейнера просто ждёт клика.
-      const d=selDescendants(f.n);
+      const d=selDescendants(f.n),cc=childSelCtx(f.n);
       if(!d.length)ph=true;
-      else{const k=d.filter(x=>treeSel.has(x.id)).length;state=k===0?"":k===d.length?"on":"part"}
+      else{const k=d.filter(x=>selShownIn(x,cc)).length;state=k===0?"":k===d.length?"on":"part"}
     }
     const chk=document.createElement("span");
     if(!ph&&!on&&!canMultiPick(f.n)&&!selDescendants(f.n).length)ph=true;
@@ -11562,21 +11639,23 @@ function selChkClick(id,ctx){
   // уже в выборке, снимать его было бы неожиданно.
   if(entering&&canMultiPick(f.n)&&treeSel.size===1&&treeSel.has(id)){afterSelChange(id,ctx);return}
   if(canMultiPick(f.n)){selToggle(id,ctx);return}
-  const d=selDescendants(f.n);
+  const d=selDescendants(f.n),cc=childSelCtx(f.n);
   if(!d.length){toast("Здесь нечего отметить");return}
-  const all=d.every(x=>treeSel.has(x.id));
-  d.forEach(x=>all?treeSel.delete(x.id):treeSel.add(x.id));
-  afterSelChange(all?null:d[0].id,ctx);
+  const all=d.every(x=>selShownIn(x,cc));
+  d.forEach(x=>all?treeSel.delete(x.id):treeSel.add(x.id,cc&&(x.type==="camera"||x.type==="ipsrv")?cc:null));
+  afterSelChange(all?null:d[0].id,all?ctx:cc||ctx);
 }
+// Объект уже отмечен в другом месте дерева — щелчок переносит галочку сюда,
+// а не снимает её.
 function selToggle(id,ctx){
   const f=find(id);if(!f||!canMultiPick(f.n))return;
-  if(treeSel.has(id))treeSel.delete(id);else{if(blockedId(id)){toast("Объект в очереди — отметить нельзя");return}treeSel.add(id)}
+  if(selShownAt(id,ctx))treeSel.delete(id);else{if(blockedId(id)){toast("Объект в очереди — отметить нельзя");return}treeSel.add(id,ctx)}
   treeAnchor=id;
   afterSelChange(id,ctx);
 }
 function afterSelChange(id,ctx){
   bulkPeek=false;
-  if(id){sel=id;selCtx=normalizeTreeCtx(ctx||null)}
+  if(id){sel=id;selCtx=normalizeTreeCtx(ctx||null);const t=archCtxTab(find(id)?.n||{},selCtx);if(t&&treeSel.size<=1)tab=t}
   if(treeSel.size===1)sel=[...treeSel][0];
   if(bulkActive())tab=bulkTabFix(tab);
   setD(false);
@@ -11713,7 +11792,7 @@ function bulkRecHtml(nodes){
   const archOpts=[["__none__",i18n("Не задан")],...arch.map(a=>[a.id,locName(a)])];
   const recOpts=REC_MODES.map(([v,l])=>[v,i18n(l),v==="replica"&&!edgeAll]);
   return card("Архив и запись",`<div class="g">${bkSelect("Архив","arch",archOpts,archD)}${bkSelect("Режим","rec",recOpts,recD)}${bkInput("Предзапись, с","pre","number",preD)}</div>
-    <p class="sub">${i18n("Камера под сервером пишет только в хранилища своего сервера или в сетевые хранилища домена: камеры другого сервера в плане будут пропущены. Камера без записи переходит на сервер выбранного хранилища, поэтому смена идёт через план. Режим и предзапись применяются сразу, с «Отменить».")} ${edgeAll?"":`${i18n("Репликация недоступна: встроенное хранилище есть у")} ${edgeN} ${i18n("из")} ${nodes.length}.`}</p>`);
+    <p class="sub">${i18n("Камера под сервером пишет только в хранилища своего сервера или в сетевые хранилища домена: камеры другого сервера в плане будут пропущены. Камера без сервера подключается к серверу выбранного хранилища, поэтому смена идёт через план. Режим и предзапись применяются сразу, с «Отменить».")} ${edgeAll?"":`${i18n("Репликация недоступна: встроенное хранилище есть у")} ${edgeN} ${i18n("из")} ${nodes.length}.`}</p>`);
 }
 function bulkVidHtml(nodes,st){
   if(st.models.length>1)return card("Видео",`<div class="nt">${i18n("Выбрано моделей")}: ${st.models.length}. ${i18n("Параметры видео доступны, если выбрать камеры одной модели.")}</div>
@@ -11802,8 +11881,10 @@ function bulkChanges(draft){
   if(d.arch){
     const a=d.arch==="__none__"?null:arch.find(x=>x.id===d.arch);
     const ops=nodes.filter(n=>n.type==="camera"&&(n.arch||null)!==(a?a.id:null)).map(n=>mkOp(n,a?`Архив «${locName(a)}»`:"Снять архив","arch",()=>{
+      pinCamServer(n);
       n.arch=a?a.id:null;
       if(!a)n.rec="none";else if(!n.rec||n.rec==="none")n.rec="always";
+      bindArchServer(n);
     },archForeignReason(n,a)));
     const as=a?archServer(a):null,sk=ops.filter(o=>o.skip).length;
     const where=as?`${i18n("камеры без сервера перейдут на сервер")} «${locName(as)}»`:i18n("запись пойдёт в сетевое хранилище домена");
@@ -11811,9 +11892,13 @@ function bulkChanges(draft){
     step("arch",a?`Архив «${locName(a)}»`:"Снять архив",ops,a?`${where}${skNote}${d.rec?"":`; ${i18n("у камер без записи режим станет «Всегда»")}`}`:i18n("запись у этих камер остановится"));
   }
   if(d.rec){
-    const ops=nodes.filter(n=>n.type==="camera"&&(n.rec||"none")!==d.rec).map(n=>{const prev={rec:n.rec,arch:n.arch};return mkOp(n,`Режим «${i18n(recordModeLabel(d.rec))}»`,"rec",()=>{
-      n.rec=d.rec;if(d.rec!=="none"&&!n.arch)n.arch=(d.arch&&d.arch!=="__none__"?d.arch:arch[0]?.id)||null;
-    },d.rec==="replica"&&!edgeStorage(n)?i18n("нет встроенного хранилища"):(d.rec!=="none"&&!n.arch&&!(d.arch&&d.arch!=="__none__")?i18n("архив не задан — будет взят первый доступный"):null),()=>{n.rec=prev.rec;n.arch=prev.arch})});
+    const ops=nodes.filter(n=>n.type==="camera"&&(n.rec||"none")!==d.rec).map(n=>{
+      const prev={rec:n.rec,arch:n.arch,srvId:n.srvId};
+      // Архив из поля «Архив» — только если он доступен камере; иначе первый доступный
+      const want=d.arch&&d.arch!=="__none__"&&archChoicesFor(n).some(a=>a.id===d.arch)?d.arch:null;
+      return mkOp(n,`Режим «${i18n(recordModeLabel(d.rec))}»`,"rec",()=>{
+      n.rec=d.rec;if(d.rec!=="none"&&!n.arch){pinCamServer(n);n.arch=(want||archChoicesFor(n)[0]?.id)||null;bindArchServer(n)}
+    },d.rec==="replica"&&!edgeStorage(n)?i18n("нет встроенного хранилища"):(d.rec!=="none"&&!n.arch&&!want?i18n("архив не задан — будет взят первый доступный"):null),()=>{n.rec=prev.rec;n.arch=prev.arch;n.srvId=prev.srvId})});
     const sk=ops.filter(o=>o.skip).length;
     step("rec",`Режим записи «${i18n(recordModeLabel(d.rec))}»`,ops,sk?`${sk} ${i18n(plural(sk,"камера|камеры|камер"))} ${i18n("будут пропущены")}`:"");
   }
