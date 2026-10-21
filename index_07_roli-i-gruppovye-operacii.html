@@ -1082,7 +1082,23 @@ html[data-theme="light"] .acc-sync.run{color:#9a6a12}
 .sel-bar{position:absolute;inset:0;z-index:3;display:flex;align-items:center;gap:10px;padding:0 6px 0 var(--gut);border-bottom:1px solid #3f6fac;background:#1a3150;color:#d8e9ff;font-size:12px;white-space:nowrap;overflow:hidden}
 .sel-bar .sel-gap{flex:1}
 .sel-bar[hidden]{display:none}
-.ph:has(.sel-bar:not([hidden])) .ph-row{visibility:hidden}
+/* Переход: панель съезжает сверху и проявляется, срезы под ней гаснут; при
+   выходе — наоборот. Срезы прячем через visibility с задержкой, чтобы успели
+   погаснуть, а показываем сразу. */
+.ph-row{transition:opacity .2s ease,visibility 0s}
+.ph:has(.sel-bar:not([hidden]):not(.sel-out)) .ph-row{opacity:0;visibility:hidden;transition:opacity .16s ease,visibility 0s linear .16s}
+.sel-bar.sel-in{animation:selIn .22s cubic-bezier(.2,.8,.3,1)}
+.sel-bar.sel-in>*{animation:selItemIn .26s cubic-bezier(.2,.8,.3,1) backwards}
+.sel-bar.sel-in>:nth-child(2){animation-delay:.03s}
+.sel-bar.sel-in>:nth-child(3){animation-delay:.06s}
+.sel-bar.sel-out{animation:selOut .16s ease-in forwards;pointer-events:none}
+@keyframes selIn{from{opacity:0;clip-path:inset(0 0 100% 0)}to{opacity:1;clip-path:inset(0)}}
+@keyframes selItemIn{from{opacity:0;transform:translateY(-6px)}}
+@keyframes selOut{to{opacity:0;clip-path:inset(0 0 100% 0)}}
+.sel-badge.bump{animation:selBump .22s ease-out}
+@keyframes selBump{40%{transform:scale(1.12)}}
+.sel-all .n-chk{transition:background .15s,border-color .15s}
+@media (prefers-reduced-motion:reduce){.sel-bar.sel-in,.sel-bar.sel-in>*,.sel-bar.sel-out,.sel-badge.bump{animation:none}.ph-row,.ph:has(.sel-bar:not([hidden]):not(.sel-out)) .ph-row{transition:none}}
 .sel-all{display:inline-flex;align-items:center;gap:8px;border:0;background:0;padding:4px 6px 4px 2px;margin-left:-2px;border-radius:5px;color:inherit;font:inherit;font-size:12.5px;cursor:pointer}
 .sel-all:hover{background:#ffffff12}
 .sel-all .n-chk{opacity:1;margin:0;pointer-events:none}
@@ -11933,17 +11949,33 @@ function selectAllVisible(){
   ids.forEach(id=>treeSel.add(id));
   afterSelChange(ids[0]);
 }
+// Анимируем только вход в режим выбора и выход из него: перестройка панели
+// внутри режима (смена среза, отметки) показывает панель без перехода.
+let selBarOn=false,selBarN=0,selBarOutT=0;
 function renderSelBar(){
   const host=document.getElementById("selBar");if(!host)return;
   const n=bulkSelNodes().length;
-  if(app!=="hw"||!selMode){host.innerHTML="";host.hidden=true;return}
+  clearTimeout(selBarOutT);
+  if(app!=="hw"||!selMode){
+    const was=selBarOn;selBarOn=false;selBarN=0;
+    if(!was||host.hidden){host.innerHTML="";host.hidden=true;host.className="sel-bar";return}
+    host.classList.remove("sel-in");host.classList.add("sel-out");
+    selBarOutT=setTimeout(()=>{host.innerHTML="";host.hidden=true;host.className="sel-bar"},170);
+    return;
+  }
   const all=selCandidates(),total=all.length,allOn=total>0&&all.every(x=>treeSel.has(x.id));
   const scope=hasActiveFilters()?i18n("по фильтру"):i18n("в срезе");
+  host.classList.remove("sel-out");
+  // Класс входа снимаем после перехода: иначе каждая перерисовка внутри режима
+  // заново проигрывала бы появление кнопок.
+  if(!selBarOn){host.classList.add("sel-in");setTimeout(()=>host.classList.remove("sel-in"),340)}
+  const bump=selBarOn&&n&&selBarN&&n!==selBarN;
+  selBarOn=true;selBarN=n;
   host.hidden=false;
   // Общая галочка: что-то отмечено — снимает всё, ничего — отмечает всё в срезе.
   const chk=allOn&&n?"on":n?"part":"";
   host.innerHTML=`${n||total?`<button type="button" class="sel-all" aria-pressed="${n?"true":"false"}" ${n?`onclick="clearTreeSel()"`:`title="${i18n("Выбрать все")} ${total} ${scope}" onclick="selectAllFiltered()"`}><span class="n-chk ${chk}" aria-hidden="true"></span>${n?i18n("Снять выделение"):`${i18n("Отметить все")} ${total}`}</button>`:""}
-    ${n?`<span class="sel-badge">${i18n("Выбрано:")} ${n}</span>`:`<span class="sel-cnt">${i18n("или отметьте в дереве")}</span>`}
+    ${n?`<span class="sel-badge${bump?" bump":""}">${i18n("Выбрано:")} ${n}</span>`:`<span class="sel-cnt">${i18n("или отметьте в дереве")}</span>`}
     ${n&&total&&!allOn?`<button type="button" class="lk" title="${i18n("Выбрать все")} ${total} ${scope}" onclick="selectAllFiltered()">${i18n("Все")} ${total}</button>`:""}
     <span class="sel-gap"></span>
     <button type="button" class="sel-close" title="${i18n("Выйти из режима выбора")} (Esc)" aria-label="${i18n("Выйти из режима выбора")}" onclick="setSelMode(false)">✕</button>`;
