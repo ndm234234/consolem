@@ -2309,8 +2309,11 @@ function deleteDomain(id){
           <select id="domMoveTo">${others.map(o=>`<option value="${o.id}">${escHtml(locName(o))}</option>`).join("")}</select></div></div>
         <p class="sub" style="margin:8px 0 0">${i18n("Серверы станут нераспределёнными в выбранном домене; папки, устройства и сетевые архивы переедут туда же.")}</p>`
       :`<p class="sub" style="margin:0">${i18n("Домен пуст.")}</p>`);
-  askConfirm("Удалить домен?",body,"",i18n("Удалить"),()=>{
+  if(pendingDelHas(id)){toast("Домен уже ждёт удаления — отменить можно в тосте");return}
+  askConfirm("Удалить домен?",body+`<p class="sub" style="margin:10px 0 0">${i18n("После подтверждения будет отсчёт с кнопкой «Отменить».")}</p>`,"",i18n("Удалить"),()=>{
     const to=document.getElementById("domMoveTo")?.value||others[0]?.id;
+    scheduleDelete([id],{label:`${i18n("Домен")} «${locName(d)}»`,commit:()=>{
+    if(!domainById(id))return;
     if(items.length&&to)moveDomainContents(id,to);
     const i=domains.findIndex(x=>x.id===id);
     if(i>=0)domains.splice(i,1);
@@ -2323,6 +2326,7 @@ function deleteDomain(id){
     resetTreeSel(next);sel=next;tab="gen";setD(false);editClear();expandTo(next);
     aside();
     toast("Домен удалён");paint();
+    }});
   },{html:true});
 }
 
@@ -4363,9 +4367,10 @@ function addSubfolder(parentId,domainId){
 function deleteFolder(id){
   closeTreeCtx();
   const f=folderById(id);if(!f)return;
+  if(pendingDelHas(id)){toast("Папка уже ждёт удаления — отменить можно в тосте");return}
   const cnt=folderDeviceIds(f).size;
   askConfirm("Удалить папку?",`${i18n("Будет удалена папка")} «${escHtml(f.name)}».`,
-    cnt?`${i18n("Устройства останутся в системе")} (${cnt}).`:"",i18n("Удалить"),()=>{
+    (cnt?`${i18n("Устройства останутся в системе")} (${cnt}). `:"")+i18n("После подтверждения будет отсчёт с кнопкой «Отменить»."),i18n("Удалить"),()=>scheduleDelete([id],{label:`${i18n("Папка")} «${f.name}»`,commit:()=>{
     const parent=folderParent(id);
     if(parent)parent.folders=parent.folders.filter(x=>x.id!==id);
     else{const i=folders.findIndex(x=>x.id===id);if(i>=0)folders.splice(i,1)}
@@ -4374,18 +4379,17 @@ function deleteFolder(id){
     sel=(parent||folders[0])?.id||sel;tab="gen";setD(false);
     treeMatchCache.clear();searchMatchCache.clear();
     toast(i18n("Папка удалена"));paint();
-  });
+  }}));
 }
+// Одиночное удаление идёт той же дорогой, что и групповое: подтверждение с
+// последствиями, потом отсчёт в тосте с «Отменить».
 function deleteTreeNode(id){
   closeTreeCtx();
   const f=find(id);if(!f||!canTreeCtxDelete(f.n))return;
-  const name=f.n.name;
+  if(pendingDelHas(id)){toast("Объект уже ждёт удаления — отменить можно в тосте");return}
+  if(bulkBusyGuard())return;
   const back=f.p?f.p.id:(foldersOfDevice(id)[0]?.id||selFolder||folders[0]?.id);
-  removeNodeFromParent(f);
-  remakeAcfa();
-  treeMatchCache.clear();searchMatchCache.clear();open.delete(id);
-  resetTreeSel(back);sel=back;tab="gen";setD(false);expandTo(back);
-  toast(name+" удалён");paint();
+  confirmDeleteNodes([id],back);
 }
 // Корневые устройства лежат в общем пуле, вложенные — под родительским объектом
 function removeNodeFromParent(f){
@@ -6209,11 +6213,12 @@ function addDetector(camId){
 function deleteDetector(camId,detId){
   const f=find(camId);if(!f)return;
   const d=camDetectors(f.n).find(x=>x.id===detId);if(!d)return;
-  askConfirm("Удалить детектор?",`${i18n("Будет удалён")} «${escHtml(locName(d))}».`,i18n("Это действие нельзя отменить."),i18n("Удалить"),()=>{
+  if(pendingDelHas(detId)){toast("Детектор уже ждёт удаления — отменить можно в тосте");return}
+  askConfirm("Удалить детектор?",`${i18n("Будет удалён")} «${escHtml(locName(d))}».`,i18n("После подтверждения будет отсчёт с кнопкой «Отменить»."),i18n("Удалить"),()=>scheduleDelete([detId],{label:`${i18n("Детектор")} «${locName(d)}»`,commit:()=>{
     f.n.devices=f.n.devices.filter(x=>x.id!==detId);
     if(detSel===detId)detSel=null;
     setD(true);toast(i18n("Детектор удалён"));applyFiltersFromState();
-  });
+  }}));
 }
 // Зона детектора рисуется прямо на карточке, без отдельной вкладки
 function detZoneShapeSvg(kind){
@@ -10500,15 +10505,16 @@ function deleteVolume(id){
   closeTreeCtx();
   const v=volById(id),a=v&&archById(v.archId);if(!v||!a)return;
   const last=archVols(a).length===1,n=archCameras(a.id).length;
+  if(pendingDelHas(id)){toast("Том уже ждёт удаления — отменить можно в тосте");return}
   askConfirm("Удалить том",`${i18n("Том")} «${escHtml(v.disk)}» ${i18n("хранилища")} «${escHtml(locName(a))}» ${i18n("будет удалён вместе с записями на нём.")}`,
-    last&&n?`${i18n("Это последний том: хранилищу будет некуда писать, камер:")} ${n}.`:"",
-    "Удалить",()=>{
+    (last&&n?`${i18n("Это последний том: хранилищу будет некуда писать, камер:")} ${n}. `:"")+i18n("После подтверждения будет отсчёт с кнопкой «Отменить»."),
+    "Удалить",()=>scheduleDelete([id],{label:`${i18n("Том")} «${v.disk}»`,commit:()=>{
       a.vols.splice(a.vols.indexOf(v),1);
       if(sel===id){sel=a.id;tab="gen"}
       setD(false);
       toast(i18n("Том удалён"));
       paint();
-    },{rawMsg:true});
+    }}),{rawMsg:true});
 }
 // Камеры удалённого хранилища не удаляются: они остаются в системе и уходят в
 // «Без записи» (режим записи помнят — при новом архиве его не надо задавать
@@ -10517,16 +10523,17 @@ function deleteArchive(id){
   closeTreeCtx();
   const a=arch.find(x=>x.id===id);if(!a)return;
   const n=archCameras(id).length;
+  if(pendingDelHas(id)){toast("Хранилище уже ждёт удаления — отменить можно в тосте");return}
   askConfirm("Удалить хранилище",`${i18n("Хранилище")} «${locName(a)}» ${i18n("будет удалено вместе с томами.")}`,
-    n?`${i18n("Перестанут писать камер:")} ${n}. ${i18n("Сами камеры останутся в системе — в разделе «Без записи».")}`:"",
-    "Удалить",()=>{
+    (n?`${i18n("Перестанут писать камер:")} ${n}. ${i18n("Сами камеры останутся в системе — в разделе «Без записи».")} `:"")+i18n("После подтверждения будет отсчёт с кнопкой «Отменить»."),
+    "Удалить",()=>scheduleDelete([id],{label:`«${locName(a)}»`,commit:()=>{
       walkAll(c=>{if(c.type==="camera"&&c.arch===id)c.arch=""});
-      arch.splice(arch.indexOf(a),1);
+      if(arch.includes(a))arch.splice(arch.indexOf(a),1);
       if(sel===id){sel=a.server||a.domain||sel;tab="gen"}
-      open.delete(id);setD(false);
+      open.delete(id);setD(false);treeMatchCache.clear();searchMatchCache.clear();
       toast(i18n("Хранилище удалено"));
       paint();
-    },{rawMsg:true});
+    }}),{rawMsg:true});
 }
 function archOwnerLine(a){
   const sv=archServer(a),dm=archDomain(a);
@@ -12492,31 +12499,39 @@ function deleteSelected(){
   const idSet=new Set(ids);
   const roots=ids.filter(id=>!path(id).slice(0,-1).some(n=>idSet.has(n.id))).filter(id=>!pendingDelHas(id));
   if(!roots.length){toast("Выбранное уже в очереди на удаление");return}
+  confirmDeleteNodes(roots);
+}
+function confirmDeleteNodes(roots,back){
   const nodes=roots.map(id=>find(id).n);
   const cams=[];nodes.forEach(n=>walk(x=>{if(x.type==="camera")cams.push(x)},[n]));
   const rec=cams.filter(isRecording).length,dets=cams.reduce((s,c)=>s+camDetectors(c).length,0);
   const nvr=nodes.filter(n=>n.type==="ipsrv").length;
   const fold=new Set();nodes.forEach(n=>foldersOfDevice(n.id).forEach(f=>fold.add(f.id)));
-  const count=roots.length,big=count>=10;
-  const lines=[`${count} ${i18n(plural(count,"объект|объекта|объектов"))}${nvr?` (${i18n("регистраторов")}: ${nvr} — ${i18n("вместе с их камерами")})`:""}`];
+  const count=roots.length,big=count>=10,one=count===1?nodes[0]:null;
+  const lines=[one?`${escHtml(i18n(LB[one.type]||"Объект"))} «${escHtml(locName(one))}»${one.type==="ipsrv"&&ipsrvCameras(one).length?` — ${i18n("вместе с его камерами")}`:""}`
+    :`${count} ${i18n(plural(count,"объект|объекта|объектов"))}${nvr?` (${i18n("регистраторов")}: ${nvr} — ${i18n("вместе с их камерами")})`:""}`];
   if(cams.length)lines.push(`${i18n("камер")}: ${cams.length}, ${i18n("из них пишут в архив")}: ${rec} — ${i18n("запись остановится, архив останется")}`);
   if(dets)lines.push(`${i18n("детекторов")}: ${dets} — ${i18n("удалятся вместе с правилами")}`);
   if(fold.size)lines.push(`${i18n("папок, из которых пропадут объекты")}: ${fold.size}`);
   const html=`<ul class="bk-del">${lines.map(l=>`<li>${l}</li>`).join("")}</ul>
     ${big?`<label>${i18n("Введите")} ${count}, ${i18n("чтобы подтвердить")}</label><input id="delCountInp" inputmode="numeric" autocomplete="off" oninput="document.getElementById('confirmOk').disabled=this.value.trim()!=='${count}'">`:""}
     <p class="sub" style="margin:10px 0 0">${i18n("После подтверждения будет отсчёт с кнопкой «Отменить».")}</p>`;
-  askConfirm(count===1?"Удалить объект?":"Удалить выбранные объекты?",html,"","Удалить",()=>scheduleDelete(roots),{html:true});
+  const opts=one?{label:`«${locName(one)}»`,back}:{back};
+  askConfirm(one?`${i18n("Удалить")} «${escHtml(locName(one))}»?`:"Удалить выбранные объекты?",html,"","Удалить",()=>scheduleDelete(roots,opts),{html:true});
   if(big){const ok=document.getElementById("confirmOk");if(ok)ok.disabled=true;setTimeout(()=>document.getElementById("delCountInp")?.focus(),40)}
 }
-function scheduleDelete(ids){
+// opts.label — подпись в тосте вместо «N объектов»; opts.commit — своё
+// удаление (папка, хранилище, том, детектор, домен); opts.back — куда
+// перейти, если удалённый объект был открыт.
+function scheduleDelete(ids,opts={}){
   const key="del"+(++pendingSeq),delay=ids.length>3?15000:10000;
-  const p={key,ids,deadline:Date.now()+delay,delay,timer:null,paused:false,left:0};
+  const p={key,ids,deadline:Date.now()+delay,delay,timer:null,paused:false,left:0,commit:opts.commit||null,back:opts.back||null};
   p.timer=setTimeout(()=>commitDelete(key),delay);
   pendingDel.set(key,p);
   if(!pendingTicker)pendingTicker=setInterval(tickPending,1000);
   treeSel.clear();treeAnchor=null;bulkPeek=false;
   renderTree();gear();
-  toastAction(key,`${ids.length} ${plural(ids.length,"объект|объекта|объектов")} — ${i18n("удаление через")}`,i18n("Отменить"),()=>cancelDelete(key),null,{pause:()=>pausePending(key),resume:()=>resumePending(key),danger:true,ms:delay});
+  toastAction(key,`${opts.label||`${ids.length} ${plural(ids.length,"объект|объекта|объектов")}`} — ${i18n("удаление через")}`,i18n("Отменить"),()=>cancelDelete(key),null,{pause:()=>pausePending(key),resume:()=>resumePending(key),danger:true,ms:delay});
 }
 function pausePending(key){const p=pendingDel.get(key);if(!p||p.paused)return;p.paused=true;p.left=Math.max(0,p.deadline-Date.now());clearTimeout(p.timer);tickPending()}
 function resumePending(key){const p=pendingDel.get(key);if(!p||!p.paused)return;p.paused=false;p.deadline=Date.now()+p.left;p.timer=setTimeout(()=>commitDelete(key),p.left);tickPending()}
@@ -12537,10 +12552,11 @@ function cancelDelete(key){
 function commitDelete(key){
   const p=pendingDel.get(key);if(!p)return;
   pendingDel.delete(key);removeToastAction(key);
+  if(p.commit){p.commit();return}
   let n=0;
   p.ids.forEach(id=>{const f=find(id);if(f&&removeNodeFromParent(f))n++});
   remakeAcfa();treeMatchCache.clear();searchMatchCache.clear();
-  if(!find(sel)){sel=domains[0]?.id||sel;tab="gen"}
+  if(!find(sel)){const b=p.back&&(find(p.back)||folderById(p.back))?p.back:domains[0]?.id;sel=b||sel;tab="gen";resetTreeSel(sel);expandTo(sel)}
   toast(n===1?"Устройство удалено":`${i18n("Удалено объектов")}: ${n}`);
   paint();
 }
