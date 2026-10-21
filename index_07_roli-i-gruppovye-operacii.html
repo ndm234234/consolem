@@ -1107,11 +1107,31 @@ html[data-theme="light"] .acc-sync.run{color:#9a6a12}
 .ttu-timer{color:var(--mu);font-variant-numeric:tabular-nums;white-space:nowrap}
 .ttu-act{border:0;background:0;color:#9ec8ff;font-weight:600;cursor:pointer;font-size:13px}
 .ttu-act:hover{color:#fff}
+/* Отложенное удаление: тост должен заметить даже тот, кто смотрит в дерево */
+.ttu.danger{border-color:#c4505a;padding:10px 14px 13px;overflow:hidden;animation:ttu-in .45s cubic-bezier(.2,1.5,.4,1) both,ttu-ring 1.4s ease-out .45s 3}
+.ttu-ic{flex:none;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:#e5484d2e;color:var(--rd);animation:ttu-shake .5s ease-in-out .5s 2}
+.ttu.danger .ttu-timer{color:var(--tx);font-weight:600}
+.ttu.danger .ttu-act{background:#e5484d;color:#fff;border-radius:6px;padding:5px 12px}
+.ttu.danger .ttu-act:hover{background:#f0646a}
+.ttu-bar{position:absolute;left:0;right:0;bottom:0;height:3px;background:#e5484d33}
+.ttu-bar i{display:block;height:100%;background:var(--rd);transform-origin:left;animation:ttu-drain linear forwards}
+.ttu.danger:hover .ttu-bar i,.ttu.danger:focus-within .ttu-bar i{animation-play-state:paused}
+.ttu.urgent .ttu-timer{color:var(--rd)}
+.ttu.urgent .ttu-left{display:inline-block;animation:ttu-beat 1s ease-out infinite}
+.ttu.urgent{animation:ttu-ring 1s ease-out infinite}
+.ttu.danger:hover,.ttu.danger:focus-within{animation:none}
+@keyframes ttu-in{from{opacity:0;transform:translate(-50%,40px) scale(.85)}to{opacity:1;transform:translate(-50%,0) scale(1)}}
+@keyframes ttu-ring{0%{box-shadow:0 12px 40px #000a,0 0 0 0 #e5484dcc}100%{box-shadow:0 12px 40px #000a,0 0 0 16px #e5484d00}}
+@keyframes ttu-shake{0%,100%{transform:rotate(0)}20%{transform:rotate(-16deg)}40%{transform:rotate(14deg)}60%{transform:rotate(-10deg)}80%{transform:rotate(6deg)}}
+@keyframes ttu-drain{from{transform:scaleX(1)}to{transform:scaleX(0)}}
+@keyframes ttu-beat{0%{transform:scale(1.35)}60%,100%{transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){.ttu.danger,.ttu.urgent,.ttu-ic,.ttu.urgent .ttu-left{animation:none}}
 html[data-theme="light"] .sel-bar{background:#dce8f7;border-color:#9db6d9;color:#1a3358}
 html[data-theme="light"] .sel-bar .lk,html[data-theme="light"] .sel-close,html[data-theme="light"] .sel-ic{color:#2f5fad}
 html[data-theme="light"] .sel-cnt b{color:#1a3358}
 html[data-theme="light"] .pending-chip{background:#fff1cc;color:#7a5a00}
 html[data-theme="light"] .ttu{background:#fff;border-color:#c9d4e4;color:var(--tx)}
+html[data-theme="light"] .ttu.danger{border-color:#e0a2a7}
 html[data-theme="light"] .bk-warn{background:#fff6d8;border-color:#e2cc84;color:#5a4600}
 html[data-theme="light"] .rs-btn:hover{background:#e7effa}
 html[data-theme="light"] .n-chk{border-color:#8fa4bf}
@@ -12054,13 +12074,14 @@ function scheduleDelete(ids){
   if(!pendingTicker)pendingTicker=setInterval(tickPending,1000);
   treeSel.clear();treeAnchor=null;bulkPeek=false;
   renderTree();gear();
-  toastAction(key,`${ids.length} ${plural(ids.length,"объект|объекта|объектов")} — ${i18n("удаление через")}`,i18n("Отменить"),()=>cancelDelete(key),null,{pause:()=>pausePending(key),resume:()=>resumePending(key)});
+  toastAction(key,`${ids.length} ${plural(ids.length,"объект|объекта|объектов")} — ${i18n("удаление через")}`,i18n("Отменить"),()=>cancelDelete(key),null,{pause:()=>pausePending(key),resume:()=>resumePending(key),danger:true,ms:delay});
 }
 function pausePending(key){const p=pendingDel.get(key);if(!p||p.paused)return;p.paused=true;p.left=Math.max(0,p.deadline-Date.now());clearTimeout(p.timer);tickPending()}
 function resumePending(key){const p=pendingDel.get(key);if(!p||!p.paused)return;p.paused=false;p.deadline=Date.now()+p.left;p.timer=setTimeout(()=>commitDelete(key),p.left);tickPending()}
 function tickPending(){
   pendingDel.forEach(p=>{
     const t=document.querySelector(`#ttu-${p.key} .ttu-left`);if(t)t.textContent=pendingLeft(p);
+    document.getElementById("ttu-"+p.key)?.classList.toggle("urgent",!p.paused&&pendingLeft(p)<=3);
   });
   document.querySelectorAll(".pending-chip").forEach(chip=>{chip.textContent=pendingLabel(chip.dataset.for)});
   if(!pendingDel.size&&pendingTicker){clearInterval(pendingTicker);pendingTicker=null}
@@ -12088,6 +12109,11 @@ function toastAction(key,msg,label,fn,ms,hooks){
   const e=document.createElement("div");e.id="ttu-"+key;e.className="ttu";
   e.innerHTML=`<span class="ttu-msg">${escHtml(msg)}</span><span class="ttu-timer"><span class="ttu-left"></span> ${i18n("с")}</span><button type="button" class="ttu-act">${escHtml(label)}</button>`;
   e.querySelector(".ttu-act").onclick=()=>{removeToastAction(key);fn()};
+  if(hooks?.danger){
+    e.classList.add("danger");
+    e.insertAdjacentHTML("afterbegin",`<span class="ttu-ic"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4h11M6 4V2.5h4V4M4 4l.7 9.5h6.6L12 4M6.8 6.5v4.5M9.2 6.5v4.5"/></svg></span>`);
+    e.insertAdjacentHTML("beforeend",`<span class="ttu-bar"><i style="animation-duration:${hooks.ms}ms"></i></span>`);
+  }
   if(hooks){
     e.addEventListener("mouseenter",hooks.pause);e.addEventListener("mouseleave",hooks.resume);
     e.addEventListener("focusin",hooks.pause);e.addEventListener("focusout",hooks.resume);
