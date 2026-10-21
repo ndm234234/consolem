@@ -1836,8 +1836,9 @@ function unfolderedDevices(did){
   walkFolders(f=>{if(f.domain===did||folderDomain(f.id)===did)f.items.forEach(id=>inF.add(id))});
   return devicePool.filter(d=>DEVICE_DOMAIN[d.id]===did&&!inF.has(d.id));
 }
-// Хранилище живёт на сервере — это и есть единственная связь камеры с сервером.
-// Запись не обязана идти на сервер той же площадки: КПП пишется в офисное хранилище.
+// Хранилище живёт на сервере или в домене (сетевое). Камера пишет только в
+// хранилище своего сервера или в сетевое хранилище домена — поэтому у КПП и
+// охраны свои хранилища, а не офисное и складское.
 // Хранилище — объект: владелец (сервер или домен), срок хранения, шифрование
 // и тома. Камера привязывается к хранилищу, а не к тому; том — путь, объём, занято.
 const arch=[
@@ -1847,6 +1848,8 @@ const arch=[
   {id:"a4",type:"archive",name:"Хранилище — Цех",server:"s4",days:21,enc:true,vols:[["E:","6 ТБ","31%"]]},
   {id:"a5",type:"archive",name:"Хранилище — ТЦ «Север»",server:"s8",days:30,enc:false,vols:[["D:","12 ТБ","47%"],["E:","12 ТБ","19%"]]},
   {id:"a6",type:"archive",name:"Хранилище — Логистика",server:"s9",days:14,enc:false,vols:[["E:","8 ТБ","61%"]]},
+  {id:"a9",type:"archive",name:"Хранилище — КПП",server:"s5",days:30,enc:false,vols:[["D:","4 ТБ","52%"]]},
+  {id:"a10",type:"archive",name:"Хранилище — Охрана",server:"s10",days:30,enc:true,vols:[["D:","2 ТБ","38%"]]},
   // Сетевые хранилища принадлежат домену, а не конкретному серверу
   {id:"a7",type:"archive",name:"Сетевое хранилище — NAS",domain:"d1",days:60,enc:true,vols:[["\\\\nas01\\vms","48 ТБ","37%"],["\\\\nas01\\vms2","48 ТБ","8%"]]},
   {id:"a8",type:"archive",name:"Сетевое хранилище — Склад",domain:"d2",days:45,enc:false,vols:[["\\\\nas02\\wh","24 ТБ","12%"]]}
@@ -1876,7 +1879,7 @@ function archSize(a){return fmtTb(archSizeTb(a))}
 function archUsed(a){const t=archSizeTb(a);if(!t)return"0%";const u=archVols(a).reduce((x,v)=>x+sizeTb(v.size)*(parseFloat(v.used)||0)/100,0);return Math.round(u/t*100)+"%"}
 function archDiskLabel(a){const v=archVols(a);return v.length===1?v[0].disk:`${v.length} ${i18n(plural(v.length,"том|тома|томов"))}`}
 // Камеры площадок без архива (Ангар, Парковка, Резервный узел) не пишутся вовсе
-const RECORDS_TO={s1:"a1",s5:"a1",s2:"a2",s10:"a2",s3:"a3",s4:"a4",s8:"a5",s9:"a6",s7:"a7"};
+const RECORDS_TO={s1:"a1",s5:"a9",s2:"a2",s10:"a10",s3:"a3",s4:"a4",s8:"a5",s9:"a6",s7:"a7"};
 // Камера и регистратор подключены к своему серверу независимо от записи:
 // хранилище — только куда пишется видео. Без хранилища камера остаётся под
 // сервером (и в «Без записи»), а не пропадает из дерева.
@@ -11585,8 +11588,16 @@ function selDescendants(n){
     if(!x||seen.has(x.id))return;seen.add(x.id);
     if(x!==n&&canMultiPick(x)&&selfInView(x)&&matchesSearch(x,q)&&!busy.has(x.id)&&!pendingDelHas(x.id))out.push(x);
     kids(x).forEach(visit);
-    if(x.type==="server"&&!isUnallocated(x.id))serverCameras(x.id).forEach(visit);
-    if(x.type==="archive")archCameras(x.id).forEach(visit);
+    // Сервер и хранилище отмечают всё, что под ними в дереве: регистраторы
+    // вместе с их камерами и отдельные камеры.
+    if(x.type==="server"&&!isUnallocated(x.id)){
+      devicePool.filter(d=>(d.type==="camera"||d.type==="ipsrv")&&d.srvId===x.id).forEach(visit);
+      serverCameras(x.id).forEach(visit);
+    }
+    if(x.type==="archive"){
+      devicePool.filter(d=>d.type==="ipsrv"&&ipsrvCameras(d).some(c=>isRecording(c)&&c.arch===x.id)).forEach(d=>{seen.add(d.id);if(canMultiPick(d)&&selfInView(d)&&matchesSearch(d,q)&&!busy.has(d.id)&&!pendingDelHas(d.id))out.push(d)});
+      archCameras(x.id).forEach(visit);
+    }
   };
   visit(n);return out;
 }
@@ -11638,6 +11649,15 @@ function selChkClick(id,ctx){
   // Первый клик по галочке открытого объекта только включает режим: объект
   // уже в выборке, снимать его было бы неожиданно.
   if(entering&&canMultiPick(f.n)&&treeSel.size===1&&treeSel.has(id)){afterSelChange(id,ctx);return}
+  // Регистратор отмечается вместе со своими камерами (под хранилищем — с теми,
+  // что пишутся в это хранилище)
+  if(f.n.type==="ipsrv"&&canMultiPick(f.n)){
+    const on=selShownAt(id,ctx),aid=ctx?.startsWith("arch:")?ctx.slice(5):null;
+    const all=[f.n,...selDescendants(f.n).filter(x=>!aid||x.type!=="camera"||x.arch===aid)];
+    all.forEach(x=>on?treeSel.delete(x.id):treeSel.add(x.id,ctx||null));
+    treeAnchor=id;
+    afterSelChange(on?null:id,ctx);return;
+  }
   if(canMultiPick(f.n)){selToggle(id,ctx);return}
   const d=selDescendants(f.n),cc=childSelCtx(f.n);
   if(!d.length){toast("Здесь нечего отметить");return}
