@@ -2611,7 +2611,7 @@ function expandTo(id,ctx){
   if(sv){open.add(sv.id);const dom=domainOf(sv.id);if(dom)open.add(dom.id)}
   else if(did)open.add(norecId(did));
   let node=find(id)?.n;
-  if(node&&node.type==="camera"&&node.arch)open.add(node.arch);
+  if(node&&node.type==="camera"&&node.arch&&!archServer(archById(node.arch)))open.add(node.arch);
   // Детектор виден в ветке GPU того сервера, где он считается
   if(node&&node.type==="det"){
     const cam=find(id)?.p,sid=cam?detServerId(cam,node):null;
@@ -2722,7 +2722,7 @@ registerJumpSource(()=>{                          // объекты дерева
   const out=[];
   walkAll(n=>{if(n.type==="det"||isFav(n.id))return;out.push(jumpNodeTarget(n))});
   flatFolders().forEach(f=>{if(!isFav(f.id))out.push(jumpNodeTarget(f))});
-  arch.forEach(a=>{if(!isFav(a.id))out.push(jumpNodeTarget(a));archVols(a).forEach(v=>{if(!isFav(v.id))out.push(jumpNodeTarget(v))})});
+  arch.forEach(a=>{if(!isFav(a.id))out.push(jumpNodeTarget(a))});
   return out;
 });
 function jumpNodeTarget(n){
@@ -3114,8 +3114,8 @@ function displayNameHtml(n,q){
 let selCtx=null;
 function treeRowPick(id,ctx){return ` data-pick="${id}"`+(ctx?` data-ctx="${ctx}"`:"")}
 function normalizeTreeCtx(ctx){
-  // Старое избранное вело к камере через локальный архив.
-  if(ctx?.startsWith("arch:")){const s=archServer(archById(ctx.slice(5)));if(s)return"srv:"+s.id}
+  // Камера стоит и под сервером («srv:»), и под хранилищем («arch:») —
+  // это два разных места, контекст различает их.
   return ctx||null;
 }
 function sameCtx(ctx){
@@ -4509,10 +4509,12 @@ function srow(s,l=1,bare=false){
   const devs=offline?[]:(s.devices||[]).filter(d=>d.type!=="det");
   const gpu=offline||slice==="acfa"?null:serverGpu(s);
   const svcHtml=devs.filter(d=>!q||matchesSearch(d,q)).map(d=>svcrow(d,l+1)).join("");
-  // Под сервером — его хранилища, GPU и службы. Камеры стоят внутри своего
-  // хранилища: именно через него они и попадают на сервер.
+  // Камеры стоят под сервером и ещё раз под своим хранилищем: по серверу
+  // видно всё, что на нём пишется, по хранилищу — что именно в него. Камеры
+  // всех хранилищ собираем до группировки, чтобы один NVR не повторялся.
   const cams=archs.flatMap(a=>archCameras(a.id));
-  const kidsHtml=archs.map(a=>arow(a,l+1)).join("")
+  const kidsHtml=(srvSlice?"":recordedCameraRows(cams,l+1,"srv:"+s.id))
+    +archs.map(a=>arow(a,l+1)).join("")
     +(gpu?gpurow(s,l+1):"")+svcHtml;
   if(!srvHit&&!kidsHtml)return"";
   const cnt=srvSlice?devs.length:cams.length;
@@ -4829,32 +4831,25 @@ function gpurow(sv,l){
   if(op)h+=children;
   return h;
 }
-// Хранилище в дереве: под ним тома, затем камеры, которые в него пишут.
-// В срезах «Серверы» и «Хранилища» — опись: только тома.
+// Хранилище в дереве: под ним камеры, которые в него пишут. Тома в дереве
+// не нужны — они в карточке хранилища. В срезах «Серверы» и «Хранилища»
+// хранилище — строка описи без детей.
 function arow(a,l){
   if(slice==="acfa"||slice==="det")return"";
   const q=qval(),inventory=slice==="srv"||slice==="arch";
-  const allCams=inventory?[]:archCameras(a.id),cams=allCams.filter(selfInView);
+  const allCams=archCameras(a.id),cams=allCams.filter(selfInView);
   const selfHit=matchesStatus(a)&&matchesSearch(a,q);
-  const vols=archVols(a).filter(v=>!q||selfHit||matchesSearch(v,q));
-  const volRows=vols.map(v=>vrow(v,l+1)).join("");
-  const camRows=inventory?"":recordedCameraRows(allCams,l+1,"arch:"+a.id);
-  const children=volRows+camRows;
+  const children=inventory?"":recordedCameraRows(allCams,l+1,"arch:"+a.id);
   if(!selfHit&&!children)return"";
   const hasKids=!!children;
   const op=hasKids&&(open.has(a.id)||autoExpand());
-  const cnt=inventory?archVols(a).length:(hasSliceContext()?sliceParentCount(a.id):cams.length);
+  // В описи камеры не «в срезе», но сколько их пишется в хранилище — видно.
+  const cnt=inventory?allCams.length:hasSliceContext()?sliceParentCount(a.id):cams.length;
   let h=`<div class="n srv stor ${sel===a.id?"on":""}${inventory?"":sliceParentClass(a.id)}${treeRenameId===a.id?" renaming":""}" style="--l:${l}"${treeRowPick(a.id)}${treeCtxAttr(a.id)}${treeExpandMeta(a.id,"srv",hasKids)}>
-    ${treeChevron(a.id,"srv",hasKids,op)}
+    ${hasKids?treeChevron(a.id,"srv",hasKids,op):'<span class="tw"></span>'}
     ${ic("storage")}${treeRenameId===a.id?treeNameCell(a,q):`<span class="nm">${hlText(locName(a),selfHit?q:"")}</span>`}${treeTail({tags:`<span class="tag">${archIsNetwork(a)?i18n("сетевое"):i18n("локальное")}</span>`,cnt:treeCntHtml(cnt),acts:a.id})}</div>`;
   if(op)h+=children;
   return h;
-}
-// Том — лист хранилища: путь, объём, занято.
-function vrow(v,l){
-  const q=qval();
-  return`<div class="n vol ${sel===v.id?"on":""}" style="--l:${l}"${treeRowPick(v.id)}${treeCtxAttr(v.id)}>
-    <span class="tw"></span>${ic("vol")}<span class="nm">${hlText(locName(v),q)}</span>${treeTail({tags:`<span class="tag">${escHtml(v.size)}</span><span class="tag">${escHtml(v.used)}</span>`,acts:v.id})}</div>`;
 }
 // Камеры, для которых запись не настроена: сервера у них нет вовсе
 function norow(d,l){
@@ -6082,7 +6077,7 @@ function form(n){
         unit:"том|тома|томов",
         head:`<button type="button" class="btn s" onclick="addVolume('${n.id}')">＋ ${i18n("Том")}</button>`
       })+
-      `<p class="sub">${i18n("Срок хранения и шифрование — на хранилище, тома только хранят записи. Камеры привязаны к хранилищу и в дереве стоят под ним.")}</p>`;
+      `<p class="sub">${i18n("Срок хранения и шифрование — на хранилище, тома только хранят записи и в дереве не показываются. Камеры привязаны к хранилищу: в дереве они стоят под сервером и ещё раз под хранилищем.")}</p>`;
   }
   if(n.type==="vol"){
     const a=archById(n.archId),net=archIsNetwork(a);
