@@ -1082,6 +1082,15 @@ html[data-theme="light"] .acc-sync.run{color:#9a6a12}
 .sel-bar{flex:none;display:flex;align-items:center;gap:10px;min-height:34px;padding:0 6px 0 var(--gut);border-top:1px solid #3f6fac;background:#1a3150;color:#d8e9ff;font-size:12px;white-space:nowrap;overflow:hidden}
 .sel-bar .sel-gap{flex:1}
 .sel-bar[hidden]{display:none}
+/* Панель выезжает снизу: растёт от нуля, дерево над ней плавно укорачивается,
+   содержимое поднимается из-под края. При выходе — обратно вниз. */
+.sel-bar.sel-in{animation:selUp .22s cubic-bezier(.2,.8,.3,1)}
+.sel-bar.sel-in>*{animation:selItemUp .22s cubic-bezier(.2,.8,.3,1)}
+.sel-bar.sel-out{animation:selUp .16s ease-in reverse forwards;pointer-events:none}
+.sel-bar.sel-out>*{animation:selItemUp .16s ease-in reverse forwards}
+@keyframes selUp{from{min-height:0;height:0;border-top-color:transparent}to{min-height:34px;height:34px}}
+@keyframes selItemUp{from{transform:translateY(100%);opacity:0}}
+@media (prefers-reduced-motion:reduce){.sel-bar.sel-in,.sel-bar.sel-in>*,.sel-bar.sel-out,.sel-bar.sel-out>*{animation:none}}
 .sel-ic{display:inline-flex;color:#9ec8ff}.sel-ic svg{width:13px;height:13px}
 .sel-bar .lk{font-size:12px;white-space:nowrap;color:#9ec8ff}
 .sel-cnt{white-space:nowrap}
@@ -11933,12 +11942,27 @@ function selectAllVisible(){
   ids.forEach(id=>treeSel.add(id));
   afterSelChange(ids[0]);
 }
+// Анимируем только вход в режим выбора и выход из него: перестройка панели
+// внутри режима (смена среза, отметки) показывает её без перехода.
+let selBarOn=false,selBarOutT=0;
 function renderSelBar(){
   const host=document.getElementById("selBar");if(!host)return;
   const n=bulkSelNodes().length;
-  if(app!=="hw"||!selMode){host.innerHTML="";host.hidden=true;return}
+  clearTimeout(selBarOutT);
+  if(app!=="hw"||!selMode){
+    const was=selBarOn;selBarOn=false;
+    if(!was||host.hidden){host.innerHTML="";host.hidden=true;host.className="sel-bar";return}
+    host.classList.remove("sel-in");host.classList.add("sel-out");
+    selBarOutT=setTimeout(()=>{host.innerHTML="";host.hidden=true;host.className="sel-bar"},170);
+    return;
+  }
   const all=selCandidates(),total=all.length,allOn=total>0&&all.every(x=>treeSel.has(x.id));
   const scope=hasActiveFilters()?i18n("по фильтру"):i18n("в срезе");
+  host.classList.remove("sel-out");
+  // Класс входа снимаем после перехода: иначе каждая перерисовка внутри режима
+  // заново проигрывала бы появление.
+  if(!selBarOn){host.classList.add("sel-in");setTimeout(()=>host.classList.remove("sel-in"),260)}
+  selBarOn=true;
   host.hidden=false;
   host.innerHTML=`<span class="sel-ic" aria-hidden="true">${SEL_IC}</span><span class="sel-cnt">${n?`${i18n("Отмечено")} <b>${n}</b>`:i18n("Отметьте объекты")}</span>
     ${total&&!allOn?`<button type="button" class="lk" title="${i18n("Выбрать все")} ${total} ${scope}" onclick="selectAllFiltered()">${i18n("Все")} ${total}</button>`:""}
