@@ -1091,17 +1091,18 @@ html[data-theme="light"] .acc-sync.run{color:#9a6a12}
 .bk-prev{margin:6px 0 10px;padding-left:18px;font-size:12px}
 .bk-del{margin:0 0 10px;padding-left:18px}
 .bk-table .empty{padding:20px;text-align:center;color:var(--mu)}
-.rail-status{flex:none;padding:6px 2px;border-top:1px solid var(--ln);display:flex;align-items:flex-start;gap:2px}
+.rail-status{flex:none;position:relative;padding:6px 2px;border-top:1px solid var(--ln);display:flex;align-items:flex-start;gap:0}
 .rail-status[hidden]{display:none}
 .rs-btn{flex:1;min-width:0;border:0;background:0;color:var(--tx);text-align:left;padding:4px;border-radius:6px;cursor:pointer;display:flex;flex-direction:column;gap:3px;font:inherit}
 .rs-btn:hover{background:#16223a}
 .rs-l1{font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-.rs-l2{font-size:10px;color:var(--mu);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.rs-l2{font-size:10px;color:var(--mu);white-space:normal;line-height:1.25;max-width:100%}
 .rs-btn.ok .rs-l1{color:var(--gn)}.rs-btn.bad .rs-l1{color:#f0b4b8}
 .rs-bar{display:block;width:100%;height:3px;border-radius:3px;background:#2a374b;overflow:hidden}
 .rs-bar i{display:block;height:100%;background:var(--bl);transition:width .15s}
 .rs-bar.big{height:6px;margin-top:4px}
-.rs-x{flex:none;border:0;background:0;color:var(--mu);cursor:pointer;font-size:11px;padding:2px}
+.rs-x{position:absolute;right:2px;top:6px;border:0;background:0;color:var(--mu);cursor:pointer;font-size:11px;padding:2px;line-height:1}
+.rail-status .rs-l1{padding-right:14px}
 .ttu{position:fixed;left:50%;bottom:64px;transform:translateX(-50%);display:flex;align-items:center;gap:12px;background:#1d2a3d;border:1px solid #3b506e;padding:10px 14px;border-radius:8px;z-index:61;max-width:min(560px,calc(100vw - 32px));box-shadow:0 12px 40px #000a;font-size:13px}
 .ttu-timer{color:var(--mu);font-variant-numeric:tabular-nums;white-space:nowrap}
 .ttu-act{border:0;background:0;color:#9ec8ff;font-weight:600;cursor:pointer;font-size:13px}
@@ -11920,8 +11921,9 @@ function railStatusHtml(compact){
   if(!bq)return"";
   const pct=bq.total?Math.round(bq.done/bq.total*100):100;
   const bad=bq.fail+(bq.finished?bq.steps.reduce((n,s)=>n+s.ops.filter(o=>o.state==="cancel").length,0):0);
-  const l1=bq.finished?(bad?`${i18n("Готово")} · ${bad} ${i18n("не ок")}`:i18n("Готово")):bq.paused?i18n("Пауза"):`${bq.done} ${i18n("из")} ${bq.total}`;
-  const l2=bq.finished?i18n("Отчёт"):escHtml(i18n(bq.cur||"…"));
+  // В рельсе 95 px: первая строка короткая, подробности во второй.
+  const l1=bq.finished?i18n("Готово"):bq.paused?i18n("Пауза"):`${bq.done} ${i18n("из")} ${bq.total}`;
+  const l2=bq.finished?(bad?`${bad} ${i18n("не ок")} · ${i18n("Отчёт")}`:i18n("Отчёт")):escHtml(i18n(bq.cur||"…"));
   return`<button type="button" class="rs-btn ${bq.finished?(bad?"bad":"ok"):""}" title="${i18n("Очередь применения")}" onclick="${bq.finished?"openReport()":"openQueueModal()"}"><span class="rs-l1">${l1}${compact?` · <span class="rs-l2">${l2}</span>`:""}</span><span class="rs-bar" aria-hidden="true"><i style="width:${pct}%"></i></span>${compact?"":`<span class="rs-l2">${l2}</span>`}</button>${bq.finished?`<button type="button" class="rs-x" title="${i18n("Скрыть")}" onclick="queueDismiss()">✕</button>`:""}`;
 }
 // Строка очереди живёт у рельса; когда рельс спрятан, та же строка
