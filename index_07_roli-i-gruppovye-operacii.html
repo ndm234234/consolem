@@ -2671,6 +2671,8 @@ function addCtx(){return srv(sel)}
 function expandTo(id,ctx){
   let f=find(id);if(!f)return;
   let p=f.p?find(f.p.id):null;
+  // Детектор виден под GPU, а не под камерой на сервере: её не раскрываем.
+  if(f.n.type==="det"&&p)p=p.p?find(p.p.id):null;
   while(p){open.add(p.n.id);p=p.p?find(p.p.id):null}
   // Раскрываем только ту ветку, по которой кликнули
   if(ctx){
@@ -2700,8 +2702,15 @@ function expandTo(id,ctx){
     const cam=find(id)?.p,sid=cam?detServerId(cam,node):null;
     const gs=sid?servers.find(x=>x.id===sid):null;
     if(gs){open.add(gs.id);const dm=domainOf(gs.id);if(dm)open.add(dm.id);if(serverGpu(gs))open.add(gpuId(gs.id))}
-    if(cam)open.add(cam.id);
+    if(cam)openCamDets(cam,gs);
   }
+}
+// Раскрыть камеру с детекторами там, где детекторы видны: под GPU сервера и
+// в срезе «Детекторы» — без контекста и в первой папке камеры, а не во всех
+// разом. Камеру под самим сервером не трогаем: её копия раскрывается отдельно.
+function openCamDets(cam,gs){
+  if(gs&&serverGpu(gs))open.add("gpu:"+gs.id+"|"+cam.id);
+  if(slice==="det"){open.add(cam.id);const fd=foldersOfDevice(cam.id)[0];if(fd)open.add("f:"+fd.id+"|"+cam.id)}
 }
 function pushRecent(id){recent=recent.filter(x=>x!==id);recent.unshift(id);if(recent.length>8)recent.pop()}
 function setFocus(id,keepSel){if(!keepSel){const s=servers.find(x=>x.id===id);sel=s?.devices?.find(d=>treeKind(d)===tview)?.id||id}expandTo(sel);paint()}
@@ -4900,9 +4909,12 @@ function gcamrow(cam,dets,l,ctx){
   const shown=parentHit?available:vis;
   if(!selfHit&&!shown.length)return"";
   const hasKids=!!shown.length;
-  const op=hasKids&&(open.has(cam.id)||autoExpand());
-  let h=`<div class="n ${rowOn(cam.id,ctx)}${slice==="det"?sliceParentClass(cam.id):""}" style="--l:${l}"${treeRowPick(cam.id,ctx)}${treeCtxAttr(cam.id)}${treeExpandMeta(cam.id,"node",hasKids)}>
-    ${treeChevron(cam.id,"node",hasKids,op)}
+  // Камера стоит и под сервером, и под его GPU (и в нескольких папках среза
+  // «Детекторы»): раскрытие помним по месту, иначе вторая копия раскрывается сама.
+  const ok=ctx?ctx+"|"+cam.id:cam.id;
+  const op=hasKids&&(open.has(ok)||autoExpand());
+  let h=`<div class="n ${rowOn(cam.id,ctx)}${slice==="det"?sliceParentClass(cam.id):""}" style="--l:${l}"${treeRowPick(cam.id,ctx)}${treeCtxAttr(cam.id)}${treeExpandMeta(ok,"node",hasKids)}>
+    ${treeChevron(ok,"node",hasKids,op)}
     ${treeIconHtml(cam)}<span class="nm">${displayNameHtml(cam,q)}</span>${treeTail({cnt:treeCntHtml(slice==="det"?sliceParentCount(cam.id):available.length),acts:cam.id,ctx})}</div>`;
   if(op)h+=shown.map(d=>gdetrow(d,l+1,ctx,parentHit)).join("");
   return h;
@@ -6191,7 +6203,7 @@ function addDetector(camId){
   const d={id:"det"+Date.now(),type:"det",name:i18n("Новый детектор"),kind:DET_TYPES[0],sens:"12",online:true,devices:[]};
   (f.n.devices||(f.n.devices=[])).push(d);
   detSel=d.id;tab="det";setD(true);
-  if(slice==="det")open.add(camId);
+  if(slice==="det")openCamDets(f.n,null);
   toast(i18n("Детектор добавлен"));applyFiltersFromState();
 }
 function deleteDetector(camId,detId){
