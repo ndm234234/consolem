@@ -11584,22 +11584,26 @@ function selCandidates(){
 // Отмечаемые потомки контейнера: сервер, регистратор, папка, домен, архив.
 function selDescendants(n){
   const q=qval(),out=[],seen=new Set(),busy=busyIds();
-  const visit=x=>{
+  // Начинка камеры и регистратора (датчики, реле, микрофоны, встроенное
+  // хранилище, каналы) в групповую выборку не идёт — её отмечают поштучно.
+  const dev=x=>x.type==="camera"||x.type==="ipsrv"||x.type==="channel";
+  const visit=(x,inDev)=>{
     if(!x||seen.has(x.id))return;seen.add(x.id);
-    if(x!==n&&canMultiPick(x)&&selfInView(x)&&matchesSearch(x,q)&&!busy.has(x.id)&&!pendingDelHas(x.id))out.push(x);
-    kids(x).forEach(visit);
+    const part=inDev&&x.type!=="camera";
+    if(x!==n&&!part&&canMultiPick(x)&&selfInView(x)&&matchesSearch(x,q)&&!busy.has(x.id)&&!pendingDelHas(x.id))out.push(x);
+    kids(x).forEach(k=>visit(k,inDev||dev(x)));
     // Сервер и хранилище отмечают всё, что под ними в дереве: регистраторы
     // вместе с их камерами и отдельные камеры.
     if(x.type==="server"&&!isUnallocated(x.id)){
-      devicePool.filter(d=>(d.type==="camera"||d.type==="ipsrv")&&d.srvId===x.id).forEach(visit);
-      serverCameras(x.id).forEach(visit);
+      devicePool.filter(d=>(d.type==="camera"||d.type==="ipsrv")&&d.srvId===x.id).forEach(d=>visit(d,false));
+      serverCameras(x.id).forEach(c=>visit(c,false));
     }
     if(x.type==="archive"){
       devicePool.filter(d=>d.type==="ipsrv"&&ipsrvCameras(d).some(c=>isRecording(c)&&c.arch===x.id)).forEach(d=>{seen.add(d.id);if(canMultiPick(d)&&selfInView(d)&&matchesSearch(d,q)&&!busy.has(d.id)&&!pendingDelHas(d.id))out.push(d)});
-      archCameras(x.id).forEach(visit);
+      archCameras(x.id).forEach(c=>visit(c,false));
     }
   };
-  visit(n);return out;
+  visit(n,false);return out;
 }
 function decorateTreeSel(){
   const treeEl=document.getElementById("tree");if(!treeEl)return;
