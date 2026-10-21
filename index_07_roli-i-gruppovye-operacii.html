@@ -6311,6 +6311,7 @@ function form(n){
         :`<div class="nt ok">${i18n("Архив «")}${escHtml(locName(a))}${i18n("», срок ")}${a.days} ${i18n("дн.")}</div>`;
       return card("Архив камеры",`${head}
       <div class="g">${camArchSelectHtml(n)}${camRecSelectHtml(n)}${n.rec==="replica"?fldRo("Предзапись, с","—"):fld("Предзапись, с","5","number")}</div>
+      ${archChoicesNote(n)}
       ${edge?`<p class="sub">${i18n("Встроенное хранилище:")} <b>${escHtml(edge.size||locName(edge))}</b></p>`
         :`<p class="sub">${i18n("Встроенное хранилище не найдено — репликация недоступна.")}</p>`}
       ${n.rec==="replica"?`<div class="nt">${i18n("Сервер периодически забирает записи со встроенного хранилища камеры. Постоянный поток на сервер не идёт: канал нагружается только на время репликации, а пропуски в архиве восполняются после обрыва связи.")}</div>`:""}
@@ -10275,7 +10276,7 @@ function nvrRecCardHtml(n){
   const arc=mixedOf(cams,c=>c.arch||""),mode=mixedOf(cams,c=>c.rec||"none");
   const mixOpt=v=>v==="__mixed__"?`<option value="__mixed__" selected>${i18n("— разные —")}</option>`:"";
   const archSel=`<div><label>${i18n("Архив")}</label><select onchange="setNvrArch('${n.id}',this.value)">${mixOpt(arc)}<option value="" ${arc===""?"selected":""}>${i18n("Не задан")}</option>${
-    arch.map(a=>`<option value="${a.id}" ${a.id===arc?"selected":""}>${escHtml(locName(a))}</option>`).join("")}</select></div>`;
+    archChoicesForAll(cams).map(a=>`<option value="${a.id}" ${a.id===arc?"selected":""}>${escHtml(locName(a))}</option>`).join("")}</select></div>`;
   const modeSel=`<div><label>${i18n("Режим")}</label><select onchange="setNvrRec('${n.id}',this.value)">${mixOpt(mode)}${
     REC_MODES.map(([v,l])=>`<option value="${v}" ${mode===v?"selected":""} ${v==="replica"&&!canRep?"disabled":""}>${i18n(l)}</option>`).join("")}</select></div>`;
   const note=edge
@@ -10285,13 +10286,31 @@ function nvrRecCardHtml(n){
     cams.map(c=>`<tr onclick="pick('${c.id}')" style="cursor:pointer"><td>${escHtml(locName(c))}</td><td>${escHtml(c.arch?locName(arch.find(a=>a.id===c.arch)||{name:"—"}):"—")}</td><td>${i18n(recordModeLabel(c.rec))}</td></tr>`).join("")
     ||`<tr><td class="empty" colspan="3">${i18n("У регистратора нет камер")}</td></tr>`}</table>`;
   return card("Запись камер регистратора",`${note}<div class="g" style="margin-top:10px">${archSel}${modeSel}</div>
+    ${archChoicesNote(n)}
     <p class="sub">${i18n("Настройка применяется сразу ко всем камерам регистратора. Отдельную камеру можно переопределить в её карточке, вкладка «Архив».")}</p>`,
     `<span class="sub" style="font-weight:400">${cams.length}</span>`)+
     card("Камеры регистратора",table);
 }
+// Камера под сервером пишет только на этот сервер: в его хранилища или в
+// сетевые хранилища домена. Хранилище другого сервера её туда не переносит.
+// Камера без сервера (без записи или на сетевом хранилище) выбирает любое.
+function archChoicesFor(n){
+  const s=cameraTreeServer(n.id);
+  return s?[...serverArchives(s.id),...domainArchives(SERVER_DOMAIN[s.id])]:arch;
+}
+function archChoicesForAll(nodes){return arch.filter(a=>nodes.every(n=>archChoicesFor(n).includes(a)))}
+function archForeignReason(n,a){
+  if(!a||archChoicesFor(n).includes(a))return null;
+  const s=cameraTreeServer(n.id);
+  return`${i18n("камера на сервере")} «${locName(s)}» — ${i18n("хранилище другого сервера недоступно")}`;
+}
+function archChoicesNote(n){
+  const s=cameraTreeServer(n.id);
+  return s?`<p class="sub">${i18n(n.type==="ipsrv"?"Регистратор на сервере":"Камера на сервере")} <b>${escHtml(locName(s))}</b>: ${i18n("доступны хранилища этого сервера и сетевые хранилища домена.")}</p>`:"";
+}
 function camArchSelectHtml(n){
   return `<div><label>${i18n("Архив")}</label><select onchange="setCamArch('${n.id}',this.value)"><option value="" ${!n.arch?"selected":""}>${i18n("Не задан")}</option>${
-    arch.map(a=>`<option value="${a.id}" ${a.id===n.arch?"selected":""}>${escHtml(locName(a))}</option>`).join("")}</select></div>`;
+    archChoicesFor(n).map(a=>`<option value="${a.id}" ${a.id===n.arch?"selected":""}>${escHtml(locName(a))}</option>`).join("")}</select></div>`;
 }
 function setCamRec(id,v){
   const f=find(id);if(!f)return;
@@ -11694,7 +11713,7 @@ function bulkRecHtml(nodes){
   const archOpts=[["__none__",i18n("Не задан")],...arch.map(a=>[a.id,locName(a)])];
   const recOpts=REC_MODES.map(([v,l])=>[v,i18n(l),v==="replica"&&!edgeAll]);
   return card("Архив и запись",`<div class="g">${bkSelect("Архив","arch",archOpts,archD)}${bkSelect("Режим","rec",recOpts,recD)}${bkInput("Предзапись, с","pre","number",preD)}</div>
-    <p class="sub">${i18n("Архив определяет сервер: смена архива переносит камеру на сервер архива, поэтому идёт через план. Режим и предзапись применяются сразу, с «Отменить».")} ${edgeAll?"":`${i18n("Репликация недоступна: встроенное хранилище есть у")} ${edgeN} ${i18n("из")} ${nodes.length}.`}</p>`);
+    <p class="sub">${i18n("Камера под сервером пишет только в хранилища своего сервера или в сетевые хранилища домена: камеры другого сервера в плане будут пропущены. Камера без записи переходит на сервер выбранного хранилища, поэтому смена идёт через план. Режим и предзапись применяются сразу, с «Отменить».")} ${edgeAll?"":`${i18n("Репликация недоступна: встроенное хранилище есть у")} ${edgeN} ${i18n("из")} ${nodes.length}.`}</p>`);
 }
 function bulkVidHtml(nodes,st){
   if(st.models.length>1)return card("Видео",`<div class="nt">${i18n("Выбрано моделей")}: ${st.models.length}. ${i18n("Параметры видео доступны, если выбрать камеры одной модели.")}</div>
@@ -11785,9 +11804,11 @@ function bulkChanges(draft){
     const ops=nodes.filter(n=>n.type==="camera"&&(n.arch||null)!==(a?a.id:null)).map(n=>mkOp(n,a?`Архив «${locName(a)}»`:"Снять архив","arch",()=>{
       n.arch=a?a.id:null;
       if(!a)n.rec="none";else if(!n.rec||n.rec==="none")n.rec="always";
-    }));
-    const as=a?archServer(a):null;
-    step("arch",a?`Архив «${locName(a)}»`:"Снять архив",ops,a?`${i18n("камеры перейдут на сервер")} «${as?locName(as):"—"}»${d.rec?"":`; ${i18n("у камер без записи режим станет «Всегда»")}`}`:i18n("запись у этих камер остановится"));
+    },archForeignReason(n,a)));
+    const as=a?archServer(a):null,sk=ops.filter(o=>o.skip).length;
+    const where=as?`${i18n("камеры без сервера перейдут на сервер")} «${locName(as)}»`:i18n("запись пойдёт в сетевое хранилище домена");
+    const skNote=sk?`; ${sk} ${i18n(plural(sk,"камера|камеры|камер"))} ${i18n("другого сервера")} ${i18n(plural(sk,"будет пропущена|будут пропущены|будут пропущены"))}`:"";
+    step("arch",a?`Архив «${locName(a)}»`:"Снять архив",ops,a?`${where}${skNote}${d.rec?"":`; ${i18n("у камер без записи режим станет «Всегда»")}`}`:i18n("запись у этих камер остановится"));
   }
   if(d.rec){
     const ops=nodes.filter(n=>n.type==="camera"&&(n.rec||"none")!==d.rec).map(n=>{const prev={rec:n.rec,arch:n.arch};return mkOp(n,`Режим «${i18n(recordModeLabel(d.rec))}»`,"rec",()=>{
