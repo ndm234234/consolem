@@ -302,12 +302,15 @@ html[data-theme="light"] .status-pop .mi.on{background:#e8f0ff;color:#1a3a7a}
 .n.renaming{cursor:default}
 .nm mark{background:#3a5a2a;color:#d8f5c8;border-radius:2px;padding:0 1px}
 .n-cnt{flex:0 0 24px;width:24px;min-width:24px;height:16px;display:inline-flex;align-items:center;justify-content:flex-end;font-size:11px;line-height:1;color:var(--mu);font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
-.n-menu{flex:none;border:0;background:0;color:#41526b;font-size:13px;line-height:1;padding:0 1px;width:16px;opacity:0;cursor:pointer;transition:color .12s}
-.n:hover .n-menu,.n-menu:focus-visible{opacity:1}
+/* Меню строки — правой кнопкой; видимая «⋮» только у выбранной строки, а не
+   бледной точкой у каждой при наведении. Тот же список — «Ещё ▾» в шапке. */
+.n-menu{flex:none;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:5px;background:0;color:#b4c3d8;font-size:15px;font-weight:700;line-height:1;padding:0;width:22px;height:22px;opacity:0;pointer-events:none;cursor:pointer;transition:background .12s,color .12s}
+.n.on .n-menu,.n-menu:focus-visible{opacity:1;pointer-events:auto}
+.n.on button.n-menu{background:#22385a}
 /* Пустые для выбранного среза родители остаются на своих местах. */
 .n-slice-empty>*{opacity:.38;transition:opacity .12s}
 .n-slice-empty:hover>*,.n-slice-empty.on>*,.n-slice-empty:focus-within>*{opacity:1}
-.n-menu:hover{color:var(--tx)}
+.n-menu:hover{color:#fff;background:#2c4a75!important}
 /* Высотой распоряжается обёртка — она флекс-ребёнок боковой панели. Проценты
    на самой панели считались от обёртки и резали список вдвое. */
 .fav-wrap{flex:none;display:flex;flex-direction:column;min-height:0;max-height:38%}
@@ -3768,7 +3771,7 @@ function rowActionsHtml(id,ctx){
 function treeMenuBtnHtml(id){
   const n=find(id)?.n;
   if(!n||!canTreeCtx(n))return`<span class="n-menu" aria-hidden="true"></span>`;
-  return`<button type="button" class="n-menu" tabindex="-1" title="${i18n("Действия")}" aria-haspopup="menu" onclick="treeCtx(event,'${id}')">⋯</button>`;
+  return`<button type="button" class="n-menu" tabindex="-1" title="${i18n("Действия")}" aria-haspopup="menu" onclick="treeCtx(event,'${id}')">⋮</button>`;
 }
 // Правый край строки — четыре жёсткие колонки: теги, число, статус, действия.
 // Каждая занимает своё место независимо от того, есть ли чем её заполнить.
@@ -4240,6 +4243,21 @@ function lanHeadBtns(n){
   if(!lanHost(n)&&n?.type!=="found")return"";
   return`<button type="button" class="btn s" title="${i18n("Добавить устройство вручную")}" onclick="lanOpenWizard('manual')">＋ ${i18n("Вручную")}</button>`+
     `<button type="button" class="btn s" title="${i18n("Добавить устройства из файла")}" onclick="lanOpenWizard('csv')">＋ ${i18n("Из файла")}</button>`;
+}
+// «Ещё ▾» в шапке карточки — то же меню, что по правой кнопке на строке
+// дерева: видимый вход для тех, кто про правую кнопку не знает.
+function cardMoreBtn(n){
+  if(app!=="hw"||!canTreeCtx(n))return"";
+  return`<button type="button" class="btn s" aria-haspopup="menu" onclick="cardMore(event,'${n.id}')">${i18n("Ещё")} ▾</button>`;
+}
+function cardMore(e,id){
+  e.stopPropagation();
+  const f=find(id),btn=e.currentTarget;if(!f)return;
+  openTreeCtx(f.n,{x:0,y:0});
+  const menu=document.getElementById("tctx");if(!menu)return;
+  const r=btn.getBoundingClientRect(),mw=menu.offsetWidth,mh=menu.offsetHeight;
+  menu.style.left=Math.max(8,Math.min(Math.round(r.right-mw),innerWidth-mw-8))+"px";
+  menu.style.top=Math.round(r.bottom+4+mh>innerHeight-8?Math.max(8,r.top-mh-4):r.bottom+4)+"px";
 }
 function favCardBtn(n){
   if(!canFav(n))return"";
@@ -4846,7 +4864,7 @@ function nvrrow(owner,cams,l,ctx){
   if(!selfHit&&!vis.length&&!rest.length)return"";
   const hasKids=!!(vis.length||rest.length),op=hasKids&&(open.has(owner.id)||autoExpand());
   const edge=edgeStorage(owner);
-  let h=`<div class="n srv ${rowOn(owner.id,ctx)}${sliceParentClass(owner.id)}" style="--l:${l}"${treeRowPick(owner.id,ctx)}${treeExpandMeta(owner.id,"srv",hasKids)}>
+  let h=`<div class="n srv ${rowOn(owner.id,ctx)}${sliceParentClass(owner.id)}" style="--l:${l}"${treeRowPick(owner.id,ctx)}${treeCtxAttr(owner.id)}${treeExpandMeta(owner.id,"srv",hasKids)}>
     ${treeChevron(owner.id,"srv",hasKids,op)}
     ${treeIconHtml(owner)}<span class="nm">${displayNameHtml(owner,q)}</span>${treeTail({tags:edge?`<span class="n-tail"><span class="cnt" title="${i18n("Встроенное хранилище")}">${ic("storage")}</span></span>`:"",cnt:treeCntHtml(hasSliceContext()?sliceParentCount(owner.id):cams.length),acts:owner.id,ctx})}</div>`;
   if(op)h+=(q?vis:cams).map(c=>scamrow(c,l+1,ctx)).join("")+rest.map(d=>nrow(d,l+1)).join("");
@@ -5014,7 +5032,7 @@ function gear(){
   const tabsH=tabs.map(([id,x])=>`<button class="tab ${tab===id?"on":""}" onclick="tab='${id}';gear()">${i18n(x)}</button>`).join("");
   // Слева направо — откуда берут устройство: из сети, руками, из файла; дальше
   // собственные действия объекта, а звезда последней и без подписи.
-  const addBtn=lanFoundBtn(n)+lanHeadBtns(n)+inspectorAddBtn(n)+bulkCopyBtn(n)+favCardBtn(n)+fullCardBtn();
+  const addBtn=lanFoundBtn(n)+lanHeadBtns(n)+inspectorAddBtn(n)+bulkCopyBtn(n)+cardMoreBtn(n)+favCardBtn(n)+fullCardBtn();
   const scClass=n.type==="unalloc"?"sc sc-unalloc":"sc";
   paintMain(mainHd(crumbsHtml(sel),objectTitle(n),"",tabsH,addBtn,true)+`<div class="${scClass}">${bulkPeekNoteHtml()}${hiddenByFilterNoteHtml()}${objectStatusNotesHtml(n)}${form(n)}</div>`+domainActionsHtml(n));
   if(n.type==="found")renderDeviceWizard();  // панель живёт в разметке, которую только что вставили
