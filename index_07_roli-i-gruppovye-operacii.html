@@ -4202,7 +4202,7 @@ function bindTreeDbl(){
     if(e.target.closest(".n-chk")){e.stopPropagation();selChkClick(id,ctx);return}
     if(selMode&&app==="hw"){
       const f=find(id);
-      if(f&&(canMultiPick(f.n)||selDescendants(f.n).length)){selChkClick(id,ctx);return}
+      if(f&&f.n.type!=="archive"&&(canMultiPick(f.n)||selDescendants(f.n).length)){selChkClick(id,ctx);return}
     }
     // Выбор — сразу: ожидание второго клика делало отклик вязким на ровном
     // месте. Повторный клик по уже выбранной строке раскрывает её.
@@ -11789,19 +11789,20 @@ function markTypeLabel(t){return i18n(MARK_TYPE_RU[t]||LB[t]||t)}
 function markTypeRank(t){const i=MARK_TYPE_ORDER.indexOf(t);return i<0?99:i}
 function insideByType(n){
   const by=new Map();
-  selDescendants(n,true).forEach(x=>{if(!by.has(x.type))by.set(x.type,[]);by.get(x.type).push(x)});
+  // В хранилище пишут камеры и регистраторы — их начинка тут ни при чём.
+  selDescendants(n,n.type!=="archive").forEach(x=>{if(!by.has(x.type))by.set(x.type,[]);by.get(x.type).push(x)});
   return[...by.entries()].sort((a,b)=>markTypeRank(a[0])-markTypeRank(b[0]));
 }
 function markInsideItems(n){
   if(app!=="hw")return[];
   const groups=insideByType(n);if(!groups.length)return[];
-  return[`<div class="tctx-head">${i18n("Отметить внутри")}</div>`,
+  return[`<div class="tctx-head">${i18n(n.type==="archive"?"Отметить пишущие сюда":"Отметить внутри")}</div>`,
     ...groups.map(([t,list])=>tctxItem(`${markTypeLabel(t)} (${list.length})`,`markInside('${n.id}','${t}')`,`<span class="tctx-ic">${ic(t)}</span>`))];
 }
 function markInside(id,type){
   closeTreeCtx();
   const f=find(id);if(!f)return;
-  const list=selDescendants(f.n,true).filter(x=>x.type===type);
+  const list=selDescendants(f.n,f.n.type!=="archive").filter(x=>x.type===type);
   if(!list.length){toast("Здесь нечего отметить");return}
   const cc=childSelCtx(f.n),at=x=>cc&&(x.type==="camera"||x.type==="ipsrv")?cc:null;
   selMode=true;treeSel.clear();
@@ -11836,7 +11837,9 @@ function decorateTreeSel(){
     let ph=false,state="";
     // Вне режима открытый объект тоже лежит в treeSel, но галочкой его не показываем.
     if(canMultiPick(f.n))state=(on||treeSel.size>1)&&selShownAt(id,row.dataset.ctx)?"on":"";
-    else if(f.n.type==="det"||f.n.type==="vol"||f.n.type==="found"||f.n.type==="founddev"||f.n.type==="norec"||f.n.type==="nofolder"||f.n.type==="gpu")ph=true;
+    // У хранилища камер в дереве нет, и галочка «частично» читалась бы как
+    // выбор самого хранилища. Камеры, что в него пишут, — из его меню.
+    else if(f.n.type==="archive"||f.n.type==="det"||f.n.type==="vol"||f.n.type==="found"||f.n.type==="founddev"||f.n.type==="norec"||f.n.type==="nofolder"||f.n.type==="gpu")ph=true;
     else if(on){
       // Тристейт считаем только в режиме: вне его галочка контейнера просто ждёт клика.
       const d=selDescendants(f.n),cc=childSelCtx(f.n);
@@ -11844,7 +11847,7 @@ function decorateTreeSel(){
       else{const k=d.filter(x=>selShownIn(x,cc)).length;state=k===0?"":k===d.length?"on":"part"}
     }
     const chk=document.createElement("span");
-    if(!ph&&!on&&!canMultiPick(f.n)&&!selDescendants(f.n).length)ph=true;
+    if(!ph&&!on&&!canMultiPick(f.n)&&f.n.type!=="archive"&&!selDescendants(f.n).length)ph=true;
     chk.className="n-chk"+(ph?" n-chk-ph":"")+(state?" "+state:"")+(blockedId(id)?" dis":"");
     chk.setAttribute("role","checkbox");chk.setAttribute("aria-checked",state==="part"?"mixed":state?"true":"false");
     chk.title=blockedId(id)?i18n("Объект в очереди"):canMultiPick(f.n)?i18n("Отметить"):i18n("Отметить всё внутри");
@@ -11853,7 +11856,7 @@ function decorateTreeSel(){
   });
 }
 function selChkClick(id,ctx){
-  const f=find(id);if(!f)return;
+  const f=find(id);if(!f||f.n.type==="archive")return;
   if(blockedId(id)){toast(pendingDelHas(id)?"Объект ждёт удаления — отмените его в тосте":"Объект в очереди применения — дождитесь конца");return}
   const entering=!selMode;selMode=true;
   // Первый клик по галочке открытого объекта только включает режим: объект
