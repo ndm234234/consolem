@@ -847,18 +847,22 @@ html[data-theme="light"] .dev-bulk-badge{background:#d6e4f8;color:#2f5fad}
 .hd-act{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .set-flash{outline:2px solid var(--bl);outline-offset:4px;border-radius:8px;transition:outline-color .4s}
 /* ── Прототип 06: групповые операции ─────────────────────────────────── */
-.n-chk{flex:none;width:14px;height:14px;box-sizing:border-box;border:1.5px solid #4c6180;border-radius:4px;background:transparent;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;margin-right:2px}
+.n-chk{flex:none;width:14px;height:14px;box-sizing:border-box;border:1.5px solid #4c6180;border-radius:4px;background:transparent;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;margin-right:2px;opacity:0;transition:opacity .12s}
+.n:hover>.n-chk,.n-chk:focus-visible{opacity:.55}
+.n:hover>.n-chk:hover{opacity:1}
+.tree.selmode .n-chk,.n-chk.on,.n-chk.part{opacity:1}
 .n-chk:hover{border-color:var(--bl)}
 .n-chk.on{background:var(--bl);border-color:var(--bl)}
 .n-chk.on::after{content:"";width:4px;height:7px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg);margin-top:-2px}
 .n-chk.part{border-color:var(--bl)}
 .n-chk.part::after{content:"";width:7px;height:2px;background:var(--bl)}
-.sel-bar{flex:none;display:flex;align-items:center;gap:8px;padding:5px var(--gut);font-size:12px;color:var(--tx);background:#12223a;border-bottom:1px solid #244066}
+.sel-bar{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 4px 0 8px;border:1px solid #3f6fac;border-radius:6px;background:#1a3150;color:#d8e9ff;font-size:12px;white-space:nowrap}
 .sel-bar[hidden]{display:none}
-.sel-bar .lk{font-size:12px;white-space:nowrap}
+.sel-ic{display:inline-flex;color:#9ec8ff}.sel-ic svg{width:13px;height:13px}
+.sel-bar .lk{font-size:12px;white-space:nowrap;color:#9ec8ff}
 .sel-cnt{white-space:nowrap}
-.sel-cnt b{color:#d8e9ff}
-.sel-close{margin-left:auto;border:0;background:0;color:var(--mu);cursor:pointer;font-size:12px;padding:2px 4px;border-radius:4px}
+.sel-cnt b{color:#fff}
+.sel-close{border:0;background:0;color:#9ec8ff;cursor:pointer;font-size:12px;padding:2px 4px;border-radius:4px}
 .sel-close:hover{color:var(--tx);background:#ffffff14}
 .ph-selmode svg{width:13px;height:13px}
 .n.pending>*{opacity:.5}
@@ -902,7 +906,8 @@ html[data-theme="light"] .dev-bulk-badge{background:#d6e4f8;color:#2f5fad}
 .ttu-timer{color:var(--mu);font-variant-numeric:tabular-nums;white-space:nowrap}
 .ttu-act{border:0;background:0;color:#9ec8ff;font-weight:600;cursor:pointer;font-size:13px}
 .ttu-act:hover{color:#fff}
-html[data-theme="light"] .sel-bar{background:#e7effa;border-color:#b9cde8}
+html[data-theme="light"] .sel-bar{background:#dce8f7;border-color:#9db6d9;color:#1a3358}
+html[data-theme="light"] .sel-bar .lk,html[data-theme="light"] .sel-close,html[data-theme="light"] .sel-ic{color:#2f5fad}
 html[data-theme="light"] .sel-cnt b{color:#1a3358}
 html[data-theme="light"] .pending-chip{background:#fff1cc;color:#7a5a00}
 html[data-theme="light"] .ttu{background:#fff;border-color:#c9d4e4;color:var(--tx)}
@@ -3312,7 +3317,7 @@ function aside(){
       <div class="filt-tags" id="filtTags">${tagsHtml()}</div>
       <div class="filt-hint" id="filtHint">${hasActiveFilters()?`${i18n("Найдено:")} ${countFiltered()}`:""}</div>
       ${filtPopHtml()}
-    </div></div><div class="sel-bar" id="selBar" hidden></div><div class="tree" id="tree"></div></div>`:"";
+    </div></div><div class="tree" id="tree"></div></div>`:"";
   const srvScope="";
   // Дерево и избранное наполняются после перестройки панели, поэтому и
   // прокрутку возвращаем после них: пустому блоку её ставить некуда.
@@ -3580,7 +3585,7 @@ function panelHeadHtml(){
     ${Object.keys(SLICE).map(id=>`<button type="button" class="ph-choice ${slice===id?"on":""}" data-slice="${id}" aria-pressed="${slice===id}" onclick="setSlice('${id}')"><span>${SLICE[id]}</span><span class="ph-cnt">${sliceCount(id)}</span></button>`).join("")}
     <button type="button" class="ph-choice ph-folders ${foldersOn?"on":""}" id="viewBtn" aria-pressed="${foldersOn}" title="${i18n("Группировка")}: ${GROUP_HINT[group()]}" onclick="toggleFolders()">${i18n("Папки")}</button>
     <button type="button" class="ph-choice ph-status ${filtPop||st?"on":""}" id="filtBtn" aria-haspopup="menu" aria-controls="filtPop" aria-expanded="${filtPop}" title="${statusLabel(st)}" onclick="toggleFiltPop(event)"><span class="st-dot st-${st||"all"}" aria-hidden="true"></span><span class="ph-status-label">${statusLabel(st)}</span><span class="ph-chevron" aria-hidden="true">▾</span></button>
-    <button type="button" class="ph-choice ph-selmode ${selMode?"on":""}" id="selModeBtn" aria-pressed="${selMode}" title="${i18n("Режим выбора: галочки у объектов, действия над выбранными")}" onclick="toggleSelMode()">${SEL_IC}<span>${i18n("Выбрать")}</span></button>
+    <span class="sel-bar" id="selBar" hidden></span>
   </div></div>`;
 }
 function toggleFolders(){
@@ -3667,7 +3672,8 @@ function pick(id,opts){
   if(multi&&canMultiPick(f.n)){
     bulkPeek=false;
     // Ctrl/Shift-выбор включает режим галочек: выборка должна быть видна.
-    if(treeSel.size>1&&!selMode){selMode=true;aside()}else renderTree();
+    if(treeSel.size>1)selMode=true;
+    renderTree();
     gear();return
   }
   paint();
@@ -7840,7 +7846,7 @@ function setSelMode(on){
   on=!!on;if(selMode===on)return;
   selMode=on;bulkPeek=false;
   if(!on&&treeSel.size>1){treeSel.clear();treeAnchor=null}
-  aside();gear();
+  renderTree();gear();
 }
 function toggleSelMode(){setSelMode(!selMode)}
 // Объект занят, пока он в очереди применения или ждёт удаления: отмечать и
@@ -7888,10 +7894,13 @@ function decorateTreeSel(){
       const chip=document.createElement("span");chip.className="busy-chip";chip.textContent=i18n("изменяется");
       row.querySelector(":scope>.nm")?.after(chip);
     }
-    if(!on)return;
+    if(app!=="hw")return;
     let state="";
-    if(canMultiPick(f.n))state=treeSel.has(id)?"on":"";
-    else{
+    // Вне режима открытый объект тоже лежит в treeSel, но галочкой его не показываем.
+    if(canMultiPick(f.n))state=(on||treeSel.size>1)&&treeSel.has(id)?"on":"";
+    else if(f.n.type==="det"||f.n.type==="found"||f.n.type==="founddev"||f.n.type==="norec"||f.n.type==="nofolder"||f.n.type==="gpu")return;
+    else if(on){
+      // Тристейт считаем только в режиме: вне его галочка контейнера просто ждёт клика.
       const d=selDescendants(f.n);if(!d.length)return;
       const k=d.filter(x=>treeSel.has(x.id)).length;
       state=k===0?"":k===d.length?"on":"part";
@@ -7907,7 +7916,10 @@ function decorateTreeSel(){
 function selChkClick(id,ctx){
   const f=find(id);if(!f)return;
   if(blockedId(id)){toast(pendingDelHas(id)?"Объект ждёт удаления — отмените его в тосте":"Объект в очереди применения — дождитесь конца");return}
-  if(!selMode){selMode=true;aside()}
+  const entering=!selMode;selMode=true;
+  // Первый клик по галочке открытого объекта только включает режим: объект
+  // уже в выборке, снимать его было бы неожиданно.
+  if(entering&&canMultiPick(f.n)&&treeSel.size===1&&treeSel.has(id)){afterSelChange(id,ctx);return}
   if(canMultiPick(f.n)){selToggle(id,ctx);return}
   const d=selDescendants(f.n);
   if(!d.length){toast("Здесь нечего отметить");return}
@@ -7931,13 +7943,13 @@ function afterSelChange(id,ctx){
 }
 function selectAllFiltered(){
   const all=selCandidates();if(!all.length){toast("В срезе нечего отметить");return}
-  if(!selMode){selMode=true;aside()}
+  selMode=true;
   all.forEach(x=>treeSel.add(x.id));
   afterSelChange(all[0].id);
 }
 function selectAllVisible(){
   const ids=visibleMultiIds().filter(id=>!blockedId(id));if(!ids.length)return;
-  if(!selMode){selMode=true;aside()}
+  selMode=true;
   ids.forEach(id=>treeSel.add(id));
   afterSelChange(ids[0]);
 }
@@ -7948,9 +7960,9 @@ function renderSelBar(){
   const all=selCandidates(),total=all.length,allOn=total>0&&all.every(x=>treeSel.has(x.id));
   const scope=hasActiveFilters()?i18n("по фильтру"):i18n("в срезе");
   host.hidden=false;
-  host.innerHTML=`<span class="sel-cnt">${n?`${i18n("Выбрано")}: <b>${n}</b>`:i18n("Отметьте объекты")}</span>
-    ${total&&!allOn?`<button type="button" class="lk" onclick="selectAllFiltered()">${i18n("Выбрать все")} ${total} ${scope}</button>`:""}
-    ${n?`<button type="button" class="lk" onclick="clearTreeSel()">${i18n("Снять")}</button>`:""}
+  host.innerHTML=`<span class="sel-ic" aria-hidden="true">${SEL_IC}</span><span class="sel-cnt">${n?`<b>${n}</b>`:i18n("отметьте")}</span>
+    ${total&&!allOn?`<button type="button" class="lk" title="${i18n("Выбрать все")} ${total} ${scope}" onclick="selectAllFiltered()">${i18n("все")} ${total}</button>`:""}
+    ${n?`<button type="button" class="lk" onclick="clearTreeSel()">${i18n("снять")}</button>`:""}
     <button type="button" class="sel-close" title="${i18n("Выйти из режима выбора")} (Esc)" aria-label="${i18n("Выйти из режима выбора")}" onclick="setSelMode(false)">✕</button>`;
 }
 // Один объект открыт из выборки: карточка объекта, а выборка цела.
@@ -8458,7 +8470,7 @@ function showReportInTree(){
   const ids=reportRows().filter(reportMatch).map(r=>r.o.n.id);
   closeBulkModal();
   treeSel.clear();ids.forEach(id=>{if(find(id))treeSel.add(id)});
-  if(!selMode){selMode=true;aside()}
+  selMode=true;
   ids.forEach(id=>expandTo(id));
   afterSelChange(ids[0]);
 }
