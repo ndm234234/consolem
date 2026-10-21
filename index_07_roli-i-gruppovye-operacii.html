@@ -1057,7 +1057,11 @@ html[data-theme="light"] .acc-sync.run{color:#9a6a12}
 .n-chk.on::after{content:"";width:4px;height:7px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg);margin-top:-2px}
 .n-chk.part{border-color:var(--bl)}
 .n-chk.part::after{content:"";width:7px;height:2px;background:var(--bl)}
-.sel-bar{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 4px 0 8px;border:1px solid #3f6fac;border-radius:6px;background:#1a3150;color:#d8e9ff;font-size:12px;white-space:nowrap}
+/* Панель отметок — строка под деревом, а не в ряду фильтров: её появление не
+   сдвигает дерево под курсором. Это отдельный flex-элемент колонки, поэтому
+   область прокрутки становится ниже, и последние строки дерева не закрыты. */
+.sel-bar{flex:none;display:flex;align-items:center;gap:10px;min-height:34px;padding:0 6px 0 var(--gut);border-top:1px solid #3f6fac;background:#1a3150;color:#d8e9ff;font-size:12px;white-space:nowrap;overflow:hidden}
+.sel-bar .sel-gap{flex:1}
 .sel-bar[hidden]{display:none}
 .sel-ic{display:inline-flex;color:#9ec8ff}.sel-ic svg{width:13px;height:13px}
 .sel-bar .lk{font-size:12px;white-space:nowrap;color:#9ec8ff}
@@ -3656,7 +3660,8 @@ function aside(){
       <div class="filt-tags" id="filtTags">${tagsHtml()}</div>
       <div class="filt-hint" id="filtHint">${hasActiveFilters()?`${i18n("Найдено:")} ${countFiltered()}`:""}</div>
       ${filtPopHtml()}
-    </div></div><div class="tree" id="tree"></div></div>`:"";
+    </div></div><div class="tree" id="tree"></div>
+    <div class="sel-bar" id="selBar" role="toolbar" aria-label="${i18n("Отмеченные объекты")}" hidden></div></div>`:"";
   const srvScope="";
   // Дерево и избранное наполняются после перестройки панели, поэтому и
   // прокрутку возвращаем после них: пустому блоку её ставить некуда.
@@ -3932,7 +3937,6 @@ function panelHeadHtml(){
     ${Object.keys(SLICE).map(id=>`<button type="button" class="ph-choice ${slice===id?"on":""}" data-slice="${id}" aria-pressed="${slice===id}" onclick="setSlice('${id}')"><span>${SLICE[id]}</span><span class="ph-cnt">${sliceCount(id)}</span></button>`).join("")}
     <button type="button" class="ph-choice ph-folders ${foldersOn?"on":""}" id="viewBtn" aria-pressed="${foldersOn}" title="${i18n("Группировка")}: ${GROUP_HINT[group()]}" onclick="toggleFolders()">${i18n("Папки")}</button>
     <button type="button" class="ph-choice ph-status ${filtPop||st?"on":""}" id="filtBtn" aria-haspopup="menu" aria-controls="filtPop" aria-expanded="${filtPop}" title="${statusLabel(st)}" onclick="toggleFiltPop(event)"><span class="st-dot st-${st||"all"}" aria-hidden="true"></span><span class="ph-status-label">${statusLabel(st)}</span><span class="ph-chevron" aria-hidden="true">▾</span></button>
-    <span class="sel-bar" id="selBar" hidden></span>
   </div></div>`;
 }
 function toggleFolders(){
@@ -11704,9 +11708,10 @@ function renderSelBar(){
   const all=selCandidates(),total=all.length,allOn=total>0&&all.every(x=>treeSel.has(x.id));
   const scope=hasActiveFilters()?i18n("по фильтру"):i18n("в срезе");
   host.hidden=false;
-  host.innerHTML=`<span class="sel-ic" aria-hidden="true">${SEL_IC}</span><span class="sel-cnt">${n?`<b>${n}</b>`:i18n("отметьте")}</span>
-    ${total&&!allOn?`<button type="button" class="lk" title="${i18n("Выбрать все")} ${total} ${scope}" onclick="selectAllFiltered()">${i18n("все")} ${total}</button>`:""}
-    ${n?`<button type="button" class="lk" onclick="clearTreeSel()">${i18n("снять")}</button>`:""}
+  host.innerHTML=`<span class="sel-ic" aria-hidden="true">${SEL_IC}</span><span class="sel-cnt">${n?`${i18n("Отмечено")} <b>${n}</b>`:i18n("Отметьте объекты")}</span>
+    ${total&&!allOn?`<button type="button" class="lk" title="${i18n("Выбрать все")} ${total} ${scope}" onclick="selectAllFiltered()">${i18n("Все")} ${total}</button>`:""}
+    ${n?`<button type="button" class="lk" onclick="clearTreeSel()">${i18n("Снять")}</button>`:""}
+    <span class="sel-gap"></span>
     <button type="button" class="sel-close" title="${i18n("Выйти из режима выбора")} (Esc)" aria-label="${i18n("Выйти из режима выбора")}" onclick="setSelMode(false)">✕</button>`;
 }
 // Один объект открыт из выборки: карточка объекта, а выборка цела.
