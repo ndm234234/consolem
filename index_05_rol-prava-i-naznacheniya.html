@@ -7182,6 +7182,9 @@ function accGroupsUI(){
     ph:"Поиск…",unit:"папка|папки|папок",empty:"Нет папок"});
   paintMain(mainHd("",i18n("Права"),ACC_SUB,accListTabs(),accActsHtml())+`<div class="sc">${body}</div>`);
 }
+function accRoleActionsHtml(rid=""){
+  return accActsHtml()+`<button type="button" class="btn s" onclick="${rid?`accCmp[0]='${rid}';`:""}accGo('compare')">${i18n("Сравнить роли")}</button><button type="button" class="btn s pri" onclick="accWzOpen()">${i18n("Новая роль")}</button>`;
+}
 function accRolesUI(){
   const rs=accRoles(),ordinary=rs.filter(r=>!r.g.unr);
   const rows=rs.map(r=>{
@@ -7190,7 +7193,7 @@ function accRolesUI(){
       <td>${us.length?shown+(us.length>4?` <span class="sub">${i18n("и ещё")} ${us.length-4}</span>`:""):`<span class="sub">${i18n("никому не назначена")}</span>`}</td>
       <td class="${r.g.unr||accHasNo(r.g)?"acc-em":""}">${escHtml(accSummary(r.g))}</td></tr>`}).join("");
   paintMain(mainHd("",i18n("Права"),ACC_SUB,accListTabs(),
-    accActsHtml()+`<button type="button" class="btn s" onclick="accGo('compare')">${i18n("Сравнить роли")}</button><button type="button" class="btn s pri" onclick="accWzOpen()">${i18n("Новая роль")}</button>`)
+    accRoleActionsHtml())
     +`<div class="sc">${ordinary.length?"":`<div class="nt">${i18n("Ролей нет, кроме администратора. Создайте роль")}</div>`}
       ${card("Роли",`<table class="acc-tbl"><tr><th>${i18n("Роль")}</th><th>${i18n("Действующие пользователи")}</th><th>${i18n("Функции")}</th></tr>${rows}</table>`)}</div>`);
 }
@@ -7451,15 +7454,9 @@ function accRoleUI(r){
   const title=`<span class="hd-ic">${ic(r.g.unr?"acc_admin":"acc_role")}</span>${i18n("Роль")} «${escHtml(r.n)}»${own?` <span class="acc-own">${i18n("ваша роль")}</span>`:""}${d.isNew?` <span class="acc-own">${i18n("в черновике")}</span>`:""}`;
   const sub=[escHtml(r.comment),`${i18n("вход:")} ${i18n(ACC_TZ[r.tz||0]).toLowerCase()}`,r.sup?.role&&(r.sup.login||r.sup.export)?accSupText(r):""].filter(Boolean).join(" · ");
   const note=own?`<div class="nt">${i18n("Вы не можете менять права своей роли")}</div>`:"";
-  const acts=accActsHtml()+`<button type="button" class="btn s" onclick="accRoleMenu(this,'${r.id}')">${i18n("Действия")} ▾</button>`;
+  const acts=accRoleActionsHtml(r.id);
   const body={global:accGlobalHtml,defs:accDefsHtml,groups:accGroupsTabHtml,objects:accObjectsHtml,members:accMembersHtml,history:accRoleHistoryHtml}[accTab](r,ro);
   paintMain(mainHd(cr,title,sub,tabsH,acts)+`<div class="sc">${note}${seg}${body}</div>`);
-}
-function accRoleMenu(el,rid){
-  const r=accRole(rid),others=accRoles().filter(x=>x.id!==rid);
-  accMenuOpen(el,`<button type="button" class="mi" onclick="accMenuClose();accWzOpen('${rid}')">${i18n("Создать на основе")}</button>
-    <div class="acc-sep"></div><div class="acc-mi-h">${i18n("Сравнить с")}</div>${others.map(o=>`<button type="button" class="mi" onclick="accMenuClose();accCmp=['${rid}','${o.id}'];accGo('compare')">${escHtml(o.n)}</button>`).join("")}
-    <div class="acc-sep"></div><button type="button" class="mi danger" ${r.g.unr||accIsOwn(rid)?"disabled":""} onclick="accMenuClose();accDeleteRole('${rid}')">${i18n("Удалить роль")}…</button>`);
 }
 function accDeleteRole(rid,stay){
   const r=accRole(rid),us=accRoleUsers(rid);
@@ -8813,8 +8810,7 @@ function accPwdFieldHtml(w,setFn,genFn,toggleFn,errFn){
 const ACC_WZ=[["role","Роль"],["rights","Права"],["user","Кому"],["plan","Итог"]];
 let accWz=null;
 // Основа роли выбирается на первом шаге: пустая, встроенный шаблон или
-// существующая роль. «Создать на основе» из меню роли открывает мастер сразу
-// с этой ролью в основе.
+// существующая роль. При переданном id мастер сразу заполняется этой ролью.
 function accWzOpen(rid){
   accMenuClose();accData();
   accWz={step:0,tried:new Set(),name:"",comment:"",tz:0,sup:{role:"",login:false,export:false},who:"none",login:"",uname:"",email:"",on:true,pwd:"",show:false,must:true,until:"",expires:"",
