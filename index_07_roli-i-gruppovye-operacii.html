@@ -11879,7 +11879,13 @@ function decorateTreeSel(){
     // прочие неотмечаемые строки стоят левее соседей.
     let ph=false,state="";
     // Вне режима открытый объект тоже лежит в treeSel, но галочкой его не показываем.
-    if(canMultiPick(f.n))state=(on||treeSel.size>1)&&selShownAt(id,row.dataset.ctx)?"on":"";
+    // Отмечено что-то внутри строки — «частично», даже если сама строка не
+    // отмечена: регистратор с отмеченной камерой, камера с отмеченным реле.
+    // Начинку (датчики, реле, каналы) считаем тоже: её отмечают поштучно, и
+    // в свёрнутом дереве иначе не видно, где она.
+    const inner=cc=>selDescendants(f.n,true).some(x=>selShownIn(x,cc));
+    const rowCc=row.dataset.ctx?.startsWith("srv:")?row.dataset.ctx:null;
+    if(canMultiPick(f.n))state=(on||treeSel.size>1)&&selShownAt(id,row.dataset.ctx)?"on":on&&inner(childSelCtx(f.n)||rowCc)?"part":"";
     // У хранилища камер в дереве нет, и галочка «частично» читалась бы как
     // выбор самого хранилища. Камеры, что в него пишут, — из его меню.
     else if(f.n.type==="archive"||f.n.type==="det"||f.n.type==="vol"||f.n.type==="found"||f.n.type==="founddev"||f.n.type==="norec"||f.n.type==="nofolder"||f.n.type==="gpu")ph=true;
@@ -11887,7 +11893,7 @@ function decorateTreeSel(){
       // Тристейт считаем только в режиме: вне его галочка контейнера просто ждёт клика.
       const d=selDescendants(f.n),cc=childSelCtx(f.n);
       if(!d.length)ph=true;
-      else{const k=d.filter(x=>selShownIn(x,cc)).length;state=k===0?"":k===d.length?"on":"part"}
+      else{const k=d.filter(x=>selShownIn(x,cc)).length;state=k===0?(inner(cc)?"part":""):k===d.length?"on":"part"}
     }
     const chk=document.createElement("span");
     if(!ph&&!on&&!canMultiPick(f.n)&&f.n.type!=="archive"&&!selDescendants(f.n).length)ph=true;
