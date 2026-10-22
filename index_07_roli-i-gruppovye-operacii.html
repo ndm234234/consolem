@@ -1263,6 +1263,11 @@ html[data-theme="light"] .busy-chip{background:#dce8f7;color:#2f5fad}
 .lan-r-nvr td:nth-child(2){padding-left:26px}
 .lan-ip-via{color:var(--mu);font-size:11px}
 html[data-theme="light"] .tag.tag-ch{color:#5b3fa0;background:#ece5fb}
+/* Карточка выборки: к чему применяется правка, и что не показано */
+.bk-scope{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px}
+.bk-scope .stchip.on{box-shadow:0 0 0 1px var(--bl)}
+.bk-miss{margin:0 0 8px;padding-left:18px;font-size:12px;color:var(--mu)}
+.bk-miss li{margin:2px 0}
 .an-kinds{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 .an-kind{display:flex;gap:9px;align-items:flex-start;padding:10px;border:1px solid var(--ln);border-radius:8px;background:var(--p2);cursor:pointer}
 .an-kind.on{border-color:var(--bl);box-shadow:inset 0 0 0 1px var(--bl)}
@@ -3483,9 +3488,12 @@ function childSelCtx(n){return n.type==="server"?"srv:"+n.id:null}
 // домену, а сервер между ними оставался пустым. Место отметки различает
 // только строка самой камеры (selShownAt).
 function selShownIn(x,cc){return treeSel.has(x.id)}
-function canMultiPick(n){
-  return n&&n.type!=="domain"&&n.type!=="storage"&&n.type!=="server"&&n.type!=="unalloc"&&n.type!=="det"&&n.type!=="folder"&&treeKind(n)===tview;
-}
+// Отметить можно любое устройство в любом срезе — камеру вместе с SMS-шлюзом,
+// реле, детектором или встроенным хранилищем. Что из этого можно править
+// вместе, решает карточка выборки, а не галочка. Контейнеры (домен, сервер,
+// папка) и записи о хранении (хранилище, том) — не устройства.
+const NOT_PICKABLE=new Set(["domain","server","unalloc","folder","archive","vol","gpu","norec","nofolder","found","founddev"]);
+function canMultiPick(n){return!!n&&!NOT_PICKABLE.has(n.type)}
 function treeRowHi(id,ctx){
   const on=sel===id&&sameCtx(ctx),mark=selShownAt(id,ctx);
   if(on&&mark)return"on mark";
@@ -12397,7 +12405,9 @@ function selDescendants(n,withParts){
   const dev=x=>x.type==="camera"||x.type==="ipsrv"||x.type==="channel";
   const visit=(x,inDev)=>{
     if(!x||seen.has(x.id))return;seen.add(x.id);
-    const part=inDev&&x.type!=="camera"&&!withParts;
+    // Службы сервера галочка сервера не берёт — их, как и начинку, отмечают
+    // через «Отметить внутри» по типу или поштучно.
+    const part=(inDev&&x.type!=="camera"||isSvc(x))&&!withParts;
     if(x!==n&&!part&&canMultiPick(x)&&selfInView(x)&&matchesSearch(x,q)&&!busy.has(x.id)&&!pendingDelHas(x.id))out.push(x);
     kids(x).forEach(k=>visit(k,inDev||dev(x)));
     // Сервер и хранилище отмечают всё, что под ними в дереве: регистраторы
@@ -12593,8 +12603,64 @@ const BULK_TABS_ANY=[["gen","Основные"]];
 // Что можно вернуть одним обратным действием: такие правки идут без окна
 // плана и получают «Отменить» в тосте.
 const BULK_REVERSIBLE=new Set(["enabled","folderAdd","folderRemove","rec","pre"]);
-function bulkTabs(nodes){return nodes.every(n=>n.type==="camera")?BULK_TABS_CAM:BULK_TABS_ANY}
-function bulkTabFix(t){const tabs=bulkTabs(bulkSelNodes());return tabs.some(([id])=>id===t)?t:tabs[0][0]}
+function bulkTabs(nodes){return nodes.length&&nodes.every(n=>n.type==="camera")?BULK_TABS_CAM:BULK_TABS_ANY}
+function bulkTabFix(t){const tabs=bulkTabs(bulkScopeNodes());return tabs.some(([id])=>id===t)?t:tabs[0][0]}
+// К чему применяется правка. Выборка может быть любой; чип типа сужает
+// правку до объектов этого типа, а выборку не трогает — как список типов
+// в палитре свойств AutoCAD. «Все» — только то, что умеют все отмеченные.
+let bulkScope="all",bulkScopeSel="";
+const KIND_PLURAL={camera:"Камеры",ipsrv:"Регистраторы",channel:"Каналы",relay:"Реле",sensor:"Датчики",mic:"Микрофоны",spk:"Динамики",
+  "spk:srv":"Динамики сервера",email:"Email",sms:"SMS",export:"Экспорт",eventsrc:"Источники событий",acfa:"ОПС/СКУД",
+  acfa_sensor:"Датчики ОПС",acfa_lock:"Замки",acfa_fence:"Шлейфы",det:"Детекторы",storage:"Встроенные хранилища"};
+function kindLabel(k){return i18n(KIND_PLURAL[k]||LB[k]||k)}
+function bulkKinds(nodes){return countBy(nodes,cpKind)}
+function bulkScopeNodes(){
+  const all=bulkSelNodes(),key=bulkSelKey();
+  // Новая выборка — снова «Все»: прежний тип к ней может не относиться.
+  if(key!==bulkScopeSel){bulkScopeSel=key;bulkScope="all"}
+  if(bulkScope==="all")return all;
+  // «camera@модель» — камеры одной модели: для видео и встроенных детекторов.
+  const[kind,model]=bulkScope.split("@");
+  const part=all.filter(n=>cpKind(n)===kind&&(model==null||modelOf(n)===model));
+  if(part.length)return part;
+  bulkScope="all";return all;
+}
+function bulkSetScope(k){
+  if(k===bulkScope)return;
+  const had=Object.keys(bulkDraft).length;
+  bulkScope=k;bulkDraft={};tab=bulkTabFix(tab);gear();
+  if(had)toast("Черновик сброшен: правка теперь для другого типа");
+}
+function bulkScopeHtml(all){
+  const kinds=bulkKinds(all);
+  if(kinds.length<2)return"";
+  const[sk,sm]=bulkScope.split("@");
+  if(kinds.length<2&&sm==null)return"";
+  const esc=k=>JSON.stringify(k).replace(/"/g,"&quot;");
+  const chip=(k,l,c)=>`<button type="button" class="stchip ${bulkScope===k?"on":""}" onclick="bulkSetScope(${esc(k)})"><span class="stchip-lab">${escHtml(l)}</span><span class="stchip-cnt">${c}</span></button>`;
+  const modelChip=sm!=null?chip(bulkScope,`${kindLabel(sk)} · ${sm||i18n("модель не указана")}`,bulkScopeNodes().length):"";
+  return`<div class="bk-scope"><span class="bk-sum-l">${i18n("Править")}</span>${chip("all",i18n("Все"),all.length)}${kinds.map(([k,c])=>chip(k,kindLabel(k),c)+(k===sk?modelChip:"")).join("")}</div>
+    <p class="sub">${bulkScope==="all"?i18n("Показано то, что умеют все отмеченные. Чтобы править параметры одного типа, выберите его — выборка останется целой, правка пойдёт только ему.")
+      :`${i18n("Правка — только для")} «${escHtml(kindLabel(sk))}${sm!=null?" · "+escHtml(sm):""}» (${bulkScopeNodes().length} ${i18n("из")} ${all.length}). ${i18n("Остальные отмеченные не меняются.")}`}</p>`;
+}
+// Что умеет объект — из этого собирается пересечение для «Все».
+const CREDS_TYPES=new Set(["camera","ipsrv","acfa","eventsrc"]);
+function canCreds(n){return CREDS_TYPES.has(n.type)}
+function canFolder(n){return devicePool.includes(n)}
+// Параметры типа: у начинки — DEV_PARAMS, у служб и детекторов — свои.
+function typeParams(kind){
+  if(kind==="spk:srv"||kind==="spk")return DEV_PARAMS.spk;
+  if(DEV_PARAMS[kind])return DEV_PARAMS[kind];
+  return{email:[["mode","Режим",["Облачный AxxonNet","SMTP сервер"]],["smtp","SMTP сервер",""],["port","Порт",25],["ssl","SSL",["вкл","выкл"]],["from","От кого",""],["to","Получатели",""]],
+    sms:[["gateway","Шлюз / API",""]],export:[["path","Папка",""],["format","Формат",["MP4","AVI"]]],
+    det:[["kind","Тип",DET_TYPES],["sens","Чувствительность",12]]}[kind]||[];
+}
+function paramShow(n,k){
+  if(k==="ssl")return cpVal(n,"ssl")?"вкл":"выкл";
+  if(n.type==="det")return String(k==="kind"?(n.kind||DET_TYPES[0]):(n.sens||"12"));
+  return String(cpVal(n,k));
+}
+function paramPut(n,k,v,def){n[k]=k==="ssl"?v==="вкл":typeof def==="number"?Number(v):v}
 function bulkSet(k,v){
   if(v===""||v==null)delete bulkDraft[k];else bulkDraft[k]=v;
   const foot=document.getElementById("bulkFoot");if(foot)foot.innerHTML=bulkFootHtml();
@@ -12616,7 +12682,7 @@ function bulkStats(nodes){
   };
 }
 function bulkKeep(kind,key){
-  const keep=bulkSelNodes().filter(n=>{
+  const keep=bulkScopeNodes().filter(n=>{
     const v=kind==="server"?serverNameOf(n):kind==="model"?(modelOf(n)||i18n("модель не указана")):(LB[n.type]||n.type);
     return v===key;
   });
@@ -12643,40 +12709,60 @@ function bkInput(label,key,type,entries,hint,id){
   return`<div><label>${i18n(label)}</label><input ${id?`id="${id}"`:""} type="${type||"text"}" value="${escHtml(cur)}" placeholder="${bkNone(entries)}" oninput="bulkSet('${key}',this.value)">${hint!=null?hint:entries?bkHint(entries):""}</div>`;
 }
 function bulkCardHtml(){
-  const nodes=bulkSelNodes(),st=bulkStats(nodes),tabs=bulkTabs(nodes);
+  const sel=bulkSelNodes(),nodes=bulkScopeNodes(),st=bulkStats(nodes),tabs=bulkTabs(nodes);
   if(!tabs.some(([id])=>id===tab))tab=tabs[0][0];
   const tabsH=tabs.map(([id,x])=>`<button class="tab ${tab===id?"on":""}" onclick="tab='${id}';gear()">${i18n(x)}</button>`).join("");
   const allCams=nodes.every(n=>n.type==="camera");
-  const unit=allCams?"камера|камеры|камер":"объект|объекта|объектов";
-  const title=`<span class="hd-ic bk-hd-ic">${SEL_IC}</span>${nodes.length} ${i18n(plural(nodes.length,unit))}`;
+  const unit=sel.every(n=>n.type==="camera")?"камера|камеры|камер":"объект|объекта|объектов";
+  const title=`<span class="hd-ic bk-hd-ic">${SEL_IC}</span>${sel.length} ${i18n(plural(sel.length,unit))}`;
   const cr=`<button type="button" class="cr-link" onclick="pick('${domains[0].id}')">${escHtml(domainLabel())}</button><span class="cr-sep">/</span><span class="cr-cur">${i18n("Выборка")}</span>`;
   const act=`<button type="button" class="btn s" title="${i18n("Включить все выбранные — сразу, с «Отменить»")}" onclick="bulkQuick('on')">${i18n("Включить")}</button>
     <button type="button" class="btn s" title="${i18n("Выключить все выбранные — сразу, с «Отменить»")}" onclick="bulkQuick('off')">${i18n("Выключить")}</button>
-    <button type="button" class="btn s" title="${i18n("Добавить выбранные в папку — сразу, с «Отменить»")}" onclick="bulkFolderMenu(event)">${i18n("В папку")}…</button>
+    ${nodes.some(canFolder)?`<button type="button" class="btn s" title="${i18n("Добавить выбранные в папку — сразу, с «Отменить»")}" onclick="bulkFolderMenu(event)">${i18n("В папку")}…</button>`:""}
     ${allCams?`<button type="button" class="btn s" title="${i18n("Архив и режим записи выбранных")}" onclick="bulkGoTab('rec')">${i18n("Архив и запись")}…</button>`:""}
     <button type="button" class="btn s" onclick="bulkMenu(event)">${i18n("Ещё")} ▾</button>${fullCardBtn()}`;
   const sum=`<div class="bk-sum">
       <div class="bk-sum-row"><span class="bk-sum-l">${i18n("Серверы")}</span>${bkChips(st.servers,"server")}</div>
       <div class="bk-sum-row"><span class="bk-sum-l">${i18n("Модели")}</span>${bkChips(st.models,"model")}</div>
-      ${st.types.length>1?`<div class="bk-sum-row"><span class="bk-sum-l">${i18n("Типы")}</span>${bkChips(st.types,"type")}</div>`:""}
     </div>
-    <p class="sub">${i18n("Клик по чипу оставляет в выборке только его объекты. Общие параметры правятся у любых объектов среза, параметры видео и детекторы — у одной модели.")}</p>`;
+    <p class="sub">${i18n("Клик по серверу или модели оставляет в выборке только их объекты. Параметры видео и встроенные детекторы правятся у одной модели.")}</p>`;
   const offNote=st.offline.length?`<div class="nt" role="status">${st.offline.length} ${i18n(plural(st.offline.length,"объект|объекта|объектов"))} ${i18n("на сервере без связи")} (${[...new Set(st.offline.map(serverNameOf))].map(escHtml).join(", ")}). ${i18n("Изменения к ним не применятся — в отчёте они будут «не применено».")}</div>`:"";
-  const body=offNote+sum+(tab==="vid"?bulkVidHtml(nodes,st):tab==="rec"?bulkRecHtml(nodes):tab==="det"?bulkDetHtml(nodes,st):bulkGenHtml(nodes,allCams))+bulkListCard(nodes);
+  const body=bulkScopeHtml(sel)+offNote+sum+(tab==="vid"?bulkVidHtml(nodes,st):tab==="rec"?bulkRecHtml(nodes):tab==="det"?bulkDetHtml(nodes,st):bulkGenHtml(nodes,allCams))+bulkListCard(sel);
   return mainHd(cr,title,"",tabsH,act,false)+`<div class="sc">${body}</div><div class="main-actions bk-foot" id="bulkFoot">${bulkFootHtml()}</div>`;
 }
+// Карточка «Основные» — пересечение: раздел показан, только если его умеют
+// все объекты, к которым идёт правка. Чего нет — сказано, почему.
 function bulkGenHtml(nodes,allCams){
-  const en=countBy(nodes,n=>n.enabled!==false?i18n("включён"):i18n("выключен"));
-  const creds=nodes.filter(n=>n.type==="camera"||n.type==="ipsrv"||n.type==="acfa");
-  const inFolders=countBy(nodes.flatMap(n=>foldersOfDevice(n.id).map(f=>f.id)),id=>id);
-  const removeOpts=inFolders.map(([id,c])=>[id,`${folderPathName(id)} (${c})`]);
-  const addOpts=flatFolders().map(f=>[f.id,folderPathName(f.id)]);
-  let h=card("Состояние",`<div class="g">${bkSelect("Включено","enabled",[["on",i18n("Включить")],["off",i18n("Выключить")]],en)}</div>`);
-  if(creds.length)h+=card("Учётные данные",`<div class="g">${bkInput("Имя пользователя","user","text",null,`<div class="bk-hint">${i18n("задано у всех, значения не показываются")}</div>`,"bkUser")}${bkInput("Пароль","pass","password",null,`<div class="bk-hint">${i18n("задан у всех · ввод заменит на всех")}</div>`)}</div>
+  const miss=[],kinds=bulkKinds(nodes),one=kinds.length===1?kinds[0][0]:null;
+  const lack=(fn,what)=>{const no=bulkKinds(nodes.filter(n=>!fn(n)));if(no.length)miss.push(`${i18n(what)} — ${i18n("нет у")}: ${no.map(([k,c])=>`${escHtml(kindLabel(k).toLowerCase())} (${c})`).join(", ")}`);return!no.length};
+  let h="";
+  if(lack(canToggleEnabled,"Включение и выключение")){
+    const en=countBy(nodes,n=>n.enabled!==false?i18n("включён"):i18n("выключен"));
+    h+=card("Состояние",`<div class="g">${bkSelect("Включено","enabled",[["on",i18n("Включить")],["off",i18n("Выключить")]],en)}</div>`);
+  }
+  if(one)h+=bulkParamsHtml(one,nodes);
+  if(lack(canCreds,"Учётные данные"))h+=card("Учётные данные",`<div class="g">${bkInput("Имя пользователя","user","text",null,`<div class="bk-hint">${i18n("задано у всех, значения не показываются")}</div>`,"bkUser")}${bkInput("Пароль","pass","password",null,`<div class="bk-hint">${i18n("задан у всех · ввод заменит на всех")}</div>`)}</div>
     <p class="sub">${i18n("Пароль только записывается: прежнее значение не показывается и не сравнивается. Устройства переподключатся — поэтому через план.")}</p>`);
-  h+=card("Расположение",`<div class="g">${bkSelect("Добавить в папку","folderAdd",addOpts,null,"")}${bkSelect("Убрать из папки","folderRemove",removeOpts,null,removeOpts.length?"":`<div class="bk-hint">${i18n("ни один объект не входит в папки")}</div>`)}</div>`);
+  if(lack(canFolder,"Расположение в папках")){
+    const inFolders=countBy(nodes.flatMap(n=>foldersOfDevice(n.id).filter(f=>f.items.includes(n.id)).map(f=>f.id)),id=>id);
+    const removeOpts=inFolders.map(([id,c])=>[id,`${folderPathName(id)} (${c})`]);
+    const addOpts=flatFolders().map(f=>[f.id,folderPathName(f.id)]);
+    h+=card("Расположение",`<div class="g">${bkSelect("Добавить в папку","folderAdd",addOpts,null,"")}${bkSelect("Убрать из папки","folderRemove",removeOpts,null,removeOpts.length?"":`<div class="bk-hint">${i18n("ни один объект не входит в папки")}</div>`)}</div>`);
+  }
+  if(!one&&kinds.length>1)miss.push(`${i18n("Параметры типов")} — ${i18n("у каждого типа свои; выберите тип вверху")}`);
+  if(miss.length)h+=card("Не показано",`<ul class="bk-miss">${miss.map(x=>`<li>${x}</li>`).join("")}</ul>
+    <p class="sub" style="margin:0">${i18n("Это не запрет: выберите тип в строке «Править», и его параметры появятся — правка пойдёт только ему.")}</p>`);
   h+=card("Идентификация",`<p class="sub" style="margin:0">${i18n("Имя, короткое имя, ID и IP у каждого объекта свои — массово не меняются. Имена по шаблону: «Ещё → Переименовать по шаблону…».")}</p>`);
   return h;
+}
+// Параметры одного типа: те же поля, что в карточке объекта.
+function bulkParamsHtml(kind,nodes){
+  const ps=typeParams(kind);if(!ps.length)return"";
+  const fields=ps.map(([k,l,d])=>{
+    const ent=countBy(nodes,n=>paramShow(n,k));
+    return Array.isArray(d)?bkSelect(l,"p:"+k,d.map(x=>[x,i18n(x)]),ent):bkInput(l,"p:"+k,typeof d==="number"?"number":"text",ent);
+  }).join("");
+  return card(`${i18n("Параметры")}: ${kindLabel(kind).toLowerCase()}`,`<div class="g">${fields}</div>`);
 }
 function bulkRecHtml(nodes){
   const archD=countBy(nodes,n=>{const a=arch.find(x=>x.id===n.arch);return a?locName(a):i18n("не задан")});
@@ -12694,7 +12780,7 @@ function bulkRecHtml(nodes){
 }
 function bulkVidHtml(nodes,st){
   if(st.models.length>1)return card("Видео",`<div class="nt">${i18n("Выбрано моделей")}: ${st.models.length}. ${i18n("Параметры видео доступны, если выбрать камеры одной модели.")}</div>
-    <div class="bk-keep">${st.models.map(([k,c])=>`<button type="button" class="btn s" onclick="bulkKeep('model',${JSON.stringify(k).replace(/"/g,"&quot;")})">${i18n("Оставить только")} ${escHtml(k)} (${c})</button>`).join("")}</div>`);
+    <div class="bk-keep">${st.models.map(([k,c])=>`<button type="button" class="btn s" title="${i18n("Выборка останется целой — правка пойдёт только камерам этой модели")}" onclick="bulkSetScope(${JSON.stringify("camera@"+(k===i18n("модель не указана")?"":k)).replace(/"/g,"&quot;")})">${i18n("Править только")} ${escHtml(k)} (${c})</button>`).join("")}</div>`);
   const codecD=countBy(nodes,n=>n.codec||"H.265"),resD=countBy(nodes,n=>n.res||"1920×1080"),fpsD=countBy(nodes,n=>n.fps||25),brD=countBy(nodes,n=>n.bitrate||4096);
   return card("Видео",`<div class="g">${bkSelect("Кодек","codec",[["H.265","H.265"],["H.264","H.264"]],codecD)}${bkSelect("Разрешение","res",[["1920×1080","1920×1080"],["4K","4K"]],resD)}${bkInput("к/с","fps","number",fpsD)}${bkInput("Битрейт","bitrate","number",brD)}</div>
     <p class="sub">${i18n("Одна модель")}: ${escHtml(st.models[0][0])}. ${i18n("Значения проверяются по пересечению допустимых диапазонов выбранных камер; поток переоткроется, поэтому через план.")}</p>`);
@@ -12703,7 +12789,7 @@ function bulkDetHtml(nodes,st){
   const kinds=countBy(nodes.flatMap(n=>camDetectors(n).map(d=>d.kind||DET_TYPES[0])),k=>k);
   const have=`<p class="sub">${kinds.length?`${i18n("Есть детекторы")}: ${kinds.map(([k,c])=>`${escHtml(i18n(k))} ×${c}`).join(" · ")}`:i18n("Детекторов у выбранных камер нет.")}</p>`;
   if(st.models.length>1)return card("Детекторы",`<div class="nt">${i18n("Выбрано моделей")}: ${st.models.length}. ${i18n("Детекторы добавляются сразу всем камерам одной модели.")}</div>
-    <div class="bk-keep">${st.models.map(([k,c])=>`<button type="button" class="btn s" onclick="bulkKeep('model',${JSON.stringify(k).replace(/"/g,"&quot;")})">${i18n("Оставить только")} ${escHtml(k)} (${c})</button>`).join("")}</div>${have}`);
+    <div class="bk-keep">${st.models.map(([k,c])=>`<button type="button" class="btn s" title="${i18n("Выборка останется целой — правка пойдёт только камерам этой модели")}" onclick="bulkSetScope(${JSON.stringify("camera@"+(k===i18n("модель не указана")?"":k)).replace(/"/g,"&quot;")})">${i18n("Править только")} ${escHtml(k)} (${c})</button>`).join("")}</div>${have}`);
   const kind=bulkDraft.addDet||"";
   const missing=kind?nodes.filter(n=>!camDetectors(n).some(d=>(d.kind||DET_TYPES[0])===kind)).length:0;
   return card("Детекторы",`<div class="g">${bkSelect("Добавить детектор всем","addDet",DET_TYPES.map(k=>[k,i18n(k)]),null,kind?`<div class="bk-hint">${i18n("нет у")} ${missing} ${i18n("из")} ${nodes.length} — ${i18n("добавится только им")}</div>`:"")}</div>${have}
@@ -12735,10 +12821,10 @@ function bulkListCard(nodes){
 function bulkCollapsible(ch){
   if(ch.length!==1)return false;
   const c=ch[0];
-  return BULK_REVERSIBLE.has(c.key)&&!c.note&&!c.ops.some(o=>o.skip)&&!bulkStats(bulkSelNodes()).offline.length;
+  return(BULK_REVERSIBLE.has(c.key)||c.key.startsWith("p:"))&&!c.note&&!c.ops.some(o=>o.skip)&&!bulkStats(bulkScopeNodes()).offline.length;
 }
 function bulkFootHtml(){
-  const ch=bulkChanges(),nodes=bulkSelNodes();
+  const ch=bulkChanges(),nodes=bulkScopeNodes();
   const n=ch.reduce((s,c)=>s+c.ops.length,0);
   if(!ch.length)return`<span class="sub bk-foot-text">${i18n("Ничего не изменено — поля стоят в «— не менять —» или «— разные —»")}</span><span class="tfoot-gap"></span>
     <button type="button" class="btn s" disabled>${i18n("Сбросить")}</button><button type="button" class="btn s pri" disabled>${i18n("Показать план")}</button>`;
@@ -12768,23 +12854,33 @@ function opFail(n,kind){
 }
 function mkOp(n,label,kind,run,skip,undo){return{n,label,kind,run,skip:skip||null,undo:undo||null}}
 function bulkChanges(draft){
-  const nodes=bulkSelNodes(),d=draft||bulkDraft,out=[];
+  const nodes=bulkScopeNodes(),d=draft||bulkDraft,out=[];
   const step=(key,label,ops,note)=>{if(ops.length)out.push({key,label,ops,note:note||""})};
   if(d.enabled){
     const want=d.enabled==="on";
-    const ops=nodes.filter(n=>(n.enabled!==false)!==want).map(n=>{const prev=n.enabled;return mkOp(n,want?"Включить":"Выключить",want?"enable":"disable",()=>{n.enabled=want},null,()=>{n.enabled=prev})});
+    const ops=nodes.filter(n=>canToggleEnabled(n)&&(n.enabled!==false)!==want).map(n=>{const prev=n.enabled;return mkOp(n,want?"Включить":"Выключить",want?"enable":"disable",()=>{n.enabled=want},null,()=>{n.enabled=prev})});
     const lic=want?ops.filter(o=>o.n.licenseExceeded).length:0;
     step("enabled",want?"Включить":"Выключить",ops,lic?`${i18n("лицензия")}: ${lic} ${i18n(plural(lic,"камера|камеры|камер"))} ${i18n("сверх лимита не включатся")}`:"");
   }
-  if(d.user||d.pass)step("creds","Учётные данные",nodes.filter(n=>n.type==="camera"||n.type==="ipsrv"||n.type==="acfa").map(n=>mkOp(n,"Учётные данные","creds",()=>{if(d.user)n.user=d.user;if(d.pass)n.pass="•".repeat(8)})),i18n("устройство переподключится"));
+  if(d.user||d.pass)step("creds","Учётные данные",nodes.filter(canCreds).map(n=>mkOp(n,"Учётные данные","creds",()=>{if(d.user)n.user=d.user;if(d.pass)n.pass="•".repeat(8)})),i18n("устройство переподключится"));
   [...(d.folderAdd?[d.folderAdd]:[]),...(d.folderAddMany||[])].forEach(fid=>{
     const f=folderById(fid);
-    if(f)step("folderAdd:"+fid,`В папку «${folderPathName(f.id)}»`,nodes.filter(n=>!f.items.includes(n.id)).map(n=>mkOp(n,"В папку","folder",()=>folderAddDevice(f.id,n.id),null,()=>{f.items=f.items.filter(x=>x!==n.id)})));
+    if(f)step("folderAdd:"+fid,`В папку «${folderPathName(f.id)}»`,nodes.filter(n=>canFolder(n)&&!f.items.includes(n.id)).map(n=>mkOp(n,"В папку","folder",()=>folderAddDevice(f.id,n.id),null,()=>{f.items=f.items.filter(x=>x!==n.id)})));
   });
   if(d.folderRemove){
     const f=folderById(d.folderRemove);
     if(f)step("folderRemove",`Из папки «${folderPathName(f.id)}»`,nodes.filter(n=>f.items.includes(n.id)).map(n=>mkOp(n,"Из папки","folder",()=>{f.items=f.items.filter(x=>x!==n.id)},null,()=>folderAddDevice(f.id,n.id))));
   }
+  // Параметры одного типа: шаг на поле, сразу с откатом.
+  Object.keys(d).filter(k=>k.startsWith("p:")).forEach(key=>{
+    const k=key.slice(2),v=d[key];
+    const ops=nodes.map(n=>[n,typeParams(cpKind(n)).find(x=>x[0]===k)]).filter(([n,p])=>p&&paramShow(n,k)!==String(v)).map(([n,p])=>{
+      const had=Object.prototype.hasOwnProperty.call(n,k),prev=n[k];
+      return mkOp(n,`${i18n(p[1])}: ${v}`,"param",()=>paramPut(n,k,v,p[2]),null,()=>{if(had)n[k]=prev;else delete n[k]});
+    });
+    const lab=(typeParams(bulkScope.split("@")[0])||[]).find(x=>x[0]===k)?.[1]||k;
+    step(key,`${i18n(lab)}: ${v}`,ops);
+  });
   if(d.arch){
     const a=d.arch==="__none__"?null:arch.find(x=>x.id===d.arch);
     const ops=nodes.filter(n=>n.type==="camera"&&(n.arch||null)!==(a?a.id:null)).map(n=>mkOp(n,a?`Архив «${locName(a)}»`:"Снять архив","arch",()=>{
@@ -12910,7 +13006,7 @@ function downloadText(name,text,mime){
   }catch(e){toast("Не удалось сохранить файл")}
 }
 function bulkRenameDialog(){
-  const nodes=bulkSelNodes();
+  const nodes=bulkScopeNodes();
   const opts=BULK_NAME_TEMPLATES.filter(([v])=>v).map(([v,l])=>`<option value="${v}">${escHtml(l)}</option>`).join("");
   const preview=tpl=>nodes.slice(0,3).map(n=>`<li>${escHtml(locName(n))} → <b>${escHtml(bulkName(n,tpl))}</b></li>`).join("");
   window._bkPreview=preview;
@@ -12933,13 +13029,13 @@ function closeBulkModal(){document.getElementById("bmodal")?.classList.remove("o
 function bulkBusyGuard(){
   if(bq&&!bq.finished){toast("Очередь ещё выполняется — дождитесь её конца");return true}
   const busy=busyIds();
-  if(bulkSelNodes().some(n=>busy.has(n.id)||pendingDelHas(n.id))){toast("В выборке есть объекты в очереди или на удалении");return true}
+  if(bulkScopeNodes().some(n=>busy.has(n.id)||pendingDelHas(n.id))){toast("В выборке есть объекты в очереди или на удалении");return true}
   return false;
 }
 // План по выборке дерева; «Применить к другим» для устройств без галочек
 // передаёт свои шаги, объекты и что делать по кнопкам.
 function bulkShowPlan(chIn,nodesIn,applyJs,backJs){
-  const ch=chIn||bulkChanges(),nodes=nodesIn||bulkSelNodes();
+  const ch=chIn||bulkChanges(),nodes=nodesIn||bulkScopeNodes();
   if(!ch.length){toast("Нечего применять");return}
   if(chIn?(bq&&!bq.finished&&(toast("Очередь ещё выполняется — дождитесь её конца"),true)):bulkBusyGuard())return;
   const st=bulkStats(nodes);
@@ -12972,7 +13068,7 @@ function bulkApply(opts){
   gear();
 }
 function bulkRun(ch,opts,nodesIn){
-  const nodes=nodesIn||bulkSelNodes();
+  const nodes=nodesIn||bulkScopeNodes();
   const excluded=new Set(bulkStats(nodes).offline.map(n=>n.id));
   const steps=ch.map(c=>({label:c.label,ops:c.ops.map(o=>({...o,state:o.skip?"skip":excluded.has(o.n.id)?"excl":"wait",msg:o.skip||(excluded.has(o.n.id)?i18n("сервер без связи"):""),done:!!o.skip||excluded.has(o.n.id)}))}));
   startQueue(steps,`${nodes.length} ${i18n(plural(nodes.length,"объект|объекта|объектов"))}`,opts);
