@@ -1171,7 +1171,6 @@ html[data-theme="light"] .n-chk{border-color:#8fa4bf}
 .n.busy>*{opacity:.6}
 .n.busy>.busy-chip{opacity:1}
 .busy-chip{flex:none;font-size:9px;padding:1px 5px;border-radius:4px;background:#1c3350;color:#9ec8ff;margin-left:4px;white-space:nowrap}
-.bk-peek{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .tctx-head{padding:6px 10px 2px;font-size:10px;color:var(--mu);text-transform:uppercase;letter-spacing:.04em}
 /* Очередь применения — в шапке справа от поиска, плашкой постоянной ширины:
    текст шага обрезается многоточием, а не переносится, поэтому плашка не
@@ -1265,6 +1264,15 @@ html[data-theme="light"] .busy-chip{background:#dce8f7;color:#2f5fad}
 html[data-theme="light"] .tag.tag-ch{color:#5b3fa0;background:#ece5fb}
 /* Карточка выборки: к чему применяется правка, и что не показано */
 .bk-scope{padding:10px 12px;border:1px solid var(--ln);border-radius:8px;background:var(--p2);margin-bottom:12px}
+/* Дорога назад к выборке: корень пути в шапке и кнопка на панели под деревом */
+.cr-link.cr-sel{display:inline-flex;align-items:center;gap:5px;color:#9ec8ff;font-weight:600;background:#1c3350;border-radius:6px;padding:1px 8px}
+.cr-link.cr-sel:hover{background:#24426a;color:#fff}
+.cr-link.cr-sel svg{flex:none}
+.sel-back{border:0;background:var(--bl);color:#fff;font:inherit;font-size:12px;font-weight:600;border-radius:6px;padding:3px 10px;cursor:pointer}
+.sel-back:hover{filter:brightness(1.1)}
+.sel-bar.sel-peek{animation:selpeek .6s ease-out 1}
+@keyframes selpeek{0%{box-shadow:0 0 0 0 #4b8df8aa}100%{box-shadow:0 0 0 10px #4b8df800}}
+html[data-theme="light"] .cr-link.cr-sel{background:#dce8f7;color:#2f5fad}
 .bk-scope-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .bk-scope-l{font-size:13px;font-weight:600}
 .bk-scope-or{margin:0;font-size:11px}
@@ -5335,7 +5343,7 @@ function gear(){
   // собственные действия объекта, а звезда последней и без подписи.
   const addBtn=lanFoundBtn(n)+lanHeadBtns(n)+inspectorAddBtn(n)+bulkCopyBtn(n)+cardMoreBtn(n)+favCardBtn(n)+fullCardBtn();
   const scClass=n.type==="unalloc"?"sc sc-unalloc":"sc";
-  paintMain(mainHd(crumbsHtml(sel),objectTitle(n),"",tabsH,addBtn,true)+`<div class="${scClass}">${bulkPeekNoteHtml()}${hiddenByFilterNoteHtml()}${objectStatusNotesHtml(n)}${form(n)}</div>`+domainActionsHtml(n));
+  paintMain(mainHd(bulkPeekCrumbHtml()+crumbsHtml(sel),objectTitle(n),"",tabsH,addBtn,true)+`<div class="${scClass}">${hiddenByFilterNoteHtml()}${objectStatusNotesHtml(n)}${form(n)}</div>`+domainActionsHtml(n));
   if(n.type==="found")renderDeviceWizard();  // панель живёт в разметке, которую только что вставили
 }
 function domainActionsHtml(n){
@@ -12269,12 +12277,20 @@ function navMark(){
   if(cur){const sc=document.querySelector("#main .sc");cur.loc.sc=sc?sc.scrollTop:null;cur.loc.foc={...accFoc}}
   navForce=true;
 }
-function navLoc(){return{app,sel,tab,slice,selFolder,detSel,sview,tview,rule,sys,logFilt,accSel,accTab,domainFilter}}
-function navKey(loc){const{tab,accTab,...rest}=loc;return JSON.stringify(rest)}
+// Карточка выборки — тоже шаг: «Назад» из открытого объекта ведёт к ней.
+// Галочки внутри шага не плодят шагов: ключ — «выборка», а состав
+// запоминается, чтобы вернуть его, если с тех пор выборку сняли.
+function navLoc(){
+  const bulk=app==="hw"&&bulkActive()&&!bulkPeek;
+  return{app,sel,tab,slice,selFolder,detSel,sview,tview,rule,sys,logFilt,accSel,accTab,domainFilter,bulk,
+    bsel:bulk?[...treeSel].map(id=>[id,selWhere.get(id)??null]):null};
+}
+function navKey(loc){const{tab,accTab,bsel,sel,...rest}=loc;return JSON.stringify({...rest,sel:loc.bulk?"":sel})}
 function navTitle(){
   const sec=i18n(APPS_LIST.find(a=>a.id===app)?.label||app);
   let t="";
-  if(app==="hw"){const n=find(sel)?.n;t=n?locName(n):""}
+  if(app==="hw"&&bulkActive()&&!bulkPeek)t=`${i18n("Выборка")} (${bulkSelNodes().length})`;
+  else if(app==="hw"){const n=find(sel)?.n;t=n?locName(n):""}
   else if(app==="rules")t=rules.find(r=>r.id===rule)?.name||"";
   else if(app==="sys")t=sysOpts.find(o=>o.id===sys)?.n||"";
   else if(app==="log")t=logCats.find(c=>c.id===logFilt)?.n||"";
@@ -12307,6 +12323,13 @@ function navApply(loc){
     app=loc.app;sel=loc.sel;tab=loc.tab;slice=loc.slice;selFolder=loc.selFolder;detSel=loc.detSel;
     rule=loc.rule;sys=loc.sys;logFilt=loc.logFilt;accSel=loc.accSel;accTab=loc.accTab;domainFilter=loc.domainFilter||"";domainPop=false;
     syncViews();sview=loc.sview;tview=loc.tview;   // syncViews ставит виды по срезу, шаг их уточняет
+    // Шаг «выборка» возвращает её состав; шаг объекта при живой выборке
+    // открывает объект поверх неё — выборка остаётся.
+    if(app==="hw"&&loc.bulk&&loc.bsel){
+      const ok=loc.bsel.filter(([id])=>find(id));
+      if(ok.length>1){treeSel.clear();ok.forEach(([id,c])=>treeSel.add(id,c));selMode=true}
+      bulkPeek=false;
+    }else if(app==="hw"&&selMode&&treeSel.size>1)bulkPeek=true;
     if(app==="hw"&&find(sel))expandTo(sel);
     closeUserMenu();closeTreeCtx();accMenuClose();accTipClose();
     accUserSel.clear();accMemSel.clear();accSelMe=false;accDrawerClose("accBulk");accDrawerClose("accAdd");
@@ -12591,17 +12614,32 @@ function renderSelBar(){
   if(!selBarOn){host.classList.add("sel-in");setTimeout(()=>host.classList.remove("sel-in"),260)}
   selBarOn=true;
   host.hidden=false;
-  host.innerHTML=`<span class="sel-ic" aria-hidden="true">${SEL_IC}</span><span class="sel-cnt">${n?`${i18n("Отмечено")} <b>${n}</b>`:i18n("Отметьте объекты")}</span>
+  // Открыт объект, а не выборка — счётчик становится дорогой назад.
+  const peek=bulkPeekOn();
+  host.classList.toggle("sel-peek",peek);
+  host.innerHTML=`<span class="sel-ic" aria-hidden="true">${SEL_IC}</span>${peek
+    ?`<button type="button" class="sel-back" title="${i18n("Открыт объект; выборка сохранена")}" onclick="bulkBack()">${i18n("К выборке")} (${n}) →</button>`
+    :`<span class="sel-cnt">${n?`${i18n("Отмечено")} <b>${n}</b>`:i18n("Отметьте объекты")}</span>`}
     ${total&&!allOn?`<button type="button" class="lk" title="${i18n("Выбрать все")} ${total} ${scope}" onclick="selectAllFiltered()">${i18n("Все")} ${total}</button>`:""}
     ${n?`<button type="button" class="lk" onclick="clearTreeSel()">${i18n("Снять")}</button>`:""}
     <span class="sel-gap"></span>
     <button type="button" class="sel-close" title="${i18n("Выйти из режима выбора")} (Esc)" aria-label="${i18n("Выйти из режима выбора")}" onclick="setSelMode(false)">✕</button>`;
 }
-// Один объект открыт из выборки: карточка объекта, а выборка цела.
-function bulkPeekNoteHtml(){
-  if(!bulkActive()||!bulkPeek)return"";
+// Объект открыт, пока есть выборка: путь в шапке начинается с неё —
+// «Выборка (3) / Сервер — Офис / Хранилище — Офис». Это и ответ на «где я»,
+// и дорога назад; та же дорога — кнопка на панели под деревом и «Назад».
+function bulkPeekOn(){return app==="hw"&&bulkActive()&&bulkPeek}
+function bulkPeekCrumbHtml(){
+  if(!bulkPeekOn())return"";
   const n=bulkSelNodes().length;
-  return`<div class="nt bk-peek">${i18n("Объект открыт из выборки")} (${n} ${i18n(plural(n,"объект|объекта|объектов"))}); ${i18n("выборка сохранена")}. <button type="button" class="lk" onclick="bulkPeek=false;gear()">${i18n("К выборке")}</button></div>`;
+  return`<span class="cr-it cr-sel-it"><button type="button" class="cr-link cr-sel" title="${i18n("Вернуться к выборке — она сохранена")}" onclick="bulkBack()">${SEL_IC}${i18n("Выборка")} (${n})</button><span class="cr-sep">/</span></span>`;
+}
+let bulkLastTab="gen";
+function bulkBack(){
+  if(!bulkActive())return;
+  navMark();
+  bulkPeek=false;tab=bulkTabFix(bulkLastTab);
+  paint();
 }
 
 // ── Карточка выборки ──────────────────────────────────────────────────────
@@ -12735,6 +12773,7 @@ function bkInput(label,key,type,entries,hint,id){
 function bulkCardHtml(){
   const sel=bulkSelNodes(),nodes=bulkScopeNodes(),st=bulkStats(nodes),tabs=bulkTabs(nodes);
   if(!tabs.some(([id])=>id===tab))tab=tabs[0][0];
+  bulkLastTab=tab;
   const tabsH=tabs.map(([id,x])=>`<button class="tab ${tab===id?"on":""}" onclick="tab='${id}';gear()">${i18n(x)}</button>`).join("");
   const allCams=nodes.every(n=>n.type==="camera");
   const unit=sel.every(n=>n.type==="camera")?"камера|камеры|камер":"объект|объекта|объектов";
