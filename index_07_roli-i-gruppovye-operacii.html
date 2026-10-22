@@ -5863,10 +5863,24 @@ function lanRefresh(){lan.sel.clear();lanSearch();gear()}
 // Какие объекты вообще попадают в таблицу. У папки это расположение — там
 // строкой идёт устройство целиком; у архива и сервера речь о записи, а пишется
 // каждый канал регистратора сам по себе, так что вложенные тоже строки.
+// У хранилища и сервера речь о записи видео: в таблице только камеры и
+// регистраторы с камерами (их встроенный архив реплицируется сюда же).
+// Хранилище сервера видит камеры этого сервера — других к нему не привязать;
+// сетевое хранилище домена — все камеры домена. Камера ещё без сервера
+// (заведена, но не пишется) подходит любому хранилищу своего домена.
+function lanVideoDev(d){return d.type==="camera"||(d.type==="ipsrv"&&ipsrvCameras(d).length>0)}
+function lanInScope(n,d){
+  const dom=lanDomainOf(n);
+  if(deviceDomain(d.id)!==dom)return false;
+  const sid=lanIsArch(n)?n.server:n.type==="server"?n.id:null;
+  if(!sid)return true;
+  const s=cameraTreeServer(d.id);
+  return!s||s.id===sid;
+}
 function lanSysDevices(n){
   const out=[];
   if(lanIsPlace(n)){devicePool.forEach(d=>{if(d.type!=="det"&&!isSvc(d))out.push(d)});return out}
-  walk(d=>{if(d.type!=="det"&&!isSvc(d))out.push(d)},devicePool,null);
+  walk(d=>{if(lanVideoDev(d)&&lanInScope(n,d))out.push(d)},devicePool,null);
   return out;
 }
 function lanBindOf(n,d){
@@ -5908,8 +5922,10 @@ function lanRows(n){
       vendor:d.vendor||"",model:d.model||"",type:d.type,bind:b.k,bindText:b.t,nested:b.nested||null,
       foreign:deviceDomain(d.id)!==own};
   });
+  // Устройство из сети, которое уже заведено (пусть и на другом сервере),
+  // строкой «Нет в системе» не показываем.
   const busy=new Set();
-  sys.forEach(r=>{if(r.ip)busy.add("ip:"+r.ip.toLowerCase());if(r.mac)busy.add("mac:"+r.mac.toLowerCase())});
+  walk(d=>{if(d.ip)busy.add("ip:"+String(d.ip).toLowerCase());if(d.mac)busy.add("mac:"+String(d.mac).toLowerCase())},devicePool,null);
   const net=lan.net.filter(r=>!busy.has("ip:"+String(r.ip).toLowerCase())&&!busy.has("mac:"+String(r.mac).toLowerCase()))
     .map(r=>({key:"n:"+r.id,kind:"net",id:r.id,node:null,name:r.name||r.ip,ip:r.ip||"",mac:r.mac||"",
       vendor:r.vendor||"",model:r.model||"",type:r.type||"camera",bind:"none",bindText:i18n("Нет в системе"),
@@ -5951,19 +5967,21 @@ function lanAction(n,r){
   }
   if(folder){
     if(r.nested)return{off:i18n("Объект лежит во вложенной папке")};
-    if(r.bind==="here")return{label:i18n("Убрать"),fn:`lanUnbind('${r.key}')`};
+    if(r.bind==="here")return{label:i18n("Убрать"),fn:`lanUnbindKeys(['${r.key}'])`,unbind:true};
     // Устройства ещё нет в системе: его не «привязывают», а заводят — поля
     // для этого уже в строке, кнопка только подтверждает.
     if(r.kind==="net")return{label:i18n("В папку"),fn:`lanAddNew('${r.key}')`,pri:true,net:true};
-    return{label:i18n("В папку"),fn:`lanBind('${r.key}')`,pri:true};
+    return{label:i18n("В папку"),fn:`lanBindKeys(['${r.key}'])`,pri:true};
   }
   if(r.type!=="camera"&&r.type!=="ipsrv")return{off:i18n("Запись в архив ведут только камеры")};
   if(!lanTargets(n).length)return{off:i18n("У сервера нет архива")};
-  if(r.bind==="here")return{label:i18n("Отвязать"),fn:`lanUnbind('${r.key}')`};
+  if(r.bind==="here")return{label:i18n("Отвязать"),fn:`lanUnbindKeys(['${r.key}'])`,unbind:true};
   const far=r.kind==="sys"?lanFarServer(n,r.node):null;
   if(far)return{off:`${i18n(r.type==="ipsrv"?"Регистратор на сервере":"Камера на сервере")} «${locName(far)}» — ${i18n("хранилище другого сервера недоступно")}`};
   if(r.kind==="net")return{label:i18n("Писать сюда"),fn:`lanAddNew('${r.key}')`,pri:true,net:true};
-  return{label:i18n("Писать сюда"),fn:`lanBind('${r.key}')`,pri:true};
+  // Пишет в другое хранилище — это добавится, прежнее останется.
+  if(r.bind==="other")return{label:i18n("Добавить сюда"),fn:`lanBindKeys(['${r.key}'])`,pri:true,tip:`${i18n("Продолжит писать и в")} «${r.bindText}»`};
+  return{label:i18n("Писать сюда"),fn:`lanBindKeys(['${r.key}'])`,pri:true};
 }
 function lanRowByKey(n,key){return lanRows(n).find(r=>r.key===key)||null}
 function lanMaterialize(n,r,opts={}){
@@ -6055,24 +6073,53 @@ function lanUnbind(key){
   lan.sel.delete(key);
   treeMatchCache.clear();searchMatchCache.clear();paint();
 }
-function lanBulk(){
+function lanPickable(n,r){const a=lanAction(n,r);return!a.off&&(a.pri||a.unbind)}
+function lanHasUnbind(n){return!lanIsDomain(n)}
+// Что было у камер до правки — для «Отменить» в тосте.
+function lanSnap(ids){
+  const cams=[];
+  ids.forEach(id=>{const d=find(id)?.n;if(!d)return;(d.type==="ipsrv"?[d,...ipsrvCameras(d)]:[d]).forEach(c=>cams.push(c))});
+  const was=cams.map(c=>({c,arch:c.arch,rec:c.rec,stream:c.stream,srvId:c.srvId,archx:(c.archx||[]).map(x=>({...x}))}));
+  return()=>{was.forEach(w=>{Object.assign(w.c,{arch:w.arch,rec:w.rec,stream:w.stream,srvId:w.srvId,archx:w.archx})});treeMatchCache.clear();searchMatchCache.clear();paint()};
+}
+function lanBulk(){lanBindKeys([...lan.sel])}
+// Привязка ничего не теряет — сразу, с «Отменить» в тосте.
+function lanBindKeys(keys){
   const n=find(lan.owner)?.n;if(!n)return;
-  const keys=[...lan.sel];
-  if(!keys.length){toast("Ничего не выбрано");return}
-  let ok=0;
-  keys.forEach(k=>{
-    const r=lanRowByKey(n,k);if(!r)return;
-    const a=lanAction(n,r);if(a.off||!a.pri)return;
-    lanBind(k);ok++;
-  });
-  lan.sel.clear();
-  toast(ok?`${i18n("Привязано")}: ${ok}`:i18n("Нечего привязывать"));
+  const rows=keys.map(k=>lanRowByKey(n,k)).filter(r=>r&&lanAction(n,r).pri);
+  if(!rows.length){toast("Нечего привязывать");return}
+  const undo=lanSnap(rows.filter(r=>r.kind==="sys").map(r=>r.id));
+  const fresh=rows.filter(r=>r.kind==="net");
+  if(fresh.length&&rows.length===1){lanAddNew(rows[0].key);return}
+  rows.forEach(r=>lanBind(r.key));
+  keys.forEach(k=>lan.sel.delete(k));
+  const what=lanIsFolder(n)?i18n("Добавлено в папку"):`${i18n("Привязано к")} «${locName(lanIsArch(n)?n:archById(lan.arch)||n)}»`;
+  if(fresh.length)toast(`${what}: ${rows.length}`);
+  else toastAction("lanbind",`${what}: ${rows.length}`,i18n("Отменить"),()=>{undo();toast(i18n("Привязка отменена"))},8000);
   paint();
+}
+// Отвязка останавливает запись — сначала спрашиваем, потом даём «Отменить».
+function lanUnbindKeys(keys){
+  const n=find(lan.owner)?.n;if(!n)return;
+  const rows=keys.map(k=>lanRowByKey(n,k)).filter(r=>r&&lanAction(n,r).unbind);
+  if(!rows.length){toast("Нечего отвязывать");return}
+  const folder=lanIsFolder(n),names=rows.slice(0,5).map(r=>`«${escHtml(r.name)}»`).join(", ")+(rows.length>5?` ${i18n("и ещё")} ${rows.length-5}`:"");
+  const where=folder?`${i18n("из папки")} «${escHtml(locName(n))}»`:`${i18n("от")} «${escHtml(lanIsArch(n)?locName(n):locName(n))}»`;
+  const stop=folder?"":rows.map(r=>find(r.id)?.n).filter(Boolean).flatMap(d=>d.type==="ipsrv"?ipsrvCameras(d):[d]).filter(c=>camArchs(c).filter(x=>x.rec!=="none").length===1).length;
+  askConfirm(folder?"Убрать из папки":"Отвязать от хранилища",`${i18n(folder?"Убрать":"Отвязать")} ${names} ${where}?`,
+    folder?i18n("Сами устройства останутся в системе."):`${i18n("Запись в это хранилище прекратится; уже записанное хранится до конца глубины.")}${stop?` ${stop} ${i18n(plural(stop,"камера перестанет|камеры перестанут|камер перестанут"))} ${i18n("писаться совсем — других хранилищ у них нет.")}`:""}`,
+    folder?"Убрать":"Отвязать",()=>{
+      const undo=lanSnap(rows.map(r=>r.id)),fold=folder?folderById(n.id):null,prev=fold?[...fold.items]:null;
+      rows.forEach(r=>lanUnbind(r.key));
+      keys.forEach(k=>lan.sel.delete(k));
+      toastAction("lanunbind",`${i18n(folder?"Убрано":"Отвязано")}: ${rows.length}`,i18n("Отменить"),()=>{if(fold){fold.items=prev;paint()}else undo();toast(i18n("Возвращено"))},10000);
+      paint();
+    },{rawMsg:true});
 }
 function lanPick(key,on){if(on)lan.sel.add(key);else lan.sel.delete(key);gear()}
 function lanPickAll(n,on){
   lan.sel.clear();
-  if(on)lanFilter(lanRows(n)).forEach(r=>{if(lanAction(n,r).pri)lan.sel.add(r.key)});
+  if(on)lanFilter(lanRows(n)).forEach(r=>{if(lanPickable(n,r))lan.sel.add(r.key)});
   gear();
 }
 function lanSort(k){
@@ -6115,7 +6162,8 @@ function lanTargetHtml(n){
     :`<input value="${escHtml(locName(n))}" readonly disabled>`;
   const recHtml=`<select onchange="lanSetRec(this.value)" ${targets.length?"":"disabled"}>${
     REC_MODES.filter(([v])=>v!=="none").map(([v,l])=>`<option value="${v}" ${v===lan.rec?"selected":""}>${i18n(l)}</option>`).join("")}</select>`;
-  return`<div class="lan-arch"><label>${i18n("Архив")}</label>${archHtml}</div>
+  // У хранилища выбирать архив нечего — поле было бы его же именем.
+  return`${many?`<div class="lan-arch"><label>${i18n("Архив")}</label>${archHtml}</div>`:""}
     <div class="lan-arch"><label>${i18n("Режим записи")}</label>${recHtml}</div>`;
 }
 function lanBulkLabel(n){return lanIsDomain(n)?i18n("В домен"):lanIsFolder(n)?i18n("В папку"):i18n("Писать сюда")}
@@ -6123,8 +6171,8 @@ function lanSysRowHtml(n,r){
   const a=lanAction(n,r);
   const btn=a.off
     ?`<button type="button" class="btn s" disabled title="${escHtml(a.off)}">${lanBulkLabel(n)}</button>`
-    :`<button type="button" class="btn s ${a.pri?"pri":""}" onclick="event.stopPropagation();${a.fn}">${a.label}</button>`;
-  const chk=a.pri
+    :`<button type="button" class="btn s ${a.pri?"pri":""}" ${a.tip?`title="${escHtml(a.tip)}"`:""} onclick="event.stopPropagation();${a.fn}">${a.label}</button>`;
+  const chk=lanPickable(n,r)
     ?`<input type="checkbox" ${lan.sel.has(r.key)?"checked":""} aria-label="${escHtml(r.name)}" onclick="event.stopPropagation()" onchange="lanPick('${r.key}',this.checked)">`:"";
   return`<tr class="gtbl-r lan-r" onclick="pick('${r.id}')">
     <td class="lan-chk">${chk}</td>
@@ -6156,11 +6204,15 @@ function lanCardHtml(n){
   // говорят про весь отбор, а не про текущую страницу.
   const rows=pageSlice(key,found);
   const counts={};LAN_CHIPS.forEach(([k])=>counts[k]=k==="all"?all.length:all.filter(r=>r.bind===k).length);
-  const pickable=found.filter(r=>lanAction(n,r).pri);
+  // Отмечают и тех, кого привязать, и тех, кого отвязать: кнопок две.
+  const pickable=found.filter(r=>lanPickable(n,r));
   const picked=pickable.filter(r=>lan.sel.has(r.key)).length;
+  const selRows=all.filter(r=>lan.sel.has(r.key));
+  const nBind=selRows.filter(r=>lanAction(n,r).pri).length,nUnbind=selRows.filter(r=>lanAction(n,r).unbind).length;
   // Сперва выбирают, на что смотреть, и только потом ищут внутри этого —
   // поэтому чипы стоят выше строки поиска.
-  const head=`<div class="lan-chips">${LAN_CHIPS.map(([k,l])=>`<button type="button" class="stchip ${lan.chip===k?"on":""}" onclick="lanSetChip('${k}')"><span class="stchip-lab">${i18n(l)}</span><span class="stchip-cnt">${counts[k]}</span></button>`).join("")}</div>
+  const rec=!lanIsPlace(n),REC_CHIP={here:"Пишут сюда",free:"Без записи",other:"Пишут в другое"};
+  const head=`<div class="lan-chips">${LAN_CHIPS.map(([k,l])=>`<button type="button" class="stchip ${lan.chip===k?"on":""}" onclick="lanSetChip('${k}')"><span class="stchip-lab">${i18n(rec&&REC_CHIP[k]||l)}</span><span class="stchip-cnt">${counts[k]}</span></button>`).join("")}</div>
   <div class="lan-bar">
     <div class="sq lan-sq">
       <span class="sq-lead" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none"><path d="M2 3.5H14L9.5 9.5V13.5H6.5V9.5L2 3.5Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
@@ -6169,7 +6221,8 @@ function lanCardHtml(n){
     </div>
     ${lanIsPlace(n)?"":lanTargetHtml(n)}
     <button type="button" class="btn s" onclick="lanRefresh()">${i18n("Обновить")}</button>
-    <button type="button" class="btn pri s" onclick="lanBulk()" ${picked?"":"disabled"}>${lanBulkLabel(n)} (${picked})</button>
+    <button type="button" class="btn pri s" onclick="lanBulk()" ${nBind?"":"disabled"}>${lanBulkLabel(n)} (${nBind})</button>
+    ${lanHasUnbind(n)?`<button type="button" class="btn s" onclick="lanUnbindKeys([...lan.sel])" ${nUnbind?"":"disabled"}>${i18n(lanIsFolder(n)?"Убрать":"Отвязать")} (${nUnbind})</button>`:""}
   </div>`;
   const th=LAN_COLS.map(([k,l])=>`<th class="lan-th ${lan.sort===k?"on":""}" onclick="lanSort('${k}')"><span class="gtbl-th-txt">${i18n(l)}${lan.sort===k?(lan.dir>0?" ▲":" ▼"):""}</span></th>`).join("");
   const body=rows.length?rows.map(r=>r.kind==="net"?lanNetRowHtml(n,r):lanSysRowHtml(n,r)).join("")
