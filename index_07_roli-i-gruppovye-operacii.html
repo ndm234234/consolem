@@ -12582,12 +12582,17 @@ function decorateTreeSel(){
     // в свёрнутом дереве иначе не видно, где она.
     const inner=cc=>selDescendants(f.n,true).some(x=>selShownIn(x,cc));
     const rowCc=row.dataset.ctx?.startsWith("srv:")?row.dataset.ctx:null;
-    // Сервер, папка и домен отмечаются сами, как папка в проводнике; что в них
-    // отмечено — видно «частично». У хранилища и тома камер в дереве нет, и
-    // «частично» читалось бы как выбор самого хранилища: камеры, что в него
-    // пишут, отмечают из его меню или из карточки выборки.
+    // Сервер, папка и домен отмечаются вместе со всем, что под ними: «да» —
+    // отмечены и он, и всё внутри; «частично» — что-то одно. У хранилища и
+    // тома камер в дереве нет, и «частично» читалось бы как выбор самого
+    // хранилища: камеры, что в него пишут, отмечают из его меню или карточки.
     const noInner=f.n.type==="archive"||f.n.type==="vol";
-    if(canMultiPick(f.n))state=(on||treeSel.size>1)&&selShownAt(id,row.dataset.ctx)?"on":on&&!noInner&&inner(childSelCtx(f.n)||rowCc)?"part":"";
+    if(selDeep(f.n)&&on){
+      const d=selDescendants(f.n),cc=childSelCtx(f.n),me=selShownAt(id,row.dataset.ctx);
+      const k=d.filter(x=>selShownIn(x,cc)).length;
+      state=me&&k===d.length?"on":me||k||inner(cc)?"part":"";
+    }
+    else if(canMultiPick(f.n))state=(on||treeSel.size>1)&&selShownAt(id,row.dataset.ctx)?"on":on&&!noInner&&inner(childSelCtx(f.n)||rowCc)?"part":"";
     else if(f.n.type==="found"||f.n.type==="founddev"||f.n.type==="norec"||f.n.type==="nofolder"||f.n.type==="gpu")ph=true;
     else if(on){
       // Тристейт считаем только в режиме: вне его галочка контейнера просто ждёт клика.
@@ -12599,11 +12604,12 @@ function decorateTreeSel(){
     if(!ph&&!on&&!canMultiPick(f.n)&&!selDescendants(f.n).length)ph=true;
     chk.className="n-chk"+(ph?" n-chk-ph":"")+(state?" "+state:"")+(blockedId(id)?" dis":"");
     chk.setAttribute("role","checkbox");chk.setAttribute("aria-checked",state==="part"?"mixed":state?"true":"false");
-    chk.title=blockedId(id)?i18n("Объект в очереди"):canMultiPick(f.n)?i18n("Отметить"):i18n("Отметить всё внутри");
+    chk.title=blockedId(id)?i18n("Объект в очереди"):selDeep(f.n)?i18n("Отметить вместе со всем внутри; только сам объект — Ctrl+клик по строке"):canMultiPick(f.n)?i18n("Отметить"):i18n("Отметить всё внутри");
     const tw=row.querySelector(":scope>.tw");
     if(tw)tw.after(chk);else row.prepend(chk);
   });
 }
+function selDeep(n){return n.type==="server"||n.type==="domain"||n.type==="folder"}
 function selChkClick(id,ctx){
   const f=find(id);if(!f)return;
   if(blockedId(id)){toast(pendingDelHas(id)?"Объект ждёт удаления — отмените его в тосте":"Объект в очереди применения — дождитесь конца");return}
@@ -12612,6 +12618,18 @@ function selChkClick(id,ctx){
   // начинают отмечать, а не первый объект выборки: галочка у другой строки
   // начинает выборку с неё.
   if(entering&&treeSel.size===1&&!treeSel.has(id)){const o=find([...treeSel][0])?.n;if(o&&bulkSolo(o)){treeSel.clear();treeAnchor=null}}
+  // Сервер, папка, домен — как родитель в дереве с галочками: галочка берёт
+  // его вместе со всем, что под ним (службы сервера и начинку камер — нет,
+  // как и раньше). Сам объект без содержимого — Ctrl+клик по строке.
+  if(selDeep(f.n)){
+    const d=selDescendants(f.n),cc=childSelCtx(f.n),me=treeSel.has(id)&&!(entering&&treeSel.size===1);
+    const full=me&&d.every(x=>selShownIn(x,cc));
+    const at=x=>cc&&(x.type==="camera"||x.type==="ipsrv")?cc:null;
+    if(full){treeSel.delete(id);d.forEach(x=>treeSel.delete(x.id))}
+    else{treeSel.add(id,ctx||null);d.forEach(x=>{if(!blockedId(x.id))treeSel.add(x.id,at(x))});open.add(id)}
+    treeAnchor=id;
+    afterSelChange(full?null:id,ctx);return;
+  }
   // Первый клик по галочке открытого объекта только включает режим: объект
   // уже в выборке, снимать его было бы неожиданно.
   if(entering&&canMultiPick(f.n)&&treeSel.size===1&&treeSel.has(id)){afterSelChange(id,ctx);return}
