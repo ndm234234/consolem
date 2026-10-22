@@ -1237,6 +1237,23 @@ html[data-theme="light"] .busy-chip{background:#dce8f7;color:#2f5fad}
   .cp-list,.cp-det-list{flex:none;max-height:40vh}
 }
 /* Новое хранилище: тип — тремя карточками, у облачного — провайдер чипами */
+/* Окно постоянного размера: смена типа не дёргает рамку, прокручивается тело */
+.bbox.bbox-an{height:min(760px,92vh);max-height:none}
+.bbox-an .cbody{flex:1;min-height:0;overflow:hidden;display:flex;padding:0}
+.an-body{flex:1;min-height:0;overflow:auto;padding:16px;scrollbar-gutter:stable}
+.an-srv{margin-bottom:12px}
+.gb-in{display:flex;align-items:center;gap:6px}
+.gb-in input{flex:1;min-width:0}
+.gb-in>span{color:var(--mu);font-size:12px}
+/* Хранилища камеры: строка — хранилище, поток, режим */
+.ca-tbl{width:100%;border-collapse:collapse}
+.ca-tbl th{text-align:left;font-size:11px;color:var(--mu);font-weight:500;padding:0 8px 6px 0}
+.ca-tbl td{padding:4px 8px 6px 0;vertical-align:top}
+.ca-tbl td select{width:100%}
+.ca-tbl .ca-x{width:1%;white-space:nowrap;padding-right:0}
+.ca-main{color:#9ec8ff}
+.ca-foot{margin-top:8px}
+.ca-add{max-width:360px}
 .an-kinds{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 .an-kind{display:flex;gap:9px;align-items:flex-start;padding:10px;border:1px solid var(--ln);border-radius:8px;background:var(--p2);cursor:pointer}
 .an-kind.on{border-color:var(--bl);box-shadow:inset 0 0 0 1px var(--bl)}
@@ -1977,15 +1994,18 @@ arch.forEach(a=>{const src=a.vols||[];a.vols=[];src.forEach(([d,sz,u])=>addVol(a
 // нагрузкой; объектное — объём тома меняется на ходу, том можно зашифровать.
 // Срок — «глубина, дней», 0 — без ограничения. Том больше 30 ТБ не советуют.
 const ARCH_KINDS=[["local","Локальное"],["remote","Сетевое (NAS)"],["cloud","Облачное"]];
-const CLOUD_PROVIDERS=[["s3","Amazon S3"],["minio","MinIO"],["wasabi","Wasabi"],["huawei","Huawei Cloud"],["lyve","Seagate Lyve Cloud"],["azure","Microsoft Azure"]];
+const CLOUD_PROVIDERS=[["s3","Amazon S3"],["s3c","S3-совместимое"],["minio","MinIO"],["wasabi","Wasabi"],["huawei","Huawei Cloud"],["lyve","Seagate Lyve Cloud"],["azure","Microsoft Azure"]];
 const ARCH_STORAGE=[["block","Блочное"],["object","Объектное"]];
-const VOL_STATES={ready:"Готов",format:"Форматируется",open:"Открывается",off:"Выключен",maint:"Обслуживание",broken:"Нужно форматировать или восстановить",error:"Ошибка"};
+const VOL_STATES={ready:"Готов",format:"Форматируется",open:"Открывается",off:"Выключен",maint:"Обслуживание",broken:"Нужно форматировать или восстановить",unfmt:"Не отформатирован",error:"Ошибка"};
+// Размер тома вводят числом в гигабайтах; храним строкой, как и прежние тома.
+function gbOf(size){return Math.round(sizeTb(size)*1024)}
+function gbStr(n){n=Math.max(1,Math.round(Number(n)||0));return n>=1024?fmtTb(n/1024):n+" "+i18n("ГБ")}
 function archKind(a){return a?.kind||(a?.server?"local":"remote")}
 function cloudLabel(p){return(CLOUD_PROVIDERS.find(x=>x[0]===p)||[0,"S3"])[1]}
 function archKindLabel(a){const k=archKind(a);return k==="cloud"?`${i18n("Облачное")} · ${cloudLabel(a.provider)}`:i18n((ARCH_KINDS.find(x=>x[0]===k)||ARCH_KINDS[0])[1])}
 function archKindTag(a){
   const k=archKind(a);
-  if(k==="cloud")return a.provider==="azure"?"Azure":a.provider==="minio"?"MinIO":"S3";
+  if(k==="cloud")return a.provider==="azure"?"Azure":a.provider==="minio"?"MinIO":a.provider==="s3c"?i18n("S3-совм."):"S3";
   return k==="remote"?i18n("сетевое"):i18n("локальное");
 }
 function archCanEncrypt(a){return archKind(a)==="cloud"||a.storage==="object"}
@@ -1996,7 +2016,7 @@ function serverDisks(sid){
     ...(sid==="s1"?"HIJKLMNOP".split("").map((c,i)=>[c+":",[2,4,6,8,12][i%5]+" ТБ"]):[])]
     .map(([disk,size,sys])=>({disk,size,sys:!!sys}));
 }
-// Чем занят диск: раздел хранилища занимает его целиком, файлы — нет.
+// Чем занят диск: раздел хранилища занимает его целиком, папки и файлы — нет.
 function diskUse(sid,disk){
   const vols=[];
   serverArchives(sid).filter(a=>archKind(a)==="local").forEach(a=>archVols(a).forEach(v=>{if(v.disk===disk)vols.push({a,v})}));
@@ -2004,22 +2024,28 @@ function diskUse(sid,disk){
 }
 function volLabel(v){
   const a=archById(v.archId),k=archKind(a);
-  if(k==="cloud")return a.provider==="azure"?`azure://${v.bucket||"контейнер"}/${v.path||""}`:`${a.provider==="minio"?`${v.host||"minio"}:${v.port||9000}/`:"s3://"}${v.bucket||"бакет"}/${v.path||""}`;
-  if(k==="local"&&v.mode==="file")return`${v.disk}\\${v.file||"axxon.afs"}`;
+  if(k==="cloud"){
+    if(a.provider==="azure")return`azure://${v.bucket||"контейнер"}/${v.path||""}`;
+    const host=a.provider==="minio"?`${v.host||"minio"}:${v.port||9000}/`:a.provider==="s3c"?`${String(v.endpoint||"endpoint").replace(/^https?:\/\//,"").replace(/\/$/,"")}/`:"s3://";
+    return`${host}${v.bucket||"бакет"}/${v.path||""}`;
+  }
+  if(k==="local"&&v.mode==="file")return`${v.dir||v.disk}\\${v.file||"axxon.afs"}`;
+  if(k==="local"&&v.mode==="dir")return v.dir||v.disk;
   return v.disk;
 }
 function volDesc(v){
   const a=archById(v.archId),k=archKind(a);
   if(k==="cloud")return`${cloudLabel(a.provider)}${v.region?" · "+v.region:""} · ${v.size}`;
   if(k==="remote")return`${i18n("файл")} ${v.size} · ${v.user||i18n("без пользователя")}`;
-  return v.mode==="file"?`${i18n("файл")} ${v.size}`:`${i18n("раздел целиком")} · ${v.size}`;
+  return v.mode==="file"?`${i18n("файл")} ${v.size}`:v.mode==="dir"?`${i18n("папка на")} ${v.disk} · ${v.size}`:`${i18n("раздел")} ${v.disk} ${i18n("целиком")} · ${v.size}`;
 }
 function volStateText(v){return v.state&&v.state!=="ready"?i18n(VOL_STATES[v.state]||v.state):`${i18n("Готов")} (${v.used})`}
 (()=>{
   arch.forEach(a=>{
     a.kind=archKind(a);a.storage=a.enc?"object":"block";
     archVols(a).forEach((v,i)=>{
-      if(a.kind==="local"){v.mode=i%2?"file":"part";if(v.mode==="file")v.file=a.name.replace(/^Хранилище — /,"")+".afs"}
+      if(a.kind==="local"&&a.storage==="object"){v.mode="dir";v.dir=v.disk+"\\AxxonArchive\\"+a.name.replace(/^Хранилище — /,"")}
+      else if(a.kind==="local"){v.mode=i%2?"file":"part";if(v.mode==="file"){v.dir=v.disk+"\\Axxon";v.file=a.name.replace(/^Хранилище — /,"")+".afs"}}
       else v.user="VMS\\svc_archive";
     });
   });
@@ -2033,12 +2059,13 @@ function volStateText(v){return v.state&&v.state!=="ready"?i18n(VOL_STATES[v.sta
   [s3,mn].forEach(a=>archVols(a).forEach(v=>v.name=volLabel(v)));
   arch.find(a=>a.id==="a7n2").vols[0].state="maint";
   arch.find(a=>a.id==="a6").vols[0].state="error";
-  // Почему устройство без сигнала: у камер и регистраторов причины разные,
-  // у начинки и служб — чаще всего связь.
+  // Почему устройство без сигнала. Вход и драйвер бывают только у IP-устройств
+  // со своим драйвером — камеры, регистратора (NVR, IP-сервера) и контроллера
+  // ОПС/СКУД; у начинки, подобъектов и служб сервера причина одна — связь.
   let k=0;
   walkAll(n=>{
     if(n.online!==false||n.err||["domain","server","unalloc","det"].includes(n.type))return;
-    n.err=n.type==="camera"||n.type==="ipsrv"?["auth","conn","drv","conn"][k++%4]:(k++%5===0?"drv":"conn");
+    n.err=devIsIp(n)?["auth","conn","drv","conn"][k++%4]:"conn";
   });
 })();
 function archVols(a){return a?.vols||[]}
@@ -2134,7 +2161,31 @@ function serverArchives(sid){return arch.filter(a=>a.server===sid)}
 function domainArchives(did){return arch.filter(a=>a.domain===did&&!a.server)}
 function archDomainId(a){return a?(a.domain||(a.server?SERVER_DOMAIN[a.server]:null)):null}
 function isRecording(n){return n&&n.type==="camera"&&!!n.arch&&n.rec&&n.rec!=="none"}
-function archCameras(aid){const out=[];walkAll(n=>{if(isRecording(n)&&n.arch===aid)out.push(n)});return out}
+// Камера пишет в несколько хранилищ: основное (n.arch — через него камера
+// получает сервер) и дополнительные (n.archx), каждое со своим потоком и
+// режимом — как запись основного и второго потока в разные архивы у Axxon One.
+function camArchs(n){
+  if(!n||n.type!=="camera"||!n.arch)return[];
+  return[{arch:n.arch,rec:n.rec||"none",stream:n.stream||"main",main:true},...(n.archx||[]).map(x=>({...x}))];
+}
+function camWritesTo(n,aid){return camArchs(n).some(x=>x.arch===aid&&x.rec&&x.rec!=="none")}
+function archCameras(aid){const out=[];walkAll(n=>{if(n.type==="camera"&&camWritesTo(n,aid))out.push(n)});return out}
+// Привязать камеру к хранилищу, не трогая прежние: без записи — основным,
+// иначе — дополнительным.
+function camAddArch(n,aid,rec){
+  if(!n||camArchs(n).some(x=>x.arch===aid))return;
+  if(!isRecording(n)){pinCamServer(n);n.arch=aid;n.rec=rec||"always";bindArchServer(n);return}
+  (n.archx||(n.archx=[])).push({arch:aid,rec:rec||"always",stream:"main"});
+}
+// Отвязать от хранилища: снялось основное — основным становится следующее.
+function camDropArch(n,aid){
+  if(!n)return;
+  n.archx=(n.archx||[]).filter(x=>x.arch!==aid);
+  if(n.arch===aid){
+    const next=n.archx.shift();
+    if(next){n.arch=next.arch;n.rec=next.rec;n.stream=next.stream}else{n.arch=null;n.rec="none"}
+  }
+}
 function unrecordedCameras(did){const out=[];walkAll(n=>{if(n.type==="camera"&&!isRecording(n)&&(!did||deviceDomain(n.id)===did))out.push(n)});return out}
 // Сценарий — не три строки текста, а форма, которую умеет исполнить система:
 // СОБЫТИЯ (одно или несколько, и тогда — окно, в котором они считаются
@@ -2676,7 +2727,11 @@ const DEV_ERR={
   drv:{t:"Внутренняя ошибка драйвера",s:"сбой драйвера",fix:"Перезапустите устройство; если повторяется — обновите драйвер.",
     ic:`<rect x="4.2" y="4.2" width="7.6" height="7.6" rx="1.2"/><path d="M6.6 6.6l2.8 2.8M9.4 6.6 6.6 9.4M6.2 2v2.2M9.8 2v2.2M6.2 11.8V14M9.8 11.8V14M2 6.2h2.2M2 9.8h2.2M11.8 6.2H14M11.8 9.8H14"/>`}
 };
-function devErr(n){return deviceStatusDotKind(n)==="bad"?(DEV_ERR[n.err]?n.err:"conn"):null}
+function devIsIp(n){return n?.type==="camera"||n?.type==="ipsrv"||n?.type==="acfa"}
+function devErr(n){
+  if(deviceStatusDotKind(n)!=="bad")return null;
+  return DEV_ERR[n.err]&&(devIsIp(n)||n.err==="conn")?n.err:"conn";
+}
 function devErrIc(code){return`<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${DEV_ERR[code].ic}</svg>`}
 function devErrText(n){const e=devErr(n);return e?i18n(DEV_ERR[e].t):""}
 function deviceStatusDotHtml(n,tag="i",cls="d"){
@@ -5754,6 +5809,8 @@ function lanEnsure(n){
   // У архива закладка называется «Камеры», так что первым делом показываем
   // тех, кто сюда пишет; остальные — в соседних чипах.
   lan.chip=lanIsPlace(n)?"all":"here";
+  // В пустое хранилище ещё никто не пишет — открываем тех, кого можно привязать.
+  if(lan.chip==="here"&&!lanRows(n).some(r=>r.bind==="here"))lan.chip=lanRows(n).some(r=>r.bind==="free")?"free":"all";
   lan.net=[];lan.state="idle";lan.progress=0;
   // Куда писать: у архива вариант один, у сервера выбирают из его архивов.
   lan.arch=lanIsPlace(n)?null:(lanTargets(n)[0]?.id||null);
@@ -5830,12 +5887,14 @@ function lanBindOf(n,d){
   }
   // Привязан — значит пишется: архив без режима записи это «без записи», и
   // считать такую камеру «пишущей сюда» значило бы расходиться с деревом.
-  const on=!!d.arch&&!!d.rec&&d.rec!=="none";
-  const a=on?archById(d.arch):null;
-  const mine=on&&lanTargets(n).some(x=>x.id===d.arch);
+  const cams=d.type==="ipsrv"?ipsrvCameras(d):[d];
+  const ids=[...new Set(cams.flatMap(c=>camArchs(c).filter(x=>x.rec!=="none").map(x=>x.arch)))];
+  const on=ids.length>0,t=lanTargets(n),hit=ids.find(id=>t.some(x=>x.id===id));
+  const a=on?archById(hit||ids[0]):null;
+  const mine=!!hit;
   // У сервера архивов несколько — говорим, в какой именно из них пишется.
   if(a&&mine)return{k:"here",t:lanIsArch(n)?i18n("Пишется сюда"):i18n("Пишется сюда")+" · "+locName(a)};
-  if(a)return{k:"other",t:locName(a)+(archServer(a)?" · "+locName(archServer(a)):"")};
+  if(a)return{k:"other",t:locName(a)+(archServer(a)?" · "+locName(archServer(a)):"")+(ids.length>1?` +${ids.length-1}`:"")};
   // Камера другого сервера сюда писать не может — она не «свободная».
   const far=lanFarServer(n,d);
   if(far)return{k:"other",t:i18n("Без записи")+" · "+locName(far)};
@@ -5975,7 +6034,8 @@ function lanBind(key,opts={}){
     const node=find(id)?.n;if(!node)return null;
     // У найденного архив и режим заданы в самой строке — не переспрашиваем.
     if(r.kind==="net"){if(!node.arch)node.arch=lan.arch}
-    else{node.arch=lan.arch;node.rec=lan.rec||"always"}
+    // Уже пишет в другое хранилище — это хранилище добавляется к нему.
+    else(node.type==="ipsrv"?ipsrvCameras(node):[node]).forEach(c=>camAddArch(c,lan.arch,lan.rec||"always"));
     if(n.type==="server"&&!node.srvId)setDevServer(node,n.id);
     bindArchServer(node);
   }
@@ -5987,7 +6047,11 @@ function lanUnbind(key){
   const n=find(lan.owner)?.n;if(!n)return;
   const r=lanRowByKey(n,key);if(!r||r.kind!=="sys")return;
   if(lanIsFolder(n)){const f=folderById(n.id);if(f)f.items=f.items.filter(x=>x!==r.id)}
-  else{const node=find(r.id)?.n;if(node){node.arch=null;node.rec="none"}}
+  else{
+    const node=find(r.id)?.n,t=new Set(lanTargets(n).map(a=>a.id));
+    const cams=node?.type==="ipsrv"?ipsrvCameras(node):[node];
+    cams.forEach(c=>camArchs(c).filter(x=>t.has(x.arch)).forEach(x=>camDropArch(c,x.arch)));
+  }
   lan.sel.delete(key);
   treeMatchCache.clear();searchMatchCache.clear();paint();
 }
@@ -6111,7 +6175,9 @@ function lanCardHtml(n){
   const body=rows.length?rows.map(r=>r.kind==="net"?lanNetRowHtml(n,r):lanSysRowHtml(n,r)).join("")
     // Пока опрос идёт, пустая таблица — это не ответ «ничего нет», а «ещё не
     // дошло»; говорить об этом надо разными словами.
-    :`<tr><td class="empty" colspan="8">${lan.state==="searching"
+    :`<tr><td class="empty" colspan="8">${lan.chip==="here"&&!lan.q.trim()&&!lanIsPlace(n)
+      ?`${i18n("Сюда пока никто не пишет.")} ${i18n("Привязать:")} <button type="button" class="lk" onclick="lanSetChip('free')">${i18n("свободные")} (${counts.free})</button> · <button type="button" class="lk" onclick="lanSetChip('other')">${i18n("пишущие в другое хранилище")} (${counts.other})</button>`
+      :lan.state==="searching"
       ?`${i18n("Идёт поиск в сети")}… ${lan.progress}%`
       :i18n("Ничего не найдено")}</td></tr>`;
   const allOn=pickable.length>0&&picked===pickable.length;
@@ -6523,14 +6589,14 @@ function form(n){
   }
   if(n.type==="vol"){
     const a=archById(n.archId),k=archKind(a);
-    return card("Том хранилища",`<div class="nt ok">${i18n("Том хранилища")} <button type="button" class="lk" onclick="pick('${a.id}')"><b>${escHtml(locName(a))}</b></button> · ${escHtml(archKindLabel(a))}</div>
+    return card("Том хранилища",`${n.state==="unfmt"?`<div class="nt err">${i18n("Раздел не отформатирован — записывать на него нельзя. Отформатируйте его, когда будете готовы: данные на диске пропадут.")}</div>`:""}<div class="nt ok">${i18n("Том хранилища")} <button type="button" class="lk" onclick="pick('${a.id}')"><b>${escHtml(locName(a))}</b></button> · ${escHtml(archKindLabel(a))}</div>
       ${volFieldsHtml(a,n,`volSet('${n.id}',`)}
       <div class="mx" style="margin-top:10px">
         <div class="mc"><span>${i18n("Состояние")}</span><b style="font-size:14px">${escHtml(volStateText(n))}</b></div>
         <div class="mc"><span>${i18n("Томов в хранилище")}</span><b>${archVols(a).length}</b></div>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
-        ${k==="local"?"":`<button type="button" class="btn s" onclick="toast(i18n('${k==="cloud"?"Подключение к бакету проверено":"Подключение к NAS проверено"}'))">${i18n(k==="cloud"?"Проверить подключение":"Подключиться")}</button>`}
+        ${k==="local"?(n.mode==="part"?`<button type="button" class="btn s" onclick="formatVolume('${n.id}')" ${n.state==="format"?"disabled":""}>${i18n("Форматировать…")}</button>`:""):`<button type="button" class="btn s" onclick="toast(i18n('${k==="cloud"?"Подключение к бакету проверено":"Подключение к NAS проверено"}'))">${i18n(k==="cloud"?"Проверить подключение":"Подключиться")}</button>`}
         <button type="button" class="btn s" onclick="deleteVolume('${n.id}')">${i18n("Удалить том")}</button>
       </div>
       <p class="sub" style="margin-top:10px">${i18n("Глубина и шифрование задаются на хранилище; у тома — где он лежит и какого он размера.")}</p>`);
@@ -6751,21 +6817,15 @@ function form(n){
     if(tab==="io")return periphCardHtml(n);
     if(tab==="acc")return accCamAccessHtml(n);
     if(tab==="rec"){
-      const as=archServer(a),noRec=!isRecording(n),edge=edgeStorage(n);
-      const head=noRec?`<div class="nt">${i18n("Запись не настроена — архив не назначен.")}</div>`
-        :`<div class="nt ok">${i18n("Архив «")}${escHtml(locName(a))}${i18n("», срок ")}${a.days} ${i18n("дн.")}</div>`;
-      return card("Архив камеры",`${head}
-      <div class="g">${camArchSelectHtml(n)}${camRecSelectHtml(n)}${n.rec==="replica"?fldRo("Предзапись, с","—"):fld("Предзапись, с","5","number")}</div>
-      ${archChoicesNote(n)}
+      const noRec=!isRecording(n),edge=edgeStorage(n),list=camArchs(n);
+      return camArchsCardHtml(n)+card("Запись",`<div class="g">${n.rec==="replica"?fldRo("Предзапись, с","—"):fld("Предзапись, с",String(n.pre??5),"number")}</div>
       ${edge?"":`<p class="sub">${i18n("Встроенное хранилище не найдено — репликация недоступна.")}</p>`}
-      ${n.rec==="replica"?`<div class="nt">${i18n("Сервер периодически забирает записи со встроенного хранилища камеры. Постоянный поток на сервер не идёт: канал нагружается только на время репликации, а пропуски в архиве восполняются после обрыва связи.")}</div>`:""}
-      <p class="sub">${noRec?(cameraTreeServer(n.id)?i18n("Назначьте архив, чтобы включить запись. Без архива камера остаётся под своим сервером, просто не пишется.")
-          :i18n("Назначьте архив, чтобы включить запись. Камера ещё не подключена к серверу — подключится к серверу выбранного архива."))
-        :as?`${i18n("Архив размещён на сервере")} <b>${escHtml(locName(as))}</b>.`
-        :i18n("Архив — сетевое хранилище домена: пишет в него сервер камеры.")}</p>
-      ${ipsrvOwnerNode(n)?`<p class="sub">${i18n("Камера входит в регистратор")} <button class="lk" onclick="pick('${ipsrvOwnerNode(n).id}');goTab('rec')">${escHtml(locName(ipsrvOwnerNode(n)))}</button> — ${i18n("там режим задаётся сразу для всех его камер.")}</p>`:""}
-      ${as?`<p class="sub"><button class="lk" onclick="goApp('hw');setSrvView('cam');pick('${a.id}')">${i18n("Показать архив в разделе «Сервера» →")}</button></p>`:""}`)
-      +edgeStorageCardHtml(n)+(n.rec==="motion"?camRecDetsHtml(n):"");
+      ${list.some(x=>x.rec==="replica")?`<div class="nt">${i18n("Сервер периодически забирает записи со встроенного хранилища камеры. Постоянный поток на сервер не идёт: канал нагружается только на время репликации, а пропуски в архиве восполняются после обрыва связи.")}</div>`:""}
+      <p class="sub">${noRec?(cameraTreeServer(n.id)?i18n("Привяжите камеру к хранилищу, чтобы включить запись. Без хранилища камера остаётся под своим сервером, просто не пишется.")
+          :i18n("Привяжите камеру к хранилищу, чтобы включить запись. Камера ещё не подключена к серверу — подключится к серверу выбранного хранилища."))
+        :i18n("Основное хранилище задаёт сервер камеры; дополнительные пишут тот же или второй поток — например, основной поток в локальное хранилище, второй в облако.")}</p>
+      ${ipsrvOwnerNode(n)?`<p class="sub">${i18n("Камера входит в регистратор")} <button class="lk" onclick="pick('${ipsrvOwnerNode(n).id}');goTab('rec')">${escHtml(locName(ipsrvOwnerNode(n)))}</button> — ${i18n("там режим задаётся сразу для всех его камер.")}</p>`:""}`)
+      +edgeStorageCardHtml(n)+(list.some(x=>x.rec==="motion")?camRecDetsHtml(n):"");
     }
     const ips=ipsrvOwnerNode(n);
     const underIpsrv=!!ips;
@@ -10699,150 +10759,191 @@ function archSet(id,k,v,quiet){
   if(k==="days")v=Math.max(0,Number(v)||0);
   if(k==="storage"&&v==="block")a.enc=false;
   a[k]=v;setD(true);
+  // Сменили тип хранения — тома локального хранилища меняют размещение:
+  // у объектного это папка на диске, у блочного — файл в той же папке.
+  if(k==="storage"&&archKind(a)==="local")archVols(a).forEach(x=>{
+    if(v==="object"){if(x.mode!=="dir"){x.dir=x.dir||x.disk+"\\AxxonArchive";x.mode="dir"}}
+    else if(x.mode==="dir"){x.mode="file";x.file=x.file||a.name+".afs"}
+    x.name=volLabel(x);
+  });
   if(k==="name")renderTree();
   if(!quiet)gear();
 }
 const CLOUD_REGIONS={s3:["eu-central-1","eu-west-1","us-east-1","us-west-1","ap-southeast-1"],wasabi:["eu-central-1","eu-west-1","us-east-1","us-west-1"],
   huawei:["ru-moscow-1","ap-southeast-1","cn-north-4"],lyve:["us-east-1","us-west-1","eu-west-1"]};
 // Поля тома по типу хранилища. set — начало вызова, которому уйдут ключ и значение.
+// Локальное объектное — папка на диске; блочное — раздел целиком или файл
+// в папке. Размер — числом в гигабайтах.
 function volFieldsHtml(a,v,set){
-  const k=archKind(a),inp=(label,key,type,hint)=>`<div><label>${i18n(label)}</label><input type="${type||"text"}" value="${escHtml(v[key]??"")}" oninput="${set}'${key}',this.value,true)">${hint?`<div class="bk-hint">${i18n(hint)}</div>`:""}</div>`;
+  const k=archKind(a),inp=(label,key,type,hint,ph)=>`<div><label>${i18n(label)}</label><input type="${type||"text"}" value="${escHtml(v[key]??"")}" ${ph?`placeholder="${escHtml(ph)}"`:""} oninput="${set}'${key}',this.value,true)">${hint?`<div class="bk-hint">${i18n(hint)}</div>`:""}</div>`;
   const sel=(label,key,opts,hint)=>`<div><label>${i18n(label)}</label><select onchange="${set}'${key}',this.value)">${opts.map(([val,l,dis])=>`<option value="${escHtml(val)}" ${String(v[key])===String(val)?"selected":""} ${dis?"disabled":""}>${escHtml(l)}</option>`).join("")}</select>${hint?`<div class="bk-hint">${hint}</div>`:""}</div>`;
+  const gb=(label,hint)=>`<div><label>${i18n(label)}</label><div class="gb-in"><input type="number" min="1" step="1" value="${gbOf(v.size)||""}" oninput="${set}'gb',this.value,true)"><span>${i18n("ГБ")}</span></div>${hint?`<div class="bk-hint">${i18n(hint)}</div>`:""}</div>`;
+  const dir=hint=>`<div><label>${i18n("Папка на диске")}</label><div class="gb-in"><input value="${escHtml(v.dir||"")}" oninput="${set}'dir',this.value,true)"><button type="button" class="btn s" title="${i18n("Выбрать папку на диске")}" onclick="volPickDir(this,'${v.disk}')">${i18n("Обзор…")}</button></div>${hint?`<div class="bk-hint">${i18n(hint)}</div>`:""}</div>`;
   if(k==="local"){
-    const sid=a.server,disks=serverDisks(sid);
+    const sid=a.server;
+    if(!sid)return`<div class="nt" style="margin-top:10px">${i18n("Сначала выберите сервер — тома локального хранилища лежат на его дисках.")}</div>`;
+    const disks=serverDisks(sid),obj=a.storage==="object";
     const opts=disks.map(d=>{
       const use=diskUse(sid,d.disk),mine=use.vols.some(x=>x.a.id===a.id&&x.v!==v),busy=use.part&&use.part.v!==v;
       const why=busy?i18n("раздел хранилища")+" «"+locName(use.part.a)+"»":mine?i18n("уже том этого хранилища"):"";
       return[d.disk,`${d.disk} · ${d.size}${d.sys?" · "+i18n("системный"):""}${why?" — "+why:""}`,!!why];
     });
     const d=disks.find(x=>x.disk===v.disk),others=diskUse(sid,v.disk).vols.filter(x=>x.v!==v).length;
+    if(obj)return`<div class="g" style="margin-top:10px">${sel("Диск","disk",opts)}${dir("объектное хранилище пишет в папку; на одном диске у хранилища один том")}${gb("Размер","меняется на ходу, без перезапуска")}</div>`;
     const partOff=d?.sys||others>0;
     return`<div class="g" style="margin-top:10px">${sel("Диск","disk",opts)}
-      ${sel("Размещение","mode",[["part",i18n("Раздел целиком")+(d?.sys?" — "+i18n("не для системного диска"):others?" — "+i18n("на диске есть файлы"):""),partOff],["file",i18n("Файл заданного размера")]],
-        v.mode==="part"?i18n("диск будет отформатирован в SolidStore — данные на нём пропадут"):i18n("на диске с файловой системой; FAT32 — не больше 4 ГБ"))}
-      ${v.mode==="file"?inp("Размер файла","size","text","например 500 ГБ или 4 ТБ")+inp("Имя файла","file"):fldRo("Объём",d?.size||v.size)}</div>`;
+      ${sel("Размещение","mode",[["part",i18n("Раздел целиком")+(d?.sys?" — "+i18n("не для системного диска"):others?" — "+i18n("на диске есть другие тома"):""),partOff],["file",i18n("Файл в папке")]],
+        v.mode==="part"?i18n("занимает весь диск; неотформатированный диск форматируют отдельно — кнопкой «Форматировать» у тома"):i18n("на диске с файловой системой; FAT32 — не больше 4 ГБ"))}
+      ${v.mode==="part"?fldRo("Объём",d?.size||v.size):dir("файл тома создаётся в этой папке")+gb("Размер файла","не меньше 1 ГБ")}</div>`;
   }
-  if(k==="remote")return`<div class="g" style="margin-top:10px">${inp("Путь к папке","disk","text","\\\\nas01\\vms или //nas01/vms")}${inp("Размер файла","size","text","том сетевого хранилища — всегда файл")}
+  if(k==="remote")return`<div class="g" style="margin-top:10px">${inp("Путь к папке","disk","text","\\\\nas01\\vms или //nas01/vms")}${gb("Размер файла","том сетевого хранилища — всегда файл")}
       ${inp("Пользователь","user","text","домен\\имя или компьютер\\имя")}${inp("Пароль","pass","password")}</div>`;
   const p=a.provider||"s3";
-  if(p==="azure")return`<div class="g" style="margin-top:10px">${inp("Учётная запись хранилища","account")}${inp("Ключ доступа","secret","password")}${inp("Контейнер","bucket","text","создаётся заранее в портале Azure")}${inp("Путь в контейнере","path")}${inp("Объём","size")}</div>`;
+  if(p==="azure")return`<div class="g" style="margin-top:10px">${inp("Учётная запись хранилища","account")}${inp("Ключ доступа","secret","password")}${inp("Контейнер","bucket","text","создаётся заранее в портале Azure")}${inp("Путь в контейнере","path")}${gb("Объём")}</div>`;
   const keys=`${inp("Access key ID","keyId")}${inp("Secret access key","secret","password")}`;
   if(p==="minio")return`<div class="g" style="margin-top:10px">${inp("Хост","host")}${inp("Порт","port","number")}${sel("Протокол","proto",[["https","https"],["http","http"]])}${inp("Регион","region")}
-      ${inp("Бакет","bucket","text","создаётся заранее в консоли MinIO")}${inp("Bucket endpoint","endpoint","text","если MinIO по доменному имени")}${keys}${inp("Путь в бакете","path")}${inp("Объём","size")}</div>`;
+      ${inp("Бакет","bucket","text","создаётся заранее в консоли MinIO")}${inp("Bucket endpoint","endpoint","text","если MinIO по доменному имени")}${keys}${inp("Путь в бакете","path")}${gb("Объём")}</div>`;
+  // Любое хранилище с API S3: Ceph, Yandex Object Storage, VK Cloud, Selectel,
+  // NetApp StorageGRID — адрес сервиса и, если надо, адресация бакета путём.
+  if(p==="s3c")return`<div class="g" style="margin-top:10px">${inp("Endpoint","endpoint","text","адрес S3 API сервиса","https://storage.example.com")}${inp("Регион","region","text","если сервис его требует","us-east-1")}
+      ${inp("Бакет","bucket","text","создаётся заранее в консоли сервиса")}${sel("Адресация бакета","style",[["path",i18n("Путём: endpoint/бакет")],["vhost",i18n("Поддоменом: бакет.endpoint")]],i18n("у большинства локальных S3 — путём"))}
+      ${keys}${inp("Путь в бакете","path")}${gb("Объём")}</div>`;
   return`<div class="g" style="margin-top:10px">${sel("Регион","region",(CLOUD_REGIONS[p]||CLOUD_REGIONS.s3).map(r=>[r,r]),i18n("ближайший к серверу — меньше задержка"))}
-      ${inp("Бакет","bucket","text","создаётся заранее в консоли провайдера, имя уникально")}${keys}${inp("Путь в бакете","path")}${inp("Объём","size","text","не ограничен; тома лучше одного размера")}</div>`;
+      ${inp("Бакет","bucket","text","создаётся заранее в консоли провайдера, имя уникально")}${keys}${inp("Путь в бакете","path")}${gb("Объём","не ограничен; тома лучше одного размера")}</div>`;
+}
+// Обзор папок на сервере — в макете подставляем папку по умолчанию на диске.
+function volPickDir(btn,disk){
+  const inp=btn.previousElementSibling;if(!inp)return;
+  inp.value=(disk||"D:")+"\\AxxonArchive";inp.dispatchEvent(new Event("input"));
+  toast(i18n("Выбрана папка")+" "+inp.value);
+}
+function volApply(v,k,val){
+  if(k==="gb"){v.size=gbStr(val);return}
+  v[k]=k==="port"?Number(val)||0:val;
+  if(k==="disk"&&v.dir)v.dir=v.dir.replace(/^[A-Z]:/i,val);
 }
 function volSet(id,k,val,quiet){
   const v=volById(id);if(!v)return;
-  v[k]=k==="port"?Number(val)||0:val;
+  volApply(v,k,val);
+  const a=archById(v.archId);
+  if(archKind(a)==="local"&&v.mode==="part"&&(k==="disk"||k==="mode"))v.size=serverDisks(a.server).find(d=>d.disk===v.disk)?.size||v.size;
+  if(k==="mode"&&v.mode==="file"){v.dir=v.dir||v.disk+"\\Axxon";v.file=v.file||a.name+".afs"}
   v.name=volLabel(v);
-  if(k==="disk"||k==="mode"){
-    const a=archById(v.archId);
-    if(archKind(a)==="local"&&v.mode==="part")v.size=serverDisks(a.server).find(d=>d.disk===v.disk)?.size||v.size;
-  }
   setD(true);
   if(!quiet){renderTree();gear()}
+}
+// Форматирование — отдельное действие тома: хранилище подключают и к
+// неотформатированному разделу, а форматируют, когда решат.
+function formatVolume(id){
+  const v=volById(id),a=v&&archById(v.archId);if(!v||!a)return;
+  askConfirm("Форматировать том",`${i18n("Диск")} ${escHtml(v.disk)} ${i18n("будет отформатирован в SolidStore для хранилища")} «${escHtml(locName(a))}».`,
+    i18n("Всё, что на диске есть, пропадёт, записи этого тома — тоже."),"Форматировать",()=>{
+      v.state="format";gear();
+      setTimeout(()=>{v.state="ready";v.used="0%";if(sel===id||sel===a.id)gear();toast(i18n("Том отформатирован"))},1500);
+    },{rawMsg:true});
 }
 // Новый том того же типа: у локального — следующий свободный диск сервера.
 function volDefaults(a){
   const k=archKind(a);
   if(k==="local"){
+    if(!a.server)return{disk:"",mode:"dir",size:"500 ГБ"};
     const free=serverDisks(a.server).sort((x,y)=>x.sys-y.sys).find(d=>{const u=diskUse(a.server,d.disk);return!u.part&&!u.vols.some(x=>x.a===a)&&(a.vols||[]).every(v=>v.disk!==d.disk)});
     if(!free)return null;
+    const nm=(a.name||"Axxon").replace(/[\\/:*?"<>|]/g,"");
+    if(a.storage==="object")return{disk:free.disk,mode:"dir",dir:`${free.disk}\\AxxonArchive\\${nm}`,size:"500 ГБ"};
     const empty=!diskUse(a.server,free.disk).vols.length&&!free.sys;
-    return empty?{disk:free.disk,mode:"part",size:free.size}:{disk:free.disk,mode:"file",size:"500 ГБ",file:(a.name||"axxon")+".afs"};
+    return empty?{disk:free.disk,mode:"part",size:free.size,state:"unfmt"}:{disk:free.disk,mode:"file",dir:`${free.disk}\\Axxon`,size:"500 ГБ",file:nm+".afs"};
   }
   if(k==="remote"){const n=(a.vols||[]).length+1;return{disk:"\\\\nas01\\vms"+(n>1?n:""),size:"1 ТБ",user:"",pass:""}}
   const f=(a.vols||[])[0]||{};
   return{disk:a.provider||"s3",size:f.size||"10 ТБ",region:f.region||(CLOUD_REGIONS[a.provider]||CLOUD_REGIONS.s3)[0],bucket:f.bucket||"",path:"vms"+((a.vols||[]).length?"/vol"+((a.vols||[]).length+1):""),
-    keyId:f.keyId||"",secret:"",host:f.host||"",port:f.port||9000,proto:f.proto||"https",account:f.account||""};
+    keyId:f.keyId||"",secret:"",host:f.host||"",port:f.port||9000,proto:f.proto||"https",account:f.account||"",endpoint:f.endpoint||"",style:f.style||"path"};
 }
-// ── Новое хранилище: сначала тип, потом первый том ───────────────────────
-// Как «Создать…» в ветке сервера у Axxon One: локальное, сетевое (удалённое)
-// или облачное — у каждого свои поля тома. Сетевое хранилище домена не
-// бывает локальным: дисков у домена нет.
+// ── Новое хранилище: сервер, тип, первый том ─────────────────────────────
+// Как «Создать…» в ветке сервера у Axxon One: хранилище — всегда хранилище
+// сервера. Вызвали с сервера — он и подставлен; с домена — сервер выбирают.
 let an=null;
 function addArchive(ownerId){
   const f=find(ownerId);if(!f)return;
-  const dom=f.n.type==="domain";
-  an={owner:ownerId,dom,kind:dom?"remote":"local",provider:"s3",name:"",days:30,storage:"block",enc:false,ack:false};
+  const dom=f.n.type==="domain"?f.n.id:SERVER_DOMAIN[f.n.id];
+  an={domain:dom,server:f.n.type==="server"?f.n.id:"",kind:"local",provider:"s3",name:"",days:30,storage:"object",enc:false};
   anReset();renderArchNew();
 }
-function anDraft(){
-  const a={kind:an.kind,provider:an.provider,name:an.name,vols:[]};
-  if(an.dom)a.domain=an.owner;else a.server=an.owner;
-  return a;
-}
-function anReset(){an.vol=volDefaults(anDraft())||{disk:"",mode:"file",size:"500 ГБ"};an.ack=false}
+function anDraft(){return{kind:an.kind,provider:an.provider,name:an.name,storage:an.storage,server:an.server||null,vols:[]}}
+function anReset(){an.vol=volDefaults(anDraft())||{disk:"",mode:an.storage==="object"?"dir":"file",size:"500 ГБ"}}
 function anSet(k,v,quiet){
   if(!an)return;
-  if(k in{kind:1,provider:1,name:1,days:1,storage:1,enc:1,ack:1}){
+  if(k in{kind:1,provider:1,name:1,days:1,storage:1,enc:1,server:1}){
     an[k]=k==="days"?Math.max(0,Number(v)||0):v;
-    if(k==="kind"){an.storage=an.kind==="cloud"?"object":"block";if(an.storage==="block")an.enc=false}
-    if(k==="kind"||k==="provider")anReset();
-    if(k==="storage"&&v==="block")an.enc=false;
+    if(k==="kind"){an.storage=an.kind==="cloud"?"object":an.storage}
+    if(an.storage==="block"&&an.kind!=="cloud")an.enc=false;
+    if(k==="kind"||k==="provider"||k==="server"||k==="storage")anReset();
   }else{
-    an.vol[k]=k==="port"?Number(v)||0:v;
+    volApply(an.vol,k,v);
     if(an.kind==="local"&&(k==="disk"||k==="mode")){
-      const d=serverDisks(an.owner).find(x=>x.disk===an.vol.disk);
-      if(an.vol.mode==="part")an.vol.size=d?.size||an.vol.size;else if(!/ГБ|ТБ/.test(an.vol.size||"")||k==="mode")an.vol.size="500 ГБ";
-      an.ack=false;
+      const d=serverDisks(an.server).find(x=>x.disk===an.vol.disk);
+      if(an.vol.mode==="part"){an.vol.size=d?.size||an.vol.size;an.vol.state="unfmt"}
+      else{delete an.vol.state;if(k==="mode")an.vol.size="500 ГБ";an.vol.dir=an.vol.dir||an.vol.disk+"\\Axxon"}
     }
   }
   if(!quiet)renderArchNew();
   else{const b=document.getElementById("anCreate");if(b){const why=anBlock();b.disabled=!!why;b.title=why}}
 }
-// Что мешает создать: пустые обязательные поля, неподтверждённое форматирование.
+// Что мешает создать: не выбран сервер, пустые обязательные поля.
 function anBlock(){
   const v=an.vol;
+  if(!an.server)return i18n("Выберите сервер");
   if(an.kind==="local"){
     if(!v.disk)return i18n("Нет свободного диска");
-    if(v.mode==="part"&&!an.ack)return i18n("Подтвердите форматирование диска");
-    if(v.mode==="file"&&!sizeTb(v.size))return i18n("Укажите размер файла");
+    if(v.mode!=="part"&&!String(v.dir||"").trim())return i18n("Укажите папку на диске");
   }
+  if(an.kind!=="local"||v.mode!=="part")if(!gbOf(v.size))return i18n("Укажите размер в ГБ");
   if(an.kind==="remote"&&(!String(v.disk||"").trim()||!String(v.user||"").trim()))return i18n("Укажите путь и пользователя");
   if(an.kind==="cloud"&&!String(v.bucket||"").trim())return i18n(an.provider==="azure"?"Укажите контейнер":"Укажите бакет");
   if(an.kind==="cloud"&&an.provider==="minio"&&!String(v.host||"").trim())return i18n("Укажите хост MinIO");
+  if(an.kind==="cloud"&&an.provider==="s3c"&&!String(v.endpoint||"").trim())return i18n("Укажите endpoint");
   return"";
 }
 function renderArchNew(){
   if(!an)return;
-  const own=find(an.owner)?.n,a=anDraft(),why=anBlock();
+  const dom=domains.find(d=>d.id===an.domain),a=anDraft(),why=anBlock();
+  const srvs=(dom?.servers||servers.filter(s=>!isUnallocated(s.id)));
+  const keep=document.querySelector("#bmBody .an-body")?.scrollTop||0;
   const kinds=ARCH_KINDS.map(([k,l])=>{
-    const off=k==="local"&&an.dom;
-    const desc={local:"Диски этого сервера. Том — раздел целиком или файл заданного размера.",remote:"Папка на NAS по SMB/NFS. Том — файл заданного размера.",cloud:"Бакет S3-совместимого сервиса или контейнер Azure."}[k];
-    return`<label class="an-kind ${an.kind===k?"on":""} ${off?"off":""}" title="${off?i18n("Локальные диски есть только у сервера"):""}"><input type="radio" name="anKind" ${an.kind===k?"checked":""} ${off?"disabled":""} onchange="anSet('kind','${k}')"><span><b>${i18n(l)}</b><small>${i18n(off?"Только в ветке сервера: у домена своих дисков нет.":desc)}</small></span></label>`;
+    const desc={local:"Диски сервера: папка на диске или, у блочного, раздел целиком.",remote:"Папка на NAS по SMB/NFS. Том — файл заданного размера.",cloud:"Бакет Amazon S3, MinIO, любого S3-совместимого сервиса или контейнер Azure."}[k];
+    return`<label class="an-kind ${an.kind===k?"on":""}"><input type="radio" name="anKind" ${an.kind===k?"checked":""} onchange="anSet('kind','${k}')"><span><b>${i18n(l)}</b><small>${i18n(desc)}</small></span></label>`;
   }).join("");
-  const provs=an.kind==="cloud"?`<div class="bk-chips an-provs">${CLOUD_PROVIDERS.map(([p,l])=>`<button type="button" class="stchip ${an.provider===p?"on":""}" onclick="anSet('provider','${p}')"><span class="stchip-lab">${escHtml(l)}</span></button>`).join("")}</div>`:"";
+  const provs=an.kind==="cloud"?`<div class="bk-chips an-provs">${CLOUD_PROVIDERS.map(([p,l])=>`<button type="button" class="stchip ${an.provider===p?"on":""}" onclick="anSet('provider','${p}')"><span class="stchip-lab">${i18n(l)}</span></button>`).join("")}</div>`:"";
   const canEnc=an.kind==="cloud"||an.storage==="object";
-  const fmt=an.kind==="local"&&an.vol.mode==="part"&&an.vol.disk;
-  openBulkModal(`${i18n("Новое хранилище")} · ${escHtml(own?locName(own):"")}`,
-    `<div class="an-kinds">${kinds}</div>${provs}
+  openBulkModal(`${i18n("Новое хранилище")}${dom?" · "+escHtml(locName(dom)):""}`,
+    `<div class="an-body">
+    <div class="g an-srv"><div><label>${i18n("Сервер")}</label><select onchange="anSet('server',this.value)">${an.server?"":`<option value="" selected>${i18n("— выберите сервер —")}</option>`}${srvs.map(s=>`<option value="${s.id}" ${an.server===s.id?"selected":""}>${escHtml(locName(s))}${hasNoSignal(s)?" — "+i18n("нет связи"):""}</option>`).join("")}</select>${an.server?"":`<div class="bk-hint">${i18n("хранилище всегда принадлежит серверу — он ведёт запись")}</div>`}</div></div>
+    <div class="an-kinds">${kinds}</div>${provs}
     <div class="g" style="margin-top:12px">
       <div><label>${i18n("Имя")}</label><input value="${escHtml(an.name)}" placeholder="${escHtml(an.kind==="cloud"?cloudLabel(an.provider):i18n(an.kind==="remote"?"Сетевое хранилище":"Хранилище"))}" oninput="anSet('name',this.value,true)"></div>
       <div><label>${i18n("Глубина, дней")}</label><input type="number" value="${an.days}" oninput="anSet('days',this.value,true)"><div class="bk-hint">${i18n("0 — без ограничения")}</div></div>
-      ${an.kind==="cloud"?"":`<div><label>${i18n("Тип хранения")}</label><select onchange="anSet('storage',this.value)">${ARCH_STORAGE.map(([v,l])=>`<option value="${v}" ${an.storage===v?"selected":""}>${i18n(l)}</option>`).join("")}</select><div class="bk-hint">${i18n(an.storage==="object"?"объём тома меняется на ходу, том можно зашифровать":"меньше задержка под большой нагрузкой")}</div></div>`}
+      ${an.kind==="cloud"?fldRo("Тип хранения",i18n("Облачное")):`<div><label>${i18n("Тип хранения")}</label><select onchange="anSet('storage',this.value)">${ARCH_STORAGE.map(([v,l])=>`<option value="${v}" ${an.storage===v?"selected":""}>${i18n(l)}</option>`).join("")}</select><div class="bk-hint">${i18n(an.storage==="object"?"объём тома меняется на ходу, том можно зашифровать":"меньше задержка под большой нагрузкой")}</div></div>`}
       <div><label>${i18n("Шифрование")}</label><select ${canEnc?"":"disabled"} onchange="anSet('enc',this.value==='1')"><option value="0">${i18n("Нет")}</option><option value="1" ${an.enc&&canEnc?"selected":""}>AES-256-GCM</option></select>${canEnc?"":`<div class="bk-hint">${i18n("только у объектного хранилища")}</div>`}</div>
     </div>
     <div class="an-vol-h">${i18n("Первый том")}<span class="sub">${i18n("остальные — «＋ Том» в карточке хранилища")}</span></div>
-    ${an.kind==="local"&&!an.vol.disk?`<div class="nt err">${i18n("Свободных дисков на сервере нет: на каждом уже есть раздел хранилища.")}</div>`:volFieldsHtml(a,an.vol,"anSet(")}
-    ${fmt?`<div class="nt err" style="margin-top:10px">${i18n("Диск")} ${escHtml(an.vol.disk)} ${i18n("будет отформатирован в SolidStore, всё, что на нём есть, пропадёт.")}
-      <label class="an-ack"><input type="checkbox" ${an.ack?"checked":""} onchange="anSet('ack',this.checked)"> ${i18n("Я прочитал предупреждение и понимаю риск потери данных")}</label></div>`:""}`,
-    `<button type="button" class="btn" onclick="closeBulkModal();an=null">${i18n("Отмена")}</button>${an.kind==="local"?"":`<button type="button" class="btn" onclick="toast(i18n('${an.kind==="cloud"?"Подключение к бакету проверено":"Подключение к NAS проверено"}'))">${i18n("Проверить подключение")}</button>`}<span class="tfoot-gap"></span><button type="button" class="btn pri" id="anCreate" onclick="createArchive()" ${why?"disabled":""} title="${escHtml(why)}">${i18n(fmt?"Форматировать и создать":"Создать")}</button>`,"bbox-wide bbox-an");
+    ${an.kind==="local"&&an.server&&!an.vol.disk?`<div class="nt err">${i18n("Свободных дисков на сервере нет: на каждом уже есть раздел хранилища.")}</div>`:volFieldsHtml(a,an.vol,"anSet(")}
+    </div>`,
+    `<button type="button" class="btn" onclick="closeBulkModal();an=null">${i18n("Отмена")}</button>${an.kind==="local"?"":`<button type="button" class="btn" onclick="toast(i18n('${an.kind==="cloud"?"Подключение к бакету проверено":"Подключение к NAS проверено"}'))">${i18n("Проверить подключение")}</button>`}<span class="tfoot-gap"></span><button type="button" class="btn pri" id="anCreate" onclick="createArchive()" ${why?"disabled":""} title="${escHtml(why)}">${i18n("Создать")}</button>`,"bbox-wide bbox-an");
+  const b=document.querySelector("#bmBody .an-body");if(b)b.scrollTop=keep;
 }
 function createArchive(){
   if(!an||anBlock())return;
-  const a={id:"a"+(++_aseq),type:"archive",kind:an.kind,storage:an.kind==="cloud"?"object":an.storage,enc:!!an.enc&&(an.kind==="cloud"||an.storage==="object"),days:an.days,vols:[],
+  const a={id:"a"+(++_aseq),type:"archive",kind:an.kind,storage:an.kind==="cloud"?"object":an.storage,enc:!!an.enc&&(an.kind==="cloud"||an.storage==="object"),days:an.days,vols:[],server:an.server,
     name:an.name.trim()||(an.kind==="cloud"?`${i18n("Облачное хранилище")} — ${cloudLabel(an.provider)}`:i18n(an.kind==="remote"?"Новое сетевое хранилище":"Новое хранилище"))};
   if(an.kind==="cloud")a.provider=an.provider;
-  if(an.dom)a.domain=an.owner;else a.server=an.owner;
   const{size,disk,...rest}=an.vol;
-  Object.assign(addVol(a,an.kind==="cloud"?an.provider:disk,size||"1 ТБ","0%"),rest,an.kind==="local"&&rest.mode==="file"&&!rest.file?{file:a.name+".afs"}:{});
+  const v=Object.assign(addVol(a,an.kind==="cloud"?an.provider:disk,size||"1 ТБ","0%"),rest);
+  if(an.kind==="local"&&v.mode==="file"&&!v.file)v.file=a.name+".afs";
   arch.push(a);
-  archVols(a).forEach(v=>v.name=volLabel(v));
-  const owner=an.owner;an=null;closeBulkModal();
-  open.add(owner);sel=a.id;tab="arch";setD(true);
-  toast(i18n("Хранилище создано"));
+  v.name=volLabel(v);
+  an=null;closeBulkModal();
+  open.add(a.server);sel=a.id;tab="arch";setD(true);
+  toast(v.state==="unfmt"?i18n("Хранилище создано. Раздел не отформатирован — отформатируйте его у тома, когда будете готовы"):i18n("Хранилище создано"));
   paint();
 }
 function addVolume(archId){
@@ -10884,7 +10985,7 @@ function deleteArchive(id){
   askConfirm("Удалить хранилище",`${i18n("Хранилище")} «${locName(a)}» ${i18n("будет удалено вместе с томами.")}`,
     (n?`${i18n("Перестанут писать камер:")} ${n}. ${i18n("Сами камеры останутся в системе — в разделе «Без записи».")} `:"")+i18n("После подтверждения будет отсчёт с кнопкой «Отменить»."),
     "Удалить",()=>scheduleDelete([id],{label:`«${locName(a)}»`,commit:()=>{
-      walkAll(c=>{if(c.type==="camera"&&c.arch===id)c.arch=""});
+      walkAll(c=>{if(c.type==="camera"&&camArchs(c).some(x=>x.arch===id)){camDropArch(c,id)}});
       if(arch.includes(a))arch.splice(arch.indexOf(a),1);
       if(sel===id){sel=a.server||a.domain||sel;tab="gen"}
       open.delete(id);setD(false);treeMatchCache.clear();searchMatchCache.clear();
@@ -10934,6 +11035,46 @@ function archForeignReason(n,a){
 function archChoicesNote(n){
   const s=cameraTreeServer(n.id);
   return s?`<p class="sub">${i18n(n.type==="ipsrv"?"Регистратор на сервере":"Камера на сервере")} <b>${escHtml(locName(s))}</b>: ${i18n("доступны хранилища этого сервера и сетевые хранилища домена.")}</p>`:"";
+}
+// Хранилища камеры списком: у каждой строки своё хранилище, поток и режим.
+// Первая строка — основное хранилище, через него камера получает сервер.
+function camArchsCardHtml(n){
+  const list=camArchs(n),has=!!edgeStorage(n),used=new Set(list.map(x=>x.arch));
+  const free=archChoicesFor(n).filter(a=>!used.has(a.id));
+  const rows=list.map((x,i)=>{
+    const a=archById(x.arch),opts=archChoicesFor(n).filter(o=>o.id===x.arch||!used.has(o.id));
+    return`<tr><td><select onchange="camArchRowSet('${n.id}',${i},'arch',this.value)">${opts.map(o=>`<option value="${o.id}" ${o.id===x.arch?"selected":""}>${escHtml(locName(o))} · ${escHtml(archKindTag(o))}</option>`).join("")}</select>
+        ${x.main?`<div class="bk-hint ca-main">${i18n("основное")}${a?` · ${a.days?a.days+" "+i18n("дн."):i18n("без ограничения")}`:""}</div>`:`<div class="bk-hint">${a?`${a.days?a.days+" "+i18n("дн."):i18n("без ограничения")}`:""}</div>`}</td>
+      <td><select onchange="camArchRowSet('${n.id}',${i},'stream',this.value)"><option value="main" ${x.stream!=="sub"?"selected":""}>${i18n("Основной")}</option><option value="sub" ${x.stream==="sub"?"selected":""}>${i18n("Второй")}</option></select></td>
+      <td><select onchange="camArchRowSet('${n.id}',${i},'rec',this.value)">${REC_MODES.filter(([v])=>v!=="none").map(([v,l])=>`<option value="${v}" ${x.rec===v?"selected":""} ${v==="replica"&&!has?"disabled":""}>${i18n(l)}</option>`).join("")}${x.rec==="none"?`<option value="none" selected>${i18n("Нет")}</option>`:""}</select></td>
+      <td class="ca-x"><button type="button" class="btn s" title="${i18n("Отвязать от хранилища")}" onclick="camArchRowDel('${n.id}',${i})">${i18n("Отвязать")}</button></td></tr>`;
+  }).join("");
+  const add=free.length?`<select class="ca-add" onchange="if(this.value)camArchRowAdd('${n.id}',this.value)"><option value="">＋ ${i18n("Привязать к хранилищу")}…</option>${free.map(a=>`<option value="${a.id}">${escHtml(locName(a))} · ${escHtml(archKindTag(a))}</option>`).join("")}</select>`
+    :`<span class="sub">${i18n(list.length?"Других доступных хранилищ нет":"Доступных хранилищ нет")}</span>`;
+  return card("Хранилища камеры",`${list.length?`<table class="ca-tbl"><thead><tr><th>${i18n("Хранилище")}</th><th>${i18n("Поток")}</th><th>${i18n("Режим записи")}</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+      :`<div class="nt">${i18n("Камера не привязана ни к одному хранилищу — запись не идёт.")}</div>`}
+    <div class="ca-foot">${add}</div>${archChoicesNote(n)}`,`<span class="sub" style="font-weight:400">${list.length}</span>`);
+}
+function camArchRowAdd(id,aid){
+  const f=find(id);if(!f)return;
+  camAddArch(f.n,aid,"always");
+  treeMatchCache.clear();searchMatchCache.clear();setD(true);paint();
+  toast(`${i18n("Камера привязана к хранилищу")} «${locName(archById(aid))}»`);
+}
+function camArchRowDel(id,i){
+  const f=find(id);if(!f)return;
+  const x=camArchs(f.n)[i];if(!x)return;
+  camDropArch(f.n,x.arch);
+  treeMatchCache.clear();searchMatchCache.clear();setD(true);paint();
+}
+function camArchRowSet(id,i,k,v){
+  const f=find(id);if(!f)return;const n=f.n;
+  if(i===0){
+    if(k==="arch"){pinCamServer(n);n.arch=v;bindArchServer(n)}
+    else if(k==="rec"){n.rec=v;if(v==="motion"&&!Array.isArray(n.recDets))n.recDets=camDetectors(n).map(d=>d.id)}
+    else n.stream=v;
+  }else{const x=(n.archx||[])[i-1];if(x)x[k]=v}
+  treeMatchCache.clear();searchMatchCache.clear();setD(true);paint();
 }
 function camArchSelectHtml(n){
   return `<div><label>${i18n("Архив")}</label><select onchange="setCamArch('${n.id}',this.value)"><option value="" ${!n.arch?"selected":""}>${i18n("Не задан")}</option>${
