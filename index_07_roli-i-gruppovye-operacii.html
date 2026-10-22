@@ -1302,6 +1302,9 @@ html[data-theme="light"] .cr-link.cr-sel{background:#dce8f7;color:#2f5fad}
 .bk-scope-sum.on{color:#9ec8ff}
 .bk-scope-sum b{color:var(--tx)}
 .bk-solo-note{display:block;margin-top:4px;color:var(--mu)}
+.draft-chip{flex:none;margin-left:6px;padding:0 6px;border-radius:99px;font-size:10px;line-height:16px;background:#4a3a12;color:#f3cf72;white-space:nowrap}
+html[data-theme="light"] .draft-chip{background:#fbeec8;color:#7a5500}
+.card-foot .bk-foot-text b{color:#f3cf72}
 /* Отметка в таблицах — общая с деревом */
 table.gtbl-cams th.ts-td,table.gtbl-cams td.ts-td{width:34px;padding:0 0 0 10px;text-overflow:clip}
 .ts-chk{margin:0;cursor:pointer;accent-color:var(--bl)}
@@ -2638,6 +2641,152 @@ function saveEdits(){
 }
 function cancelEdits(){editClear();setD(false);paint();toast("Отменено")}
 
+// ── Карточка объекта: черновик → план ─────────────────────────────────────
+// Одна модель применения на всё «Оборудование»: карточка одного объекта, как
+// и карточка выборки, ничего не пишет сразу. Правки копятся черновиком (поля
+// и переключатели остаются на экране, строка дерева помечена «не применено»),
+// внизу — «Сбросить · Показать план». План перечисляет «было → станет», дальше
+// та же очередь и отчёт: сервер без связи не примет правку, и это будет видно.
+let cardBase=null,cardDraft=null,cardFootRaf=0;
+const CARD_SKIP=new Set(["devices","online","cpu","ram","net","disk"]);
+function cardClone(n){try{return JSON.parse(JSON.stringify(n))}catch(e){return{}}}
+function cardEnsureBase(n){
+  if(cardDraft&&cardDraft.id!==n.id){
+    // Сюда приходят мимо pick (из очереди, удаления, кода): черновик чужого
+    // объекта откатываем — иначе он остался бы в модели неприменённым.
+    const was=find(cardDraft.id)?.n,had=cardDiff().length;
+    cardRestore();
+    if(had&&was)toast(`${i18n("Неприменённые изменения сброшены")}: «${locName(was)}»`);
+  }
+  if(!cardDraft)cardBase={id:n.id,snap:cardClone(n),folders:cardFolders(n.id)};
+}
+// Папки, в которые объект добавлен напрямую: они живут в папках, а не в объекте.
+function cardFolders(id){return flatFolders().filter(f=>(f.items||[]).includes(id)).map(f=>f.id)}
+function cardSetFolders(id,ids){
+  flatFolders().forEach(f=>{const has=(f.items||[]).includes(id),want=ids.includes(f.id);
+    if(want&&!has)folderAddDevice(f.id,id);else if(!want&&has)f.items=f.items.filter(x=>x!==id)});
+  treeMatchCache.clear();searchMatchCache.clear();
+}
+// Поля без своего свойства в модели (маска, шлюз, DNS…) после «Применить»
+// помнятся в n._f — иначе карточка показала бы прежнее значение.
+function cardFldOrig(l,v){const n=app==="hw"?find(sel)?.n:null;return n?._f&&l in n._f?n._f[l]:v}
+function cardFldVal(l,v){const f=cardDraft&&cardDraft.id===sel?cardDraft.fields[l]:null;return f?f.to:v}
+function cardFld(el){
+  const l=el.dataset.df,orig=el.dataset.orig??"";
+  setD(true);if(!cardDraft)return;
+  if(String(el.value)===String(orig))delete cardDraft.fields[l];else cardDraft.fields[l]={from:orig,to:el.value};
+}
+const CARD_PROP={enabled:"Включено",rec:"Режим записи",arch:"Архив",archx:"Дополнительные архивы",pre:"Предзапись, с",srvId:"Сервер",
+  recDets:"Запись по детекторам",name:"Имя",short:"Короткое имя",ip:"IP",port:"Порт",vendor:"Производитель",model:"Модель",
+  days:"Глубина, дней",enc:"Шифрование",storage:"Тип хранения",vols:"Тома",kind:"Тип",sens:"Чувствительность",license:"Лицензия",
+  codec:"Кодек",res:"Разрешение",fps:"к/с",bitrate:"Битрейт",stream:"Поток",lat:"Широта",lon:"Долгота",azimuth:"Азимут",user:"Имя пользователя",pass:"Пароль"};
+// Поле карточки → свойство объекта, куда его запишет «Применить».
+const CARD_FLD_PROP={"Имя":"name","Короткое имя":"short","IP":"ip","Порт":"port","Производитель":"vendor","Модель":"model",
+  "Широта":"lat","Долгота":"lon","Азимут":"azimuth","Номер канала":"ch","Роль":"role"};
+function cardFmt(k,v){
+  if(k==="enabled")return v===false?i18n("выкл"):i18n("вкл");
+  if(v===undefined||v===null||v==="")return"—";
+  if(k==="enabled"||k==="enc"||k==="ssl")return v===false?i18n("выкл"):i18n("вкл");
+  if(k==="rec")return i18n(recordModeLabel(v));
+  if(k==="arch"){const a=archById(v);return a?locName(a):String(v)}
+  if(k==="srvId"){const s=servers.find(x=>x.id===v);return s?locName(s):String(v)}
+  if(k==="pass")return"••••••••";
+  if(Array.isArray(v))return v.length?`${v.length} ${i18n("шт.")}`:"—";
+  if(typeof v==="object")return"…";
+  return String(v);
+}
+function cardDiffNode(live,snap,owner,out){
+  const keys=new Set([...Object.keys(live),...Object.keys(snap)]);
+  keys.forEach(k=>{
+    if(CARD_SKIP.has(k)||k.startsWith("_"))return;
+    if(JSON.stringify(live[k])===JSON.stringify(snap[k]))return;
+    const from=snap[k]===undefined?undefined:cardClone({v:snap[k]}).v,to=live[k]===undefined?undefined:cardClone({v:live[k]}).v;
+    out.push({node:live,key:k,from,to,label:(live!==owner?`«${locName(live)}»: `:"")+i18n(CARD_PROP[k]||k),
+      fromT:cardFmt(k,from),toT:cardFmt(k,to)});
+  });
+  const sk=new Map((snap.devices||[]).map(d=>[d.id,d]));
+  (live.devices||[]).forEach(d=>{const o=sk.get(d.id);if(o)cardDiffNode(d,o,owner,out);
+    else out.push({node:live,add:d,label:`${i18n("Добавить")}: ${i18n(LB[d.type]||d.type)} «${locName(d)}»`,fromT:"—",toT:i18n("будет добавлен")})});
+}
+// Что изменится: свойства объекта и его начинки плюс поля, которые в модель
+// пока не пишутся (имя, адрес, модель).
+function cardDiff(){
+  if(!cardDraft)return[];
+  const n=find(cardDraft.id)?.n;if(!n)return[];
+  const out=[];cardDiffNode(n,cardDraft.snap,n,out);
+  const fNow=cardFolders(n.id),fWas=cardDraft.folders||[];
+  const gone=fWas.filter(x=>!fNow.includes(x)),came=fNow.filter(x=>!fWas.includes(x));
+  if(gone.length||came.length)out.push({node:n,folders:fNow,fromFolders:fWas,label:i18n("Папки"),
+    fromT:`${fWas.length} ${i18n(plural(fWas.length,"папка|папки|папок"))}`,
+    toT:[...gone.map(id=>`${i18n("убрать из")} «${folderPathName(id)}»`),...came.map(id=>`${i18n("добавить в")} «${folderPathName(id)}»`)].join("; ")});
+  Object.entries(cardDraft.fields).forEach(([l,f])=>out.push({node:n,fld:l,prop:CARD_FLD_PROP[l]||null,from:f.from,to:f.to,label:i18n(l),fromT:f.from===""?"—":f.from,toT:f.to===""?"—":f.to}));
+  Object.entries(edits).forEach(([k,v])=>{const[id,f]=splitEditKey(k);if(id!==n.id)return;out.push({node:n,edit:k,prop:f,from:n[f],to:v,label:i18n(CARD_PROP[f]||f),fromT:cardFmt(f,n[f]),toT:cardFmt(f,v)})});
+  return out;
+}
+// Вернуть объект к снимку «до»: по ключам, начинку — по id, добавленное — убрать.
+function cardRestoreNode(live,snap){
+  Object.keys(live).forEach(k=>{if(k!=="devices"&&!CARD_SKIP.has(k)&&!(k in snap))delete live[k]});
+  Object.keys(snap).forEach(k=>{if(k!=="devices"&&!CARD_SKIP.has(k))live[k]=cardClone({v:snap[k]}).v});
+  if(live.devices){
+    const sk=new Map((snap.devices||[]).map(d=>[d.id,d]));
+    live.devices=live.devices.filter(d=>sk.has(d.id));
+    live.devices.forEach(d=>cardRestoreNode(d,sk.get(d.id)));
+  }
+}
+function cardRestore(){
+  if(!cardDraft)return;
+  const n=find(cardDraft.id)?.n;if(n){cardRestoreNode(n,cardDraft.snap);if(cardDraft.folders)cardSetFolders(n.id,cardDraft.folders)}
+  Object.keys(edits).forEach(k=>{if(splitEditKey(k)[0]===cardDraft.id)delete edits[k]});
+  cardDraft=null;cardBase=null;dirty=false;
+  treeMatchCache.clear();searchMatchCache.clear();
+}
+function cardReset(){cardRestore();paint();toast("Изменения сброшены")}
+function cardLeaveAsk(go){
+  const n=find(cardDraft.id)?.n,d=cardDiff();
+  askConfirm("Изменения не применены",`<p>${i18n("У")} «${escHtml(locName(n||{}))}» ${d.length} ${i18n(plural(d.length,"неприменённое изменение|неприменённых изменения|неприменённых изменений"))}.</p><ul class="bk-del">${d.slice(0,5).map(r=>`<li>${escHtml(r.label)}: ${escHtml(r.fromT)} → <b>${escHtml(r.toT)}</b></li>`).join("")}</ul>`,
+    "",i18n("Сбросить и перейти"),()=>{cardRestore();go()},{html:true,cancelLabel:"Остаться"});
+}
+function cardFootHtml(){
+  const d=cardDraft&&cardDraft.id===sel?cardDiff():[];
+  if(!d.length)return`<div id="cardFoot" hidden></div>`;
+  return`<div class="main-actions bk-foot card-foot" id="cardFoot"><span class="sub bk-foot-text">${i18n("Не применено")}: <b>${d.length}</b> ${i18n(plural(d.length,"изменение|изменения|изменений"))} — ${escHtml(d.slice(0,2).map(r=>r.label).join(", "))}${d.length>2?"…":""}</span><span class="tfoot-gap"></span>
+    <button type="button" class="btn s" onclick="cardReset()">${i18n("Сбросить")}</button>
+    <button type="button" class="btn s pri" onclick="cardPlan()">${i18n("Показать план")} (${d.length})</button></div>`;
+}
+function cardFootRefresh(){
+  const el=document.getElementById("cardFoot");if(el)el.outerHTML=cardFootHtml();
+  decorateTreeSel();
+}
+function cardPlan(){
+  const d=cardDiff();if(!d.length){toast("Нечего применять");return}
+  if(bq&&!bq.finished){toast("Очередь ещё выполняется — дождитесь её конца");return}
+  const n=find(cardDraft.id).n,s=srv(n.id),off=s&&hasNoSignal(s);
+  const rows=d.map((r,i)=>`<tr><td class="bk-num">${i+1}</td><td>${escHtml(r.label)}</td><td class="bk-note">${escHtml(r.fromT)}</td><td><b>${escHtml(r.toT)}</b></td></tr>`).join("");
+  openBulkModal(`${i18n("План")}: «${escHtml(locName(n))}», ${d.length} ${i18n(plural(d.length,"изменение|изменения|изменений"))}`,
+    `<table class="bk-table"><thead><tr><th>#</th><th>${i18n("Параметр")}</th><th>${i18n("Было")}</th><th>${i18n("Станет")}</th></tr></thead><tbody>${rows}</tbody></table>
+     ${off?`<div class="nt bk-warn">⚠ ${i18n("сервер")} «${escHtml(locName(s))}» ${i18n("без связи — изменения не применятся, в отчёте они будут «не применено»")}</div>`:""}
+     <p class="sub" style="margin:10px 0 0">${i18n("Так же, как правка выборки: изменения уходят на сервер очередью, итог — в отчёте; после применения — «Отменить».")}</p>`,
+    `<button type="button" class="btn" onclick="closeBulkModal()">${i18n("Назад")}</button><button type="button" class="btn pri" onclick="closeBulkModal();cardApply()">${i18n("Применить")} (${d.length})</button>`,"bbox-wide");
+}
+function cardApply(){
+  const d=cardDiff();if(!d.length)return;
+  const n=find(cardDraft.id).n;
+  // Модель возвращается к «до», а «станет» записывает очередь — так сбой
+  // сервера оставляет объект как был, а не наполовину изменённым.
+  cardRestore();
+  const set=(o,k,v)=>{if(v===undefined)delete o[k];else o[k]=cardClone({v}).v};
+  const ops=d.map(r=>{
+    if(r.folders)return mkOp(n,`${r.label}: ${r.toT}`,"folder",()=>cardSetFolders(n.id,r.folders),null,()=>cardSetFolders(n.id,r.fromFolders));
+    if(r.add)return mkOp(r.node,r.label,"param",()=>{(r.node.devices||(r.node.devices=[])).push(r.add)},null,()=>{r.node.devices=r.node.devices.filter(x=>x!==r.add)});
+    if(r.fld||r.edit){const k=r.prop,prev=k?n[k]:undefined,v=k==="port"||k==="ch"?Number(r.to)||r.to:String(r.to).trim();
+      const pf=n._f?.[r.fld];
+      return mkOp(n,`${r.label}: ${r.toT}`,"param",()=>{if(k)n[k]=v;else(n._f||(n._f={}))[r.fld]=r.to},null,()=>{if(k)set(n,k,prev);else if(pf===undefined)delete n._f[r.fld];else n._f[r.fld]=pf})}
+    return mkOp(r.node,`${r.label}: ${r.toT}`,"param",()=>set(r.node,r.key,r.to),null,()=>set(r.node,r.key,r.from));
+  });
+  startQueue([{label:`«${locName(n)}»: ${d.length} ${plural(d.length,"изменение|изменения|изменений")}`,ops:ops.map(o=>({...o,state:"wait",msg:"",done:false}))}],`«${locName(n)}»`,{undo:true});
+  paint();
+}
+
 // ── Опрос сети: заглушка ─────────────────────────────────────────────────
 // Настоящего запроса тут нет. Известные серверы определяются правильно, а часть
 // новых адресов намеренно «не отвечает» — иначе экран выглядел бы так, будто в
@@ -3374,7 +3523,16 @@ function runConfirmOk(){
   closeConfirm();
   if(cb)cb();
 }
-function setD(v){dirty=v}
+function setD(v){
+  dirty=v;
+  // В «Оборудовании» любая правка карточки — черновик: она применяется через
+  // план, как правка выборки. Черновик начинается с первой правки открытого
+  // объекта; снимок «до» снят при показе карточки.
+  if(v&&app==="hw"&&cardBase&&cardBase.id===sel&&!(bulkActive()&&!bulkPeek)){
+    if(!cardDraft)cardDraft={id:sel,snap:cardBase.snap,folders:cardBase.folders,fields:{}};
+    cancelAnimationFrame(cardFootRaf);cardFootRaf=requestAnimationFrame(cardFootRefresh);
+  }
+}
 const appSel={dev:null,srvs:"d1"};
 function setApp(a){
   domainPop=false;
@@ -4392,6 +4550,8 @@ function pick(id,opts){
   const fromLink=hwFromLink();
   closeTreeCtx();
   const f=find(id);if(!f)return;
+  // Ушли с объекта с неприменёнными правками — спрашиваем, а не теряем молча.
+  if(!opts?.force&&cardDraft&&cardDraft.id!==id&&cardDiff().length){cardLeaveAsk(()=>pick(id,{...(opts||{}),force:true}));return}
   const range=!!opts?.range,additive=!!opts?.additive,multi=range||additive;
   const ctx=normalizeTreeCtx(opts?.ctx);
   if(range&&canMultiPick(f.n)){
@@ -4443,9 +4603,9 @@ function hwFlashLanding(){
     if(els.length)accFlash(()=>els,true);
   },40);
 }
-function fld(l,v,tp="text"){return `<div><label>${i18n(l)}</label><input type="${tp}" value="${escHtml(v??"")}" oninput="setD(true)"></div>`}
+function fld(l,v,tp="text"){v=cardFldOrig(l,v);const d=cardFldVal(l,v);return `<div><label>${i18n(l)}</label><input type="${tp}" value="${escHtml(d??"")}" data-df="${escHtml(l)}" data-orig="${escHtml(v??"")}" oninput="cardFld(this)"></div>`}
 function fldRo(l,v){return `<div><label>${i18n(l)}</label><input type="text" value="${escHtml(v??"")}" readonly disabled></div>`}
-function sl(l,a,cur){return `<div><label>${i18n(l)}</label><select onchange="setD(true)">${a.map(x=>`<option ${x===cur?"selected":""}>${i18n(x)}</option>`).join("")}</select></div>`}
+function sl(l,a,cur){cur=cardFldOrig(l,cur);const d=cardFldVal(l,cur);return `<div><label>${i18n(l)}</label><select data-df="${escHtml(l)}" data-orig="${escHtml(cur??"")}" onchange="cardFld(this)">${a.map(x=>`<option value="${escHtml(x)}" ${x===d?"selected":""}>${i18n(x)}</option>`).join("")}</select></div>`}
 function card(title,b,x=""){return `<div class="card"><div class="ch">${i18n(title)}${x}</div><div class="cb">${b}</div></div>`}
 function bdg(n){
   // Домен / сервер — только сигнал
@@ -5429,7 +5589,8 @@ function gear(){
   // собственные действия объекта, а звезда последней и без подписи.
   const addBtn=lanFoundBtn(n)+lanHeadBtns(n)+inspectorAddBtn(n)+bulkCopyBtn(n)+cardMoreBtn(n)+favCardBtn(n)+fullCardBtn();
   const scClass=n.type==="unalloc"?"sc sc-unalloc":"sc";
-  paintMain(mainHd(bulkPeekCrumbHtml()+crumbsHtml(sel),objectTitle(n),"",tabsH,addBtn,true)+`<div class="${scClass}">${hiddenByFilterNoteHtml()}${objectStatusNotesHtml(n)}${form(n)}</div>`+domainActionsHtml(n));
+  cardEnsureBase(n);
+  paintMain(mainHd(bulkPeekCrumbHtml()+crumbsHtml(sel),objectTitle(n),"",tabsH,addBtn,true)+`<div class="${scClass}">${hiddenByFilterNoteHtml()}${objectStatusNotesHtml(n)}${form(n)}</div>`+cardFootHtml()+domainActionsHtml(n));
   if(n.type==="found")renderDeviceWizard();  // панель живёт в разметке, которую только что вставили
 }
 function domainActionsHtml(n){
@@ -6595,13 +6756,13 @@ function addDeviceToFolder(fid,id){
   if(!fid||!id)return;
   folderAddDevice(fid,id);
   open.add(fid);treeMatchCache.clear();searchMatchCache.clear();
-  toast(i18n("Добавлено в папку")+" «"+folderById(fid).name+"»");paint();
+  setD(true);paint();
 }
 function removeDeviceFromFolder(fid,id){
   const f=folderById(fid);if(!f)return;
   f.items=f.items.filter(x=>x!==id);
   treeMatchCache.clear();searchMatchCache.clear();
-  toast(i18n("Убрано из папки")+" «"+f.name+"»");paint();
+  setD(true);paint();
 }
 function deviceFoldersCardHtml(n){
   const sv=srv(n.id);
@@ -12650,6 +12811,12 @@ function decorateTreeSel(){
   treeEl.classList.toggle("selmode",on);
   treeEl.querySelectorAll(".n-chk,.pending-chip,.busy-chip").forEach(el=>el.remove());
   treeEl.querySelectorAll(".n.pending,.n.busy").forEach(el=>el.classList.remove("pending","busy"));
+  treeEl.querySelectorAll(".draft-chip").forEach(el=>el.remove());
+  // Открытый объект с неприменёнными правками — видно и в дереве.
+  if(cardDraft&&cardDiff().length)treeEl.querySelectorAll(`.n[data-pick="${cardDraft.id}"]`).forEach(row=>{
+    const chip=document.createElement("span");chip.className="draft-chip";chip.textContent=i18n("не применено");chip.title=i18n("Изменения ждут «Показать план» внизу карточки");
+    row.querySelector(":scope>.nm")?.after(chip);
+  });
   treeEl.querySelectorAll(".n[data-pick]").forEach(row=>{
     const id=row.dataset.pick,f=find(id);if(!f)return;
     const multi=treeSel.size>1&&selShownAt(id,row.dataset.ctx)&&canMultiPick(f.n);
@@ -13038,9 +13205,9 @@ function bulkCardHtml(){
   // говорит, скольким объектам из отмеченных это достанется.
   const on=bulkFiltOn(),who=on?`«${bulkFiltLabel()}»`:i18n("все отмеченные"),cnt=k=>on?` (${k})`:"";
   const tg=nodes.filter(canToggleEnabled).length,fd=nodes.filter(canFolder).length;
-  const act=`${tg?`<button type="button" class="btn s" title="${i18n("Включить")} ${escHtml(who)} — ${i18n("сразу, с «Отменить»")}" onclick="bulkQuick('on')">${i18n("Включить")}${cnt(tg)}</button>
-    <button type="button" class="btn s" title="${i18n("Выключить")} ${escHtml(who)} — ${i18n("сразу, с «Отменить»")}" onclick="bulkQuick('off')">${i18n("Выключить")}${cnt(tg)}</button>`:""}
-    ${fd?`<button type="button" class="btn s" title="${i18n("Добавить в папку")} ${escHtml(who)} — ${i18n("сразу, с «Отменить»")}" onclick="bulkFolderMenu(event)">${i18n("В папку")}${cnt(fd)}…</button>`:""}
+  const act=`${tg?`<button type="button" class="btn s" title="${i18n("Включить")} ${escHtml(who)} — ${i18n("через план")}" onclick="bulkQuick('on')">${i18n("Включить")}${cnt(tg)}</button>
+    <button type="button" class="btn s" title="${i18n("Выключить")} ${escHtml(who)} — ${i18n("через план")}" onclick="bulkQuick('off')">${i18n("Выключить")}${cnt(tg)}</button>`:""}
+    ${fd?`<button type="button" class="btn s" title="${i18n("Добавить в папку")} ${escHtml(who)} — ${i18n("через план")}" onclick="bulkFolderMenu(event)">${i18n("В папку")}${cnt(fd)}…</button>`:""}
     ${allCams?`<button type="button" class="btn s" title="${i18n("Архив и режим записи выбранных")}" onclick="bulkGoTab('rec')">${i18n("Архив и запись")}…</button>`:""}
     <button type="button" class="btn s" onclick="bulkMenu(event)">${i18n("Ещё")} ▾</button>${fullCardBtn()}`;
   const offNote=st.offline.length?`<div class="nt" role="status">${st.offline.length} ${i18n(plural(st.offline.length,"объект|объекта|объектов"))} ${i18n("на сервере без связи")} (${[...new Set(st.offline.map(serverNameOf))].map(escHtml).join(", ")}). ${i18n("Изменения к ним не применятся — в отчёте они будут «не применено».")}</div>`:"";
@@ -13171,7 +13338,7 @@ function bulkRecHtml(nodes){
     .map(([a,k])=>[a.id,locName(a)+(k<cams.length?` — ${i18n("подходит")} ${k} ${i18n("из")} ${cams.length}`:"")])];
   const recOpts=REC_MODES.map(([v,l])=>[v,i18n(l),v==="replica"&&!edgeAll]);
   return card("Архив и запись",`<div class="g">${bkSelect("Архив","arch",archOpts,archD)}${bkSelect("Режим","rec",recOpts,recD)}${bkInput("Предзапись, с","pre","number",preD)}</div>
-    <p class="sub">${i18n("Камера под сервером пишет только в хранилища своего сервера или в сетевые хранилища домена: камеры другого сервера в плане будут пропущены. Камера без сервера подключается к серверу выбранного хранилища, поэтому смена идёт через план. Режим и предзапись применяются сразу, с «Отменить».")} ${edgeAll?"":`${i18n("Репликация недоступна: встроенное хранилище есть у")} ${edgeN} ${i18n("из")} ${nodes.length}.`}</p>`);
+    <p class="sub">${i18n("Камера под сервером пишет только в хранилища своего сервера или в сетевые хранилища домена: камеры другого сервера в плане будут пропущены. Камера без сервера подключается к серверу выбранного хранилища, поэтому смена идёт через план. Всё применяется через план, после — «Отменить».")} ${edgeAll?"":`${i18n("Репликация недоступна: встроенное хранилище есть у")} ${edgeN} ${i18n("из")} ${nodes.length}.`}</p>`);
 }
 function bulkVidHtml(nodes,st){
   if(st.models.length>1)return card("Видео",`<div class="nt">${i18n("Выбрано моделей")}: ${st.models.length}. ${i18n("Параметры видео доступны, если выбрать камеры одной модели.")}</div>
@@ -13213,7 +13380,10 @@ function bulkListCard(nodes){
 }
 // Одна обратимая правка — строка «Изменится … · Применить» без окна; всё
 // остальное — «Показать план».
+// Всё через план — и правка выборки, и правка одного объекта: свёрнутой
+// строки «сразу, с «Отменить»» больше нет.
 function bulkCollapsible(ch){
+  return false;
   if(ch.length!==1)return false;
   const c=ch[0];
   return(BULK_REVERSIBLE.has(c.key)||c.key.startsWith("p:"))&&!c.note&&!c.ops.some(o=>o.skip)&&!bulkStats(bulkScopeNodes()).offline.length;
@@ -13338,16 +13508,20 @@ function bulkName(n,tpl){
   }
 }
 // Кнопки шапки не трогают черновик полей: у них свой одношаговый план.
+// Кнопки шапки — тоже через план: тот же шаг, что дало бы поле, но без
+// черновика полей.
+let bulkPlanCh=null;
+function bulkPlanOf(ch){bulkPlanCh=ch;bulkShowPlan(ch,null,"closeBulkModal();bulkRun(bulkPlanCh,{undo:true})")}
 function bulkQuick(v){
   const ch=bulkChanges({enabled:v});
   if(!ch.length){toast(v==="on"?"Все выбранные уже включены":"Все выбранные уже выключены");return}
-  bulkRun(ch,{undo:true});
+  bulkPlanOf(ch);
 }
 function bulkQuickFolder(fid){
   closeTreeCtx();
   const ch=bulkChanges({folderAdd:fid});
   if(!ch.length){toast("Все выбранные уже в этой папке");return}
-  bulkRun(ch,{undo:true});
+  bulkPlanOf(ch);
 }
 function bulkFolderMenu(e){
   e.stopPropagation();
