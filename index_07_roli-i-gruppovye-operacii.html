@@ -2067,11 +2067,10 @@ function volStateText(v){return v.state&&v.state!=="ready"?i18n(VOL_STATES[v.sta
   arch.push(s3,mn);
   [s3,mn].forEach(a=>archVols(a).forEach(v=>v.name=volLabel(v)));
   // Камера регистратора — его видеоканал: своего IP у неё нет, VMS ходит к
-  // ней через IP регистратора. Встроенное хранилище есть у каждого канала
-  // регистратора (его диск) и у части камер (карта памяти).
+  // ней через IP регистратора. Встроенное хранилище у регистратора одно —
+  // его диск, строкой рядом с камерами; у части отдельных камер — карта памяти.
   devicePool.filter(d=>d.type==="ipsrv"&&d.subtype==="nvr").forEach(nvr=>ipsrvCameras(nvr).forEach(c=>{
     delete c.ip;delete c.port;delete c.mac;
-    if(!edgeStorage(c))(c.devices||(c.devices=[])).push({id:c.id+"sd",type:"storage",name:"Встроенное хранилище",short:c.short+".1",size:i18n("диск регистратора"),online:true,devices:[]});
   }));
   let m=0;
   devicePool.filter(d=>d.type==="camera").forEach(c=>{
@@ -6927,10 +6926,10 @@ function form(n){
     if(tab==="io")return periphCardHtml(n);
     if(tab==="acc")return accCamAccessHtml(n);
     if(tab==="rec"){
-      const noRec=!isRecording(n),edge=edgeStorage(n),list=camArchs(n);
+      const noRec=!isRecording(n),edge=recEdge(n),list=camArchs(n);
       return camArchsCardHtml(n)+card("Запись",`<div class="g">${n.rec==="replica"?fldRo("Предзапись, с","—"):fld("Предзапись, с",String(n.pre??5),"number")}</div>
       ${edge?"":`<p class="sub">${i18n("Встроенное хранилище не найдено — репликация недоступна.")}</p>`}
-      ${list.some(x=>x.rec==="replica")?`<div class="nt">${i18n("Сервер периодически забирает записи со встроенного хранилища камеры. Постоянный поток на сервер не идёт: канал нагружается только на время репликации, а пропуски в архиве восполняются после обрыва связи.")}</div>`:""}
+      ${list.some(x=>x.rec==="replica")?`<div class="nt">${!edgeStorage(n)&&edge?`${i18n("Записи этой камеры лежат на диске регистратора")} «${escHtml(locName(ipsrvOwnerNode(n)))}» — ${i18n("оттуда их и забирает сервер.")} `:""}${i18n("Сервер периодически забирает записи со встроенного хранилища. Постоянный поток на сервер не идёт: канал нагружается только на время репликации, а пропуски в архиве восполняются после обрыва связи.")}</div>`:""}
       <p class="sub">${noRec?(cameraTreeServer(n.id)?i18n("Привяжите камеру к хранилищу, чтобы включить запись. Без хранилища камера остаётся под своим сервером, просто не пишется.")
           :i18n("Привяжите камеру к хранилищу, чтобы включить запись. Камера ещё не подключена к серверу — подключится к серверу выбранного хранилища."))
         :i18n("Основное хранилище задаёт сервер камеры; дополнительные пишут тот же или второй поток — например, основной поток в локальное хранилище, второй в облако.")}</p>
@@ -10796,6 +10795,8 @@ function recordModeLabel(rec){
 }
 // Репликация возможна, только если у камеры есть встроенное хранилище (SD/eMMC)
 function edgeStorage(n){return(n?.devices||[]).find(d=>d.type==="storage")||null}
+// Откуда камера реплицирует: своя карта памяти или диск её регистратора.
+function recEdge(n){return edgeStorage(n)||(n?.type==="camera"?edgeStorage(ipsrvOwnerNode(n)):null)}
 // Встроенное хранилище — не объект дерева, а часть записи устройства, как
 // edge storage у Milestone и edge recording у Genetec: объём, состояние и
 // выгрузка записей в хранилище сервера.
@@ -10818,7 +10819,7 @@ function edgeStorageCardHtml(owner){
     </div>`);
 }
 function camRecSelectHtml(n){
-  const has=!!edgeStorage(n),cur=n.rec||"none";
+  const has=!!recEdge(n),cur=n.rec||"none";
   return `<div><label>${i18n("Режим")}</label><select onchange="setCamRec('${n.id}',this.value)">${
     REC_MODES.map(([v,l])=>`<option value="${v}" ${cur===v?"selected":""} ${v==="replica"&&!has?"disabled":""}>${i18n(l)}</option>`).join("")}</select></div>`;
 }
@@ -11151,7 +11152,7 @@ function archChoicesNote(n){
 // Хранилища камеры списком: у каждой строки своё хранилище, поток и режим.
 // Первая строка — основное хранилище, через него камера получает сервер.
 function camArchsCardHtml(n){
-  const list=camArchs(n),has=!!edgeStorage(n),used=new Set(list.map(x=>x.arch));
+  const list=camArchs(n),has=!!recEdge(n),used=new Set(list.map(x=>x.arch));
   const free=archChoicesFor(n).filter(a=>!used.has(a.id));
   const rows=list.map((x,i)=>{
     const a=archById(x.arch),opts=archChoicesFor(n).filter(o=>o.id===x.arch||!used.has(o.id));
@@ -12681,7 +12682,7 @@ function bulkRecHtml(nodes){
   const archD=countBy(nodes,n=>{const a=arch.find(x=>x.id===n.arch);return a?locName(a):i18n("не задан")});
   const recD=countBy(nodes,n=>i18n(recordModeLabel(n.rec||"none")));
   const preD=countBy(nodes,n=>n.pre??5);
-  const edgeAll=nodes.every(n=>!!edgeStorage(n)),edgeN=nodes.filter(n=>!!edgeStorage(n)).length;
+  const edgeAll=nodes.every(n=>!!recEdge(n)),edgeN=nodes.filter(n=>!!recEdge(n)).length;
   // Хранилище сервера подходит только камерам этого сервера: в списке те, что
   // подходят хоть одной камере выборки, с тем, скольким именно.
   const cams=nodes.filter(n=>n.type==="camera");
@@ -12804,7 +12805,7 @@ function bulkChanges(draft){
       const want=d.arch&&d.arch!=="__none__"&&archChoicesFor(n).some(a=>a.id===d.arch)?d.arch:null;
       return mkOp(n,`Режим «${i18n(recordModeLabel(d.rec))}»`,"rec",()=>{
       n.rec=d.rec;if(d.rec!=="none"&&!n.arch){pinCamServer(n);n.arch=(want||archChoicesFor(n)[0]?.id)||null;bindArchServer(n)}
-    },d.rec==="replica"&&!edgeStorage(n)?i18n("нет встроенного хранилища"):(d.rec!=="none"&&!n.arch&&!want?i18n("архив не задан — сначала привяжите камеру к архиву"):null),()=>{n.rec=prev.rec;n.arch=prev.arch;n.srvId=prev.srvId})});
+    },d.rec==="replica"&&!recEdge(n)?i18n("нет встроенного хранилища"):(d.rec!=="none"&&!n.arch&&!want?i18n("архив не задан — сначала привяжите камеру к архиву"):null),()=>{n.rec=prev.rec;n.arch=prev.arch;n.srvId=prev.srvId})});
     const sk=ops.filter(o=>o.skip).length;
     step("rec",`Режим записи «${i18n(recordModeLabel(d.rec))}»`,ops,sk?`${sk} ${i18n(plural(sk,"камера|камеры|камер"))} ${i18n("будут пропущены")}`:"");
   }
