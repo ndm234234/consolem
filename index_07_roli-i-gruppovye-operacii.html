@@ -1264,9 +1264,16 @@ html[data-theme="light"] .busy-chip{background:#dce8f7;color:#2f5fad}
 .lan-ip-via{color:var(--mu);font-size:11px}
 html[data-theme="light"] .tag.tag-ch{color:#5b3fa0;background:#ece5fb}
 /* Карточка выборки: к чему применяется правка, и что не показано */
-.bk-scope-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.bk-scope{padding:10px 12px;border:1px solid var(--ln);border-radius:8px;background:var(--p2);margin-bottom:12px}
+.bk-scope-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.bk-scope-l{font-size:13px;font-weight:600}
+.bk-scope-or{margin:0;font-size:11px}
 .bk-scope .stchip.on{box-shadow:0 0 0 1px var(--bl)}
-.bk-scope-cur{font-size:12px;color:#9ec8ff}
+.bk-facet{padding-left:12px}
+.bk-facet-l{flex:none;width:58px;font-size:10px;color:var(--mu);text-transform:lowercase}
+.bk-scope-sum{margin-top:4px;padding-top:8px;border-top:1px solid var(--ln);font-size:12px;color:var(--mu)}
+.bk-scope-sum.on{color:#9ec8ff}
+.bk-scope-sum b{color:var(--tx)}
 .bk-miss{margin:0 0 8px;padding-left:18px;font-size:12px;color:var(--mu)}
 .bk-miss li{margin:2px 0}
 .an-kinds{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
@@ -12660,14 +12667,16 @@ function bulkScopeHtml(all){
     // имеют, и чип «модель не указана» был бы про них, а не про модель.
     const ent=countBy(all.filter(n=>bulkMatch(n,bulkFilt,d)&&(d!=="model"||modelOf(n))),fn);
     if(ent.length<2&&!bulkFilt[d])return"";
-    return`<div class="bk-sum-row"><span class="bk-sum-l">${i18n(label)}</span>${ent.map(([k,c])=>`<button type="button" class="stchip bk-chip ${bulkFilt[d]===k?"on":""}" onclick="bulkFiltSet({${d}:${esc(k)}})"><span class="stchip-lab">${escHtml(lab(k))}</span><span class="stchip-cnt">${c}</span></button>`).join("")}</div>`;
+    return`<div class="bk-sum-row bk-facet"><span class="bk-facet-l">${i18n(label.toLowerCase())}</span>${ent.map(([k,c])=>`<button type="button" class="stchip bk-chip ${bulkFilt[d]===k?"on":""}" onclick="bulkFiltSet({${d}:${esc(k)}})"><span class="stchip-lab">${escHtml(lab(k))}</span><span class="stchip-cnt">${c}</span></button>`).join("")}</div>`;
   }).join("");
-  const n=bulkScopeNodes().length;
-  const head=`<div class="bk-scope-h"><span class="bk-sum-l">${i18n("Править")}</span><button type="button" class="stchip ${bulkFiltOn()?"":"on"}" onclick="bulkFiltClear()"><span class="stchip-lab">${i18n("Все")}</span><span class="stchip-cnt">${all.length}</span></button>
-    ${bulkFiltOn()?`<span class="bk-scope-cur">${escHtml(bulkFiltLabel())} — ${n} ${i18n("из")} ${all.length}</span><button type="button" class="lk" onclick="bulkKeepScope()">${i18n("Оставить в выборке только их")}</button>`:""}</div>`;
-  return`<div class="bk-sum bk-scope">${head}${rows}</div>
-    <p class="sub">${bulkFiltOn()?i18n("Правка и кнопки сверху — только для них; остальные отмеченные не меняются и остаются в выборке.")
-      :i18n("Показано то, что умеют все отмеченные. Тип, сервер или модель сужают правку — выборка остаётся целой.")}</p>`;
+  // «Применить к» — продолжение фразы: всем отмеченным или их части по типу,
+  // серверу, модели. Под чипами — итог: кто получит изменения, кто нет.
+  const n=bulkScopeNodes().length,on=bulkFiltOn();
+  const head=`<div class="bk-scope-h"><span class="bk-scope-l">${i18n("Применить к")}</span><button type="button" class="stchip ${on?"":"on"}" onclick="bulkFiltClear()"><span class="stchip-lab">${i18n("всем отмеченным")}</span><span class="stchip-cnt">${all.length}</span></button>
+    ${rows?`<span class="sub bk-scope-or">${i18n("или уточните")}:</span>`:""}</div>`;
+  const sum=on?`<div class="bk-scope-sum on">${i18n("Изменения получат")} <b>${n} ${i18n("из")} ${all.length}</b>: ${escHtml(bulkFiltLabel())}. ${i18n("Остальные")} ${all.length-n} ${i18n("не меняются и остаются в выборке")} · <button type="button" class="lk" onclick="bulkKeepScope()">${i18n("Оставить в выборке только их")}</button></div>`
+    :`<div class="bk-scope-sum">${i18n("Изменения получат все")} <b>${all.length}</b> ${i18n(plural(all.length,"отмеченный|отмеченных|отмеченных"))}. ${i18n("Показаны параметры, общие для всех.")}</div>`;
+  return`<div class="bk-sum bk-scope">${head}${rows}${sum}</div>`;
 }
 // Что умеет объект — из этого собирается пересечение для «Все».
 const CREDS_TYPES=new Set(["camera","ipsrv","acfa","eventsrc"]);
@@ -12731,7 +12740,7 @@ function bulkCardHtml(){
   const unit=sel.every(n=>n.type==="camera")?"камера|камеры|камер":"объект|объекта|объектов";
   const title=`<span class="hd-ic bk-hd-ic">${SEL_IC}</span>${sel.length} ${i18n(plural(sel.length,unit))}`;
   const cr=`<button type="button" class="cr-link" onclick="pick('${domains[0].id}')">${escHtml(domainLabel())}</button><span class="cr-sep">/</span><span class="cr-cur">${i18n("Выборка")}</span>`;
-  // Кнопки правят то, что выбрано в «Править»; при фильтре число на кнопке
+  // Кнопки правят то, что выбрано в «Применить к»; при фильтре число на кнопке
   // говорит, скольким объектам из отмеченных это достанется.
   const on=bulkFiltOn(),who=on?`«${bulkFiltLabel()}»`:i18n("все отмеченные"),cnt=k=>on?` (${k})`:"";
   const tg=nodes.filter(canToggleEnabled).length,fd=nodes.filter(canFolder).length;
@@ -12765,7 +12774,7 @@ function bulkGenHtml(nodes,allCams){
   }
   if(!one&&kinds.length>1)miss.push(`${i18n("Параметры типов")} — ${i18n("у каждого типа свои")}`);
   if(miss.length)h+=card("Не показано",`<ul class="bk-miss">${miss.map(x=>`<li>${x}</li>`).join("")}</ul>
-    <p class="sub" style="margin:0">${i18n("Это не запрет: выберите тип в строке «Типы» — его параметры появятся, правка пойдёт только ему, выборка останется целой.")}</p>`);
+    <p class="sub" style="margin:0">${i18n("Это не запрет: в «Применить к» уточните тип — его параметры появятся, изменения получит только он, выборка останется целой.")}</p>`);
   h+=card("Идентификация",`<p class="sub" style="margin:0">${i18n("Имя, короткое имя, ID и IP у каждого объекта свои — массово не меняются. Имена по шаблону: «Ещё → Переименовать по шаблону…».")}</p>`);
   return h;
 }
@@ -12994,14 +13003,14 @@ function bulkOpenMenuAt(btn,html){
   menu.style.left=Math.max(8,Math.min(Math.round(r.left),innerWidth-mw-8))+"px";
   menu.style.top=Math.round(r.bottom+4+mh>innerHeight-8?Math.max(8,r.top-mh-4):r.bottom+4)+"px";
 }
-// Меню в два раздела: правка — тем, что выбрано в «Править», действия над
+// Меню в два раздела: правка — тем, что выбрано в «Применить к», действия над
 // выборкой — всем отмеченным. Число в каждом пункте — кому достанется.
 function bulkMenu(e){
   e.stopPropagation();
   const n=bulkSelNodes().length,sc=bulkScopeNodes(),on=bulkFiltOn(),of=k=>on?` (${k} ${i18n("из")} ${n})`:` (${k})`;
   const cr=sc.filter(canCreds).length;
   bulkOpenMenuAt(e.currentTarget,[
-    `<div class="tctx-head">${on?`${i18n("Править")}: ${escHtml(bulkFiltLabel())}`:i18n("Править все отмеченные")}</div>`,
+    `<div class="tctx-head">${on?`${i18n("Применить к")}: ${escHtml(bulkFiltLabel())}`:i18n("Применить ко всем отмеченным")}</div>`,
     ...(cr?[tctxItem(`${i18n("Учётные данные…")}${of(cr)}`,`closeTreeCtx();bulkGoTab('gen','bkUser')`)]:[]),
     tctxItem(`${i18n("Переименовать по шаблону…")}${of(sc.length)}`,`closeTreeCtx();bulkRenameDialog()`),
     ...(on?[tctxItem(`${i18n("Оставить в выборке только их")} (${sc.length})`,`bulkKeepScope()`)]:[]),
