@@ -1254,6 +1254,15 @@ html[data-theme="light"] .busy-chip{background:#dce8f7;color:#2f5fad}
 .ca-main{color:#9ec8ff}
 .ca-foot{margin-top:8px}
 .ca-add{max-width:360px}
+/* Камеры регистратора: группа под заголовком, канал вместо своего IP */
+.tag.tag-ch{color:#c9b6f2;background:#2a2142}
+.lan-grp td{background:var(--p2);border-top:1px solid var(--ln);padding-top:7px;padding-bottom:7px}
+.lan-grp-h{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.lan-grp-sub{display:block}
+.lan-grp-h .ici{opacity:.9}
+.lan-r-nvr td:nth-child(2){padding-left:26px}
+.lan-ip-via{color:var(--mu);font-size:11px}
+html[data-theme="light"] .tag.tag-ch{color:#5b3fa0;background:#ece5fb}
 .an-kinds{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 .an-kind{display:flex;gap:9px;align-items:flex-start;padding:10px;border:1px solid var(--ln);border-radius:8px;background:var(--p2);cursor:pointer}
 .an-kind.on{border-color:var(--bl);box-shadow:inset 0 0 0 1px var(--bl)}
@@ -2057,6 +2066,18 @@ function volStateText(v){return v.state&&v.state!=="ready"?i18n(VOL_STATES[v.sta
   Object.assign(addVol(mn,"minio","16 ТБ","27%"),{host:"10.20.2.40",port:9000,proto:"https",bucket:"wh-video",region:"us-east-1",path:"cams",keyId:"vms-writer"});
   arch.push(s3,mn);
   [s3,mn].forEach(a=>archVols(a).forEach(v=>v.name=volLabel(v)));
+  // Камера регистратора — его видеоканал: своего IP у неё нет, VMS ходит к
+  // ней через IP регистратора. Встроенное хранилище есть у каждого канала
+  // регистратора (его диск) и у части камер (карта памяти).
+  devicePool.filter(d=>d.type==="ipsrv"&&d.subtype==="nvr").forEach(nvr=>ipsrvCameras(nvr).forEach(c=>{
+    delete c.ip;delete c.port;delete c.mac;
+    if(!edgeStorage(c))(c.devices||(c.devices=[])).push({id:c.id+"sd",type:"storage",name:"Встроенное хранилище",short:c.short+".1",size:i18n("диск регистратора"),online:true,devices:[]});
+  }));
+  let m=0;
+  devicePool.filter(d=>d.type==="camera").forEach(c=>{
+    if(edgeStorage(c)||m++%4)return;
+    (c.devices||(c.devices=[])).push({id:c.id+"sd",type:"storage",name:"Встроенное хранилище",short:c.short+".1",size:["64 ГБ","128 ГБ","256 ГБ"][m%3],online:c.online!==false,devices:[]});
+  });
   arch.find(a=>a.id==="a7n2").vols[0].state="maint";
   arch.find(a=>a.id==="a6").vols[0].state="error";
   // Почему устройство без сигнала. Вход и драйвер бывают только у IP-устройств
@@ -2842,9 +2863,8 @@ function inSlice(n){
 }
 function selfInView(n){
   if(n.type==="domain"||n.type==="unalloc"||n.type==="folder")return false;
-  // Встроенное хранилище — часть записи камеры, а не объект дерева: оно на
-  // вкладке «Архив» камеры или регистратора.
-  if(n.type==="storage")return false;
+  // Встроенное хранилище — дочерняя строка камеры или канала регистратора:
+  // видно, у кого есть карта памяти или диск, без захода в карточку.
   return matchesDomain(n)&&inSlice(n)&&matchesType(n)&&matchesStatus(n);
 }
 function filtKey(){return[...typeFilts].sort().join(",")+"|"+[...searchFields].sort().join(",")+"|"+[...statusFilts].sort().join(",")+"|"+strictIdSearch+"|"+domainFilter}
@@ -3345,7 +3365,7 @@ function fieldText(n,fieldId){
   if(fieldId==="name")return n.name||"";
   if(fieldId==="short")return n.short!=null?String(n.short):"";
   if(fieldId==="id")return deviceIdentifierValue(n);
-  if(fieldId==="ip")return n.ip||"";
+  if(fieldId==="ip")return n.ip||(n.type==="camera"&&ipsrvOwnerNode(n)?.ip)||"";
   if(fieldId==="vendor")return n.vendor||"";
   if(fieldId==="model")return n.model||"";
   return"";
@@ -3511,6 +3531,9 @@ function treeAttrTags(n,q){
   if(!treeTags.size)return"";
   const inner=TREE_TAG_ORDER.filter(f=>treeTags.has(f)).map(f=>{
     if(f==="id"&&!showTreeIdTag(n))return"";
+    // Камера регистратора — канал, а не адрес: IP один, у самого регистратора.
+    const nvr=f==="ip"&&n.type==="camera"&&!n.ip?ipsrvOwnerNode(n):null;
+    if(nvr){const ch=ipsrvCameraVideoChannel(n,nvr);return`<span class="tag tag-ch" title="${i18n("Видеоканал")} ${escHtml(ch)} ${i18n("регистратора")} «${escHtml(locName(nvr))}», IP ${escHtml(nvr.ip||"—")}">${i18n("кан.")} ${escHtml(ch)}</span>`}
     const val=fieldText(n,f);if(!val)return"";
     // IP не режем — иначе «съедается» слева; остальное можно укоротить
     const trunc=f!=="ip"&&val.length>16;const shown=trunc?val.slice(0,14):val;
@@ -5863,12 +5886,13 @@ function lanRefresh(){lan.sel.clear();lanSearch();gear()}
 // Какие объекты вообще попадают в таблицу. У папки это расположение — там
 // строкой идёт устройство целиком; у архива и сервера речь о записи, а пишется
 // каждый канал регистратора сам по себе, так что вложенные тоже строки.
-// У хранилища и сервера речь о записи видео: в таблице только камеры и
-// регистраторы с камерами (их встроенный архив реплицируется сюда же).
+// У хранилища и сервера речь о записи видео: в таблице только камеры —
+// отдельные и каналы регистраторов.
 // Хранилище сервера видит камеры этого сервера — других к нему не привязать;
 // сетевое хранилище домена — все камеры домена. Камера ещё без сервера
 // (заведена, но не пишется) подходит любому хранилищу своего домена.
-function lanVideoDev(d){return d.type==="camera"||(d.type==="ipsrv"&&ipsrvCameras(d).length>0)}
+// Регистратор сам строкой не идёт: пишут его камеры (каналы), они и строки.
+function lanVideoDev(d){return d.type==="camera"}
 function lanInScope(n,d){
   const dom=lanDomainOf(n);
   if(deviceDomain(d.id)!==dom)return false;
@@ -5918,7 +5942,10 @@ function lanRows(n){
   const own=lanDomainOf(n);
   const sys=lanSysDevices(n).map(d=>{
     const b=lanBindOf(n,d);
-    return{key:"s:"+d.id,kind:"sys",id:d.id,node:d,name:locName(d),ip:d.ip||"",mac:d.mac||"",
+    // Камера регистратора: адрес — его, у неё только номер канала.
+    const nvr=!lanIsPlace(n)&&d.type==="camera"&&!d.ip?ipsrvOwnerNode(d):null;
+    return{key:"s:"+d.id,kind:"sys",id:d.id,node:d,name:locName(d),ip:nvr?nvr.ip||"":d.ip||"",mac:d.mac||"",
+      nvr:nvr?.id||null,nvrName:nvr?locName(nvr):"",ch:nvr?ipsrvCameraVideoChannel(d,nvr):"",
       vendor:d.vendor||"",model:d.model||"",type:d.type,bind:b.k,bindText:b.t,nested:b.nested||null,
       foreign:deviceDomain(d.id)!==own};
   });
@@ -5940,11 +5967,41 @@ function lanFilter(rows){
     out=out.filter(r=>ws.some(words=>matchWords(words,[r.name,r.ip,r.mac,r.vendor,r.model,r.bindText])));
   }
   const dir=lan.dir,k=lan.sort;
-  return out.slice().sort((a,b)=>{
+  out=out.slice().sort((a,b)=>{
     if((a.kind==="net")!==(b.kind==="net"))return a.kind==="net"?1:-1;
     const x=String(a[k]??""),y=String(b[k]??"");
     return x.localeCompare(y,"ru",{numeric:true})*dir;
   });
+  // Камеры регистратора держатся вместе, по номеру канала, — там, где в
+  // сортировке встретилась первая из них.
+  const groups=new Map();out.forEach(r=>{if(r.nvr){if(!groups.has(r.nvr))groups.set(r.nvr,[]);groups.get(r.nvr).push(r)}});
+  const done=new Set(),res=[];
+  out.forEach(r=>{
+    if(!r.nvr){res.push(r);return}
+    if(done.has(r.nvr))return;done.add(r.nvr);
+    res.push(...groups.get(r.nvr).sort((a,b)=>String(a.ch).localeCompare(String(b.ch),"ru",{numeric:true})));
+  });
+  return res;
+}
+// Заголовок группы камер регистратора: сам регистратор не привязывают, а
+// галочка заголовка отмечает его камеры, что видны в отборе.
+function lanNvrHeadHtml(n,nvrId,found){
+  const nvr=find(nvrId)?.n;if(!nvr)return"";
+  const mates=found.filter(r=>r.nvr===nvrId),pk=mates.filter(r=>lanPickable(n,r)),on=pk.length&&pk.every(r=>lan.sel.has(r.key));
+  const edge=edgeStorage(nvr);
+  // Те же колонки, что у строк: объединённая ячейка ломала сетку таблицы,
+  // когда узкая ширина прячет колонки производителя и модели.
+  return`<tr class="lan-grp"><td class="lan-chk"><input type="checkbox" ${on?"checked":""} ${pk.length?"":"disabled"} aria-label="${i18n("Отметить камеры регистратора")}" onchange="lanPickNvr('${nvrId}',this.checked)"></td>
+    <td><span class="lan-grp-h">${ic("ipsrv")}<b>${escHtml(locName(nvr))}</b></span><span class="lan-sub lan-grp-sub">${mates.length} ${i18n(plural(mates.length,"камера|камеры|камер"))} ${i18n("на одном IP")}</span></td>
+    <td><span class="tag tag-ip" title="${i18n("Единственный IP: камеры регистратора своих адресов не имеют")}">${escHtml(nvr.ip||"—")}</span></td>
+    <td>${escHtml(nvr.mac||"")}</td><td>${escHtml(nvr.vendor||"")}</td><td>${escHtml(nvr.model||"")}</td>
+    <td><span class="sub">${mates.length} ${i18n(plural(mates.length,"камера|камеры|камер"))}${edge?` · ${i18n("архив")} ${escHtml(edge.size||"")}`:""}</span></td>
+    <td class="lan-act"><button type="button" class="lk" onclick="pick('${nvrId}')">${i18n("Карточка")}</button></td></tr>`;
+}
+function lanPickNvr(nvrId,on){
+  const n=find(lan.owner)?.n;if(!n)return;
+  lanFilter(lanRows(n)).filter(r=>r.nvr===nvrId&&lanPickable(n,r)).forEach(r=>on?lan.sel.add(r.key):lan.sel.delete(r.key));
+  gear();
 }
 // Хранилище сервера доступно только камерам этого сервера, сетевое — любой
 // камере домена. Сервер камеры, из-за которого сюда писать нельзя, или null.
@@ -6174,10 +6231,10 @@ function lanSysRowHtml(n,r){
     :`<button type="button" class="btn s ${a.pri?"pri":""}" ${a.tip?`title="${escHtml(a.tip)}"`:""} onclick="event.stopPropagation();${a.fn}">${a.label}</button>`;
   const chk=lanPickable(n,r)
     ?`<input type="checkbox" ${lan.sel.has(r.key)?"checked":""} aria-label="${escHtml(r.name)}" onclick="event.stopPropagation()" onchange="lanPick('${r.key}',this.checked)">`:"";
-  return`<tr class="gtbl-r lan-r" onclick="pick('${r.id}')">
+  return`<tr class="gtbl-r lan-r ${r.nvr?"lan-r-nvr":""}" onclick="pick('${r.id}')">
     <td class="lan-chk">${chk}</td>
-    <td><span class="lan-name">${hlText(r.name,lan.q)}</span><span class="lan-sub">${escHtml([r.vendor,r.model].filter(Boolean).join(" · "))}</span></td>
-    <td>${hlText(r.ip,lan.q)}</td><td>${hlText(r.mac,lan.q)}</td>
+    <td><span class="lan-name">${hlText(r.name,lan.q)}</span><span class="lan-sub">${escHtml(r.nvr?`${i18n("канал")} ${r.ch} · ${r.nvrName}`:[r.vendor,r.model].filter(Boolean).join(" · "))}</span></td>
+    <td>${r.nvr?`<span class="tag tag-ch" title="${i18n("Своего IP нет — видео идёт через регистратор")} ${escHtml(r.ip)}">${i18n("кан.")} ${escHtml(r.ch)}</span> <span class="lan-ip-via">${i18n("через")} ${hlText(r.ip,lan.q)}</span>`:hlText(r.ip,lan.q)}</td><td>${hlText(r.mac,lan.q)}</td>
     <td>${hlText(r.vendor,lan.q)}</td><td>${hlText(r.model,lan.q)}</td>
     <td><span class="lan-bind lan-bind-${r.bind}">${escHtml(r.bindText)}</span></td>
     <td class="lan-act">${btn}</td></tr>`;
@@ -6225,7 +6282,7 @@ function lanCardHtml(n){
     ${lanHasUnbind(n)?`<button type="button" class="btn s" onclick="lanUnbindKeys([...lan.sel])" ${nUnbind?"":"disabled"}>${i18n(lanIsFolder(n)?"Убрать":"Отвязать")} (${nUnbind})</button>`:""}
   </div>`;
   const th=LAN_COLS.map(([k,l])=>`<th class="lan-th ${lan.sort===k?"on":""}" onclick="lanSort('${k}')"><span class="gtbl-th-txt">${i18n(l)}${lan.sort===k?(lan.dir>0?" ▲":" ▼"):""}</span></th>`).join("");
-  const body=rows.length?rows.map(r=>r.kind==="net"?lanNetRowHtml(n,r):lanSysRowHtml(n,r)).join("")
+  const body=rows.length?rows.map((r,i)=>(r.nvr&&r.nvr!==rows[i-1]?.nvr?lanNvrHeadHtml(n,r.nvr,found):"")+(r.kind==="net"?lanNetRowHtml(n,r):lanSysRowHtml(n,r))).join("")
     // Пока опрос идёт, пустая таблица — это не ответ «ничего нет», а «ещё не
     // дошло»; говорить об этом надо разными словами.
     :`<tr><td class="empty" colspan="8">${lan.chip==="here"&&!lan.q.trim()&&!lanIsPlace(n)
@@ -6616,7 +6673,7 @@ function form(n){
     return card("Параметры хранилища",`<div class="nt ${net?"":"ok"}">${archOwnerLine(n)}</div>
       <div class="g" style="margin-top:10px">${archFld(n.id,"Имя","name",locName(n))}${archFld(n.id,"Глубина, дней","days",n.days,"number","0 — без ограничения")}
         ${fldRo("Тип",archKindLabel(n))}
-        ${k==="cloud"?fldRo("Тип хранения",i18n("Облачное")):`<div><label>${i18n("Тип хранения")}</label><select onchange="archSet('${n.id}','storage',this.value)">${ARCH_STORAGE.map(([v,l])=>`<option value="${v}" ${n.storage===v?"selected":""}>${i18n(l)}</option>`).join("")}</select><div class="bk-hint">${i18n(n.storage==="object"?"объём тома меняется на ходу, том можно зашифровать":"меньше задержка под большой нагрузкой")}</div></div>`}
+        <div>${fldRo("Тип хранения",k==="cloud"?i18n("Облачное"):i18n((ARCH_STORAGE.find(x=>x[0]===n.storage)||ARCH_STORAGE[0])[1])).replace(/^<div>|<\/div>$/g,"")}<div class="bk-hint">${i18n("задаётся при создании и не меняется — тома размечены под него")}</div></div>
       </div>
       <div class="ln ln-sw"><div>${i18n("Шифрование томов")} <span class="sub">${canEnc?"AES-256-GCM":i18n("— только у объектного хранилища")}</span></div><div class="sw ${n.enc&&canEnc?"on":""} ${canEnc?"":"dis"}" ${canEnc?`onclick="archSet('${n.id}','enc',!this.classList.contains('on'))"`:""}></div></div>
       <div class="mx" style="margin-top:10px">
@@ -6885,7 +6942,9 @@ function form(n){
     const camIdFld=fldRo("ID",deviceIdentifierValue(n)||"—");
     const vchFld=underIpsrv?fldRo("Номер видеоканала",ipsrvCameraVideoChannel(n,ips)):"";
     return card("Идентификация объекта",`${bdg(n)}${enabledToggleHtml(n)}<div class="g" style="margin-top:10px">${fld("Имя",n.name)}${fld("Короткое имя",n.short??"")}${camIdFld}${vchFld}</div>`)
-      +card("Подключение",`<div class="g">${fld("IP",n.ip)}${fld("Производитель",n.vendor||"")}${fld("Модель",n.model||"")}${fld("RTSP",`rtsp://${n.ip}:554/main`)}</div>`)+deviceFoldersCardHtml(n)+periphSummaryHtml(n)}
+      +(underIpsrv&&!n.ip?card("Подключение",`<div class="g">${fldRo("Регистратор",locName(ips))}${fldRo("IP регистратора",ips.ip||"—")}${fldRo("RTSP",`rtsp://${ips.ip||"—"}:554/ch${ipsrvCameraVideoChannel(n,ips)}`)}</div>
+        <p class="sub">${i18n("Своего IP у камеры регистратора нет: сервер забирает её видео через регистратор, по номеру канала. Адрес и учётные данные — в карточке")} <button class="lk" onclick="pick('${ips.id}')">${escHtml(locName(ips))}</button>.</p>`)
+        :card("Подключение",`<div class="g">${fld("IP",n.ip)}${fld("Производитель",n.vendor||"")}${fld("Модель",n.model||"")}${fld("RTSP",`rtsp://${n.ip}:554/main`)}</div>`))+deviceFoldersCardHtml(n)+periphSummaryHtml(n)}
   if(n.type==="det"){
     const cam=find(n.id)?.p;
     return detZoneCardHtml(cam,n)+card("Параметры",`<div class="g">${fld("Имя",locName(n))}${sl("Тип",DET_TYPES,n.kind||DET_TYPES[0])}${fld("Чувствительность",n.sens||"12")}${cam?detServerSelectHtml(cam,n):""}</div>
