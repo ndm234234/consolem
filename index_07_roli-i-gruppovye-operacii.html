@@ -826,6 +826,14 @@ html[data-theme="light"] .dev-bulk-badge{background:#d6e4f8;color:#2f5fad}
 .confirm-opt{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:12px;color:var(--mu);cursor:pointer;user-select:none}
 .confirm-opt input{margin:0;cursor:pointer}
 .cwarn{margin-top:10px;color:#f0b4b8;font-size:12px}
+.confirm-count{margin-top:12px;padding:10px 12px;border:1px solid #5a3434;border-radius:8px;background:#2a1a1c}
+.confirm-count label{display:block;margin:0 0 6px;font-size:12px;color:var(--tx)}
+.confirm-count label b{font-size:14px;color:#fbb}
+.confirm-count input{width:120px;font-size:15px;font-weight:600;text-align:center;letter-spacing:.04em}
+.confirm-count.ok{border-color:#3d6b4a;background:#18261c}
+html[data-theme="light"] .confirm-count{background:#fdf0f0;border-color:#e6b8b8}
+html[data-theme="light"] .confirm-count label b{color:#b4232a}
+html[data-theme="light"] .confirm-count.ok{background:#eef8f0;border-color:#9ccaa8}
 .cfoot{padding:12px 16px;border-top:1px solid var(--ln);display:flex;justify-content:flex-end;gap:8px}
 .jbox{width:min(560px,92vw);background:var(--p);border:1px solid var(--ln);border-radius:12px;overflow:hidden;box-shadow:0 16px 48px #0008}
 .jlist{max-height:360px;overflow:auto}
@@ -1091,8 +1099,12 @@ html[data-theme="light"] .acc-sync.run{color:#9a6a12}
 .sel-bar.sel-out>*{animation:selItemUp .16s ease-in reverse forwards}
 @keyframes selUp{from{min-height:0;height:0;border-top-color:transparent}to{min-height:38px;height:38px}}
 /* Вспышка поверх панели — те же два всплеска, что у места перехода в «Правах» */
+/* Панель сама синяя, и синяя вспышка на ней не видна: вспыхивает белым —
+   светлая заливка и белая рамка, два всплеска, как в «Правах». */
 .sel-bar.sel-flash::after{content:"";position:absolute;inset:0;pointer-events:none;animation:selFlash 1.8s ease-out .12s both}
-@keyframes selFlash{0%{background-color:transparent;box-shadow:inset 0 0 0 2px transparent}12%,44%{background-color:#4b8df870;box-shadow:inset 0 0 0 2px #9ec8ff}28%,60%{background-color:#4b8df822;box-shadow:inset 0 0 0 2px #9ec8ff}100%{background-color:transparent;box-shadow:inset 0 0 0 2px transparent}}
+@keyframes selFlash{0%{background-color:transparent;box-shadow:inset 0 0 0 2px transparent}12%,44%{background-color:#ffffff59;box-shadow:inset 0 0 0 2px #fff}28%,60%{background-color:#ffffff14;box-shadow:inset 0 0 0 2px #ffffffb0}100%{background-color:transparent;box-shadow:inset 0 0 0 2px transparent}}
+html[data-theme="light"] .sel-bar.sel-flash::after{animation-name:selFlashL}
+@keyframes selFlashL{0%{background-color:transparent;box-shadow:inset 0 0 0 2px transparent}12%,44%{background-color:#2f6fedb0;box-shadow:inset 0 0 0 2px #1a3e9a}28%,60%{background-color:#2f6fed30;box-shadow:inset 0 0 0 2px #1a3e9a}100%{background-color:transparent;box-shadow:inset 0 0 0 2px transparent}}
 .sel-cnt b{display:inline-block}
 .sel-cnt b.bump{animation:selBump .32s ease-out}
 @keyframes selBump{0%{transform:scale(1)}35%{transform:scale(1.45);color:#fff}100%{transform:scale(1)}}
@@ -2563,7 +2575,7 @@ function deleteDomain(id){
     aside();
     toast("Домен удалён");paint();
     }});
-  },{html:true});
+  },{html:true,typeCount:1});
 }
 
 // ── Правки, ждущие «Сохранить» ───────────────────────────────────────────
@@ -3294,7 +3306,24 @@ function askConfirm(title,msg,warn,okLabel,onOk,opts={}){
   document.getElementById("confirmOk").textContent=i18n(okLabel||"Удалить");
   document.getElementById("confirmCancel").textContent=i18n(opts.cancelLabel||"Отменить");
   confirmOkCb=onOk;
+  // Удаление подтверждают числом: сколько объектов удалится. Кнопку не нажать
+  // по привычке — сначала надо прочитать, что именно пропадёт.
+  const ok=document.getElementById("confirmOk");
+  document.getElementById("confirmCount")?.remove();
+  ok.disabled=false;
+  if(opts.typeCount!=null){
+    const k=String(opts.typeCount);
+    const w=document.createElement("div");w.id="confirmCount";w.className="confirm-count";
+    w.innerHTML=`<label for="confirmCountInp">${i18n("Чтобы подтвердить, введите число удаляемых объектов")}: <b>${k}</b></label>
+      <input id="confirmCountInp" inputmode="numeric" autocomplete="off">`;
+    document.querySelector("#confirm .cbody").appendChild(w);
+    const inp=w.querySelector("input");
+    ok.disabled=true;
+    inp.oninput=()=>{const hit=inp.value.trim()===k;ok.disabled=!hit;w.classList.toggle("ok",hit)};
+    inp.onkeydown=e=>{if(e.key==="Enter"&&!ok.disabled){e.preventDefault();runConfirmOk()}};
+  }
   document.getElementById("confirm").classList.add("open");
+  if(opts.typeCount!=null)setTimeout(()=>document.getElementById("confirmCountInp")?.focus(),40);
 }
 let skipCredentialsWarn=localStorage.getItem("skipCredentialsWarn")==="1";
 function credentialsWarnHtml(bulk){
@@ -3322,6 +3351,7 @@ function askAddWithoutCredentials(onContinue,bulk=false){
   },{html:true});
 }
 function runConfirmOk(){
+  if(document.getElementById("confirmOk")?.disabled)return;
   const cb=confirmOkCb;
   closeConfirm();
   if(cb)cb();
@@ -4692,7 +4722,7 @@ function deleteFolder(id){
     sel=(parent||folders[0])?.id||sel;tab="gen";setD(false);
     treeMatchCache.clear();searchMatchCache.clear();
     toast(i18n("Папка удалена"));paint();
-  }}));
+  }}),{typeCount:1});
 }
 // Одиночное удаление идёт той же дорогой, что и групповое: подтверждение с
 // последствиями, потом отсчёт в тосте с «Отменить».
@@ -6644,7 +6674,7 @@ function deleteDetector(camId,detId){
     f.n.devices=f.n.devices.filter(x=>x.id!==detId);
     if(detSel===detId)detSel=null;
     setD(true);toast(i18n("Детектор удалён"));applyFiltersFromState();
-  }}));
+  }}),{typeCount:1});
 }
 // Зона детектора рисуется прямо на карточке, без отдельной вкладки
 function detZoneShapeSvg(kind){
@@ -11145,7 +11175,7 @@ function deleteVolume(id){
       setD(false);
       toast(i18n("Том удалён"));
       paint();
-    }}),{rawMsg:true});
+    }}),{rawMsg:true,typeCount:1});
 }
 // Камеры удалённого хранилища не удаляются: они остаются в системе и уходят в
 // «Без записи» (режим записи помнят — при новом архиве его не надо задавать
@@ -11164,7 +11194,7 @@ function deleteArchive(id){
       open.delete(id);setD(false);treeMatchCache.clear();searchMatchCache.clear();
       toast(i18n("Хранилище удалено"));
       paint();
-    }}),{rawMsg:true});
+    }}),{rawMsg:true,typeCount:1});
 }
 function archOwnerLine(a){
   const sv=archServer(a),dm=archDomain(a);
@@ -13475,7 +13505,7 @@ function confirmDeleteNodes(roots,back,skipped){
   const rec=cams.filter(isRecording).length,dets=cams.reduce((s,c)=>s+camDetectors(c).length,0);
   const nvr=nodes.filter(n=>n.type==="ipsrv").length;
   const fold=new Set();nodes.filter(n=>!bulkSolo(n)).forEach(n=>foldersOfDevice(n.id).forEach(f=>fold.add(f.id)));
-  const count=roots.length,big=count>=10,one=count===1?nodes[0]:null;
+  const count=roots.length,one=count===1?nodes[0]:null;
   const lines=[one?`${escHtml(i18n(LB[one.type]||"Объект"))} «${escHtml(locName(one))}»${one.type==="ipsrv"&&ipsrvCameras(one).length?` — ${i18n("вместе с его камерами")}`:""}`
     :`${count} ${i18n(plural(count,"объект|объекта|объектов"))}${nvr?` (${i18n("регистраторов")}: ${nvr} — ${i18n("вместе с их камерами")})`:""}`];
   if(cams.length)lines.push(`${i18n("камер")}: ${cams.length}, ${i18n("из них пишут в архив")}: ${rec} — ${i18n("запись остановится, архив останется")}`);
@@ -13487,11 +13517,9 @@ function confirmDeleteNodes(roots,back,skipped){
   if(vl.length)lines.push(`${i18n("томов")}: ${vl.length} — ${i18n("вместе с записями на них")}`);
   if(skipped?.length)lines.push(`<span class="sub">${i18n("Не удаляются")}: ${bulkKinds(skipped).map(([k,c])=>`${escHtml(kindLabel(k).toLowerCase())} (${c})`).join(", ")} — ${i18n("сервер исключают из домена, домен удаляют по одному из его меню")}</span>`);
   const html=`<ul class="bk-del">${lines.map(l=>`<li>${l}</li>`).join("")}</ul>
-    ${big?`<label>${i18n("Введите")} ${count}, ${i18n("чтобы подтвердить")}</label><input id="delCountInp" inputmode="numeric" autocomplete="off" oninput="document.getElementById('confirmOk').disabled=this.value.trim()!=='${count}'">`:""}
     <p class="sub" style="margin:10px 0 0">${i18n("После подтверждения будет отсчёт с кнопкой «Отменить».")}</p>`;
   const opts=one?{label:`«${locName(one)}»`,back}:{back};
-  askConfirm(one?`${i18n("Удалить")} «${escHtml(locName(one))}»?`:"Удалить выбранные объекты?",html,"","Удалить",()=>scheduleDelete(roots,opts),{html:true});
-  if(big){const ok=document.getElementById("confirmOk");if(ok)ok.disabled=true;setTimeout(()=>document.getElementById("delCountInp")?.focus(),40)}
+  askConfirm(one?`${i18n("Удалить")} «${escHtml(locName(one))}»?`:"Удалить выбранные объекты?",html,"","Удалить",()=>scheduleDelete(roots,opts),{html:true,typeCount:count});
 }
 // opts.label — подпись в тосте вместо «N объектов»; opts.commit — своё
 // удаление (папка, хранилище, том, детектор, домен); opts.back — куда
