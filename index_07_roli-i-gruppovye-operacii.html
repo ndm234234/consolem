@@ -382,7 +382,7 @@ h1{margin:4px 0 10px;font-size:20px;display:flex;align-items:center;gap:10px}
 .ici-server{color:#8eb4d4}
 .ici-svcs{color:#8ec4e8}
 .ici-domain{color:#93a6bc}
-.ici-unalloc{color:#8a9aab}
+.ici-unalloc,.ici-norec,.ici-nofolder{color:#8a9aab}
 .ici-ipsrv{color:#d0b48a}
 .ici-channel{color:#5bc4d4}
 .ici-mic{color:#c084e0}
@@ -1436,7 +1436,9 @@ function applyStaticUi(){
 const svgIc=(d,vb="0 0 16 16")=>`<svg class="ic-svg" viewBox="${vb}" width="14" height="14" aria-hidden="true">${d}</svg>`;
 const IC={
   domain:svgIc(`<path fill="currentColor" d="M8 1.2 1.5 5.2v1.2h1.3V14h4.2V9.2h2V14h4.2V6.4H14.5V5.2z"/>`),
-  unalloc:svgIc(`<rect x="2" y="2" width="12" height="12" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="2.2 1.6"/>`),
+  // Строки-списки рядом с галочкой: квадрат пунктиром читался как вторая
+  // галочка, поэтому у каждой свой знак — сервер пунктиром «без домена».
+  unalloc:svgIc(`<rect x="4" y="1.5" width="8" height="13" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="2.1 1.5"/><path d="M6.3 4.5h3.4M6.3 7h3.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="8" cy="11.3" r="1" fill="currentColor"/>`),
   server:svgIc(`<path fill="currentColor" d="M4.2 1.5h7.6c.6 0 1.1.5 1.1 1.1v11c0 .5-.4.9-.9.9H4c-.5 0-.9-.4-.9-.9v-11c0-.6.5-1.1 1.1-1.1zm1.3 1.6v7.2h5V3.1h-5zm1.2 8.8c0 .5.4.9.9.9s.9-.4.9-.9-.4-.9-.9-.9-.9.4-.9.9z"/>`),
   camera:svgIc(`<path fill="currentColor" d="M1.4 3.6h7.6c.9 0 1.6.7 1.6 1.6v5.6c0 .9-.7 1.6-1.6 1.6H1.4C.5 12.4 0 11.7 0 10.8V5.2c0-.9.5-1.6 1.4-1.6z"/><path fill="currentColor" opacity=".75" d="M10.6 5.6 14.6 3.5c.55-.28 1.2.12 1.2.75v7.5c0 .63-.65 1.03-1.2.75l-4-2.1V5.6z"/>`),
   ipsrv:svgIc(`<path fill="currentColor" d="M1.2 5.2h13.6c.5 0 .9.4.9.9v3.8c0 .5-.4.9-.9.9H1.2c-.5 0-.9-.4-.9-.9V6.1c0-.5.4-.9.9-.9z"/><circle fill="#1a2433" cx="3.2" cy="8" r=".7"/><circle fill="#1a2433" cx="5" cy="8" r=".7"/><circle fill="#1a2433" cx="6.8" cy="8" r=".7"/><circle fill="#1a2433" cx="8.6" cy="8" r=".7"/><circle fill="#1a2433" cx="10.4" cy="8" r=".7"/><rect fill="#1a2433" x="12.2" y="6.8" width="1.6" height="2.4" rx=".3"/>`),
@@ -1468,7 +1470,8 @@ IC.sec_acc=svgIc(`<circle cx="8" cy="5.2" r="2.7" fill="none" stroke="currentCol
 IC.sec_sys=svgIc(`<circle cx="8" cy="8" r="2.4" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 1.6v2M8 12.4v2M1.6 8h2M12.4 8h2M3.5 3.5l1.4 1.4M11.1 11.1l1.4 1.4M12.5 3.5l-1.4 1.4M4.9 11.1l-1.4 1.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>`);
 IC.sec_log=svgIc(`<path d="M2.6 4.2h10.8M2.6 8h10.8M2.6 11.8h7.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>`);
 IC.archive=IC.storage;
-IC.vol=svgIc(`<rect x="1.5" y="4.5" width="13" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="11.6" cy="8" r="1.1" fill="currentColor"/><path d="M4 8h4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>`);IC.net=IC.storage;IC.norec=IC.unalloc;IC.nofolder=IC.unalloc;IC.found=IC.connect;IC.founddev=IC.camera;
+IC.vol=svgIc(`<rect x="1.5" y="4.5" width="13" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="11.6" cy="8" r="1.1" fill="currentColor"/><path d="M4 8h4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>`);IC.net=IC.storage;IC.norec=svgIc(`<circle cx="8" cy="8" r="5.8" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="2.2" fill="currentColor"/><path d="M3.6 12.4l8.8-8.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>`);
+IC.nofolder=svgIc(`<path d="M1.8 4.2c0-.7.5-1.2 1.2-1.2h3.2l1.5 1.6H13c.7 0 1.2.5 1.2 1.2v6.6c0 .7-.5 1.2-1.2 1.2H3c-.7 0-1.2-.5-1.2-1.2z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="2.1 1.5" stroke-linejoin="round"/>`);IC.found=IC.connect;IC.founddev=IC.camera;
 const IC_OVERLAY_R="4.65";
 const IC_NOSIG_BADGE=`<svg class="ici-overlay-svg" viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="${IC_OVERLAY_R}" fill="#f0646a"/><path d="M3.4 3.4 6.6 6.6M6.6 3.4 3.4 6.6" stroke="#fff" stroke-width="1.35" stroke-linecap="round"/></svg>`;
 const IC_RULETMP_BADGE=`<svg class="ici-overlay-svg" viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="${IC_OVERLAY_R}" fill="#6a7f9a"/><path d="M5 5V2.25" stroke="#fff" stroke-width="1.35" stroke-linecap="round"/><path d="M5 5h2.55" stroke="#fff" stroke-width="1.15" stroke-linecap="round"/></svg>`;
@@ -5094,7 +5097,7 @@ function nfrow(d,l){
   const op=hasKids&&(open.has(node.id)||(autoExpand()&&!!devs.length));
   let h=`<div class="n srv fld ${sel===node.id?"on":""}${sliceParentClass(node.id)}" style="--l:${l}"${treeRowPick(node.id)}${treeExpandMeta(node.id,"dom",hasKids)}>
     ${treeChevron(node.id,"dom",hasKids,op)}
-    ${ic("unalloc")}<span class="nm">${locName(node)}</span>${treeTail({cnt:treeCntHtml(hasSliceContext()?sliceParentCount(node.id):all.length)})}</div>`;
+    ${ic("nofolder")}<span class="nm">${locName(node)}</span>${treeTail({cnt:treeCntHtml(hasSliceContext()?sliceParentCount(node.id):all.length)})}</div>`;
   if(op)h+=devs.map(x=>nrow(x,l+1,"nf:"+d.id)).join("");
   return h;
 }
@@ -5360,7 +5363,7 @@ function norow(d,l){
   const op=hasKids&&(open.has(n.id)||(autoExpand()&&!!vis.length));
   let h=`<div class="n srv norec ${sel===n.id?"on":""}${sliceParentClass(n.id)}" style="--l:${l}"${treeRowPick(n.id)}${treeExpandMeta(n.id,"dom",hasKids)}>
     ${treeChevron(n.id,"dom",hasKids,op)}
-    ${ic("unalloc")}<span class="nm">${locName(n)}</span>${treeTail({cnt:treeCntHtml(hasSliceContext()?sliceParentCount(n.id):cams.length)})}</div>`;
+    ${ic("norec")}<span class="nm">${locName(n)}</span>${treeTail({cnt:treeCntHtml(hasSliceContext()?sliceParentCount(n.id):cams.length)})}</div>`;
   if(op)h+=vis.map(c=>scamrow(c,l+1,"norec:"+d.id)).join("");
   return h;
 }
@@ -12995,8 +12998,10 @@ function bulkSoloHtml(solo,only){
   const cams=bulkSoloCams(solo),arcOnly=solo.every(n=>n.type==="archive");
   const srvs=solo.filter(n=>n.type==="server"&&!isUnallocated(n.id)&&domainOf(n.id));
   const ren=solo.filter(bulkCanRename),del=solo.filter(n=>n.type!=="server"&&n.type!=="domain");
+  const un=bulkUnallocServers(solo);
   const btns=[cams.length?`<button type="button" class="btn s" title="${i18n("Выборка заменится этими камерами — с «Отменить»")}" onclick="bulkMarkSoloCams()">${i18n(arcOnly?"Отметить камеры, что пишут сюда":"Отметить их камеры")} (${cams.length})</button>`:"",
     ren.length?`<button type="button" class="btn s" onclick="bulkRenameDialog()">${i18n("Переименовать по шаблону…")}${ren.length<solo.length?` (${ren.length})`:""}</button>`:"",
+    un.length?`<button type="button" class="btn s pri" title="${i18n("Серверы встанут в дерево выбранного домена, как «Сервер — Офис»")}" onclick="bulkAddToDomainMenu(event)">${i18n("Добавить в домен")}… (${un.length})</button>`:"",
     srvs.length?`<button type="button" class="btn s" onclick="bulkExcludeServers()">${i18n("Исключить из домена")} (${srvs.length})</button>`:"",
     del.length?`<button type="button" class="btn s danger" onclick="deleteSelected(${JSON.stringify(del.map(n=>n.id)).replace(/"/g,"&quot;")})">${i18n("Удалить")}… (${del.length})</button>`:""].filter(Boolean).join("");
   return card(only?"Настраиваются по одному":"Не входят в правку полей",`${why}
@@ -13023,6 +13028,37 @@ function bulkExcludeServers(){
   toastAction("bkexcl",`${i18n("Исключено из домена серверов")}: ${list.length}`,i18n("Отменить"),()=>{
     back.slice().reverse().forEach(({s,d,i})=>{d.unallocServers=d.unallocServers.filter(x=>x!==s);servers.includes(s)||servers.push(s);d.servers.splice(Math.min(i,d.servers.length),0,s);resetUnallocDisplay(d.id)});
     treeMatchCache.clear();searchMatchCache.clear();paint();toast("Серверы возвращены в домен");
+  },8000);
+}
+// Нераспределённые серверы — одна групповая операция: добавить в домен.
+// Домен выбирают из списка; серверы встают в его дерево рядом с остальными
+// серверами, выборка остаётся на них. Сразу и с «Отменить».
+function bulkUnallocServers(nodes){return nodes.filter(n=>n.type==="server"&&isUnallocated(n.id))}
+function bulkAddToDomainMenu(e){
+  e.stopPropagation();
+  const k=bulkUnallocServers(bulkScopeNodes()).length;if(!k)return;
+  bulkOpenMenuAt(e.currentTarget,[`<div class="tctx-head">${i18n("Добавить в домен")} (${k})</div>`,
+    ...domains.map(d=>tctxItem(escHtml(locName(d))+(d.online===false?` — ${i18n("нет связи")}`:""),`bulkAddToDomain('${d.id}')`,`<span class="tctx-ic">${ic("domain")}</span>`,d.online===false))].join(""));
+}
+function bulkAddToDomain(did){
+  closeTreeCtx();
+  const d=domainById(did);if(!d)return;
+  const list=bulkUnallocServers(bulkScopeNodes());if(!list.length)return;
+  const back=list.map(s=>{const from=domainById(unallocDomainOf(s.id));return{s,from,i:from?from.unallocServers.indexOf(s):-1}});
+  back.forEach(({s,from})=>{takeServer(s.id);d.servers.push(s);if(from)resetUnallocDisplay(from.id)});
+  resetUnallocDisplay(d.id);
+  open.add(d.id);treeMatchCache.clear();searchMatchCache.clear();
+  list.forEach(s=>expandTo(s.id));
+  afterSelChange(null);paint();
+  // Куда встали — видно сразу: дерево доезжает до них, строки моргают.
+  setTimeout(()=>{
+    const rows=list.map(s=>document.querySelector(`#tree .n[data-pick="${s.id}"]`)).filter(Boolean);
+    rows[0]?.scrollIntoView({block:"center",behavior:"smooth"});
+    if(rows.length)accFlash(()=>rows,true);
+  },60);
+  toastAction("bkadddom",`${i18n("Добавлено в")} «${locName(d)}» ${i18n("серверов")}: ${list.length}`,i18n("Отменить"),()=>{
+    back.slice().sort((x,y)=>x.i-y.i).forEach(({s,from,i})=>{d.servers=d.servers.filter(x=>x!==s);const to=(from||d).unallocServers;to.splice(i<0?to.length:Math.min(i,to.length),0,s);resetUnallocDisplay((from||d).id)});
+    resetUnallocDisplay(d.id);treeMatchCache.clear();searchMatchCache.clear();paint();toast("Серверы снова нераспределённые");
   },8000);
 }
 function bulkCanRename(n){return n.type!=="domain"&&n.type!=="folder"&&n.type!=="vol"}
@@ -13263,6 +13299,7 @@ function bulkMenu(e){
     ...(cr?[tctxItem(`${i18n("Учётные данные…")}${of(cr)}`,`closeTreeCtx();bulkGoTab('gen','bkUser')`)]:[]),
     ...(rn?[tctxItem(`${i18n("Переименовать по шаблону…")}${of(rn)}`,`closeTreeCtx();bulkRenameDialog()`)]:[]),
     ...(ex?[tctxItem(`${i18n("Исключить из домена")}${of(ex)}`,`bulkExcludeServers()`)]:[]),
+    ...domains.filter(()=>bulkUnallocServers(sc).length).map(d=>tctxItem(`${i18n("Добавить в домен")} «${escHtml(locName(d))}»${of(bulkUnallocServers(sc).length)}`,`bulkAddToDomain('${d.id}')`,null,d.online===false)),
     ...(cams?[tctxItem(`${i18n("Отметить их камеры")} (${cams})`,`closeTreeCtx();bulkMarkSoloCams()`,`<span class="tctx-ic">${SEL_IC}</span>`)]:[]),
     ...(on?[tctxItem(`${i18n("Оставить в выборке только их")} (${sc.length})`,`bulkKeepScope()`)]:[]),
     tctxSep(),
