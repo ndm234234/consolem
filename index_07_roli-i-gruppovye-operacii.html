@@ -1282,7 +1282,7 @@ html[data-theme="light"] .busy-chip{background:#dce8f7;color:#2f5fad}
 .lan-ip-via{color:var(--mu);font-size:11px}
 html[data-theme="light"] .tag.tag-ch{color:#5b3fa0;background:#ece5fb}
 /* Карточка выборки: к чему применяется правка, и что не показано */
-.bk-scope{padding:10px 12px;border:1px solid var(--ln);border-radius:8px;background:var(--p2);margin-bottom:12px}
+.bk-scope{position:relative;padding:10px 12px;border:1px solid var(--ln);border-radius:8px;background:var(--p2);margin-bottom:12px}
 /* Дорога назад к выборке: корень пути в шапке и кнопка на панели под деревом */
 .cr-link.cr-sel{display:inline-flex;align-items:center;gap:5px;color:#9ec8ff;font-weight:600;background:#1c3350;border-radius:6px;padding:1px 8px}
 .cr-link.cr-sel:hover{background:#24426a;color:#fff}
@@ -4227,7 +4227,9 @@ const mainSeen={key:null},asideSeen={key:null},treeSeen={key:null},favSeen={key:
 function mainKey(){return app==="acc"?`acc|${accSel}|${accTab}`:`${app}|${bulkActive()&&!bulkPeek?"bulk:"+bulkSelKey():sel}|${tab}`}
 function paintMain(html){
   const host=document.getElementById("main");
+  const snap=bulkScopeSnap();
   if(host)paintInto(host,html,mainKey(),mainSeen);
+  bulkScopeFlip(snap);
   navRecord();
   fitCrumbs();
   if(host&&!host._crumbsRo&&window.ResizeObserver){host._crumbsRo=new ResizeObserver(()=>fitCrumbs());host._crumbsRo.observe(host)}
@@ -12807,6 +12809,38 @@ function bulkFiltClear(){bulkFiltSet({kind:"",srv:"",model:""})}
 function bulkFiltLabel(){
   return BULK_DIMS.filter(([d])=>bulkFilt[d]).map(([d,,,lab])=>lab(bulkFilt[d])).join(" · ");
 }
+// «Применить к» перестраивается при каждом фильтре и каждой галочке: чипы,
+// что остались, плавно съезжают на новые места, пропавшие гаснут там, где
+// стояли, новые вырастают, блок меняет высоту без скачка (FLIP).
+function bulkScopeSnap(){
+  const sc=document.querySelector("#main .bk-scope");if(!sc)return null;
+  const m=new Map();
+  sc.querySelectorAll("[data-fk]").forEach(el=>m.set(el.dataset.fk,{r:el.getBoundingClientRect(),html:el.outerHTML}));
+  return{m,h:sc.offsetHeight};
+}
+function bulkScopeFlip(snap){
+  const sc=snap&&document.querySelector("#main .bk-scope");if(!sc)return;
+  if(matchMedia("(prefers-reduced-motion: reduce)").matches||!sc.animate)return;
+  const ease="cubic-bezier(.2,.8,.3,1)",now=new Map(),sr=sc.getBoundingClientRect();
+  sc.querySelectorAll("[data-fk]").forEach(el=>now.set(el.dataset.fk,el));
+  now.forEach((el,k)=>{
+    const o=snap.m.get(k),r=el.getBoundingClientRect();
+    if(!o){el.animate([{opacity:0,transform:"scale(.6)"},{opacity:1,transform:"none"}],{duration:220,delay:90,easing:"ease-out",fill:"backwards"});return}
+    const dx=o.r.left-r.left,dy=o.r.top-r.top;
+    if(Math.abs(dx)>.5||Math.abs(dy)>.5)el.animate([{transform:`translate(${dx}px,${dy}px)`},{transform:"none"}],{duration:280,easing:ease});
+  });
+  snap.m.forEach((o,k)=>{
+    if(now.has(k))return;
+    const box=document.createElement("div");box.innerHTML=o.html;
+    const g=box.firstElementChild;if(!g)return;
+    g.removeAttribute("onclick");g.removeAttribute("data-fk");g.setAttribute("aria-hidden","true");g.tabIndex=-1;
+    g.style.cssText=`position:absolute;left:${o.r.left-sr.left}px;top:${o.r.top-sr.top}px;width:${o.r.width}px;height:${o.r.height}px;margin:0;pointer-events:none`;
+    sc.appendChild(g);
+    g.animate([{opacity:1,transform:"none"},{opacity:0,transform:"scale(.6)"}],{duration:160,easing:"ease-in",fill:"forwards"}).onfinish=()=>g.remove();
+  });
+  const h=sc.offsetHeight;
+  if(Math.abs(h-snap.h)>.5)sc.animate([{height:snap.h+"px",overflow:"hidden"},{height:h+"px",overflow:"hidden"}],{duration:280,easing:ease});
+}
 // Оставить в выборке только то, что сейчас правится, — явно и с «Отменить».
 function bulkKeepScope(){
   closeTreeCtx();
@@ -12825,13 +12859,13 @@ function bulkScopeHtml(all){
     // имеют, и чип «модель не указана» был бы про них, а не про модель.
     const ent=countBy(all.filter(n=>bulkMatch(n,bulkFilt,d)&&(d!=="model"||modelOf(n))),fn);
     if(ent.length<2&&!bulkFilt[d])return"";
-    return`<div class="bk-sum-row bk-facet"><span class="bk-facet-l">${i18n(label.toLowerCase())}</span>${ent.map(([k,c])=>`<button type="button" class="stchip bk-chip ${bulkFilt[d]===k?"on":""}" onclick="bulkFiltSet({${d}:${esc(k)}})"><span class="stchip-lab">${escHtml(lab(k))}</span><span class="stchip-cnt">${c}</span></button>`).join("")}</div>`;
+    return`<div class="bk-sum-row bk-facet"><span class="bk-facet-l" data-fk="row:${d}">${i18n(label.toLowerCase())}</span>${ent.map(([k,c])=>`<button type="button" data-fk="${d}:${escHtml(k)}" class="stchip bk-chip ${bulkFilt[d]===k?"on":""}" onclick="bulkFiltSet({${d}:${esc(k)}})"><span class="stchip-lab">${escHtml(lab(k))}</span><span class="stchip-cnt">${c}</span></button>`).join("")}</div>`;
   }).join("");
   // «Применить к» — продолжение фразы: всем отмеченным или их части по типу,
   // серверу, модели. Под чипами — итог: кто получит изменения, кто нет.
   const sc=bulkScopeNodes(),n=sc.length,on=bulkFiltOn();
-  const head=`<div class="bk-scope-h"><span class="bk-scope-l">${i18n("Применить к")}</span><button type="button" class="stchip ${on?"":"on"}" onclick="bulkFiltClear()"><span class="stchip-lab">${i18n("всем отмеченным")}</span><span class="stchip-cnt">${all.length}</span></button>
-    ${rows?`<span class="sub bk-scope-or">${i18n("или уточните")}:</span>`:""}</div>`;
+  const head=`<div class="bk-scope-h"><span class="bk-scope-l">${i18n("Применить к")}</span><button type="button" data-fk="all" class="stchip ${on?"":"on"}" onclick="bulkFiltClear()"><span class="stchip-lab">${i18n("всем отмеченным")}</span><span class="stchip-cnt">${all.length}</span></button>
+    ${rows?`<span class="sub bk-scope-or" data-fk="or">${i18n("или уточните")}:</span>`:""}</div>`;
   // Настраиваемые по одному (хранилища, серверы, папки) сказаны прямо: иначе
   // непонятно, почему полей у них нет, а кнопки «Удалить» и «Переименовать»
   // их касаются.
@@ -12839,9 +12873,9 @@ function bulkScopeHtml(all){
   const soloNote=!solo.length?"":fields
     ?` <span class="bk-solo-note">${i18n("Поля ниже получат")} ${fields} ${i18n("из")} ${n}: ${sk} ${i18n("настраиваются по одному — им достаются только действия выборки.")}</span>`
     :` <span class="bk-solo-note">${i18n("Общих полей нет")}: ${sk} ${i18n("настраиваются по одному — с ними работают действия ниже.")}</span>`;
-  const sum=on?`<div class="bk-scope-sum on">${i18n("Изменения получат")} <b>${n} ${i18n("из")} ${all.length}</b>: ${escHtml(bulkFiltLabel())}. ${i18n("Остальные")} ${all.length-n} ${i18n("не меняются и остаются в выборке")} · <button type="button" class="lk" onclick="bulkKeepScope()">${i18n("Оставить в выборке только их")}</button>${soloNote}</div>`
-    :solo.length?`<div class="bk-scope-sum">${i18n("Отмечено")} <b>${all.length}</b>.${soloNote}</div>`
-    :`<div class="bk-scope-sum">${i18n("Изменения получат все")} <b>${all.length}</b> ${i18n(plural(all.length,"отмеченный|отмеченных|отмеченных"))}. ${i18n("Показаны параметры, общие для всех.")}</div>`;
+  const sum=on?`<div class="bk-scope-sum on" data-fk="sum">${i18n("Изменения получат")} <b>${n} ${i18n("из")} ${all.length}</b>: ${escHtml(bulkFiltLabel())}. ${i18n("Остальные")} ${all.length-n} ${i18n("не меняются и остаются в выборке")} · <button type="button" class="lk" onclick="bulkKeepScope()">${i18n("Оставить в выборке только их")}</button>${soloNote}</div>`
+    :solo.length?`<div class="bk-scope-sum" data-fk="sum">${i18n("Отмечено")} <b>${all.length}</b>.${soloNote}</div>`
+    :`<div class="bk-scope-sum" data-fk="sum">${i18n("Изменения получат все")} <b>${all.length}</b> ${i18n(plural(all.length,"отмеченный|отмеченных|отмеченных"))}. ${i18n("Показаны параметры, общие для всех.")}</div>`;
   return`<div class="bk-sum bk-scope">${head}${rows}${sum}</div>`;
 }
 // Что умеет объект — из этого собирается пересечение для «Все».
