@@ -12701,13 +12701,12 @@ function selectAllVisible(){
 // внутри режима (смена среза, отметки) показывает её без перехода.
 let selBarOn=false,selBarOutT=0,selBarN=0,selBarFlashT=0;
 // Панель заметна: выезжает и дважды вспыхивает, как место перехода в «Правах».
-// Вспышка — при входе в режим и когда отмечен второй объект и справа
-// появляется карточка выборки: тогда моргает и её заголовок.
-function selBarFlash(host,card){
+// Вспышка — один раз, когда панель появляется. Дальше на каждую галочку
+// только вздрагивает счётчик: повторные вспышки выглядели как сбой.
+function selBarFlash(host){
   clearTimeout(selBarFlashT);
   host.classList.remove("sel-flash");void host.offsetWidth;host.classList.add("sel-flash");
   selBarFlashT=setTimeout(()=>host.classList.remove("sel-flash"),2000);
-  if(card)accFlash(()=>[document.querySelector("#main .hd h1")].filter(Boolean),true);
 }
 function renderSelBar(){
   const host=document.getElementById("selBar");if(!host)return;
@@ -12728,7 +12727,9 @@ function renderSelBar(){
   // заново проигрывала бы появление.
   const entering=!selBarOn;
   if(entering){host.classList.add("sel-in");setTimeout(()=>host.classList.remove("sel-in"),260)}
-  if(entering||(prevN<2&&n>=2))selBarFlash(host,n>=2);
+  if(entering)selBarFlash(host);
+  // Справа появилась карточка выборки — моргает её заголовок, не панель.
+  if(prevN<2&&n>=2)accFlash(()=>[document.querySelector("#main .hd h1")].filter(Boolean),true);
   // Счётчик вздрагивает, когда меняется число отмеченных.
   const bump=!entering&&n!==prevN;
   selBarOn=true;
