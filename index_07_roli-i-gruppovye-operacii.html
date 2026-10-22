@@ -6578,10 +6578,7 @@ function lanCardHtml(n){
       ?`${i18n("Идёт поиск в сети")}… ${lan.progress}%`
       :i18n("Ничего не найдено")}</td></tr>`;
   const pageOn=pageCk.length>0&&pagePicked===pageCk.length;
-  const banner=allCk.length>pageCk.length&&pageOn
-    ?`<div class="ts-banner">${allPicked===allCk.length
-      ?`${i18n("Отмечены все")} <b>${allCk.length}</b> ${i18n("по фильтру")} · <button type="button" class="lk" onclick="lanPickAll(find(lan.owner).n,false)">${i18n("Снять")}</button>`
-      :`${i18n("Отмечены все")} <b>${pageCk.length}</b> ${i18n("на этой странице")} · <button type="button" class="lk" onclick="lanPickAll(find(lan.owner).n,true)">${i18n("Отметить все")} ${allCk.length} ${i18n("по фильтру")}</button>`}</div>`:"";
+  const banner=tsBannerHtml(allPicked,pageCk.length,allCk.length,pageOn,"lanPickAll(find(lan.owner).n,true)","lanPickAll(find(lan.owner).n,false)");
   const table=`${banner}<div class="lan-wrap"><table class="gtbl-cams lan-tbl">
     <thead><tr class="gtbl-h"><th class="lan-chk"><input type="checkbox" class="ts-chk" ${pageOn?"checked":""} ${pagePicked&&!pageOn?'data-ind="1"':""} ${pageCk.length?"":"disabled"} title="${i18n("Все на странице")}" aria-label="${i18n("Отметить все на странице")}" onchange="lanPickPage(this.checked)"></th>${th}<th></th></tr></thead>
     <tbody>${body}</tbody></table></div>
@@ -12719,11 +12716,20 @@ function tsHead(key,pageIds,allIds){
   return`<input type="checkbox" class="ts-chk" ${all?"checked":""} ${k&&!all?'data-ind="1"':""} ${pageIds.length?"":"disabled"} title="${i18n("Все на странице")}" aria-label="${i18n("Отметить все на странице")}" onclick="event.stopPropagation()" onchange="tsSetKey('${key}','page',this.checked)">`;
 }
 function tsSetKey(key,what,on){const r=tsReg[key];if(r)tsSet(r[what],on)}
+// Строка над таблицей видна всегда, когда в ней что-то отмечено: сколько из
+// скольких, и дорога к «всем по фильтру» — даже если всё влезло на страницу.
+function tsBannerHtml(k,page,all,pageAll,onAll,onClear){
+  if(!k)return"";
+  const clr=`<button type="button" class="lk" onclick="${onClear}">${i18n("Снять")}</button>`;
+  if(k===all)return`<div class="ts-banner">${i18n("Отмечены все")} <b>${all}</b>${all>page?` ${i18n("по фильтру")}`:""} · ${clr}</div>`;
+  const more=`<button type="button" class="lk" onclick="${onAll}">${i18n("Отметить все")} ${all}${all>page?` ${i18n("по фильтру")}`:""}</button>`;
+  if(pageAll&&all>page)return`<div class="ts-banner">${i18n("Отмечены все")} <b>${k}</b> ${i18n("на этой странице")} · ${more} · ${clr}</div>`;
+  return`<div class="ts-banner">${i18n("Отмечено")} <b>${k}</b> ${i18n("из")} ${all} · ${more} · ${clr}</div>`;
+}
 function tsBanner(key){
-  const r=tsReg[key];if(!r||!selMode||r.all.length<=r.page.length)return"";
-  if(r.all.every(tsOn))return`<div class="ts-banner">${i18n("Отмечены все")} <b>${r.all.length}</b> ${i18n("по фильтру")} · <button type="button" class="lk" onclick="tsSetKey('${key}','all',false)">${i18n("Снять")}</button></div>`;
-  if(r.page.length&&r.page.every(tsOn))return`<div class="ts-banner">${i18n("Отмечены все")} <b>${r.page.length}</b> ${i18n("на этой странице")} · <button type="button" class="lk" onclick="tsSetKey('${key}','all',true)">${i18n("Отметить все")} ${r.all.length} ${i18n("по фильтру")}</button></div>`;
-  return"";
+  const r=tsReg[key];if(!r||!selMode)return"";
+  const k=r.all.filter(tsOn).length,pageAll=r.page.length>0&&r.page.every(tsOn);
+  return tsBannerHtml(k,r.page.length,r.all.length,pageAll,`tsSetKey('${key}','all',true)`,`tsSetKey('${key}','all',false)`);
 }
 // «Частично» у шапки ставится только свойством, разметкой его не задать.
 function tsFixInd(root){(root||document).querySelectorAll("input.ts-chk[data-ind]").forEach(el=>{el.indeterminate=true})}
