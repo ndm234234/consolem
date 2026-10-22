@@ -1302,6 +1302,20 @@ html[data-theme="light"] .cr-link.cr-sel{background:#dce8f7;color:#2f5fad}
 .bk-scope-sum.on{color:#9ec8ff}
 .bk-scope-sum b{color:var(--tx)}
 .bk-solo-note{display:block;margin-top:4px;color:var(--mu)}
+/* Отметка в таблицах — общая с деревом */
+table.gtbl-cams th.ts-td,table.gtbl-cams td.ts-td{width:34px;padding:0 0 0 10px;text-overflow:clip}
+.ts-chk{margin:0;cursor:pointer;accent-color:var(--bl)}
+table.gtbl-cams tr.ts-on>td,tr.ts-on>td{background:#1a2f4d}
+html[data-theme="light"] table.gtbl-cams tr.ts-on>td{background:#e3edfb}
+.it.ts-on{box-shadow:inset 0 0 0 1px #3f6fac;background:#1a2f4d}
+html[data-theme="light"] .it.ts-on{background:#e3edfb;box-shadow:inset 0 0 0 1px #9db6d9}
+.it>.ts-chk{flex:none;margin-right:2px}
+.ts-listhead{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 8px}
+.ts-all{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--mu);cursor:pointer;margin:0}
+.ts-banner{margin:0 0 8px;padding:6px 10px;border-radius:6px;background:#1a2f4d;color:#d8e9ff;font-size:12px}
+.ts-listhead .ts-banner{margin:0}
+.ts-banner .lk{font-size:12px}
+html[data-theme="light"] .ts-banner{background:#e3edfb;color:#1a3358}
 .bk-miss{margin:0 0 8px;padding-left:18px;font-size:12px;color:var(--mu)}
 .bk-miss li{margin:2px 0}
 .an-kinds{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
@@ -4233,7 +4247,7 @@ function paintMain(html){
   const host=document.getElementById("main");
   const snap=bulkScopeSnap();
   if(host)paintInto(host,html,mainKey(),mainSeen);
-  bulkScopeFlip(snap);
+  bulkScopeFlip(snap);tsFixInd(host);
   navRecord();
   fitCrumbs();
   if(host&&!host._crumbsRo&&window.ResizeObserver){host._crumbsRo=new ResizeObserver(()=>fitCrumbs());host._crumbsRo.observe(host)}
@@ -5698,6 +5712,7 @@ function repaintTbl(kind){
   const tn=tableNode();
   if(!wrap||!tn){gear();return}
   wrap.outerHTML=kind==="cams"?camsTableHtml(tn):acfaTableHtml(tn);
+  tsFixInd();
 }
 function setTblFilt(kind,key,val){
   tblFilt[kind][key]=val;
@@ -5708,6 +5723,7 @@ function setTblFilt(kind,key,val){
   if(!wrap){gear();return}
   const tn=tableNode();if(!tn){gear();return}
   wrap.outerHTML=kind==="cams"?camsTableHtml(tn):acfaTableHtml(tn);
+  tsFixInd();
   const el=document.querySelector(`[data-tf="${kind}-${key}"]`);
   if(el){el.focus();if(caret!=null)try{el.setSelectionRange(caret,caret)}catch(e){}}
 }
@@ -5765,8 +5781,8 @@ function camsColHeadHtml(){
 function applyCamsColWidths(){
   const table=document.querySelector("table.gtbl-cams");
   if(!table)return;
-  table.querySelectorAll("colgroup col").forEach((col,i)=>{if(camsColWidths[i]!=null)col.style.width=camsColWidths[i]+"px"});
-  table.style.minWidth=camsTableMinWidth()+"px";
+  table.querySelectorAll("colgroup col:not(.ts-col)").forEach((col,i)=>{if(camsColWidths[i]!=null)col.style.width=camsColWidths[i]+"px"});
+  table.style.minWidth=camsTableMinWidth()+(table.querySelector("col.ts-col")?34:0)+"px";
 }
 function startCamsColResize(e,col){
   e.preventDefault();e.stopPropagation();
@@ -6082,7 +6098,7 @@ function lanFilter(rows){
 // галочка заголовка отмечает его камеры, что видны в отборе.
 function lanNvrHeadHtml(n,nvrId,found){
   const nvr=find(nvrId)?.n;if(!nvr)return"";
-  const mates=found.filter(r=>r.nvr===nvrId),pk=mates.filter(r=>lanPickable(n,r)),on=pk.length&&pk.every(r=>lan.sel.has(r.key));
+  const mates=found.filter(r=>r.nvr===nvrId),pk=mates.filter(r=>lanCheckable(n,r)),on=pk.length&&pk.every(lanChecked);
   const edge=edgeStorage(nvr);
   // Те же колонки, что у строк: объединённая ячейка ломала сетку таблицы,
   // когда узкая ширина прячет колонки производителя и модели.
@@ -6095,9 +6111,18 @@ function lanNvrHeadHtml(n,nvrId,found){
 }
 function lanPickNvr(nvrId,on){
   const n=find(lan.owner)?.n;if(!n)return;
-  lanFilter(lanRows(n)).filter(r=>r.nvr===nvrId&&lanPickable(n,r)).forEach(r=>on?lan.sel.add(r.key):lan.sel.delete(r.key));
-  gear();
+  lanSetRows(lanFilter(lanRows(n)).filter(r=>r.nvr===nvrId&&lanCheckable(n,r)),on);
 }
+// Строки системы отмечаются в общей выборке (treeSel) — как в дереве; строки
+// «Нет в системе» в дереве не живут, их отметка своя (lan.sel).
+function lanChecked(r){return r.kind==="sys"?tsOn(r.id):lan.sel.has(r.key)}
+function lanCheckable(n,r){return r.kind==="sys"?canMultiPick(r.node)&&!blockedId(r.id):lanPickable(n,r)}
+function lanSetRows(rows,on){
+  rows.filter(r=>r.kind==="net").forEach(r=>on?lan.sel.add(r.key):lan.sel.delete(r.key));
+  const sys=rows.filter(r=>r.kind==="sys").map(r=>r.id);
+  if(sys.length)tsSet(sys,on);else gear();
+}
+function lanCheckedKeys(){const n=find(lan.owner)?.n;return n?lanRows(n).filter(lanChecked).map(r=>r.key):[]}
 // Хранилище сервера доступно только камерам этого сервера, сетевое — любой
 // камере домена. Сервер камеры, из-за которого сюда писать нельзя, или null.
 function lanFarServer(n,d){
@@ -6234,7 +6259,7 @@ function lanSnap(ids){
   const was=cams.map(c=>({c,arch:c.arch,rec:c.rec,stream:c.stream,srvId:c.srvId,archx:(c.archx||[]).map(x=>({...x}))}));
   return()=>{was.forEach(w=>{Object.assign(w.c,{arch:w.arch,rec:w.rec,stream:w.stream,srvId:w.srvId,archx:w.archx})});treeMatchCache.clear();searchMatchCache.clear();paint()};
 }
-function lanBulk(){lanBindKeys([...lan.sel])}
+function lanBulk(){lanBindKeys(lanCheckedKeys())}
 // Привязка ничего не теряет — сразу, с «Отменить» в тосте.
 function lanBindKeys(keys){
   const n=find(lan.owner)?.n;if(!n)return;
@@ -6268,12 +6293,16 @@ function lanUnbindKeys(keys){
       paint();
     },{rawMsg:true});
 }
-function lanPick(key,on){if(on)lan.sel.add(key);else lan.sel.delete(key);gear()}
-function lanPickAll(n,on){
-  lan.sel.clear();
-  if(on)lanFilter(lanRows(n)).forEach(r=>{if(lanPickable(n,r))lan.sel.add(r.key)});
-  gear();
+function lanPick(key,on){
+  if(key.startsWith("s:")){tsSet([key.slice(2)],on);return}
+  if(on)lan.sel.add(key);else lan.sel.delete(key);gear();
 }
+// Шапка — «все на странице», над таблицей — «все N по фильтру».
+function lanPickPage(on){
+  const n=find(lan.owner)?.n;if(!n)return;
+  lanSetRows(pageSlice("lan:"+n.id,lanFilter(lanRows(n))).filter(r=>lanCheckable(n,r)),on);
+}
+function lanPickAll(n,on){lanSetRows(lanFilter(lanRows(n)).filter(r=>lanCheckable(n,r)),on)}
 function lanSort(k){
   if(lan.sort===k)lan.dir=-lan.dir;else{lan.sort=k;lan.dir=1}
   gear();
@@ -6324,9 +6353,9 @@ function lanSysRowHtml(n,r){
   const btn=a.off
     ?`<button type="button" class="btn s" disabled title="${escHtml(a.off)}">${lanBulkLabel(n)}</button>`
     :`<button type="button" class="btn s ${a.pri?"pri":""}" ${a.tip?`title="${escHtml(a.tip)}"`:""} onclick="event.stopPropagation();${a.fn}">${a.label}</button>`;
-  const chk=lanPickable(n,r)
-    ?`<input type="checkbox" ${lan.sel.has(r.key)?"checked":""} aria-label="${escHtml(r.name)}" onclick="event.stopPropagation()" onchange="lanPick('${r.key}',this.checked)">`:"";
-  return`<tr class="gtbl-r lan-r ${r.nvr?"lan-r-nvr":""}" onclick="pick('${r.id}')">
+  const chk=lanCheckable(n,r)
+    ?`<input type="checkbox" class="ts-chk" ${lanChecked(r)?"checked":""} aria-label="${escHtml(r.name)}" onclick="event.stopPropagation()" onchange="lanPick('${r.key}',this.checked)">`:"";
+  return`<tr class="gtbl-r lan-r ${r.nvr?"lan-r-nvr":""} ${lanChecked(r)?"ts-on":""}" onclick="pick('${r.id}')">
     <td class="lan-chk">${chk}</td>
     <td><span class="lan-name">${hlText(r.name,lan.q)}</span><span class="lan-sub">${escHtml(r.nvr?`${i18n("канал")} ${r.ch} · ${r.nvrName}`:[r.vendor,r.model].filter(Boolean).join(" · "))}</span></td>
     <td>${r.nvr?`<span class="tag tag-ch" title="${i18n("Своего IP нет — видео идёт через регистратор")} ${escHtml(r.ip)}">${i18n("кан.")} ${escHtml(r.ch)}</span> <span class="lan-ip-via">${i18n("через")} ${hlText(r.ip,lan.q)}</span>`:hlText(r.ip,lan.q)}</td><td>${hlText(r.mac,lan.q)}</td>
@@ -6342,7 +6371,7 @@ function lanNetRowHtml(n,r){
     :`<button type="button" class="btn pri s" onclick="${a.fn}">${a.label}</button>`;
   return`<tr class="lan-net"><td colspan="8">
     <div class="dev-result"><div class="dev-result-main">
-      <input type="checkbox" ${lan.sel.has(r.key)?"checked":""} ${a.off?"disabled":""} aria-label="${escHtml(i18n("Выбрать")+" "+r.ip)}" onclick="event.stopPropagation()" onchange="lanPick('${r.key}',this.checked)">
+      <input type="checkbox" class="ts-chk" ${lan.sel.has(r.key)?"checked":""} ${a.off?"disabled":""} aria-label="${escHtml(i18n("Выбрать")+" "+r.ip)}" onclick="event.stopPropagation()" onchange="lanPick('${r.key}',this.checked)">
       <span class="dev-dot ${escHtml(src.status||"")}" title="${escHtml(i18n(DEVICE_STATUS_LABELS[src.status]||""))}"></span>
       ${deviceResultCard(src)}
       <div class="dev-actions"><span class="lan-bind lan-bind-none">${i18n("Нет в системе")}</span>${btn}</div>
@@ -6357,9 +6386,11 @@ function lanCardHtml(n){
   const rows=pageSlice(key,found);
   const counts={};LAN_CHIPS.forEach(([k])=>counts[k]=k==="all"?all.length:all.filter(r=>r.bind===k).length);
   // Отмечают и тех, кого привязать, и тех, кого отвязать: кнопок две.
-  const pickable=found.filter(r=>lanPickable(n,r));
-  const picked=pickable.filter(r=>lan.sel.has(r.key)).length;
-  const selRows=all.filter(r=>lan.sel.has(r.key));
+  // Отметка строк системы — та же, что в дереве: отмеченное здесь можно
+  // править группой, а отмеченное в дереве — привязать здесь.
+  const pageCk=rows.filter(r=>lanCheckable(n,r)),allCk=found.filter(r=>lanCheckable(n,r));
+  const pagePicked=pageCk.filter(lanChecked).length,allPicked=allCk.filter(lanChecked).length;
+  const selRows=all.filter(lanChecked);
   const nBind=selRows.filter(r=>lanAction(n,r).pri).length,nUnbind=selRows.filter(r=>lanAction(n,r).unbind).length;
   // Сперва выбирают, на что смотреть, и только потом ищут внутри этого —
   // поэтому чипы стоят выше строки поиска.
@@ -6374,7 +6405,7 @@ function lanCardHtml(n){
     ${lanIsPlace(n)?"":lanTargetHtml(n)}
     <button type="button" class="btn s" onclick="lanRefresh()">${i18n("Обновить")}</button>
     <button type="button" class="btn pri s" onclick="lanBulk()" ${nBind?"":"disabled"}>${lanBulkLabel(n)} (${nBind})</button>
-    ${lanHasUnbind(n)?`<button type="button" class="btn s" onclick="lanUnbindKeys([...lan.sel])" ${nUnbind?"":"disabled"}>${i18n(lanIsFolder(n)?"Убрать":"Отвязать")} (${nUnbind})</button>`:""}
+    ${lanHasUnbind(n)?`<button type="button" class="btn s" onclick="lanUnbindKeys(lanCheckedKeys())" ${nUnbind?"":"disabled"}>${i18n(lanIsFolder(n)?"Убрать":"Отвязать")} (${nUnbind})</button>`:""}
   </div>`;
   const th=LAN_COLS.map(([k,l])=>`<th class="lan-th ${lan.sort===k?"on":""}" onclick="lanSort('${k}')"><span class="gtbl-th-txt">${i18n(l)}${lan.sort===k?(lan.dir>0?" ▲":" ▼"):""}</span></th>`).join("");
   const body=rows.length?rows.map((r,i)=>(r.nvr&&r.nvr!==rows[i-1]?.nvr?lanNvrHeadHtml(n,r.nvr,found):"")+(r.kind==="net"?lanNetRowHtml(n,r):lanSysRowHtml(n,r))).join("")
@@ -6385,9 +6416,13 @@ function lanCardHtml(n){
       :lan.state==="searching"
       ?`${i18n("Идёт поиск в сети")}… ${lan.progress}%`
       :i18n("Ничего не найдено")}</td></tr>`;
-  const allOn=pickable.length>0&&picked===pickable.length;
-  const table=`<div class="lan-wrap"><table class="gtbl-cams lan-tbl">
-    <thead><tr class="gtbl-h"><th class="lan-chk"><input type="checkbox" ${allOn?"checked":""} ${pickable.length?"":"disabled"} aria-label="${i18n("Выбрать все")}" onchange="lanPickAll(find(lan.owner).n,this.checked)"></th>${th}<th></th></tr></thead>
+  const pageOn=pageCk.length>0&&pagePicked===pageCk.length;
+  const banner=allCk.length>pageCk.length&&pageOn
+    ?`<div class="ts-banner">${allPicked===allCk.length
+      ?`${i18n("Отмечены все")} <b>${allCk.length}</b> ${i18n("по фильтру")} · <button type="button" class="lk" onclick="lanPickAll(find(lan.owner).n,false)">${i18n("Снять")}</button>`
+      :`${i18n("Отмечены все")} <b>${pageCk.length}</b> ${i18n("на этой странице")} · <button type="button" class="lk" onclick="lanPickAll(find(lan.owner).n,true)">${i18n("Отметить все")} ${allCk.length} ${i18n("по фильтру")}</button>`}</div>`:"";
+  const table=`${banner}<div class="lan-wrap"><table class="gtbl-cams lan-tbl">
+    <thead><tr class="gtbl-h"><th class="lan-chk"><input type="checkbox" class="ts-chk" ${pageOn?"checked":""} ${pagePicked&&!pageOn?'data-ind="1"':""} ${pageCk.length?"":"disabled"} title="${i18n("Все на странице")}" aria-label="${i18n("Отметить все на странице")}" onchange="lanPickPage(this.checked)"></th>${th}<th></th></tr></thead>
     <tbody>${body}</tbody></table></div>
   <div class="tfoot">
     ${pagerHtml(key,found.length,"lan","устройство|устройства|устройств")}
@@ -6401,15 +6436,17 @@ function lanCardHtml(n){
 function camsTableHtml(server){
   const filt=tblFilt.cams;
   const key="cams:"+server.id;
-  const{rows,total}=pageGroups(key,getCamsTableRows(server));
+  const allRows=getCamsTableRows(server);
+  const{rows,total}=pageGroups(key,allRows);
+  const head=tsHead(key,rows.map(r=>r.id),allRows.map(r=>r.id));
   const filtering=Object.keys(filt).some(k=>!!(filt[k]&&String(filt[k]).trim()));
   const filtCells=CAMS_TBL_COLS.map(([k])=>`<td><input data-tf="cams-${k}" value="${escHtml(filt[k]||"")}" placeholder="${i18n("Фильтр")}" oninput="setTblFilt('cams','${k}',this.value)"></td>`).join("");
-  const body=rows.length?rows.map(r=>`<tr class="gtbl-r ${r.depth?"child":""}" onclick="pick('${r.id}')">${CAMS_TBL_COLS.map(([k])=>camsTblCellHtml(r,k)).join("")}</tr>`).join(""):
-    `<tr><td class="empty" colspan="${CAMS_TBL_COLS.length}">${i18n("Нет записей для показа")}</td></tr>`;
-  return`<div id="camsTbl"><div class="gtbl gtbl-cams-wrap"><table class="gtbl-cams" style="min-width:${camsTableMinWidth()}px">
-    ${camsColGroupHtml()}
-    <thead><tr class="gtbl-h">${camsColHeadHtml()}</tr>
-    <tr class="gtbl-f">${filtCells}</tr></thead>
+  const body=rows.length?rows.map(r=>`<tr class="gtbl-r ${r.depth?"child":""} ${tsOn(r.id)?"ts-on":""}" onclick="pick('${r.id}')"><td class="ts-td">${tsChk(r.id,r.label)}</td>${CAMS_TBL_COLS.map(([k])=>camsTblCellHtml(r,k)).join("")}</tr>`).join(""):
+    `<tr><td class="empty" colspan="${CAMS_TBL_COLS.length+1}">${i18n("Нет записей для показа")}</td></tr>`;
+  return`<div id="camsTbl">${tsBanner(key)}<div class="gtbl gtbl-cams-wrap"><table class="gtbl-cams" style="min-width:${camsTableMinWidth()+34}px">
+    <colgroup><col class="ts-col" style="width:34px">${camsColGroupHtml().replace(/^<colgroup>|<\/colgroup>$/g,"")}</colgroup>
+    <thead><tr class="gtbl-h"><th class="ts-td">${head}</th>${camsColHeadHtml()}</tr>
+    <tr class="gtbl-f"><td class="ts-td"></td>${filtCells}</tr></thead>
     <tbody>${body}</tbody>
   </table></div>
   <div class="tfoot">
@@ -6644,15 +6681,19 @@ function folderCardHtml(f){
   const devRow=d=>{
     const also=foldersOfDevice(d.id).filter(x=>x.id!==f.id);
     const note=also.length?`${i18n("также в:")} ${escHtml(also.map(x=>folderPathName(x.id)).join(", "))}`:(LB[d.type]||d.type);
-    return `<div class="it" onclick="pick('${d.id}')"><span>${ic(d.type)}</span><span>${escHtml(locName(d))}<small>${note}</small></span>${bdg(d)}</div>`;
+    return `<div class="it ${tsOn(d.id)?"ts-on":""}" onclick="pick('${d.id}')">${tsChk(d.id,locName(d))}<span>${ic(d.type)}</span><span>${escHtml(locName(d))}<small>${note}</small></span>${bdg(d)}</div>`;
   };
+  const lkey="fld:"+f.id;
   return listCard({
-    key:"fld:"+f.id,
+    key:lkey,
     title:"Состав папки",
     items,
     text:it=>[locName(it.n),it.n.ip,it.fld?i18n("Папка"):(LB[it.n.type]||it.n.type)],
+    // Отметка — общая с деревом: «все на странице» и «все по фильтру».
+    mid:found=>{const page=pageSlice(lkey,found).map(it=>it.n.id),head=tsHead(lkey,page,found.map(it=>it.n.id));
+      return`<div class="ts-listhead"><label class="ts-all">${head}<span>${i18n("Все на странице")}</span></label>${tsBanner(lkey)}</div>`},
     row:it=>it.fld
-      ?`<div class="it" onclick="pick('${it.n.id}')"><span>${ic("folder")}</span><span>${escHtml(locName(it.n))}<small>${i18n("Папка")} · ${folderCount(it.n)}</small></span></div>`
+      ?`<div class="it ${tsOn(it.n.id)?"ts-on":""}" onclick="pick('${it.n.id}')">${tsChk(it.n.id,locName(it.n))}<span>${ic("folder")}</span><span>${escHtml(locName(it.n))}<small>${i18n("Папка")} · ${folderCount(it.n)}</small></span></div>`
       :devRow(it.n),
     empty:"Папка пуста",
     ph:"Имя, IP или тип…",
@@ -12482,12 +12523,49 @@ function setSelMode(on){
   on=!!on;if(selMode===on)return;
   selMode=on;bulkPeek=false;
   if(!on&&treeSel.size>1){treeSel.clear();treeAnchor=null}
+  if(!on&&treeSel.size===1&&!treeSel.has(sel))resetTreeSel(sel,selCtx);
   // Открытый домен или сервер — место, откуда начинают отмечать, а не первый
   // отмеченный объект.
   if(on&&treeSel.size===1){const o=find([...treeSel][0])?.n;if(o&&bulkSolo(o)){treeSel.clear();treeAnchor=null}}
   renderTree();gear();
 }
 function toggleSelMode(){setSelMode(!selMode)}
+// ── Отметка в таблицах ────────────────────────────────────────────────────
+// Таблица и дерево отмечают одно и то же — treeSel: отметил строку в таблице
+// папки или сервера — галочка встала в дереве, и наоборот. Галочка в таблице
+// не уводит со страницы: карточка остаётся открытой, выборка — на панели под
+// деревом («К выборке (N) →»). Шапка таблицы — «все на странице», над
+// таблицей — «Отметить все N по фильтру», как в Gmail.
+const tsReg={};
+function tsSet(ids,on){
+  // Открытая папка или сервер — место, а не первый объект выборки.
+  if(!selMode){treeSel.clear();treeAnchor=null}
+  ids.forEach(id=>{if(!on){treeSel.delete(id);return}if(!blockedId(id)&&canMultiPick(find(id)?.n))treeSel.add(id,null)});
+  selMode=treeSel.size>0;
+  bulkPeek=bulkActive();
+  if(treeSel.size)treeAnchor=[...treeSel].pop();else treeAnchor=null;
+  renderTree();gear();
+}
+function tsOn(id){return selMode&&treeSel.has(id)}
+function tsIds(list){return list.filter(id=>canMultiPick(find(id)?.n)&&!blockedId(id))}
+function tsChk(id,label){
+  return`<input type="checkbox" class="ts-chk" ${tsOn(id)?"checked":""} ${blockedId(id)?"disabled":""} aria-label="${escHtml(i18n("Отметить")+" "+(label||""))}" onclick="event.stopPropagation()" onchange="tsSet(['${id}'],this.checked)">`;
+}
+function tsHead(key,pageIds,allIds){
+  pageIds=tsIds(pageIds);allIds=tsIds(allIds);
+  tsReg[key]={page:pageIds,all:allIds};
+  const k=pageIds.filter(tsOn).length,all=pageIds.length>0&&k===pageIds.length;
+  return`<input type="checkbox" class="ts-chk" ${all?"checked":""} ${k&&!all?'data-ind="1"':""} ${pageIds.length?"":"disabled"} title="${i18n("Все на странице")}" aria-label="${i18n("Отметить все на странице")}" onclick="event.stopPropagation()" onchange="tsSetKey('${key}','page',this.checked)">`;
+}
+function tsSetKey(key,what,on){const r=tsReg[key];if(r)tsSet(r[what],on)}
+function tsBanner(key){
+  const r=tsReg[key];if(!r||!selMode||r.all.length<=r.page.length)return"";
+  if(r.all.every(tsOn))return`<div class="ts-banner">${i18n("Отмечены все")} <b>${r.all.length}</b> ${i18n("по фильтру")} · <button type="button" class="lk" onclick="tsSetKey('${key}','all',false)">${i18n("Снять")}</button></div>`;
+  if(r.page.length&&r.page.every(tsOn))return`<div class="ts-banner">${i18n("Отмечены все")} <b>${r.page.length}</b> ${i18n("на этой странице")} · <button type="button" class="lk" onclick="tsSetKey('${key}','all',true)">${i18n("Отметить все")} ${r.all.length} ${i18n("по фильтру")}</button></div>`;
+  return"";
+}
+// «Частично» у шапки ставится только свойством, разметкой его не задать.
+function tsFixInd(root){(root||document).querySelectorAll("input.ts-chk[data-ind]").forEach(el=>{el.indeterminate=true})}
 // Объект занят, пока он в очереди применения или ждёт удаления: отмечать и
 // править его нельзя, иначе два плана лягут друг на друга.
 function busyIds(){
