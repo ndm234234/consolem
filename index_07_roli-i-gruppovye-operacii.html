@@ -382,7 +382,7 @@ h1{margin:4px 0 10px;font-size:20px;display:flex;align-items:center;gap:10px}
 .ici-server{color:#8eb4d4}
 .ici-svcs{color:#8ec4e8}
 .ici-domain{color:#93a6bc}
-.ici-unalloc,.ici-norec,.ici-nofolder{color:#8a9aab}
+.ici-unalloc,.ici-norec,.ici-nofolder{color:#6f7f91}
 .ici-ipsrv{color:#d0b48a}
 .ici-channel{color:#5bc4d4}
 .ici-mic{color:#c084e0}
@@ -1436,9 +1436,6 @@ function applyStaticUi(){
 const svgIc=(d,vb="0 0 16 16")=>`<svg class="ic-svg" viewBox="${vb}" width="14" height="14" aria-hidden="true">${d}</svg>`;
 const IC={
   domain:svgIc(`<path fill="currentColor" d="M8 1.2 1.5 5.2v1.2h1.3V14h4.2V9.2h2V14h4.2V6.4H14.5V5.2z"/>`),
-  // Строки-списки рядом с галочкой: квадрат пунктиром читался как вторая
-  // галочка, поэтому у каждой свой знак — сервер пунктиром «без домена».
-  unalloc:svgIc(`<rect x="4" y="1.5" width="8" height="13" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="2.1 1.5"/><path d="M6.3 4.5h3.4M6.3 7h3.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="8" cy="11.3" r="1" fill="currentColor"/>`),
   server:svgIc(`<path fill="currentColor" d="M4.2 1.5h7.6c.6 0 1.1.5 1.1 1.1v11c0 .5-.4.9-.9.9H4c-.5 0-.9-.4-.9-.9v-11c0-.6.5-1.1 1.1-1.1zm1.3 1.6v7.2h5V3.1h-5zm1.2 8.8c0 .5.4.9.9.9s.9-.4.9-.9-.4-.9-.9-.9-.9.4-.9.9z"/>`),
   camera:svgIc(`<path fill="currentColor" d="M1.4 3.6h7.6c.9 0 1.6.7 1.6 1.6v5.6c0 .9-.7 1.6-1.6 1.6H1.4C.5 12.4 0 11.7 0 10.8V5.2c0-.9.5-1.6 1.4-1.6z"/><path fill="currentColor" opacity=".75" d="M10.6 5.6 14.6 3.5c.55-.28 1.2.12 1.2.75v7.5c0 .63-.65 1.03-1.2.75l-4-2.1V5.6z"/>`),
   ipsrv:svgIc(`<path fill="currentColor" d="M1.2 5.2h13.6c.5 0 .9.4.9.9v3.8c0 .5-.4.9-.9.9H1.2c-.5 0-.9-.4-.9-.9V6.1c0-.5.4-.9.9-.9z"/><circle fill="#1a2433" cx="3.2" cy="8" r=".7"/><circle fill="#1a2433" cx="5" cy="8" r=".7"/><circle fill="#1a2433" cx="6.8" cy="8" r=".7"/><circle fill="#1a2433" cx="8.6" cy="8" r=".7"/><circle fill="#1a2433" cx="10.4" cy="8" r=".7"/><rect fill="#1a2433" x="12.2" y="6.8" width="1.6" height="2.4" rx=".3"/>`),
@@ -1470,8 +1467,12 @@ IC.sec_acc=svgIc(`<circle cx="8" cy="5.2" r="2.7" fill="none" stroke="currentCol
 IC.sec_sys=svgIc(`<circle cx="8" cy="8" r="2.4" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 1.6v2M8 12.4v2M1.6 8h2M12.4 8h2M3.5 3.5l1.4 1.4M11.1 11.1l1.4 1.4M12.5 3.5l-1.4 1.4M4.9 11.1l-1.4 1.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>`);
 IC.sec_log=svgIc(`<path d="M2.6 4.2h10.8M2.6 8h10.8M2.6 11.8h7.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>`);
 IC.archive=IC.storage;
-IC.vol=svgIc(`<rect x="1.5" y="4.5" width="13" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="11.6" cy="8" r="1.1" fill="currentColor"/><path d="M4 8h4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>`);IC.net=IC.storage;IC.norec=svgIc(`<circle cx="8" cy="8" r="5.8" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="2.2" fill="currentColor"/><path d="M3.6 12.4l8.8-8.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>`);
-IC.nofolder=svgIc(`<path d="M1.8 4.2c0-.7.5-1.2 1.2-1.2h3.2l1.5 1.6H13c.7 0 1.2.5 1.2 1.2v6.6c0 .7-.5 1.2-1.2 1.2H3c-.7 0-1.2-.5-1.2-1.2z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="2.1 1.5" stroke-linejoin="round"/>`);IC.found=IC.connect;IC.founddev=IC.camera;
+// Строки-списки — те же знаки, что у их содержимого, только серые: сервер
+// для «Нераспределённых серверов», хранилище для «Без записи», папка для
+// «Без папки». Пунктир на тёмном фоне рассыпался в пиксели и читался как
+// вторая галочка.
+IC.unalloc=IC.server;
+IC.vol=svgIc(`<rect x="1.5" y="4.5" width="13" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="11.6" cy="8" r="1.1" fill="currentColor"/><path d="M4 8h4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>`);IC.net=IC.storage;IC.norec=IC.storage;IC.nofolder=IC.folder;IC.found=IC.connect;IC.founddev=IC.camera;
 const IC_OVERLAY_R="4.65";
 const IC_NOSIG_BADGE=`<svg class="ici-overlay-svg" viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="${IC_OVERLAY_R}" fill="#f0646a"/><path d="M3.4 3.4 6.6 6.6M6.6 3.4 3.4 6.6" stroke="#fff" stroke-width="1.35" stroke-linecap="round"/></svg>`;
 const IC_RULETMP_BADGE=`<svg class="ici-overlay-svg" viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="${IC_OVERLAY_R}" fill="#6a7f9a"/><path d="M5 5V2.25" stroke="#fff" stroke-width="1.35" stroke-linecap="round"/><path d="M5 5h2.55" stroke="#fff" stroke-width="1.15" stroke-linecap="round"/></svg>`;
@@ -12481,6 +12482,9 @@ function setSelMode(on){
   on=!!on;if(selMode===on)return;
   selMode=on;bulkPeek=false;
   if(!on&&treeSel.size>1){treeSel.clear();treeAnchor=null}
+  // Открытый домен или сервер — место, откуда начинают отмечать, а не первый
+  // отмеченный объект.
+  if(on&&treeSel.size===1){const o=find([...treeSel][0])?.n;if(o&&bulkSolo(o)){treeSel.clear();treeAnchor=null}}
   renderTree();gear();
 }
 function toggleSelMode(){setSelMode(!selMode)}
@@ -12512,6 +12516,11 @@ function selDescendants(n,withParts){
     const part=(inDev&&x.type!=="camera"||isSvc(x))&&!withParts;
     if(x!==n&&!part&&canMultiPick(x)&&selfInView(x)&&matchesSearch(x,q)&&!busy.has(x.id)&&!pendingDelHas(x.id))out.push(x);
     kids(x).forEach(k=>visit(k,inDev||dev(x)));
+    // Строки-списки отмечают то, что в них показано: «Без записи» — камеры
+    // без хранилища, «Без папки» — устройства вне папок, GPU — его камеры.
+    if(x.type==="norec")norecList(x.domainId).forEach(c=>visit(c,false));
+    if(x.type==="nofolder")unfolderedDevices(x.domainId).forEach(c=>visit(c,false));
+    if(x.type==="gpu")gpuCameras(x.serverId).forEach(c=>visit(c,false));
     // Сервер и хранилище отмечают всё, что под ними в дереве: регистраторы
     // вместе с их камерами и отдельные камеры.
     if(x.type==="server"&&!isUnallocated(x.id)){
@@ -12598,7 +12607,7 @@ function decorateTreeSel(){
       state=me&&k===d.length?"on":me||k||inner(cc)?"part":"";
     }
     else if(canMultiPick(f.n))state=(on||treeSel.size>1)&&selShownAt(id,row.dataset.ctx)?"on":on&&!noInner&&inner(childSelCtx(f.n)||rowCc)?"part":"";
-    else if(f.n.type==="found"||f.n.type==="founddev"||f.n.type==="norec"||f.n.type==="nofolder"||f.n.type==="gpu")ph=true;
+    else if(f.n.type==="found"||f.n.type==="founddev")ph=true;
     else if(on){
       // Тристейт считаем только в режиме: вне его галочка контейнера просто ждёт клика.
       const d=selDescendants(f.n),cc=childSelCtx(f.n);
