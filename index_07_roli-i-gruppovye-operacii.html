@@ -12765,6 +12765,9 @@ function selDescendants(n,withParts){
     // без хранилища, «Без папки» — устройства вне папок, GPU — его камеры.
     if(x.type==="norec")norecList(x.domainId).forEach(c=>visit(c,false));
     if(x.type==="nofolder")unfolderedDevices(x.domainId).forEach(c=>visit(c,false));
+    // В раскладке по папкам (ОПС/СКД, «Папки») под доменом не серверы, а
+    // папки и «Без папки» — домен отмечает и то, что лежит в них.
+    if(x.type==="domain"){folders.filter(f=>folderDomain(f.id)===x.id).forEach(f=>visit(f,false));unfolderedDevices(x.id).forEach(c=>visit(c,false))}
     if(x.type==="gpu")gpuCameras(x.serverId).forEach(c=>visit(c,false));
     // Сервер и хранилище отмечают всё, что под ними в дереве: регистраторы
     // вместе с их камерами и отдельные камеры.
@@ -12874,7 +12877,15 @@ function decorateTreeSel(){
     if(tw)tw.after(chk);else row.prepend(chk);
   });
 }
-function selDeep(n){return n.type==="server"||n.type==="domain"||n.type==="folder"}
+// Галочка строки с вложенными строками берёт её вместе со всем, что под ней:
+// сервер, папка, домен, контроллер СКУД с датчиками и замками, замок с реле.
+// Камера — исключение: её датчики и реле отмечают поштучно или «Отметить
+// внутри», регистратор берёт камеры своим правилом.
+function selDeep(n){
+  if(n.type==="server"||n.type==="domain"||n.type==="folder")return true;
+  if(n.type==="camera"||n.type==="channel"||n.type==="ipsrv"||!canMultiPick(n))return false;
+  return(n.devices||[]).some(d=>d.type!=="det");
+}
 function selChkClick(id,ctx){
   const f=find(id);if(!f)return;
   if(blockedId(id)){toast(pendingDelHas(id)?"Объект ждёт удаления — отмените его в тосте":"Объект в очереди применения — дождитесь конца");return}
