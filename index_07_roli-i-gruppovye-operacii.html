@@ -1124,8 +1124,6 @@ html[data-theme="light"] .acc-sync.run{color:#9a6a12}
 .bk-prev{margin:6px 0 10px;padding-left:18px;font-size:12px}
 .bk-del{margin:0 0 10px;padding-left:18px}
 .bk-table .empty{padding:20px;text-align:center;color:var(--mu)}
-.rail-status{flex:none;position:relative;padding:6px 2px;border-top:1px solid var(--ln);display:flex;align-items:flex-start;gap:0}
-.rail-status[hidden]{display:none}
 .rs-btn{flex:1;min-width:0;border:0;background:0;color:var(--tx);text-align:left;padding:4px;border-radius:6px;cursor:pointer;display:flex;flex-direction:column;gap:3px;font:inherit}
 .rs-btn:hover{background:#16223a}
 .rs-l1{font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
@@ -1135,7 +1133,6 @@ html[data-theme="light"] .acc-sync.run{color:#9a6a12}
 .rs-bar i{display:block;height:100%;background:var(--bl);transition:width .15s}
 .rs-bar.big{height:6px;margin-top:4px}
 .rs-x{position:absolute;right:2px;top:6px;border:0;background:0;color:var(--mu);cursor:pointer;font-size:11px;padding:2px;line-height:1}
-.rail-status .rs-l1{padding-right:14px}
 .ttu{position:fixed;left:50%;bottom:64px;transform:translateX(-50%);display:flex;align-items:center;gap:12px;background:#1d2a3d;border:1px solid #3b506e;padding:10px 14px;border-radius:8px;z-index:61;max-width:min(560px,calc(100vw - 32px));box-shadow:0 12px 40px #000a;font-size:13px}
 .ttu-timer{color:var(--mu);font-variant-numeric:tabular-nums;white-space:nowrap}
 .ttu-act{border:0;background:0;color:#9ec8ff;font-weight:600;cursor:pointer;font-size:13px}
@@ -1176,46 +1173,72 @@ html[data-theme="light"] .n-chk{border-color:#8fa4bf}
 .busy-chip{flex:none;font-size:9px;padding:1px 5px;border-radius:4px;background:#1c3350;color:#9ec8ff;margin-left:4px;white-space:nowrap}
 .bk-peek{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .tctx-head{padding:6px 10px 2px;font-size:10px;color:var(--mu);text-transform:uppercase;letter-spacing:.04em}
-.hd-status{display:none;flex:none;align-items:center;gap:2px;max-width:260px;min-width:0}
-.ws.norail .hd-status:not([hidden]){display:flex}
-.hd-status .rs-btn{flex-direction:column;padding:2px 8px;gap:2px}
-.hd-status .rs-l1{font-size:12px}
-.hd-status .rs-l2{display:inline;font-size:11px;font-weight:400}
+/* Очередь применения — в шапке справа от поиска, плашкой постоянной ширины:
+   текст шага обрезается многоточием, а не переносится, поэтому плашка не
+   меняет высоту и ничего вокруг не двигает. Полный текст — в подсказке. */
+.hd-status{display:flex;flex:none;align-items:center;gap:2px;width:250px;min-width:0;height:var(--ctrl-h);padding:0 4px 0 2px;border:1px solid var(--ln);border-radius:8px;background:var(--p2);animation:hds-in .2s ease-out}
+.hd-status[hidden]{display:none}
+.hd-status .rs-btn{flex:1;min-width:0;flex-direction:column;justify-content:center;padding:3px 8px;gap:4px;height:100%;border-radius:7px}
+.hd-status .rs-l1{display:flex;gap:6px;align-items:baseline;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;padding:0}
+.hd-status .rs-n{flex:none}
+.hd-status .rs-l2{flex:1;min-width:0;font-size:11px;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hd-status .rs-bar{height:3px}
+.hd-status .rs-x{position:static;flex:none;padding:4px}
+.hd-status .rs-btn.ok .rs-n{color:var(--gn)}.hd-status .rs-btn.bad .rs-n{color:#f0b4b8}
+.hd-status .rs-btn.ok .rs-bar i{background:var(--gn)}.hd-status .rs-btn.bad .rs-bar i{background:var(--rd)}
+@keyframes hds-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+@media (max-width:900px){.hd-status{width:150px}.hd-status .rs-l2{display:none}}
 html[data-theme="light"] .busy-chip{background:#dce8f7;color:#2f5fad}
-.bbox-copy{width:min(980px,96vw)}
-.cp-wrap{display:grid;grid-template-columns:minmax(260px,1fr) minmax(320px,1.4fr);gap:18px}
-.cp-h{font-weight:600;font-size:13px;margin-bottom:8px}
-.cp-group{display:flex;gap:10px;align-items:flex-start;padding:8px;border:1px solid var(--ln);border-radius:7px;margin-bottom:6px;cursor:pointer;background:var(--p2)}
+/* «Применить к другим»: окно постоянной высоты, общего скролла нет — колонки
+   стоят рядом, прокручиваются только длинные списки (детекторы, получатели). */
+.bbox.bbox-copy{width:min(1180px,96vw);height:min(760px,92vh);max-height:none}
+.bbox-copy .cbody{flex:1;min-height:0;overflow:hidden;display:flex;padding:14px 16px}
+.cp-wrap{flex:1;min-height:0;min-width:0;display:grid;grid-template-columns:minmax(250px,310px) minmax(0,1fr);gap:16px}
+.cp-wrap.cp-3{grid-template-columns:minmax(240px,290px) minmax(250px,310px) minmax(0,1fr)}
+.cp-col{display:flex;flex-direction:column;min-height:0;min-width:0}
+.cp-h{display:flex;align-items:center;gap:7px;font-weight:600;font-size:13px;margin-bottom:8px;flex:none}
+.cp-step{display:grid;place-items:center;width:18px;height:18px;border-radius:50%;background:#1c3350;color:#9ec8ff;font-size:11px;font-weight:600;flex:none}
+.cp-h-cnt{margin-left:auto;font-weight:400;font-size:11px;color:var(--mu)}
+.cp-scroll{flex:0 1 auto;min-height:0;overflow:auto;scrollbar-width:thin}
+.cp-src{flex:none;margin:8px 0 0;font-size:11px;line-height:1.45}
+.cp-group{display:flex;gap:10px;align-items:flex-start;padding:7px 8px;border:1px solid var(--ln);border-radius:7px;margin-bottom:6px;cursor:pointer;background:var(--p2)}
+.cp-group:last-child{margin-bottom:0}
 .cp-group input{margin-top:3px}
-.cp-group small{display:block;color:var(--mu);font-size:11px;margin-top:2px}
+.cp-group>span{min-width:0}
+.cp-group small{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;color:var(--mu);font-size:11px;margin-top:2px}
 .cp-group.off{opacity:.5;cursor:default}
-.cp-dets{cursor:default}
-.cp-dets-body{flex:1;min-width:0}
-.cp-dets-head{display:block;width:100%;border:0;background:0;color:var(--tx);padding:0;text-align:left;cursor:pointer;font-size:inherit}
-.cp-dets-chev{color:var(--mu);margin-left:6px}
-.cp-dets-head:hover .cp-dets-chev{color:var(--tx)}
-.cp-det-list{margin-top:8px;max-height:240px;overflow:auto;border-top:1px solid var(--ln);padding-top:4px;scrollbar-width:thin}
-.cp-det{display:flex;gap:8px;align-items:flex-start;padding:5px 2px;cursor:pointer;border-radius:5px}
+.cp-det-list{flex:1;min-height:0;overflow:auto;border:1px solid var(--ln);border-radius:7px;padding:2px 4px;scrollbar-width:thin}
+.cp-det{display:flex;gap:8px;align-items:flex-start;padding:5px 4px;cursor:pointer;border-radius:5px;font-size:12px}
 .cp-det:hover{background:#172a46}
-.cp-det input{margin-top:3px}
+.cp-det input{margin-top:2px}
 .cp-det-nm{flex:1;min-width:0}
+.cp-det-nm small{display:block;color:var(--mu);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cp-det-tag{flex:none;font-size:10px;line-height:1.2;color:#8fb3d9;border:1px solid #2c4a6b;border-radius:99px;padding:2px 7px;margin-top:1px;white-space:nowrap}
 .cp-det-tag.bi{color:#e7c56f;border-color:#6b5a2c}
 .bk-hint-inline{font-size:10px;color:#e6c86a;font-weight:400}
-.cp-sq{margin:6px 0}
-.cp-tools{display:flex;align-items:center;gap:12px;margin:4px 0 6px;font-size:12px}
+.cp-col-list .bk-chips{flex:none;margin-bottom:0}
+.cp-sq{margin:8px 0 4px;flex:none}
+.cp-tools{display:flex;align-items:center;gap:12px;margin:4px 0 6px;font-size:12px;flex:none}
 .cp-all{display:flex;align-items:center;gap:6px;cursor:pointer}
-.cp-list{max-height:44vh;overflow:auto;border:1px solid var(--ln);border-radius:7px}
-.cp-row{display:grid;grid-template-columns:auto 1fr auto;grid-template-areas:"c n note" "c m note";column-gap:10px;align-items:center;padding:6px 10px;border-bottom:1px solid var(--ln);cursor:pointer;font-size:12px}
+.cp-list{flex:1;min-height:0;overflow:auto;border:1px solid var(--ln);border-radius:7px;scrollbar-width:thin}
+.cp-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"c n note" "c m note";column-gap:10px;align-items:center;padding:6px 10px;border-bottom:1px solid var(--ln);cursor:pointer;font-size:12px}
 .cp-row:last-child{border-bottom:0}
 .cp-row:hover{background:#142033}
 .cp-row input{grid-area:c}
-.cp-name{grid-area:n;display:flex;align-items:center;gap:6px}
-.cp-meta{grid-area:m;color:var(--mu);font-size:11px}
-.cp-note{grid-area:note;font-size:10px;color:#e6c86a;white-space:nowrap}
+.cp-name{grid-area:n;display:flex;align-items:center;gap:6px;min-width:0}
+.cp-meta{grid-area:m;color:var(--mu);font-size:11px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cp-note{grid-area:note;font-size:10px;color:#e6c86a;max-width:200px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cp-list .empty{padding:20px;text-align:center;color:var(--mu)}
-@media (max-width:900px){.cp-wrap{grid-template-columns:1fr}}
+.cp-foot-note{font-size:12px;color:#e6c86a;min-width:0;flex:1 1 200px}
+@media (max-width:900px){
+  .bbox.bbox-copy{height:auto;max-height:92vh}
+  .bbox-copy .cbody{overflow:auto;display:block}
+  .cp-wrap,.cp-wrap.cp-3{grid-template-columns:1fr}
+  .cp-list,.cp-det-list{flex:none;max-height:40vh}
+}
 html[data-theme="light"] .cp-row:hover{background:#eef3fa}
+html[data-theme="light"] .cp-det:hover{background:#eef3fa}
+html[data-theme="light"] .cp-step{background:#dce8f7;color:#2f5fad}
 
 </style>
 <script src="assets/i18n-en.js"></script>
@@ -1225,7 +1248,6 @@ html[data-theme="light"] .cp-row:hover{background:#eef3fa}
 <div class="ws" id="ws"><nav class="rail" id="rail" aria-label="Разделы">
   <button type="button" class="ph-choice domain-switch" id="domainBtn" title="Все домены" aria-haspopup="menu" aria-controls="domainPop" aria-expanded="false" onclick="toggleDomainPop(event)"><span class="asw-lb domain-switch-label">Все домены</span><span class="ph-chevron" aria-hidden="true">▾</span></button>
   <div class="rail-tabs" role="tablist" aria-label="Разделы"></div>
-  <div class="rail-status" id="railStatus" hidden></div>
   <div class="umenu" id="umenu">
     <button type="button" class="ubtn" id="ubtn" onclick="toggleUserMenu(event)" title="root" aria-label="root" aria-haspopup="menu" aria-controls="upop" aria-expanded="false">
       <span class="uav" aria-hidden="true">👤</span>
@@ -3244,9 +3266,13 @@ function selShownAt(id,ctx){
 function archCtxTab(n,ctx){return ctx?.startsWith("arch:")&&(n.type==="camera"||n.type==="ipsrv")?"rec":null}
 // Под хранилищем камер в дереве нет: его галочка отмечает их там, где они стоят.
 function childSelCtx(n){return n.type==="server"?"srv:"+n.id:null}
-// Отмечен ли объект внутри контейнера: место различаем только у камер и
-// регистраторов, остальное (датчики, реле камеры) — по самому факту отметки.
-function selShownIn(x,cc){return cc&&(x.type==="camera"||x.type==="ipsrv")?selShownAt(x.id,cc):treeSel.has(x.id)}
+// Отмечен ли объект внутри контейнера. Камера сервера стоит у него в
+// нескольких местах — в списке камер, под его GPU, в «Без записи» домена, —
+// и где бы её ни отметили, она внутри этого сервера: галочка сервера считает
+// её так же, как домен. Иначе камера, отмеченная под GPU, давала «частично»
+// домену, а сервер между ними оставался пустым. Место отметки различает
+// только строка самой камеры (selShownAt).
+function selShownIn(x,cc){return treeSel.has(x.id)}
 function canMultiPick(n){
   return n&&n.type!=="domain"&&n.type!=="storage"&&n.type!=="server"&&n.type!=="unalloc"&&n.type!=="det"&&n.type!=="folder"&&treeKind(n)===tview;
 }
@@ -4414,9 +4440,9 @@ function removeNodeFromParent(f){
   return true;
 }
 function clearTreeSel(){
-  treeSel.clear();
-  const f=find(sel);
-  treeAnchor=f&&canMultiPick(f.n)?sel:null;
+  // Снять всё — то же, что снять последнюю отметку: режим выбора закрывается.
+  treeSel.clear();treeAnchor=null;
+  selMode=false;
   bulkPeek=false;
   renderTree();gear();
 }
@@ -4779,7 +4805,7 @@ function seedFound(){
   Object.entries(FOUND_PLAN).forEach(([did,idx])=>{
     found[did]=idx.map(i=>DEVICE_DISCOVERY_SEED[i]).filter(Boolean).map(x=>({
       ...x,added:false,addedId:null,user:"",pass:"",name:"",short:"",identifier:"",
-      arch:arch[0]?.id||"",group:"",record:"motion",lat:"0",lon:"0",azimuth:"0",discoveredName:x.name}));
+      arch:arch.find(a=>archDomainId(a)===did)?.id||"",group:"",record:"motion",lat:"0",lon:"0",azimuth:"0",discoveredName:x.name}));
   });
   // Найденное раскрыто сразу: это то, с чего начинают в пустой системе, и
   // прятать его за лишний клик незачем.
@@ -5667,6 +5693,9 @@ function lanBindOf(n,d){
   // У сервера архивов несколько — говорим, в какой именно из них пишется.
   if(a&&mine)return{k:"here",t:lanIsArch(n)?i18n("Пишется сюда"):i18n("Пишется сюда")+" · "+locName(a)};
   if(a)return{k:"other",t:locName(a)+(archServer(a)?" · "+locName(archServer(a)):"")};
+  // Камера другого сервера сюда писать не может — она не «свободная».
+  const far=lanFarServer(n,d);
+  if(far)return{k:"other",t:i18n("Без записи")+" · "+locName(far)};
   return{k:"free",t:i18n("Без записи")};
 }
 function lanRows(n){
@@ -5699,6 +5728,14 @@ function lanFilter(rows){
     return x.localeCompare(y,"ru",{numeric:true})*dir;
   });
 }
+// Хранилище сервера доступно только камерам этого сервера, сетевое — любой
+// камере домена. Сервер камеры, из-за которого сюда писать нельзя, или null.
+function lanFarServer(n,d){
+  if(!d||(d.type!=="camera"&&d.type!=="ipsrv")||lanIsPlace(n))return null;
+  const t=lanTargets(n);
+  if(!t.length||t.some(a=>archChoicesFor(d).includes(a)))return null;
+  return cameraTreeServer(d.id);
+}
 // Невозможное не прячем, а объясняем: погашенная кнопка говорит, почему.
 function lanAction(n,r){
   const folder=lanIsFolder(n);
@@ -5721,6 +5758,8 @@ function lanAction(n,r){
   if(r.type!=="camera"&&r.type!=="ipsrv")return{off:i18n("Запись в архив ведут только камеры")};
   if(!lanTargets(n).length)return{off:i18n("У сервера нет архива")};
   if(r.bind==="here")return{label:i18n("Отвязать"),fn:`lanUnbind('${r.key}')`};
+  const far=r.kind==="sys"?lanFarServer(n,r.node):null;
+  if(far)return{off:`${i18n(r.type==="ipsrv"?"Регистратор на сервере":"Камера на сервере")} «${locName(far)}» — ${i18n("хранилище другого сервера недоступно")}`};
   if(r.kind==="net")return{label:i18n("Писать сюда"),fn:`lanAddNew('${r.key}')`,pri:true,net:true};
   return{label:i18n("Писать сюда"),fn:`lanBind('${r.key}')`,pri:true};
 }
@@ -6543,7 +6582,7 @@ function form(n){
   if(n.type==="export")return card("Экспорт видео",`${bdg(n)}${enabledToggleHtml(n)}<div class="g" style="margin-top:10px">${fld("Имя",n.name)}${fld("Папка",n.path)}${sl("Формат",["MP4","AVI"],n.format)}</div>
     <p class="sub">Используется в сценариях: при срабатывании правила экспортирует фрагмент в указанную папку на сервере.</p>`);
   if(n.type==="email"){
-    if(tab==="params")return card("Получатели",`<div class="g">${fld("От кого","noreply@vms.local")}${fld("Получатели","admin@company.ru")}</div>
+    if(tab==="params")return card("Получатели",`<div class="g">${fld("От кого",cpVal(n,"from"))}${fld("Получатели",cpVal(n,"to"))}</div>
       <button class="btn s">Тест</button>`);
     return card("SMTP",`${bdg(n)}${enabledToggleHtml(n)}<div class="g" style="margin-top:10px">${fld("Имя",n.name)}${sl("Режим",["Облачный AxxonNet","SMTP сервер"],n.mode)}${fld("SMTP сервер",n.smtp)}${fld("Порт",n.port,"number")}</div>
       <div class="ln"><div>SSL</div><div class="sw ${n.ssl?"on":""}" onclick="this.classList.toggle('on');setD(true)"></div></div>`)}
@@ -6597,8 +6636,8 @@ function form(n){
       (owner&&owner.type==="camera"?card("Камера",`<div class="it" onclick="pick('${owner.id}')"><span>${ic("camera")}</span><span>${escHtml(locName(owner))}<small>${i18n(recordModeLabel(owner.rec))}</small></span></div>`):"");
   }
   if(n.type==="spk")
-    return card("Динамик",`${bdg(n)}${enabledToggleHtml(n)}<div class="g" style="margin-top:10px">${fld("Имя",n.name)}${fld("Канал",n.ch??"","number")}</div>`);
-  return card("Устройство",`${bdg(n)}${enabledToggleHtml(n)}<div class="g" style="margin-top:10px">${fld("Имя",n.name)}${sl("Тип",[LB[n.type]||n.type])}${fld("Канал",n.ch??"","number")}</div>`)}
+    return card("Динамик",`${bdg(n)}${enabledToggleHtml(n)}<div class="g" style="margin-top:10px">${fld("Имя",n.name)}${fld("Канал",n.ch??"","number")}</div>${devParamsHtml(n)}`);
+  return card("Устройство",`${bdg(n)}${enabledToggleHtml(n)}<div class="g" style="margin-top:10px">${fld("Имя",n.name)}${sl("Тип",[LB[n.type]||n.type])}${fld("Канал",n.ch??"","number")}</div>${devParamsHtml(n)}`)}
 
 // ── Автоматизация ──────────────────────────────────────────────
 // Каталог — это граница, а не удобство. Форма строится из него, поэтому
@@ -10035,16 +10074,20 @@ function assignDeviceFolder(deviceId,folderId){
   folderAddDevice(fid,deviceId);
 }
 function initDeviceWizard(c){
-  return{
+  const w={
     mode:"device-add",deviceTab:"search",deviceStep:1,domain:c.domain?.id||domains[0]?.id,
     server:c.server?.id||null,folder:(c.node?.type==="folder"?c.node.id:selFolder)||null,serverOnly:false,view:c.view,
     devState:"idle",devSearchProgress:0,devFilter:"",devFiltPop:false,devSelectedOnly:false,devStatuses:{ok:true,manual:true,bad:true},
     devMode:"current",templateId:"",devResults:[],devFieldsPop:false,devViewMode:defaultDevViewMode(),devSelected:new Set(),
     bulkEditOpen:false,tplPop:false,modePop:false,tplFilter:"",bulkEdit:{vendor:"",model:"",user:"",pass:"",name:"",arch:"",group:"",record:""},
     bulkUser:"",bulkPass:"",
-    manual:{type:"camera",ip:"",port:80,mac:"",vendor:"Hikvision",model:DEVICE_MODELS.Hikvision[0],user:"",pass:"",name:"",short:"",identifier:"",arch:arch[0]?.id||"",group:"",record:"motion",lat:"0",lon:"0",azimuth:"0"},
+    manual:{type:"camera",ip:"",port:80,mac:"",vendor:"Hikvision",model:DEVICE_MODELS.Hikvision[0],user:"",pass:"",name:"",short:"",identifier:"",arch:"",group:"",record:"motion",lat:"0",lon:"0",azimuth:"0"},
     csvRows:[],csvName:"",csvError:""
   };
+  // Архив по умолчанию — первый из доступных в этом мастере (домен, сервер),
+  // а не первый в системе: тот мог оказаться хранилищем чужого сервера.
+  const keep=wizd;wizd=w;w.manual.arch=wizArchList()[0]?.id||"";wizd=keep;
+  return w;
 }
 function closeWizard(){
   document.getElementById("wiz").classList.remove("open");
@@ -10304,7 +10347,7 @@ function refreshDeviceSearch(){
   const tick=()=>{
     if(wizd!==owner){stopDeviceSearch();return}   // мастера сменили — выдача больше не его
     if(i>=seed.length)return;
-    owner.devResults.push({...seed[i],added:false,addedId:null,user:"",pass:"",name:"",short:"",identifier:"",arch:wizd.defaultArch||arch[0]?.id||"",group:"",record:"motion",lat:"0",lon:"0",azimuth:"0",discoveredName:seed[i].name});
+    owner.devResults.push({...seed[i],added:false,addedId:null,user:"",pass:"",name:"",short:"",identifier:"",arch:wizd.defaultArch||wizArchList()[0]?.id||"",group:"",record:"motion",lat:"0",lon:"0",azimuth:"0",discoveredName:seed[i].name});
     i++;
     owner.devSearchProgress=Math.round((i/seed.length)*100);
     renderDeviceWizard();
@@ -10360,8 +10403,17 @@ function changeFoundVendor(id,vendor){
   r.vendor=vendor;r.model=manualModels(vendor)[0]||r.model||"";renderDeviceWizard();
 }
 function hasLinkedArchive(arch){return!!arch}
+// Нового устройства на сервере ещё нет, поэтому выбор архива — среди хранилищ
+// его домена; если мастер открыт на сервере — только хранилища этого сервера
+// и сетевые хранилища домена. Сервер камера получит от выбранного хранилища.
+function wizArchList(){
+  const scope=lanArchScope();if(scope)return scope;
+  if(!wizd)return arch;
+  if(wizd.server)return[...serverArchives(wizd.server),...domainArchives(SERVER_DOMAIN[wizd.server])];
+  return wizd.domain?arch.filter(a=>archDomainId(a)===wizd.domain):arch;
+}
 function archiveOptions(selected,list){
-  const all=list||arch;
+  const all=list||wizArchList();
   const unset=`<option value="" ${!selected?"selected":""}>Не задано</option>`;
   if(!all.length)return unset+`<option value="" disabled>Архивы не созданы</option>`;
   return unset+all.map(a=>`<option value="${a.id}" ${a.id===selected?"selected":""}>${escHtml(a.name)}</option>`).join("");
@@ -10843,7 +10895,7 @@ function bulkEditModelOptions(){
   return `<option value="">— не менять —</option>${list.map(m=>`<option value="${escHtml(m)}" ${m===wizd.bulkEdit.model?"selected":""}>${escHtml(m)}</option>`).join("")}`;
 }
 function bulkEditArchiveOptions(){
-  return `<option value="">— не менять —</option><option value="__none__" ${wizd.bulkEdit.arch==="__none__"?"selected":""}>Не задано</option>${arch.map(a=>`<option value="${a.id}" ${a.id===wizd.bulkEdit.arch?"selected":""}>${escHtml(a.name)}</option>`).join("")}`;
+  return `<option value="">— не менять —</option><option value="__none__" ${wizd.bulkEdit.arch==="__none__"?"selected":""}>Не задано</option>${wizArchList().map(a=>`<option value="${a.id}" ${a.id===wizd.bulkEdit.arch?"selected":""}>${escHtml(a.name)}</option>`).join("")}`;
 }
 function bulkEditGroupOptions(){
   return `<option value="">— не менять —</option><option value="__none__" ${wizd.bulkEdit.group==="__none__"?"selected":""}>${i18n("Папка мастера")}</option>`+folderOptionGroups(wizd.bulkEdit.group);
@@ -11206,7 +11258,8 @@ function csvRowFrom(cols,index,colMap){
   if(identifier&&identifier!=="Авто"&&!/^[A-Za-z0-9_]+$/.test(identifier))errors.push("некорректный ID");
   if(legacy&&cols.length<4)errors.push("недостаточно столбцов");
   const a=arch.find(x=>x.name===archiveName||x.id===archiveName);
-  row.arch=a?.id||"";
+  if(a&&!wizArchList().includes(a))errors.push("архив другого домена или сервера");
+  row.arch=a&&wizArchList().includes(a)?a.id:"";
   const recMap={Нет:"none",Всегда:"always","По движению":"motion","По детектору":"motion",none:"none",always:"always",motion:"motion"};
   row.record=recMap[recordName]||(row.arch?"motion":"none");
   row.group=resolveGroupIdFromName(groupName);
@@ -11924,8 +11977,14 @@ function selToggle(id,ctx){
 }
 function afterSelChange(id,ctx){
   bulkPeek=false;
+  const emptied=selMode&&!treeSel.size;
   if(id){sel=id;selCtx=normalizeTreeCtx(ctx||null);const t=archCtxTab(find(id)?.n||{},selCtx);if(t&&treeSel.size<=1)tab=t}
   if(treeSel.size===1)sel=[...treeSel][0];
+  // Сняли последнюю отметку сами — режим выбора и панель снизу уходят: пустая
+  // выборка ничего не ждёт («Отметьте объекты» — только при входе кнопкой).
+  // Карточка последнего объекта остаётся открытой, но в выборку он не
+  // возвращается: иначе следующая галочка отметила бы и его.
+  if(emptied){selMode=false;treeAnchor=null}
   if(bulkActive())tab=bulkTabFix(tab);
   setD(false);
   renderTree();gear();
@@ -12074,7 +12133,11 @@ function bulkRecHtml(nodes){
   const recD=countBy(nodes,n=>i18n(recordModeLabel(n.rec||"none")));
   const preD=countBy(nodes,n=>n.pre??5);
   const edgeAll=nodes.every(n=>!!edgeStorage(n)),edgeN=nodes.filter(n=>!!edgeStorage(n)).length;
-  const archOpts=[["__none__",i18n("Не задан")],...arch.map(a=>[a.id,locName(a)])];
+  // Хранилище сервера подходит только камерам этого сервера: в списке те, что
+  // подходят хоть одной камере выборки, с тем, скольким именно.
+  const cams=nodes.filter(n=>n.type==="camera");
+  const archOpts=[["__none__",i18n("Не задан")],...arch.map(a=>[a,cams.filter(n=>archChoicesFor(n).includes(a)).length]).filter(([,k])=>k)
+    .map(([a,k])=>[a.id,locName(a)+(k<cams.length?` — ${i18n("подходит")} ${k} ${i18n("из")} ${cams.length}`:"")])];
   const recOpts=REC_MODES.map(([v,l])=>[v,i18n(l),v==="replica"&&!edgeAll]);
   return card("Архив и запись",`<div class="g">${bkSelect("Архив","arch",archOpts,archD)}${bkSelect("Режим","rec",recOpts,recD)}${bkInput("Предзапись, с","pre","number",preD)}</div>
     <p class="sub">${i18n("Камера под сервером пишет только в хранилища своего сервера или в сетевые хранилища домена: камеры другого сервера в плане будут пропущены. Камера без сервера подключается к серверу выбранного хранилища, поэтому смена идёт через план. Режим и предзапись применяются сразу, с «Отменить».")} ${edgeAll?"":`${i18n("Репликация недоступна: встроенное хранилище есть у")} ${edgeN} ${i18n("из")} ${nodes.length}.`}</p>`);
@@ -12192,7 +12255,7 @@ function bulkChanges(draft){
       const want=d.arch&&d.arch!=="__none__"&&archChoicesFor(n).some(a=>a.id===d.arch)?d.arch:null;
       return mkOp(n,`Режим «${i18n(recordModeLabel(d.rec))}»`,"rec",()=>{
       n.rec=d.rec;if(d.rec!=="none"&&!n.arch){pinCamServer(n);n.arch=(want||archChoicesFor(n)[0]?.id)||null;bindArchServer(n)}
-    },d.rec==="replica"&&!edgeStorage(n)?i18n("нет встроенного хранилища"):(d.rec!=="none"&&!n.arch&&!want?i18n("архив не задан — будет взят первый доступный"):null),()=>{n.rec=prev.rec;n.arch=prev.arch;n.srvId=prev.srvId})});
+    },d.rec==="replica"&&!edgeStorage(n)?i18n("нет встроенного хранилища"):(d.rec!=="none"&&!n.arch&&!want?i18n("архив не задан — сначала привяжите камеру к архиву"):null),()=>{n.rec=prev.rec;n.arch=prev.arch;n.srvId=prev.srvId})});
     const sk=ops.filter(o=>o.skip).length;
     step("rec",`Режим записи «${i18n(recordModeLabel(d.rec))}»`,ops,sk?`${sk} ${i18n(plural(sk,"камера|камеры|камер"))} ${i18n("будут пропущены")}`:"");
   }
@@ -12323,10 +12386,12 @@ function bulkBusyGuard(){
   if(bulkSelNodes().some(n=>busy.has(n.id)||pendingDelHas(n.id))){toast("В выборке есть объекты в очереди или на удалении");return true}
   return false;
 }
-function bulkShowPlan(){
-  const ch=bulkChanges(),nodes=bulkSelNodes();
+// План по выборке дерева; «Применить к другим» для устройств без галочек
+// передаёт свои шаги, объекты и что делать по кнопкам.
+function bulkShowPlan(chIn,nodesIn,applyJs,backJs){
+  const ch=chIn||bulkChanges(),nodes=nodesIn||bulkSelNodes();
   if(!ch.length){toast("Нечего применять");return}
-  if(bulkBusyGuard())return;
+  if(chIn?(bq&&!bq.finished&&(toast("Очередь ещё выполняется — дождитесь её конца"),true)):bulkBusyGuard())return;
   const st=bulkStats(nodes);
   const excluded=new Set(st.offline.map(n=>n.id));
   let total=0,skip=0;
@@ -12340,12 +12405,12 @@ function bulkShowPlan(){
   const warn=[];
   if(excluded.size)warn.push(`${excluded.size} ${i18n(plural(excluded.size,"объект|объекта|объектов"))} ${i18n("на сервере без связи исключены из плана")}`);
   if(skip-excluded.size>0)warn.push(`${i18n("пропущено операций")}: ${skip-excluded.size} (${i18n("причины в отчёте")})`);
-  if(ch.some(c=>c.key==="arch"))warn.push(i18n("смена архива переносит камеры на другой сервер — текущая запись прервётся"));
+  if(ch.some(c=>c.key==="arch"))warn.push(i18n("смена архива: новые записи пойдут в выбранное хранилище, прежние останутся в старом; камеры другого сервера к хранилищу сервера не привязываются"));
   openBulkModal(`${i18n("План")}: ${nodes.length} ${i18n(plural(nodes.length,"объект|объекта|объектов"))}, ${ch.length} ${i18n(plural(ch.length,"шаг|шага|шагов"))}, ≈ ${secs} ${i18n("с")}`,
     `<table class="bk-table"><thead><tr><th>#</th><th>${i18n("Шаг")}</th><th>${i18n("Объектов")}</th><th>${i18n("Сервер")}</th><th>${i18n("Что ещё произойдёт")}</th></tr></thead><tbody>${rows}</tbody></table>
      ${warn.map(w=>`<div class="nt bk-warn">⚠ ${w}</div>`).join("")}
      <p class="sub" style="margin:10px 0 0">${i18n("Параметры применяются к каждому объекту по отдельности, шаги идут по порядку; итог по каждому объекту — в отчёте.")}</p>`,
-    `<button type="button" class="btn" onclick="closeBulkModal()">${i18n("Назад")}</button><button type="button" class="btn pri" onclick="closeBulkModal();bulkApply()" ${total?"":"disabled"}>${i18n("Применить")} (${total})</button>`,"bbox-wide");
+    `<button type="button" class="btn" onclick="${backJs||"closeBulkModal()"}">${i18n("Назад")}</button><button type="button" class="btn pri" onclick="${applyJs||"closeBulkModal();bulkApply()"}" ${total?"":"disabled"}>${i18n("Применить")} (${total})</button>`,"bbox-wide");
 }
 let bq=null,bqTimer=null;
 function bulkApply(opts){
@@ -12356,8 +12421,8 @@ function bulkApply(opts){
   bulkDraft={};
   gear();
 }
-function bulkRun(ch,opts){
-  const nodes=bulkSelNodes();
+function bulkRun(ch,opts,nodesIn){
+  const nodes=nodesIn||bulkSelNodes();
   const excluded=new Set(bulkStats(nodes).offline.map(n=>n.id));
   const steps=ch.map(c=>({label:c.label,ops:c.ops.map(o=>({...o,state:o.skip?"skip":excluded.has(o.n.id)?"excl":"wait",msg:o.skip||(excluded.has(o.n.id)?i18n("сервер без связи"):""),done:!!o.skip||excluded.has(o.n.id)}))}));
   startQueue(steps,`${nodes.length} ${i18n(plural(nodes.length,"объект|объекта|объектов"))}`,opts);
@@ -12416,24 +12481,23 @@ function queueFinish(){
   }else toast(`${i18n("Применено")}: ${label}${bq.skipped?` · ${i18n("пропущено")}: ${bq.skipped}`:""}`);
 }
 function queueDismiss(){if(bq&&bq.finished){bq=null;renderRailStatus()}}
-function railStatusHtml(compact){
+function railStatusHtml(){
   if(!bq)return"";
   const pct=bq.total?Math.round(bq.done/bq.total*100):100;
   const bad=bq.fail+(bq.finished?bq.steps.reduce((n,s)=>n+s.ops.filter(o=>o.state==="cancel").length,0):0);
-  // В рельсе 95 px: первая строка короткая, подробности во второй.
-  const l1=bq.finished?i18n("Готово"):bq.paused?i18n("Пауза"):`${bq.done} ${i18n("из")} ${bq.total}`;
-  const l2=bq.finished?(bad?`${bad} ${i18n("не ок")} · ${i18n("Отчёт")}`:i18n("Отчёт")):escHtml(i18n(bq.cur||"…"));
-  return`<button type="button" class="rs-btn ${bq.finished?(bad?"bad":"ok"):""}" title="${i18n("Очередь применения")}" onclick="${bq.finished?"openReport()":"openQueueModal()"}"><span class="rs-l1">${l1}${compact?` · <span class="rs-l2">${l2}</span>`:""}</span><span class="rs-bar" aria-hidden="true"><i style="width:${pct}%"></i></span>${compact?"":`<span class="rs-l2">${l2}</span>`}</button>${bq.finished?`<button type="button" class="rs-x" title="${i18n("Скрыть")}" onclick="queueDismiss()">✕</button>`:""}`;
+  // Одна строка: число слева постоянной ширины цифр, шаг справа с многоточием.
+  const n=bq.finished?i18n("Готово"):bq.paused?i18n("Пауза"):`${bq.done} ${i18n("из")} ${bq.total}`;
+  const t=bq.finished?(bad?`${bad} ${i18n("не ок")} · ${i18n("Отчёт")}`:i18n("Отчёт")):i18n(bq.cur||"…");
+  const tip=`${i18n("Очередь применения")}: ${bq.title} — ${n}${bq.finished?"":` · ${t}`}`;
+  return`<button type="button" class="rs-btn ${bq.finished?(bad?"bad":"ok"):""}" title="${escHtml(tip)}" onclick="${bq.finished?"openReport()":"openQueueModal()"}"><span class="rs-l1"><span class="rs-n">${n}</span><span class="rs-l2">${escHtml(t)}</span></span><span class="rs-bar" aria-hidden="true"><i style="width:${pct}%"></i></span></button>${bq.finished?`<button type="button" class="rs-x" title="${i18n("Скрыть")}" onclick="queueDismiss()">✕</button>`:""}`;
 }
-// Строка очереди живёт у рельса; когда рельс спрятан, та же строка
-// показывается в шапке рядом с поиском — очередь не должна исчезать с экрана.
+// Очередь живёт в шапке, справа от поиска, — и при показанном рельсе, и при
+// спрятанном. В рельсе она стояла между разделами и меню пользователя, на
+// 95 px переносила название шага на две-три строки и прыгала по высоте.
 function renderRailStatus(){
-  const el=document.getElementById("railStatus"),hd=document.getElementById("hdStatus");
-  [[el,false],[hd,true]].forEach(([host,compact])=>{
-    if(!host)return;
-    if(!bq){host.hidden=true;host.innerHTML="";return}
-    host.hidden=false;host.innerHTML=railStatusHtml(compact);
-  });
+  const hd=document.getElementById("hdStatus");if(!hd)return;
+  if(!bq){hd.hidden=true;hd.innerHTML="";return}
+  hd.hidden=false;hd.innerHTML=railStatusHtml();
 }
 function queueModalHtml(){
   if(!bq)return"";
@@ -12618,80 +12682,193 @@ function toastAction(key,msg,label,fn,ms,hooks){
 function removeToastAction(key){const e=document.getElementById("ttu-"+key);if(e){clearInterval(e._t);e.remove()}}
 
 
-// ── «Применить к другим…»: от одной камеры к похожим ─────────────────────
-// Путь нынешнего Axxon One и Genetec Copy configuration: настроил одну —
-// повторил на остальных. Общие группы идут на любые камеры среза, видео —
-// только на ту же модель. Детекторы выбирают поштучно: программный (на
-// сервере) ставится на камеру любой модели, встроенный в камеру — только на
-// такую же модель. Дальше обычный план и очередь.
-let cp=null;
+// ── «Применить к другим…»: от одного объекта к таким же ──────────────────
+// Путь нынешнего Axxon One и Genetec Copy configuration: настроил один —
+// повторил на остальных. Окно открывается пустым: обычно переносят что-то
+// одно, и снимать лишние галочки дольше, чем поставить нужную.
+// У камеры привязка к архиву отдельно от настроек записи: хранилище сервера
+// доступно только камерам того же сервера, а режим и предзапись подходят
+// любой камере. Видео — только на ту же модель. Детекторы выбирают поштучно:
+// программный (на сервере) ставится на камеру любой модели, встроенный в
+// камеру — только на такую же. У остальных устройств — динамиков, реле,
+// микрофонов, служб сервера — получатели только того же типа. Дальше обычный
+// план и очередь.
+let cp=null,cpPlan=null;
+const CP_NO=new Set(["domain","server","unalloc","folder","archive","vol","gpu","norec","nofolder","found","founddev","det","storage"]);
+// Динамик сервера — служба, динамик камеры — её начинка: это разные устройства.
+function cpKind(n){return n.type==="spk"&&n.server?"spk:srv":n.type}
+function cpCanCopy(n){return!!n&&app==="hw"&&!CP_NO.has(n.type)}
 function bulkCopyBtn(n){
-  if(!n||n.type!=="camera"||app!=="hw")return"";
-  return`<button type="button" class="btn s" title="${i18n("Скопировать настройки этой камеры на другие")}" onclick="openCopyDialog('${n.id}')">${i18n("Применить к другим")}…</button>`;
+  if(!cpCanCopy(n))return"";
+  const tip=n.type==="camera"?"Скопировать настройки этой камеры на другие":"Скопировать настройки на другие устройства того же типа";
+  return`<button type="button" class="btn s" title="${i18n(tip)}" onclick="openCopyDialog('${n.id}')">${i18n("Применить к другим")}…</button>`;
+}
+// Параметры устройств без своей карточки: их и показывает форма, и копирует окно.
+const DEV_PARAMS={
+  relay:[["norm","Нормальное состояние",["Разомкнуто","Замкнуто"]],["pulse","Импульс, мс",500]],
+  sensor:[["norm","Нормальное состояние",["Разомкнуто","Замкнуто"]],["debounce","Задержка срабатывания, мс",200]],
+  mic:[["gain","Усиление, дБ",0],["acodec","Аудиокодек",["G.711","AAC"]]],
+  spk:[["vol","Громкость, %",70],["acodec","Аудиокодек",["G.711","AAC"]]]
+};
+function devParamDef(n,k){return(DEV_PARAMS[n?.type]||[]).find(x=>x[0]===k)||null}
+// Значения пишутся в объект сразу: «Применить к другим» копирует то, что видно.
+function devParamsHtml(n){
+  const ps=DEV_PARAMS[n.type];if(!ps)return"";
+  return`<div class="g" style="margin-top:10px">${ps.map(([k,l,d])=>`<div><label>${i18n(l)}</label>${Array.isArray(d)
+    ?`<select onchange="devParamSet('${n.id}','${k}',this.value)">${d.map(x=>`<option value="${escHtml(x)}" ${x===cpVal(n,k)?"selected":""}>${i18n(x)}</option>`).join("")}</select>`
+    :`<input type="number" value="${escHtml(cpVal(n,k))}" oninput="devParamSet('${n.id}','${k}',this.value)">`}</div>`).join("")}</div>`;
+}
+function devParamSet(id,k,v){
+  const n=find(id)?.n,p=devParamDef(n,k);if(!n||!p)return;
+  n[k]=Array.isArray(p[2])?v:Number(v);
+  setD(true);
+}
+const CP_FIELDS={
+  email:[{key:"smtp",label:"SMTP",fields:["mode","smtp","port","ssl"]},{key:"rcpt",label:"Получатели",fields:["from","to"]}],
+  sms:[{key:"gw",label:"Шлюз",fields:["gateway"]}],
+  export:[{key:"exp",label:"Папка и формат",fields:["path","format"]}],
+  relay:[{key:"params",label:"Параметры реле",fields:["norm","pulse"]}],
+  sensor:[{key:"params",label:"Параметры датчика",fields:["norm","debounce"]}],
+  mic:[{key:"params",label:"Параметры микрофона",fields:["gain","acodec"]}],
+  spk:[{key:"params",label:"Параметры динамика",fields:["vol","acodec"]}]
+};
+const CP_DEFAULT={mode:"SMTP сервер",port:25,ssl:false,from:"noreply@vms.local",to:"admin@company.ru",format:"MP4"};
+function cpVal(n,k){
+  const p=devParamDef(n,k);
+  if(p)return n[k]??(Array.isArray(p[2])?p[2][0]:p[2]);
+  return n[k]??CP_DEFAULT[k]??"";
+}
+function cpShow(n,k){
+  const v=cpVal(n,k);
+  if(k==="ssl")return v?"SSL":i18n("без SSL");
+  if(k==="smtp"&&!v)return i18n("без SMTP-сервера");
+  return i18n(String(v===""?"—":v));
+}
+// Устройство, внутри которого стоит объект: камера у реле, регистратор у канала.
+function cpOwner(n){return path(n.id).slice(0,-1).reverse().find(x=>x.type==="camera"||x.type==="ipsrv"||x.type==="acfa")||null}
+function cpOwnModel(n){const o=cpOwner(n);return o?modelOf(o):""}
+function cpArchScope(a){
+  if(!a)return"";
+  const s=archServer(a),d=archDomain(a);
+  return s?`${i18n("только камеры сервера")} «${locName(s)}»`:d?`${i18n("камеры домена")} «${locName(d)}»`:"";
 }
 function cpGroups(src){
-  const a=arch.find(x=>x.id===src.arch),folders=foldersOfDevice(src.id).filter(f=>f.items.includes(src.id));
-  const dets=camDetectors(src);
-  return[
-    {key:"rec",label:"Архив и запись",value:`${a?locName(a):i18n("архив не задан")} · ${i18n(recordModeLabel(src.rec||"none"))} · ${i18n("предзапись")} ${src.pre??5} ${i18n("с")}`,common:true},
-    {key:"enabled",label:"Включено",value:src.enabled!==false?i18n("включена"):i18n("выключена"),common:true},
-    {key:"folders",label:"Расположение",value:folders.length?folders.map(f=>folderPathName(f.id)).join(", "):i18n("ни в одной папке"),common:true,off:!folders.length},
-    {key:"creds",label:"Учётные данные",value:i18n("логин и пароль источника (пароль не показывается)"),common:true},
-    {key:"video",label:"Видео",value:`${src.codec||"H.265"} · ${src.res||"1920×1080"} · ${src.fps||25} ${i18n("к/с")} · ${src.bitrate||4096}`,common:false},
-    {key:"dets",label:"Детекторы",value:dets.length?"":i18n("детекторов нет"),common:true,off:!dets.length}
-  ];
-}
-function cpCandidates(src){
-  const out=[];walkAll(n=>{if(n.type==="camera"&&n.id!==src.id&&!blockedId(n.id))out.push(n)});
+  const folders=foldersOfDevice(src.id).filter(f=>f.items.includes(src.id));
+  const fGroup={key:"folders",label:"Расположение",value:folders.length?folders.map(f=>folderPathName(f.id)).join(", "):i18n("ни в одной папке"),off:!folders.length};
+  const en={key:"enabled",label:"Включено",value:src.enabled!==false?i18n("включено"):i18n("выключено")};
+  if(src.type==="camera"){
+    const a=arch.find(x=>x.id===src.arch);
+    return[
+      {key:"arch",label:"Привязка к архиву",value:a?locName(a):i18n("архив не задан"),tag:cpArchScope(a),off:!a},
+      {key:"rec",label:"Настройки записи",value:`${i18n(recordModeLabel(src.rec||"none"))} · ${i18n("предзапись")} ${src.pre??5} ${i18n("с")}`},
+      {key:"video",label:"Видео",value:`${src.codec||"H.265"} · ${src.res||"1920×1080"} · ${src.fps||25} ${i18n("к/с")} · ${src.bitrate||4096}`,tag:i18n("только та же модель")},
+      en,fGroup,
+      {key:"creds",label:"Учётные данные",value:i18n("логин и пароль источника (пароль не показывается)")}
+    ];
+  }
+  const out=(CP_FIELDS[src.type]||[]).map(g=>({...g,value:g.fields.map(k=>cpShow(src,k)).join(" · ")}));
+  out.push(en);
+  if(devicePool.includes(src))out.push(fGroup);
+  if(src.type==="ipsrv"||src.type==="acfa"||src.type==="eventsrc")out.push({key:"creds",label:"Учётные данные",value:i18n("логин и пароль источника (пароль не показывается)")});
   return out;
 }
+function cpCandidates(src){
+  const k=cpKind(src),out=[],seen=new Set();
+  walkAll(n=>{if(seen.has(n.id))return;seen.add(n.id);if(n.id!==src.id&&n.type===src.type&&cpKind(n)===k&&!blockedId(n.id))out.push(n)});
+  return out;
+}
+function cpChips(src){
+  if(src.type==="camera")return[["model","Та же модель"],["server","Тот же сервер"],["folder","Та же папка"],["all","Все камеры"]];
+  const own=cpOwner(src);
+  return[...(own?[["model",own.type==="camera"?"Камеры той же модели":"Устройства той же модели"]]:[]),["server","Тот же сервер"],["domain","Тот же домен"],["all","Все"]];
+}
+function cpMatch(n,k){
+  const src=cp.src;
+  if(k==="model")return src.type==="camera"?modelOf(n)===modelOf(src):!!cpOwnModel(src)&&cpOwnModel(n)===cpOwnModel(src);
+  if(k==="server")return srv(n.id)?.id===srv(src.id)?.id;
+  if(k==="folder")return foldersOfDevice(src.id).some(f=>f.items.includes(n.id));
+  if(k==="domain")return nodeDomainId(n)===nodeDomainId(src);
+  return true;
+}
 function cpFiltered(){
-  const q=cp.q.trim().toLowerCase(),src=cp.src;
-  return cpCandidates(src).filter(n=>{
-    if(cp.filter==="model"&&modelOf(n)!==modelOf(src))return false;
-    if(cp.filter==="server"&&srv(n.id)?.id!==srv(src.id)?.id)return false;
-    if(cp.filter==="folder"&&!foldersOfDevice(src.id).some(f=>f.items.includes(n.id)))return false;
+  const q=cp.q.trim().toLowerCase();
+  return cpCandidates(cp.src).filter(n=>{
+    if(!cpMatch(n,cp.filter))return false;
     if(!q)return true;
-    return[locName(n),n.ip,modelOf(n),serverNameOf(n)].join(" ").toLowerCase().includes(q);
+    const o=cpOwner(n);
+    return[locName(n),n.ip,modelOf(n),serverNameOf(n),o?locName(o):"",o?modelOf(o):""].join(" ").toLowerCase().includes(q);
   });
 }
 function openCopyDialog(id){
-  const f=find(id);if(!f||f.n.type!=="camera")return;
+  const f=find(id);if(!f||!cpCanCopy(f.n))return;
   if(busyIds().size){toast("Очередь ещё выполняется — дождитесь её конца");return}
-  const src=f.n;
-  cp={src,groups:new Set(["rec","enabled","folders","video"].filter(k=>!cpGroups(src).find(g=>g.key===k)?.off)),
-    dets:new Set(camDetectors(src).map(d=>d.id)),detsOpen:false,picked:new Set(),filter:"model",q:""};
+  const src=f.n,all=cpCandidates(src);
+  if(!all.length){toast(src.type==="camera"?"Других камер нет":"Других устройств этого типа нет");return}
+  cp={src,groups:new Set(),dets:new Set(),picked:new Set(),filter:"all",q:""};
+  // Чип по умолчанию — самый узкий непустой: у камеры та же модель, у
+  // начинки — та же модель камеры, у службы — тот же сервер.
+  cp.filter=(cpChips(src).find(([k])=>all.some(n=>cpMatch(n,k)))||["all"])[0];
   renderCopyDialog();
+}
+// Чем объект-получатель не подходит под выбранное: другая модель, другой сервер.
+function cpRowNote(n){
+  if(cp.src.type!=="camera")return"";
+  const bits=[];
+  if(modelOf(n)!==modelOf(cp.src)){
+    if(cp.groups.has("video"))bits.push(i18n("видео"));
+    if(camDetectors(cp.src).some(d=>d.builtin&&cp.dets.has(d.id)))bits.push(i18n("встроенные детекторы"));
+  }
+  const a=cp.groups.has("arch")?archById(cp.src.arch):null;
+  if(a&&archForeignReason(n,a))bits.push(i18n("архив"));
+  return bits.length?`${i18n("не получит")}: ${bits.join(", ")}`:"";
 }
 function renderCopyDialog(){
   if(!cp)return;
-  const src=cp.src,all=cpCandidates(src),list=cpFiltered();
-  const cnt={model:all.filter(n=>modelOf(n)===modelOf(src)).length,server:all.filter(n=>srv(n.id)?.id===srv(src.id)?.id).length,folder:all.filter(n=>foldersOfDevice(src.id).some(f=>f.items.includes(n.id))).length,all:all.length};
-  const groups=cpGroups(src).map(g=>g.key==="dets"&&!g.off?cpDetsGroupHtml(src):`<label class="cp-group ${g.off?"off":""}"><input type="checkbox" ${cp.groups.has(g.key)?"checked":""} ${g.off?"disabled":""} onchange="cpToggleGroup('${g.key}',this.checked)"><span><b>${i18n(g.label)}</b>${g.common?"":` <span class="bk-hint-inline">${i18n("только та же модель")}</span>`}<small>${escHtml(g.value)}</small></span></label>`).join("");
-  const chips=[["model","Та же модель"],["server","Тот же сервер"],["folder","Та же папка"],["all","Все камеры"]].map(([k,l])=>`<button type="button" class="stchip ${cp.filter===k?"on":""}" onclick="cp.filter='${k}';renderCopyDialog()"><span class="stchip-lab">${i18n(l)}</span><span class="stchip-cnt">${cnt[k]}</span></button>`).join("");
+  const src=cp.src,cam=src.type==="camera",all=cpCandidates(src),list=cpFiltered();
+  // Окно перерисовывается целиком — прокрутку списков возвращаем на место.
+  const keep={};document.querySelectorAll("#bmBody [data-cp-scroll]").forEach(el=>keep[el.dataset.cpScroll]=el.scrollTop);
+  const groups=cpGroups(src).map(g=>`<label class="cp-group ${g.off?"off":""}" title="${escHtml(g.value)}"><input type="checkbox" ${cp.groups.has(g.key)?"checked":""} ${g.off?"disabled":""} onchange="cpToggleGroup('${g.key}',this.checked)"><span><b>${i18n(g.label)}</b>${g.tag?` <span class="bk-hint-inline">${escHtml(g.tag)}</span>`:""}<small>${escHtml(g.value)}</small></span></label>`).join("");
+  const chips=cpChips(src).map(([k,l])=>`<button type="button" class="stchip ${cp.filter===k?"on":""}" onclick="cp.filter='${k}';renderCopyDialog()"><span class="stchip-lab">${i18n(l)}</span><span class="stchip-cnt">${all.filter(n=>cpMatch(n,k)).length}</span></button>`).join("");
   const allOn=list.length>0&&list.every(n=>cp.picked.has(n.id));
   const rows=list.map(n=>{
-    const same=modelOf(n)===modelOf(src),s=srv(n.id);
-    const lost=same?"":cpModelLoss();
-    return`<label class="cp-row"><input type="checkbox" ${cp.picked.has(n.id)?"checked":""} onchange="cpPick('${n.id}',this.checked)"><span class="cp-name">${treeIconHtml(n)} ${escHtml(crumbTitle(n))}</span><span class="cp-meta">${escHtml(serverNameOf(n))} · ${escHtml(modelOf(n)||"—")} · ${escHtml(n.ip||"")}${s&&hasNoSignal(s)?` · <span class="bk-bad">${i18n("сервер без связи")}</span>`:""}</span>${lost?`<span class="cp-note">${lost} ${i18n("не скопируются")}</span>`:""}</label>`;
+    const s=srv(n.id),o=cam?null:cpOwner(n),note=cpRowNote(n);
+    const meta=cam?[serverNameOf(n),modelOf(n)||"—",n.ip||""]:[o?`${locName(o)}${modelOf(o)?" · "+modelOf(o):""}`:"",serverNameOf(n)];
+    return`<label class="cp-row"><input type="checkbox" ${cp.picked.has(n.id)?"checked":""} onchange="cpPick('${n.id}',this.checked)"><span class="cp-name">${treeIconHtml(n)} ${crumbTitle(n)}</span><span class="cp-meta">${meta.filter(Boolean).map(escHtml).join(" · ")}${s&&hasNoSignal(s)?` · <span class="bk-bad">${i18n("сервер без связи")}</span>`:""}</span>${note?`<span class="cp-note">${escHtml(note)}</span>`:""}</label>`;
   }).join("")||`<div class="empty">${i18n("Ничего не найдено")}</div>`;
-  const loss=cpModelLoss();
-  const other=[...cp.picked].filter(id=>{const n=find(id)?.n;return n&&modelOf(n)!==modelOf(src)}).length;
-  openBulkModal(`${i18n("Применить настройки")} «${escHtml(locName(src))}» ${i18n("к другим камерам")}`,
-    `<div class="cp-wrap">
-      <div class="cp-col"><div class="cp-h">${i18n("Что копировать")}</div>${groups}
-        <p class="sub" style="margin-top:8px">${i18n("Источник")}: ${escHtml(modelOf(src)||"—")}, ${escHtml(serverNameOf(src))}. ${i18n("Общие группы и программные детекторы идут на любые камеры; видео и детекторы, встроенные в камеру, — только на ту же модель, остальные камеры по этим шагам будут пропущены с причиной.")}</p></div>
-      <div class="cp-col cp-col-list"><div class="cp-h">${i18n("Кому")}</div>
+  const dets=cam?camDetectors(src):[];
+  const hasDets=dets.length>0;
+  const what=cp.groups.size+cp.dets.size;
+  const foot=cpFootNote();
+  const unit=cam?i18n("к другим камерам"):`${i18n("к другим")}: ${i18n(LB[src.type]||src.type).toLowerCase()}`;
+  openBulkModal(`${i18n("Применить настройки")} «${escHtml(locName(src))}» ${unit}`,
+    `<div class="cp-wrap ${hasDets?"cp-3":""}">
+      <section class="cp-col"><div class="cp-h"><span class="cp-step">1</span>${i18n("Что копировать")}</div>
+        <div class="cp-scroll" data-cp-scroll="g">${groups}</div>
+        <p class="sub cp-src">${i18n("Источник")}: ${escHtml(cam?(modelOf(src)||"—"):(LB[src.type]||src.type))}, ${escHtml(serverNameOf(src))}.${cam?" "+i18n("Привязка к хранилищу сервера доступна только камерам этого сервера; остальные будут пропущены с причиной."):" "+i18n("Получатели — только устройства того же типа.")}</p></section>
+      ${hasDets?cpDetsColHtml(src,dets):""}
+      <section class="cp-col cp-col-list"><div class="cp-h"><span class="cp-step">${hasDets?3:2}</span>${i18n("Кому")}</div>
         <div class="bk-chips">${chips}</div>
-        <div class="sq lan-sq cp-sq"><input value="${escHtml(cp.q)}" placeholder="${i18n("Имя, IP, модель, сервер…")}" oninput="cp.q=this.value;renderCopyDialog();this.focus()"></div>
+        <div class="sq lan-sq cp-sq"><input value="${escHtml(cp.q)}" placeholder="${i18n(cam?"Имя, IP, модель, сервер…":"Имя, устройство, модель, сервер…")}" oninput="cp.q=this.value;renderCopyDialog();this.focus()"></div>
         <div class="cp-tools"><label class="cp-all"><input type="checkbox" ${allOn?"checked":""} ${list.length?"":"disabled"} onchange="cpPickAll(this.checked)"><span>${allOn?i18n("Снять выделение"):i18n("Выбрать всё")} (${list.length})</span></label><span class="sel-cnt">${i18n("Выбрано")}: <b>${cp.picked.size}</b></span></div>
-        <div class="cp-list">${rows}</div></div>
-    </div>${loss&&other?`<div class="nt bk-warn" style="margin-top:10px">⚠ ${other} ${i18n(plural(other,"камера|камеры|камер"))} ${i18n("другой модели:")} ${loss} ${i18n("к ним не применятся")}</div>`:""}`,
-    `<button type="button" class="btn" onclick="closeBulkModal();cp=null">${i18n("Отмена")}</button><span class="tfoot-gap"></span><button type="button" class="btn pri" onclick="cpShowPlan()" ${cp.picked.size&&(cp.groups.size||cp.dets.size)?"":"disabled"}>${i18n("Показать план")} (${cp.picked.size})</button>`,"bbox-wide bbox-copy");
+        <div class="cp-list" data-cp-scroll="l">${rows}</div></section>
+    </div>`,
+    `<button type="button" class="btn" onclick="closeBulkModal();cp=null">${i18n("Отмена")}</button>${foot?`<span class="cp-foot-note">⚠ ${foot}</span>`:""}<span class="tfoot-gap"></span><button type="button" class="btn pri" onclick="cpShowPlan()" ${cp.picked.size&&what?"":"disabled"} title="${what?"":i18n("Отметьте, что копировать")}">${i18n("Показать план")} (${cp.picked.size})</button>`,"bbox-wide bbox-copy");
   requestAnimationFrame(()=>{
-    const i=document.querySelector(".cp-sq input");if(i&&cp.q){i.focus();i.setSelectionRange(i.value.length,i.value.length)}
+    document.querySelectorAll("#bmBody [data-cp-scroll]").forEach(el=>{if(keep[el.dataset.cpScroll])el.scrollTop=keep[el.dataset.cpScroll]});
+    const i=document.querySelector(".cp-sq input");if(i&&cp?.q){i.focus();i.setSelectionRange(i.value.length,i.value.length)}
     const h=document.querySelector(".cp-dets-all");if(h)h.indeterminate=h.dataset.part==="1";
   });
+}
+// Предупреждение в подвале: сколько выбранных получателей что-то не получат.
+function cpFootNote(){
+  if(cp.src.type!=="camera")return"";
+  const picked=[...cp.picked].map(id=>find(id)?.n).filter(Boolean),bits=[];
+  const loss=cpModelLoss(),other=loss?picked.filter(n=>modelOf(n)!==modelOf(cp.src)).length:0;
+  if(other)bits.push(`${other} ${i18n(plural(other,"камера|камеры|камер"))} ${i18n("другой модели:")} ${loss} ${i18n("к ним не применятся")}`);
+  const a=cp.groups.has("arch")?archById(cp.src.arch):null;
+  const far=a?picked.filter(n=>archForeignReason(n,a)).length:0;
+  if(far)bits.push(`${far} ${i18n(plural(far,"камера|камеры|камер"))} ${i18n("на другом сервере: к архиву не привяжутся")}`);
+  return bits.join("; ");
 }
 // Что не доедет до камеры другой модели: видео и встроенные детекторы.
 function cpModelLoss(){
@@ -12702,32 +12879,34 @@ function cpModelLoss(){
   if(b)bits.push(`${b} ${i18n(plural(b,"встроенный детектор|встроенных детектора|встроенных детекторов"))}`);
   return bits.join(` ${i18n("и")} `);
 }
-// Группа «Детекторы» раскрывается списком: копируют один, несколько или все.
-function cpDetsGroupHtml(src){
-  const dets=camDetectors(src),k=dets.filter(d=>cp.dets.has(d.id)).length;
-  const bi=dets.filter(d=>d.builtin).length;
-  const sum=`${i18n("выбрано")} ${k} ${i18n("из")} ${dets.length}`+(bi?` · ${i18n("встроенных в камеру")}: ${bi}`:"");
+// Детекторы — своя колонка, плоским списком: раскрывающаяся группа слева
+// растила окно и давала второй скролл внутри первого.
+function cpDetsColHtml(src,dets){
+  const k=dets.filter(d=>cp.dets.has(d.id)).length,bi=dets.filter(d=>d.builtin).length;
   const rows=dets.map(d=>`<label class="cp-det"><input type="checkbox" ${cp.dets.has(d.id)?"checked":""} onchange="cpToggleDet('${d.id}',this.checked)">
       <span class="cp-det-nm">${escHtml(detTitle(d))}<small>${escHtml(i18n(d.kind||DET_TYPES[0]))} · ${i18n("чувствительность")} ${escHtml(String(d.sens||"12"))}</small></span>
-      ${d.builtin?`<span class="cp-det-tag bi" title="${i18n("Детектор работает в самой камере — переносится только на такую же модель")}">${i18n("в камере · та же модель")}</span>`
-        :`<span class="cp-det-tag" title="${i18n("Детектор считается на сервере — подходит камере любой модели")}">${i18n("на сервере · любая модель")}</span>`}</label>`).join("");
-  return`<div class="cp-group cp-dets ${cp.detsOpen?"open":""}">
-    <input type="checkbox" class="cp-dets-all" ${k===dets.length?"checked":""} data-part="${k&&k<dets.length?1:0}" onchange="cpAllDets(this.checked)" aria-label="${i18n("Все детекторы")}">
-    <span class="cp-dets-body"><button type="button" class="cp-dets-head" aria-expanded="${cp.detsOpen}" onclick="cp.detsOpen=!cp.detsOpen;renderCopyDialog()">
-      <b>${i18n("Детекторы")}</b><span class="cp-dets-chev">${cp.detsOpen?"▾":"▸"}</span><small>${escHtml(sum)} — ${i18n("без зон")}</small></button>
-      ${cp.detsOpen?`<div class="cp-det-list">${rows}</div>`:""}</span></div>`;
+      ${d.builtin?`<span class="cp-det-tag bi" title="${i18n("Детектор работает в самой камере — переносится только на такую же модель")}">${i18n("в камере")}</span>`
+        :`<span class="cp-det-tag" title="${i18n("Детектор считается на сервере — подходит камере любой модели")}">${i18n("на сервере")}</span>`}</label>`).join("");
+  return`<section class="cp-col"><div class="cp-h"><span class="cp-step">2</span>${i18n("Детекторы")}<span class="cp-h-cnt">${k} ${i18n("из")} ${dets.length}</span></div>
+    <label class="cp-tools cp-all"><input type="checkbox" class="cp-dets-all" ${k===dets.length?"checked":""} data-part="${k&&k<dets.length?1:0}" onchange="cpAllDets(this.checked)"><span>${k===dets.length?i18n("Снять все"):i18n("Все детекторы")}</span></label>
+    <div class="cp-det-list" data-cp-scroll="d">${rows}</div>
+    <p class="sub cp-src">${i18n("Без зон.")} <span class="cp-det-tag">${i18n("на сервере")}</span> ${i18n("— на камеру любой модели")}${bi?`, <span class="cp-det-tag bi">${i18n("в камере")}</span> ${i18n("— только на ту же модель")}`:""}.</p></section>`;
 }
 function cpToggleDet(id,on){if(!cp)return;on?cp.dets.add(id):cp.dets.delete(id);renderCopyDialog()}
 function cpAllDets(on){if(!cp)return;cp.dets.clear();if(on)camDetectors(cp.src).forEach(d=>cp.dets.add(d.id));renderCopyDialog()}
 function cpToggleGroup(k,on){if(!cp)return;if(on)cp.groups.add(k);else cp.groups.delete(k);renderCopyDialog()}
 function cpPick(id,on){if(!cp)return;if(on)cp.picked.add(id);else cp.picked.delete(id);renderCopyDialog()}
 function cpPickAll(on){if(!cp)return;cpFiltered().forEach(n=>on?cp.picked.add(n.id):cp.picked.delete(n.id));renderCopyDialog()}
-// Выбранные камеры становятся выборкой, группы — черновиком: дальше тот же
+// Камеры: выбранные становятся выборкой, группы — черновиком: дальше тот же
 // план, та же очередь и тот же отчёт, что у карточки выборки.
+// Остальные устройства в выборку дерева не попадают (у служб нет галочек),
+// поэтому для них план собирается здесь же и идёт в ту же очередь.
 function cpShowPlan(){
   if(!cp||!cp.picked.size)return;
+  if(cp.src.type!=="camera"){cpShowPlanGeneric();return}
   const src=cp.src,g=cp.groups,d={};
-  if(g.has("rec")){d.arch=src.arch||"__none__";d.rec=src.rec||"none";d.pre=String(src.pre??5)}
+  if(g.has("arch")&&src.arch)d.arch=src.arch;
+  if(g.has("rec")){d.rec=src.rec||"none";d.pre=String(src.pre??5)}
   if(g.has("enabled"))d.enabled=src.enabled!==false?"on":"off";
   if(g.has("folders"))d.folderAddMany=foldersOfDevice(src.id).filter(f=>f.items.includes(src.id)).map(f=>f.id);
   if(g.has("creds")){d.user=src.user||"admin";d.pass="********"}
@@ -12744,6 +12923,38 @@ function cpShowPlan(){
   const ch=bulkChanges();
   if(!ch.length){toast("У выбранных камер уже такие настройки");return}
   bulkShowPlan();
+}
+function cpChangesGeneric(src,nodes,groups){
+  const out=[],step=(key,label,ops,note)=>{if(ops.length)out.push({key,label,ops,note:note||""})};
+  cpGroups(src).filter(g=>groups.has(g.key)&&!g.off).forEach(g=>{
+    if(g.key==="enabled"){
+      const want=src.enabled!==false;
+      step("enabled",want?"Включить":"Выключить",nodes.filter(n=>(n.enabled!==false)!==want).map(n=>{const prev=n.enabled;return mkOp(n,want?"Включить":"Выключить",want?"enable":"disable",()=>{n.enabled=want},null,()=>{n.enabled=prev})}));
+    }else if(g.key==="folders"){
+      foldersOfDevice(src.id).filter(f=>f.items.includes(src.id)).forEach(f=>step("folderAdd:"+f.id,`В папку «${folderPathName(f.id)}»`,
+        nodes.filter(n=>!f.items.includes(n.id)).map(n=>mkOp(n,"В папку","folder",()=>folderAddDevice(f.id,n.id),devicePool.includes(n)?null:i18n("вложенный объект — папку задают его устройству"),()=>{f.items=f.items.filter(x=>x!==n.id)}))));
+    }else if(g.key==="creds"){
+      step("creds","Учётные данные",nodes.map(n=>mkOp(n,"Учётные данные","creds",()=>{n.user=src.user||"admin";n.pass="•".repeat(8)})),i18n("устройство переподключится"));
+    }else if(g.fields){
+      step(g.key,g.label,nodes.filter(n=>g.fields.some(k=>cpVal(n,k)!==cpVal(src,k))).map(n=>{
+        const prev={};g.fields.forEach(k=>prev[k]=n[k]);
+        return mkOp(n,g.label,"param",()=>{g.fields.forEach(k=>n[k]=cpVal(src,k))},null,()=>{g.fields.forEach(k=>{if(prev[k]===undefined)delete n[k];else n[k]=prev[k]})});
+      }),g.fields.map(k=>cpShow(src,k)).join(" · "));
+    }
+  });
+  return out;
+}
+function cpShowPlanGeneric(){
+  const src=cp.src,nodes=[...cp.picked].map(id=>find(id)?.n).filter(Boolean);
+  const ch=cpChangesGeneric(src,nodes,new Set([...cp.groups]));
+  if(!ch.length){toast("У выбранных устройств уже такие настройки");return}
+  cpPlan={ch,nodes};
+  bulkShowPlan(ch,nodes,"cpApplyGeneric()","renderCopyDialog()");
+}
+function cpApplyGeneric(){
+  if(!cpPlan)return;
+  const{ch,nodes}=cpPlan;cpPlan=null;cp=null;closeBulkModal();
+  bulkRun(ch,null,nodes);
 }
 
 seedFound();   // выдача поиска по доменам: сеть у каждого своя
