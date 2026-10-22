@@ -902,6 +902,7 @@ html[data-theme="light"] .acc-date{color-scheme:light}
 .acc-flash,tr.acc-flash>td,.acc-flash select,.acc-flash input{animation:accFlash 2.4s ease-out}
 [data-def].acc-flash{border-radius:6px;padding:4px;margin:-4px}
 h1.acc-flash,.tab.acc-flash,.n.acc-flash{border-radius:6px}
+.cr-cur.acc-flash{border-radius:6px;padding:0 4px;margin:0 -4px}
 .acc-ovnote{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.acc-ovnote>div:first-child{flex:1;min-width:260px}.acc-ovnote-a{display:flex;gap:6px}
 .acc-mx td.inh{color:#7f93ad}.acc-mx td.def{color:#5f718a;font-style:italic}
 .acc-menu{position:fixed;z-index:60;background:var(--p);border:1px solid var(--ln);border-radius:8px;box-shadow:0 12px 32px #0008;padding:4px;min-width:200px;max-width:440px;max-height:min(70vh,520px);overflow:auto}
@@ -1079,7 +1080,7 @@ html[data-theme="light"] .acc-sync.run{color:#9a6a12}
 /* Панель отметок — строка под деревом, а не в ряду фильтров: её появление не
    сдвигает дерево под курсором. Это отдельный flex-элемент колонки, поэтому
    область прокрутки становится ниже, и последние строки дерева не закрыты. */
-.sel-bar{flex:none;display:flex;align-items:center;gap:10px;min-height:34px;padding:0 6px 0 var(--gut);border-top:1px solid #3f6fac;background:#1a3150;color:#d8e9ff;font-size:12px;white-space:nowrap;overflow:hidden}
+.sel-bar{position:relative;flex:none;display:flex;align-items:center;gap:10px;min-height:38px;padding:0 6px 0 var(--gut);border-top:2px solid var(--bl);background:#1c3a63;color:#e2efff;font-size:12.5px;white-space:nowrap;overflow:hidden;box-shadow:0 -6px 16px #0006}
 .sel-bar .sel-gap{flex:1}
 .sel-bar[hidden]{display:none}
 /* Панель выезжает снизу: растёт от нуля, дерево над ней плавно укорачивается,
@@ -1088,9 +1089,15 @@ html[data-theme="light"] .acc-sync.run{color:#9a6a12}
 .sel-bar.sel-in>*{animation:selItemUp .22s cubic-bezier(.2,.8,.3,1)}
 .sel-bar.sel-out{animation:selUp .16s ease-in reverse forwards;pointer-events:none}
 .sel-bar.sel-out>*{animation:selItemUp .16s ease-in reverse forwards}
-@keyframes selUp{from{min-height:0;height:0;border-top-color:transparent}to{min-height:34px;height:34px}}
+@keyframes selUp{from{min-height:0;height:0;border-top-color:transparent}to{min-height:38px;height:38px}}
+/* Вспышка поверх панели — те же два всплеска, что у места перехода в «Правах» */
+.sel-bar.sel-flash::after{content:"";position:absolute;inset:0;pointer-events:none;animation:selFlash 1.8s ease-out .12s both}
+@keyframes selFlash{0%{background-color:transparent;box-shadow:inset 0 0 0 2px transparent}12%,44%{background-color:#4b8df870;box-shadow:inset 0 0 0 2px #9ec8ff}28%,60%{background-color:#4b8df822;box-shadow:inset 0 0 0 2px #9ec8ff}100%{background-color:transparent;box-shadow:inset 0 0 0 2px transparent}}
+.sel-cnt b{display:inline-block}
+.sel-cnt b.bump{animation:selBump .32s ease-out}
+@keyframes selBump{0%{transform:scale(1)}35%{transform:scale(1.45);color:#fff}100%{transform:scale(1)}}
 @keyframes selItemUp{from{transform:translateY(100%);opacity:0}}
-@media (prefers-reduced-motion:reduce){.sel-bar.sel-in,.sel-bar.sel-in>*,.sel-bar.sel-out,.sel-bar.sel-out>*{animation:none}}
+@media (prefers-reduced-motion:reduce){.sel-bar.sel-in,.sel-bar.sel-in>*,.sel-bar.sel-out,.sel-bar.sel-out>*,.sel-cnt b.bump{animation:none}}
 .sel-ic{display:inline-flex;color:#9ec8ff}.sel-ic svg{width:13px;height:13px}
 .sel-bar .lk{font-size:12px;white-space:nowrap;color:#9ec8ff}
 .sel-cnt{white-space:nowrap}
@@ -1156,7 +1163,7 @@ html[data-theme="light"] .acc-sync.run{color:#9a6a12}
 @keyframes ttu-drain{from{transform:scaleX(1)}to{transform:scaleX(0)}}
 @keyframes ttu-beat{0%{transform:scale(1.35)}60%,100%{transform:scale(1)}}
 @media (prefers-reduced-motion:reduce){.ttu.danger,.ttu.urgent,.ttu-ic,.ttu.urgent .ttu-left{animation:none}}
-html[data-theme="light"] .sel-bar{background:#dce8f7;border-color:#9db6d9;color:#1a3358}
+html[data-theme="light"] .sel-bar{background:#dce8f7;border-color:var(--bl);color:#1a3358;box-shadow:0 -6px 16px #1a335822}
 html[data-theme="light"] .sel-bar .lk,html[data-theme="light"] .sel-close,html[data-theme="light"] .sel-ic{color:#2f5fad}
 html[data-theme="light"] .sel-cnt b{color:#1a3358}
 html[data-theme="light"] .pending-chip{background:#fff1cc;color:#7a5a00}
@@ -1282,6 +1289,7 @@ html[data-theme="light"] .cr-link.cr-sel{background:#dce8f7;color:#2f5fad}
 .bk-scope-sum{margin-top:4px;padding-top:8px;border-top:1px solid var(--ln);font-size:12px;color:var(--mu)}
 .bk-scope-sum.on{color:#9ec8ff}
 .bk-scope-sum b{color:var(--tx)}
+.bk-solo-note{display:block;margin-top:4px;color:var(--mu)}
 .bk-miss{margin:0 0 8px;padding-left:18px;font-size:12px;color:var(--mu)}
 .bk-miss li{margin:2px 0}
 .an-kinds{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
@@ -3198,7 +3206,9 @@ function goPick(i){
     treeQ="";strictIdSearch=false;searchMatchCache.clear();
     const inp=document.getElementById("gq");if(inp)inp.value="";
   }
+  hwJumpFlash=true;
   t.go();
+  hwJumpFlash=false;
   updateFiltChrome();
 }
 function goClose(){document.getElementById("gopop")?.classList.remove("open")}
@@ -3504,11 +3514,13 @@ function childSelCtx(n){return n.type==="server"?"srv:"+n.id:null}
 // домену, а сервер между ними оставался пустым. Место отметки различает
 // только строка самой камеры (selShownAt).
 function selShownIn(x,cc){return treeSel.has(x.id)}
-// Отметить можно любое устройство в любом срезе — камеру вместе с SMS-шлюзом,
-// реле, детектором или встроенным хранилищем. Что из этого можно править
-// вместе, решает карточка выборки, а не галочка. Контейнеры (домен, сервер,
-// папка) и записи о хранении (хранилище, том) — не устройства.
-const NOT_PICKABLE=new Set(["domain","server","unalloc","folder","archive","vol","gpu","norec","nofolder","found","founddev"]);
+// Отметить можно любой объект дерева — камеру вместе с SMS-шлюзом, сервер,
+// папку, домен, хранилище, том. Галочка, которой нет, ставит в тупик: «а этот
+// почему нельзя?». Что из отмеченного можно править вместе, решает карточка
+// выборки, а не галочка. Не отмечаются только строки-списки, которые сами не
+// объекты: «Нераспределённые серверы», «Без записи», «Без папки», найденные,
+// GPU сервера — их галочка отмечает всё, что в них лежит.
+const NOT_PICKABLE=new Set(["unalloc","gpu","norec","nofolder","found","founddev"]);
 function canMultiPick(n){return!!n&&!NOT_PICKABLE.has(n.type)}
 function treeRowHi(id,ctx){
   const on=sel===id&&sameCtx(ctx),mark=selShownAt(id,ctx);
@@ -4327,6 +4339,7 @@ function pick(id,opts){
     const el=document.querySelector(".nm-inp");
     if(el)commitTreeRename(treeRenameId,el.value);
   }
+  const fromLink=hwFromLink();
   closeTreeCtx();
   const f=find(id);if(!f)return;
   const range=!!opts?.range,additive=!!opts?.additive,multi=range||additive;
@@ -4337,7 +4350,10 @@ function pick(id,opts){
     applyShiftRange(id,ctx);
   }else if(additive&&canMultiPick(f.n)){
     const ids=visibleMultiIds();
-    if(!treeSel.size&&ids.includes(sel))treeSel.add(sel,selCtx);
+    // Открытый домен или сервер — место, а не первый объект выборки.
+    let fresh=false;
+    if(treeSel.size===1&&!treeSel.has(id)){const o=find([...treeSel][0])?.n;if(o&&bulkSolo(o)&&!bulkSolo(f.n)){treeSel.clear();fresh=true}}
+    if(!fresh&&!treeSel.size&&ids.includes(sel)&&!bulkSolo(find(sel)?.n||{}))treeSel.add(sel,selCtx);
     if(selShownAt(id,ctx)&&treeSel.size>1)treeSel.delete(id);
     else treeSel.add(id,ctx);
     treeAnchor=id;
@@ -4355,7 +4371,27 @@ function pick(id,opts){
     renderTree();
     gear();return
   }
+  if(fromLink)hwFlashLanding();
   paint();
+}
+// Переход по ссылке из карточки, пути, списка, поиска или тоста — как в
+// «Правах»: место, куда пришли, моргает — заголовок, вкладка и строка дерева.
+// Клик в самом дереве не моргает: там и так видно, куда щёлкнул.
+let hwJumpFlash=false;
+function hwFromLink(){
+  if(app!=="hw")return false;
+  if(hwJumpFlash)return true;
+  const ev=window.event;if(!ev||ev.type!=="click"||!ev.target?.closest)return false;
+  const t=ev.target;
+  if(t.closest("#tree,.tabs,.rail,#selBar"))return false;
+  return!!t.closest("#main,#favWrap,.ttu,.cbox,#tctx");
+}
+function hwFlashLanding(){
+  setTimeout(()=>{
+    const els=[".hd h1",".hd .hd-cr .cr-cur",".hd .tabs .tab.on","#tree .n.on"].map(q=>document.querySelector(q)).filter(Boolean);
+    document.querySelector("#tree .n.on")?.scrollIntoView({block:"nearest"});
+    if(els.length)accFlash(()=>els,true);
+  },40);
 }
 function fld(l,v,tp="text"){return `<div><label>${i18n(l)}</label><input type="${tp}" value="${escHtml(v??"")}" oninput="setD(true)"></div>`}
 function fldRo(l,v){return `<div><label>${i18n(l)}</label><input type="text" value="${escHtml(v??"")}" readonly disabled></div>`}
@@ -4494,7 +4530,7 @@ function bindTreeDbl(){
     if(e.target.closest(".n-chk")){e.stopPropagation();selChkClick(id,ctx);return}
     if(selMode&&app==="hw"){
       const f=find(id);
-      if(f&&f.n.type!=="archive"&&(canMultiPick(f.n)||selDescendants(f.n).length)){selChkClick(id,ctx);return}
+      if(f&&(canMultiPick(f.n)||selDescendants(f.n).length)){selChkClick(id,ctx);return}
     }
     // Выбор — сразу: ожидание второго клика делало отклик вязким на ровном
     // месте. Повторный клик по уже выбранной строке раскрывает её.
@@ -12516,10 +12552,13 @@ function decorateTreeSel(){
     // в свёрнутом дереве иначе не видно, где она.
     const inner=cc=>selDescendants(f.n,true).some(x=>selShownIn(x,cc));
     const rowCc=row.dataset.ctx?.startsWith("srv:")?row.dataset.ctx:null;
-    if(canMultiPick(f.n))state=(on||treeSel.size>1)&&selShownAt(id,row.dataset.ctx)?"on":on&&inner(childSelCtx(f.n)||rowCc)?"part":"";
-    // У хранилища камер в дереве нет, и галочка «частично» читалась бы как
-    // выбор самого хранилища. Камеры, что в него пишут, — из его меню.
-    else if(f.n.type==="archive"||f.n.type==="det"||f.n.type==="vol"||f.n.type==="found"||f.n.type==="founddev"||f.n.type==="norec"||f.n.type==="nofolder"||f.n.type==="gpu")ph=true;
+    // Сервер, папка и домен отмечаются сами, как папка в проводнике; что в них
+    // отмечено — видно «частично». У хранилища и тома камер в дереве нет, и
+    // «частично» читалось бы как выбор самого хранилища: камеры, что в него
+    // пишут, отмечают из его меню или из карточки выборки.
+    const noInner=f.n.type==="archive"||f.n.type==="vol";
+    if(canMultiPick(f.n))state=(on||treeSel.size>1)&&selShownAt(id,row.dataset.ctx)?"on":on&&!noInner&&inner(childSelCtx(f.n)||rowCc)?"part":"";
+    else if(f.n.type==="found"||f.n.type==="founddev"||f.n.type==="norec"||f.n.type==="nofolder"||f.n.type==="gpu")ph=true;
     else if(on){
       // Тристейт считаем только в режиме: вне его галочка контейнера просто ждёт клика.
       const d=selDescendants(f.n),cc=childSelCtx(f.n);
@@ -12527,7 +12566,7 @@ function decorateTreeSel(){
       else{const k=d.filter(x=>selShownIn(x,cc)).length;state=k===0?(inner(cc)?"part":""):k===d.length?"on":"part"}
     }
     const chk=document.createElement("span");
-    if(!ph&&!on&&!canMultiPick(f.n)&&f.n.type!=="archive"&&!selDescendants(f.n).length)ph=true;
+    if(!ph&&!on&&!canMultiPick(f.n)&&!selDescendants(f.n).length)ph=true;
     chk.className="n-chk"+(ph?" n-chk-ph":"")+(state?" "+state:"")+(blockedId(id)?" dis":"");
     chk.setAttribute("role","checkbox");chk.setAttribute("aria-checked",state==="part"?"mixed":state?"true":"false");
     chk.title=blockedId(id)?i18n("Объект в очереди"):canMultiPick(f.n)?i18n("Отметить"):i18n("Отметить всё внутри");
@@ -12536,9 +12575,13 @@ function decorateTreeSel(){
   });
 }
 function selChkClick(id,ctx){
-  const f=find(id);if(!f||f.n.type==="archive")return;
+  const f=find(id);if(!f)return;
   if(blockedId(id)){toast(pendingDelHas(id)?"Объект ждёт удаления — отмените его в тосте":"Объект в очереди применения — дождитесь конца");return}
   const entering=!selMode;selMode=true;
+  // Открытые домен, сервер, папка или хранилище — это обычно место, откуда
+  // начинают отмечать, а не первый объект выборки: галочка у другой строки
+  // начинает выборку с неё.
+  if(entering&&treeSel.size===1&&!treeSel.has(id)){const o=find([...treeSel][0])?.n;if(o&&bulkSolo(o)){treeSel.clear();treeAnchor=null}}
   // Первый клик по галочке открытого объекта только включает режим: объект
   // уже в выборке, снимать его было бы неожиданно.
   if(entering&&canMultiPick(f.n)&&treeSel.size===1&&treeSel.has(id)){afterSelChange(id,ctx);return}
@@ -12594,10 +12637,20 @@ function selectAllVisible(){
 }
 // Анимируем только вход в режим выбора и выход из него: перестройка панели
 // внутри режима (смена среза, отметки) показывает её без перехода.
-let selBarOn=false,selBarOutT=0;
+let selBarOn=false,selBarOutT=0,selBarN=0,selBarFlashT=0;
+// Панель заметна: выезжает и дважды вспыхивает, как место перехода в «Правах».
+// Вспышка — при входе в режим и когда отмечен второй объект и справа
+// появляется карточка выборки: тогда моргает и её заголовок.
+function selBarFlash(host,card){
+  clearTimeout(selBarFlashT);
+  host.classList.remove("sel-flash");void host.offsetWidth;host.classList.add("sel-flash");
+  selBarFlashT=setTimeout(()=>host.classList.remove("sel-flash"),2000);
+  if(card)accFlash(()=>[document.querySelector("#main .hd h1")].filter(Boolean),true);
+}
 function renderSelBar(){
   const host=document.getElementById("selBar");if(!host)return;
-  const n=bulkSelNodes().length;
+  const n=bulkSelNodes().length,prevN=selBarN;
+  selBarN=selMode&&app==="hw"?n:0;
   clearTimeout(selBarOutT);
   if(app!=="hw"||!selMode){
     const was=selBarOn;selBarOn=false;
@@ -12611,7 +12664,11 @@ function renderSelBar(){
   host.classList.remove("sel-out");
   // Класс входа снимаем после перехода: иначе каждая перерисовка внутри режима
   // заново проигрывала бы появление.
-  if(!selBarOn){host.classList.add("sel-in");setTimeout(()=>host.classList.remove("sel-in"),260)}
+  const entering=!selBarOn;
+  if(entering){host.classList.add("sel-in");setTimeout(()=>host.classList.remove("sel-in"),260)}
+  if(entering||(prevN<2&&n>=2))selBarFlash(host,n>=2);
+  // Счётчик вздрагивает, когда меняется число отмеченных.
+  const bump=!entering&&n!==prevN;
   selBarOn=true;
   host.hidden=false;
   // Открыт объект, а не выборка — счётчик становится дорогой назад.
@@ -12619,7 +12676,7 @@ function renderSelBar(){
   host.classList.toggle("sel-peek",peek);
   host.innerHTML=`<span class="sel-ic" aria-hidden="true">${SEL_IC}</span>${peek
     ?`<button type="button" class="sel-back" title="${i18n("Открыт объект; выборка сохранена")}" onclick="bulkBack()">${i18n("К выборке")} (${n}) →</button>`
-    :`<span class="sel-cnt">${n?`${i18n("Отмечено")} <b>${n}</b>`:i18n("Отметьте объекты")}</span>`}
+    :`<span class="sel-cnt">${n?`${i18n("Отмечено")} <b class="${bump?"bump":""}">${n}</b>`:i18n("Отметьте объекты")}</span>`}
     ${total&&!allOn?`<button type="button" class="lk" title="${i18n("Выбрать все")} ${total} ${scope}" onclick="selectAllFiltered()">${i18n("Все")} ${total}</button>`:""}
     ${n?`<button type="button" class="lk" onclick="clearTreeSel()">${i18n("Снять")}</button>`:""}
     <span class="sel-gap"></span>
@@ -12650,14 +12707,29 @@ const BULK_TABS_ANY=[["gen","Основные"]];
 // плана и получают «Отменить» в тосте.
 const BULK_REVERSIBLE=new Set(["enabled","folderAdd","folderRemove","rec","pre"]);
 function bulkTabs(nodes){return nodes.length&&nodes.every(n=>n.type==="camera")?BULK_TABS_CAM:BULK_TABS_ANY}
-function bulkTabFix(t){const tabs=bulkTabs(bulkScopeNodes());return tabs.some(([id])=>id===t)?t:tabs[0][0]}
+function bulkTabFix(t){const tabs=bulkTabs(bulkFieldNodes());return tabs.some(([id])=>id===t)?t:tabs[0][0]}
 // К чему применяется правка. Выборка может быть любой; фильтр — тип,
 // сервер, модель — сужает правку, а выборку не трогает: как список типов
 // в палитре свойств AutoCAD. Пустой фильтр («Все») — только то, что умеют
 // все отмеченные. Выкинуть остальных из выборки — отдельное явное действие.
 const KIND_PLURAL={camera:"Камеры",ipsrv:"Регистраторы",channel:"Каналы",relay:"Реле",sensor:"Датчики",mic:"Микрофоны",spk:"Динамики",
   "spk:srv":"Динамики сервера",email:"Email",sms:"SMS",export:"Экспорт",eventsrc:"Источники событий",acfa:"ОПС/СКУД",
-  acfa_sensor:"Датчики ОПС",acfa_lock:"Замки",acfa_fence:"Шлейфы",det:"Детекторы",storage:"Встроенные хранилища"};
+  acfa_sensor:"Датчики ОПС",acfa_lock:"Замки",acfa_fence:"Шлейфы",det:"Детекторы",storage:"Встроенные хранилища",
+  server:"Серверы",domain:"Домены",folder:"Папки",archive:"Хранилища",vol:"Тома"};
+// Что настраивается только по одному: у каждого хранилища свой тип, тома и
+// размер, у сервера — адрес и роль, у папки настроек нет вовсе. Общих полей у
+// них нет даже между собой, поэтому в пересечение полей они не входят — иначе
+// одно отмеченное хранилище прятало бы поля у двадцати камер. Отметить их
+// можно, как и всё остальное: вместе с ними работают действия выборки —
+// переименовать, удалить, исключить из домена, отметить их камеры.
+const BULK_SOLO=new Set(["server","domain","folder","archive","vol"]);
+const BULK_SOLO_WHY={archive:"у каждого свой тип хранения, тома и размер",server:"адрес, роль и службы у каждого свои",
+  folder:"настроек нет — только состав",domain:"лицензия и состав у каждого свои",vol:"диск и размер у каждого свои"};
+function bulkSolo(n){return BULK_SOLO.has(n.type)}
+// Объекты, которым достаются правки полей: отмеченные под «Применить к»,
+// кроме настраиваемых по одному.
+function bulkFieldNodes(){return bulkScopeNodes().filter(n=>!bulkSolo(n))}
+function bulkSoloKindsText(nodes){return bulkKinds(nodes.filter(bulkSolo)).map(([k,c])=>`${escHtml(kindLabel(k).toLowerCase())} (${c})`).join(", ")}
 function kindLabel(k){return i18n(KIND_PLURAL[k]||LB[k]||k)}
 function bulkKinds(nodes){return countBy(nodes,cpKind)}
 const BULK_DIMS=[["kind","Типы",cpKind,kindLabel],["srv","Серверы",n=>serverNameOf(n),x=>x],["model","Модели",n=>modelOf(n)||i18n("модель не указана"),x=>x]];
@@ -12709,10 +12781,18 @@ function bulkScopeHtml(all){
   }).join("");
   // «Применить к» — продолжение фразы: всем отмеченным или их части по типу,
   // серверу, модели. Под чипами — итог: кто получит изменения, кто нет.
-  const n=bulkScopeNodes().length,on=bulkFiltOn();
+  const sc=bulkScopeNodes(),n=sc.length,on=bulkFiltOn();
   const head=`<div class="bk-scope-h"><span class="bk-scope-l">${i18n("Применить к")}</span><button type="button" class="stchip ${on?"":"on"}" onclick="bulkFiltClear()"><span class="stchip-lab">${i18n("всем отмеченным")}</span><span class="stchip-cnt">${all.length}</span></button>
     ${rows?`<span class="sub bk-scope-or">${i18n("или уточните")}:</span>`:""}</div>`;
-  const sum=on?`<div class="bk-scope-sum on">${i18n("Изменения получат")} <b>${n} ${i18n("из")} ${all.length}</b>: ${escHtml(bulkFiltLabel())}. ${i18n("Остальные")} ${all.length-n} ${i18n("не меняются и остаются в выборке")} · <button type="button" class="lk" onclick="bulkKeepScope()">${i18n("Оставить в выборке только их")}</button></div>`
+  // Настраиваемые по одному (хранилища, серверы, папки) сказаны прямо: иначе
+  // непонятно, почему полей у них нет, а кнопки «Удалить» и «Переименовать»
+  // их касаются.
+  const solo=sc.filter(bulkSolo),fields=n-solo.length,sk=bulkSoloKindsText(sc);
+  const soloNote=!solo.length?"":fields
+    ?` <span class="bk-solo-note">${i18n("Поля ниже получат")} ${fields} ${i18n("из")} ${n}: ${sk} ${i18n("настраиваются по одному — им достаются только действия выборки.")}</span>`
+    :` <span class="bk-solo-note">${i18n("Общих полей нет")}: ${sk} ${i18n("настраиваются по одному — с ними работают действия ниже.")}</span>`;
+  const sum=on?`<div class="bk-scope-sum on">${i18n("Изменения получат")} <b>${n} ${i18n("из")} ${all.length}</b>: ${escHtml(bulkFiltLabel())}. ${i18n("Остальные")} ${all.length-n} ${i18n("не меняются и остаются в выборке")} · <button type="button" class="lk" onclick="bulkKeepScope()">${i18n("Оставить в выборке только их")}</button>${soloNote}</div>`
+    :solo.length?`<div class="bk-scope-sum">${i18n("Отмечено")} <b>${all.length}</b>.${soloNote}</div>`
     :`<div class="bk-scope-sum">${i18n("Изменения получат все")} <b>${all.length}</b> ${i18n(plural(all.length,"отмеченный|отмеченных|отмеченных"))}. ${i18n("Показаны параметры, общие для всех.")}</div>`;
   return`<div class="bk-sum bk-scope">${head}${rows}${sum}</div>`;
 }
@@ -12770,13 +12850,15 @@ function bkInput(label,key,type,entries,hint,id){
   const cur=bulkDraft[key]??"";
   return`<div><label>${i18n(label)}</label><input ${id?`id="${id}"`:""} type="${type||"text"}" value="${escHtml(cur)}" placeholder="${bkNone(entries)}" oninput="bulkSet('${key}',this.value)">${hint!=null?hint:entries?bkHint(entries):""}</div>`;
 }
+const BULK_UNITS={camera:"камера|камеры|камер",archive:"хранилище|хранилища|хранилищ",server:"сервер|сервера|серверов",
+  folder:"папка|папки|папок",domain:"домен|домена|доменов",vol:"том|тома|томов"};
 function bulkCardHtml(){
-  const sel=bulkSelNodes(),nodes=bulkScopeNodes(),st=bulkStats(nodes),tabs=bulkTabs(nodes);
+  const sel=bulkSelNodes(),scope=bulkScopeNodes(),nodes=scope.filter(n=>!bulkSolo(n)),st=bulkStats(nodes),tabs=bulkTabs(nodes);
   if(!tabs.some(([id])=>id===tab))tab=tabs[0][0];
   bulkLastTab=tab;
   const tabsH=tabs.map(([id,x])=>`<button class="tab ${tab===id?"on":""}" onclick="tab='${id}';gear()">${i18n(x)}</button>`).join("");
-  const allCams=nodes.every(n=>n.type==="camera");
-  const unit=sel.every(n=>n.type==="camera")?"камера|камеры|камер":"объект|объекта|объектов";
+  const allCams=nodes.length>0&&nodes.every(n=>n.type==="camera");
+  const unit=BULK_UNITS[sel[0]?.type]&&sel.every(n=>n.type===sel[0].type)?BULK_UNITS[sel[0].type]:"объект|объекта|объектов";
   const title=`<span class="hd-ic bk-hd-ic">${SEL_IC}</span>${sel.length} ${i18n(plural(sel.length,unit))}`;
   const cr=`<button type="button" class="cr-link" onclick="pick('${domains[0].id}')">${escHtml(domainLabel())}</button><span class="cr-sep">/</span><span class="cr-cur">${i18n("Выборка")}</span>`;
   // Кнопки правят то, что выбрано в «Применить к»; при фильтре число на кнопке
@@ -12789,7 +12871,8 @@ function bulkCardHtml(){
     ${allCams?`<button type="button" class="btn s" title="${i18n("Архив и режим записи выбранных")}" onclick="bulkGoTab('rec')">${i18n("Архив и запись")}…</button>`:""}
     <button type="button" class="btn s" onclick="bulkMenu(event)">${i18n("Ещё")} ▾</button>${fullCardBtn()}`;
   const offNote=st.offline.length?`<div class="nt" role="status">${st.offline.length} ${i18n(plural(st.offline.length,"объект|объекта|объектов"))} ${i18n("на сервере без связи")} (${[...new Set(st.offline.map(serverNameOf))].map(escHtml).join(", ")}). ${i18n("Изменения к ним не применятся — в отчёте они будут «не применено».")}</div>`:"";
-  const body=bulkScopeHtml(sel)+offNote+(tab==="vid"?bulkVidHtml(nodes,st):tab==="rec"?bulkRecHtml(nodes):tab==="det"?bulkDetHtml(nodes,st):bulkGenHtml(nodes,allCams))+bulkListCard(sel);
+  const solo=scope.filter(bulkSolo);
+  const body=bulkScopeHtml(sel)+offNote+(!nodes.length?"":tab==="vid"?bulkVidHtml(nodes,st):tab==="rec"?bulkRecHtml(nodes):tab==="det"?bulkDetHtml(nodes,st):bulkGenHtml(nodes,allCams))+(solo.length&&tab==="gen"?bulkSoloHtml(solo,!nodes.length):"")+bulkListCard(sel);
   return mainHd(cr,title,"",tabsH,act,false)+`<div class="sc">${body}</div><div class="main-actions bk-foot" id="bulkFoot">${bulkFootHtml()}</div>`;
 }
 // Карточка «Основные» — пересечение: раздел показан, только если его умеют
@@ -12817,6 +12900,50 @@ function bulkGenHtml(nodes,allCams){
   h+=card("Идентификация",`<p class="sub" style="margin:0">${i18n("Имя, короткое имя, ID и IP у каждого объекта свои — массово не меняются. Имена по шаблону: «Ещё → Переименовать по шаблону…».")}</p>`);
   return h;
 }
+// Хранилища, серверы, папки, домены, тома — что с ними можно сделать вместе.
+// Тупика нет: сказано, почему полей нет, где их настроить и что доступно.
+function bulkSoloCams(nodes){
+  const seen=new Set(),out=[];
+  nodes.forEach(n=>selDescendants(n,false).forEach(x=>{if((x.type==="camera"||x.type==="ipsrv")&&!seen.has(x.id)){seen.add(x.id);out.push(x)}}));
+  return out;
+}
+function bulkSoloHtml(solo,only){
+  const kinds=bulkKinds(solo);
+  const why=`<ul class="bk-miss">${kinds.map(([k,c])=>`<li><b>${escHtml(kindLabel(k))}</b> (${c}) — ${i18n(BULK_SOLO_WHY[k]||"настраиваются по одному")}</li>`).join("")}</ul>`;
+  const cams=bulkSoloCams(solo),arcOnly=solo.every(n=>n.type==="archive");
+  const srvs=solo.filter(n=>n.type==="server"&&!isUnallocated(n.id)&&domainOf(n.id));
+  const ren=solo.filter(bulkCanRename),del=solo.filter(n=>n.type!=="server"&&n.type!=="domain");
+  const btns=[cams.length?`<button type="button" class="btn s" title="${i18n("Выборка заменится этими камерами — с «Отменить»")}" onclick="bulkMarkSoloCams()">${i18n(arcOnly?"Отметить камеры, что пишут сюда":"Отметить их камеры")} (${cams.length})</button>`:"",
+    ren.length?`<button type="button" class="btn s" onclick="bulkRenameDialog()">${i18n("Переименовать по шаблону…")}${ren.length<solo.length?` (${ren.length})`:""}</button>`:"",
+    srvs.length?`<button type="button" class="btn s" onclick="bulkExcludeServers()">${i18n("Исключить из домена")} (${srvs.length})</button>`:"",
+    del.length?`<button type="button" class="btn s danger" onclick="deleteSelected(${JSON.stringify(del.map(n=>n.id)).replace(/"/g,"&quot;")})">${i18n("Удалить")}… (${del.length})</button>`:""].filter(Boolean).join("");
+  return card(only?"Настраиваются по одному":"Не входят в правку полей",`${why}
+    <p class="sub">${i18n("Настройки — в карточке каждого: откройте нужный в «Составе выборки» ниже. Вместе с ними можно:")}</p>
+    <div class="bk-keep">${btns}</div>`);
+}
+function bulkMarkSoloCams(){
+  const cams=bulkSoloCams(bulkScopeNodes().filter(bulkSolo));if(!cams.length)return;
+  const was=[...treeSel].map(id=>[id,selWhere.get(id)??null]);
+  treeSel.clear();cams.forEach(c=>{treeSel.add(c.id);expandTo(c.id)});
+  bulkFilt={kind:"",srv:"",model:""};treeAnchor=cams[0].id;
+  afterSelChange(cams[0].id);
+  toastAction("bkcams",`${i18n("Отмечено камер")}: ${cams.length}`,i18n("Отменить"),()=>{treeSel.clear();was.forEach(([id,c])=>treeSel.add(id,c));afterSelChange(null)},8000);
+}
+// Сервер не удаляют, а исключают из домена — он уходит в «Нераспределённые»
+// и возвращается оттуда же, поэтому сразу и с «Отменить».
+function bulkExcludeServers(){
+  closeTreeCtx();
+  const list=bulkScopeNodes().filter(n=>n.type==="server"&&!isUnallocated(n.id)&&domainOf(n.id));if(!list.length)return;
+  const back=list.map(s=>{const d=domainOf(s.id);return{s,d,i:d.servers.indexOf(s)}});
+  back.forEach(({s,d})=>{takeServer(s.id);d.unallocServers.push(s);open.add(d.id);open.add(unallocId(d.id));resetUnallocDisplay(d.id)});
+  treeSel.clear();treeMatchCache.clear();searchMatchCache.clear();
+  sel=list[0].id;afterSelChange(null);paint();
+  toastAction("bkexcl",`${i18n("Исключено из домена серверов")}: ${list.length}`,i18n("Отменить"),()=>{
+    back.slice().reverse().forEach(({s,d,i})=>{d.unallocServers=d.unallocServers.filter(x=>x!==s);servers.includes(s)||servers.push(s);d.servers.splice(Math.min(i,d.servers.length),0,s);resetUnallocDisplay(d.id)});
+    treeMatchCache.clear();searchMatchCache.clear();paint();toast("Серверы возвращены в домен");
+  },8000);
+}
+function bulkCanRename(n){return n.type!=="domain"&&n.type!=="folder"&&n.type!=="vol"}
 // Параметры одного типа: те же поля, что в карточке объекта.
 function bulkParamsHtml(kind,nodes){
   const ps=typeParams(kind);if(!ps.length)return"";
@@ -12886,7 +13013,7 @@ function bulkCollapsible(ch){
   return(BULK_REVERSIBLE.has(c.key)||c.key.startsWith("p:"))&&!c.note&&!c.ops.some(o=>o.skip)&&!bulkStats(bulkScopeNodes()).offline.length;
 }
 function bulkFootHtml(){
-  const ch=bulkChanges(),nodes=bulkScopeNodes();
+  const ch=bulkChanges(),nodes=bulkFieldNodes();
   const n=ch.reduce((s,c)=>s+c.ops.length,0);
   if(!ch.length)return`<span class="sub bk-foot-text">${i18n("Ничего не изменено — поля стоят в «— не менять —» или «— разные —»")}</span><span class="tfoot-gap"></span>
     <button type="button" class="btn s" disabled>${i18n("Сбросить")}</button><button type="button" class="btn s pri" disabled>${i18n("Показать план")}</button>`;
@@ -12916,7 +13043,7 @@ function opFail(n,kind){
 }
 function mkOp(n,label,kind,run,skip,undo){return{n,label,kind,run,skip:skip||null,undo:undo||null}}
 function bulkChanges(draft){
-  const nodes=bulkScopeNodes(),d=draft||bulkDraft,out=[];
+  const nodes=bulkFieldNodes(),d=draft||bulkDraft,out=[];
   const step=(key,label,ops,note)=>{if(ops.length)out.push({key,label,ops,note:note||""})};
   if(d.enabled){
     const want=d.enabled==="on";
@@ -12987,7 +13114,7 @@ function bulkChanges(draft){
       (x.builtin?`${i18n("встроен в камеру — только для модели")} ${d.detModel}`:i18n("считается на сервере — для любой модели"))+`; ${i18n("зону детекции задают на каждой камере отдельно")}`);
   });
   if(d.rename){
-    step("rename",`Имена по шаблону`,nodes.map(n=>mkOp(n,"Переименование","rename",()=>{n.name=bulkName(n,d.rename)})));
+    step("rename",`Имена по шаблону`,bulkScopeNodes().filter(bulkCanRename).map(n=>mkOp(n,"Переименование","rename",()=>{n.name=bulkName(n,d.rename)})));
   }
   return out;
 }
@@ -13047,11 +13174,14 @@ function bulkOpenMenuAt(btn,html){
 function bulkMenu(e){
   e.stopPropagation();
   const n=bulkSelNodes().length,sc=bulkScopeNodes(),on=bulkFiltOn(),of=k=>on?` (${k} ${i18n("из")} ${n})`:` (${k})`;
-  const cr=sc.filter(canCreds).length;
+  const cr=sc.filter(canCreds).length,rn=sc.filter(bulkCanRename).length;
+  const ex=sc.filter(n=>n.type==="server"&&!isUnallocated(n.id)&&domainOf(n.id)).length,cams=bulkSoloCams(sc.filter(bulkSolo)).length;
   bulkOpenMenuAt(e.currentTarget,[
     `<div class="tctx-head">${on?`${i18n("Применить к")}: ${escHtml(bulkFiltLabel())}`:i18n("Применить ко всем отмеченным")}</div>`,
     ...(cr?[tctxItem(`${i18n("Учётные данные…")}${of(cr)}`,`closeTreeCtx();bulkGoTab('gen','bkUser')`)]:[]),
-    tctxItem(`${i18n("Переименовать по шаблону…")}${of(sc.length)}`,`closeTreeCtx();bulkRenameDialog()`),
+    ...(rn?[tctxItem(`${i18n("Переименовать по шаблону…")}${of(rn)}`,`closeTreeCtx();bulkRenameDialog()`)]:[]),
+    ...(ex?[tctxItem(`${i18n("Исключить из домена")}${of(ex)}`,`bulkExcludeServers()`)]:[]),
+    ...(cams?[tctxItem(`${i18n("Отметить их камеры")} (${cams})`,`closeTreeCtx();bulkMarkSoloCams()`,`<span class="tctx-ic">${SEL_IC}</span>`)]:[]),
     ...(on?[tctxItem(`${i18n("Оставить в выборке только их")} (${sc.length})`,`bulkKeepScope()`)]:[]),
     tctxSep(),
     `<div class="tctx-head">${i18n("Вся выборка")} (${n})</div>`,
@@ -13075,7 +13205,9 @@ function downloadText(name,text,mime){
   }catch(e){toast("Не удалось сохранить файл")}
 }
 function bulkRenameDialog(){
-  const nodes=bulkScopeNodes();
+  closeTreeCtx();
+  const nodes=bulkScopeNodes().filter(bulkCanRename);
+  if(!nodes.length){toast("Домены, папки и тома по шаблону не переименовываются");return}
   const opts=BULK_NAME_TEMPLATES.filter(([v])=>v).map(([v,l])=>`<option value="${v}">${escHtml(l)}</option>`).join("");
   const preview=tpl=>nodes.slice(0,3).map(n=>`<li>${escHtml(locName(n))} → <b>${escHtml(bulkName(n,tpl))}</b></li>`).join("");
   window._bkPreview=preview;
@@ -13301,28 +13433,59 @@ function pendingOf(id){for(const[k,p]of pendingDel)if(p.ids.includes(id))return 
 function pendingDelHas(id){return!!pendingOf(id)}
 function pendingLeft(p){return Math.max(0,Math.ceil((p.paused?p.left:p.deadline-Date.now())/1000))}
 function pendingLabel(id){const p=pendingOf(id);return p?`${i18n("удаляется")} · ${pendingLeft(p)}${p.paused?" · "+i18n("пауза"):""}`:""}
-function deleteSelected(){
+// Удалить вместе можно устройства, папки, хранилища и тома. Сервер не
+// удаляют, а исключают из домена; домен удаляют по одному — с выбором, куда
+// перенести содержимое. Об этом говорит подтверждение, а не молчаливый пропуск.
+const DEL_SOLO=new Set(["server","domain"]);
+function deleteSelected(only){
   closeTreeCtx();
   if(bulkBusyGuard())return;
-  const ids=[...treeSel].filter(id=>{const f=find(id);return f&&canMultiPick(f.n)&&(f.p?.devices||!f.p)});
-  if(!ids.length){toast("Нечего удалять");return}
+  const src=Array.isArray(only)?only:[...treeSel];
+  const all=src.filter(id=>{const f=find(id);return f&&canMultiPick(f.n)});
+  const skipped=all.map(id=>find(id).n).filter(n=>DEL_SOLO.has(n.type));
+  const ids=all.filter(id=>!DEL_SOLO.has(find(id).n.type));
+  if(!ids.length){toast(skipped.length?"Серверы исключают из домена, домены удаляют по одному из их меню":"Нечего удалять");return}
   const idSet=new Set(ids);
-  const roots=ids.filter(id=>!path(id).slice(0,-1).some(n=>idSet.has(n.id))).filter(id=>!pendingDelHas(id));
+  const roots=ids.filter(id=>{const n=find(id).n;if(n.type==="vol"&&idSet.has(n.archId))return false;return!path(id).slice(0,-1).some(x=>idSet.has(x.id))}).filter(id=>!pendingDelHas(id));
   if(!roots.length){toast("Выбранное уже в очереди на удаление");return}
-  confirmDeleteNodes(roots);
+  confirmDeleteNodes(roots,null,skipped);
 }
-function confirmDeleteNodes(roots,back){
+// Удаление одного объекта любого рода: устройство — из родителя, папка — из
+// дерева папок (устройства остаются), хранилище — с томами (камеры уходят в
+// «Без записи»), том — из хранилища.
+function removeAnyNode(id){
+  const f=find(id);if(!f)return false;
+  const n=f.n;
+  if(n.type==="folder"){
+    const parent=folderParent(id);
+    if(parent)parent.folders=parent.folders.filter(x=>x.id!==id);
+    else{const i=folders.findIndex(x=>x.id===id);if(i<0)return false;folders.splice(i,1)}
+    open.delete(id);if(selFolder===id)selFolder=null;return true;
+  }
+  if(n.type==="archive"){
+    walkAll(c=>{if(c.type==="camera"&&camArchs(c).some(x=>x.arch===id))camDropArch(c,id)});
+    const i=arch.indexOf(n);if(i<0)return false;arch.splice(i,1);open.delete(id);return true;
+  }
+  if(n.type==="vol"){const a=archById(n.archId);if(!a)return false;a.vols.splice(a.vols.indexOf(n),1);return true}
+  return removeNodeFromParent(f);
+}
+function confirmDeleteNodes(roots,back,skipped){
   const nodes=roots.map(id=>find(id).n);
   const cams=[];nodes.forEach(n=>walk(x=>{if(x.type==="camera")cams.push(x)},[n]));
   const rec=cams.filter(isRecording).length,dets=cams.reduce((s,c)=>s+camDetectors(c).length,0);
   const nvr=nodes.filter(n=>n.type==="ipsrv").length;
-  const fold=new Set();nodes.forEach(n=>foldersOfDevice(n.id).forEach(f=>fold.add(f.id)));
+  const fold=new Set();nodes.filter(n=>!bulkSolo(n)).forEach(n=>foldersOfDevice(n.id).forEach(f=>fold.add(f.id)));
   const count=roots.length,big=count>=10,one=count===1?nodes[0]:null;
   const lines=[one?`${escHtml(i18n(LB[one.type]||"Объект"))} «${escHtml(locName(one))}»${one.type==="ipsrv"&&ipsrvCameras(one).length?` — ${i18n("вместе с его камерами")}`:""}`
     :`${count} ${i18n(plural(count,"объект|объекта|объектов"))}${nvr?` (${i18n("регистраторов")}: ${nvr} — ${i18n("вместе с их камерами")})`:""}`];
   if(cams.length)lines.push(`${i18n("камер")}: ${cams.length}, ${i18n("из них пишут в архив")}: ${rec} — ${i18n("запись остановится, архив останется")}`);
   if(dets)lines.push(`${i18n("детекторов")}: ${dets} — ${i18n("удалятся вместе с правилами")}`);
   if(fold.size)lines.push(`${i18n("папок, из которых пропадут объекты")}: ${fold.size}`);
+  const fl=nodes.filter(n=>n.type==="folder"),ar=nodes.filter(n=>n.type==="archive"),vl=nodes.filter(n=>n.type==="vol");
+  if(fl.length&&!one)lines.push(`${i18n("папок")}: ${fl.length} — ${i18n("устройства из них останутся в системе")}`);
+  if(ar.length){const k=new Set(ar.flatMap(a=>archCameras(a.id).map(c=>c.id))).size;lines.push(`${i18n("хранилищ")}: ${ar.length}, ${i18n("вместе с томами")}${k?` — ${i18n("перестанут писать камер")}: ${k}, ${i18n("сами камеры останутся в «Без записи»")}`:""}`)}
+  if(vl.length)lines.push(`${i18n("томов")}: ${vl.length} — ${i18n("вместе с записями на них")}`);
+  if(skipped?.length)lines.push(`<span class="sub">${i18n("Не удаляются")}: ${bulkKinds(skipped).map(([k,c])=>`${escHtml(kindLabel(k).toLowerCase())} (${c})`).join(", ")} — ${i18n("сервер исключают из домена, домен удаляют по одному из его меню")}</span>`);
   const html=`<ul class="bk-del">${lines.map(l=>`<li>${l}</li>`).join("")}</ul>
     ${big?`<label>${i18n("Введите")} ${count}, ${i18n("чтобы подтвердить")}</label><input id="delCountInp" inputmode="numeric" autocomplete="off" oninput="document.getElementById('confirmOk').disabled=this.value.trim()!=='${count}'">`:""}
     <p class="sub" style="margin:10px 0 0">${i18n("После подтверждения будет отсчёт с кнопкой «Отменить».")}</p>`;
@@ -13364,10 +13527,11 @@ function commitDelete(key){
   pendingDel.delete(key);removeToastAction(key);
   if(p.commit){p.commit();return}
   let n=0;
-  p.ids.forEach(id=>{const f=find(id);if(f&&removeNodeFromParent(f))n++});
+  const kinds=new Set(p.ids.map(id=>find(id)?.n.type));
+  p.ids.forEach(id=>{if(removeAnyNode(id))n++});
   remakeAcfa();treeMatchCache.clear();searchMatchCache.clear();
   if(!find(sel)){const b=p.back&&(find(p.back)||folderById(p.back))?p.back:domains[0]?.id;sel=b||sel;tab="gen";resetTreeSel(sel);expandTo(sel)}
-  toast(n===1?"Устройство удалено":`${i18n("Удалено объектов")}: ${n}`);
+  toast(n===1?(kinds.has("folder")||kinds.has("archive")||kinds.has("vol")?"Объект удалён":"Устройство удалено"):`${i18n("Удалено объектов")}: ${n}`);
   paint();
 }
 // Тост с действием: для удаления отсчёт ведёт очередь удаления (и замирает
