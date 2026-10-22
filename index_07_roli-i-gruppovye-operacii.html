@@ -1264,8 +1264,9 @@ html[data-theme="light"] .busy-chip{background:#dce8f7;color:#2f5fad}
 .lan-ip-via{color:var(--mu);font-size:11px}
 html[data-theme="light"] .tag.tag-ch{color:#5b3fa0;background:#ece5fb}
 /* Карточка выборки: к чему применяется правка, и что не показано */
-.bk-scope{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px}
+.bk-scope-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
 .bk-scope .stchip.on{box-shadow:0 0 0 1px var(--bl)}
+.bk-scope-cur{font-size:12px;color:#9ec8ff}
 .bk-miss{margin:0 0 8px;padding-left:18px;font-size:12px;color:var(--mu)}
 .bk-miss li{margin:2px 0}
 .an-kinds{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
@@ -12605,43 +12606,68 @@ const BULK_TABS_ANY=[["gen","Основные"]];
 const BULK_REVERSIBLE=new Set(["enabled","folderAdd","folderRemove","rec","pre"]);
 function bulkTabs(nodes){return nodes.length&&nodes.every(n=>n.type==="camera")?BULK_TABS_CAM:BULK_TABS_ANY}
 function bulkTabFix(t){const tabs=bulkTabs(bulkScopeNodes());return tabs.some(([id])=>id===t)?t:tabs[0][0]}
-// К чему применяется правка. Выборка может быть любой; чип типа сужает
-// правку до объектов этого типа, а выборку не трогает — как список типов
-// в палитре свойств AutoCAD. «Все» — только то, что умеют все отмеченные.
-let bulkScope="all",bulkScopeSel="";
+// К чему применяется правка. Выборка может быть любой; фильтр — тип,
+// сервер, модель — сужает правку, а выборку не трогает: как список типов
+// в палитре свойств AutoCAD. Пустой фильтр («Все») — только то, что умеют
+// все отмеченные. Выкинуть остальных из выборки — отдельное явное действие.
 const KIND_PLURAL={camera:"Камеры",ipsrv:"Регистраторы",channel:"Каналы",relay:"Реле",sensor:"Датчики",mic:"Микрофоны",spk:"Динамики",
   "spk:srv":"Динамики сервера",email:"Email",sms:"SMS",export:"Экспорт",eventsrc:"Источники событий",acfa:"ОПС/СКУД",
   acfa_sensor:"Датчики ОПС",acfa_lock:"Замки",acfa_fence:"Шлейфы",det:"Детекторы",storage:"Встроенные хранилища"};
 function kindLabel(k){return i18n(KIND_PLURAL[k]||LB[k]||k)}
 function bulkKinds(nodes){return countBy(nodes,cpKind)}
+const BULK_DIMS=[["kind","Типы",cpKind,kindLabel],["srv","Серверы",n=>serverNameOf(n),x=>x],["model","Модели",n=>modelOf(n)||i18n("модель не указана"),x=>x]];
+let bulkFilt={kind:"",srv:"",model:""},bulkScopeSel="";
+function bulkFiltOn(){return!!(bulkFilt.kind||bulkFilt.srv||bulkFilt.model)}
+function bulkMatch(n,f,skip){return BULK_DIMS.every(([d,,fn])=>d===skip||!f[d]||fn(n)===f[d])}
 function bulkScopeNodes(){
   const all=bulkSelNodes(),key=bulkSelKey();
-  // Новая выборка — снова «Все»: прежний тип к ней может не относиться.
-  if(key!==bulkScopeSel){bulkScopeSel=key;bulkScope="all"}
-  if(bulkScope==="all")return all;
-  // «camera@модель» — камеры одной модели: для видео и встроенных детекторов.
-  const[kind,model]=bulkScope.split("@");
-  const part=all.filter(n=>cpKind(n)===kind&&(model==null||modelOf(n)===model));
+  // Новая выборка — снова «Все»: прежний фильтр к ней может не относиться.
+  if(key!==bulkScopeSel){bulkScopeSel=key;bulkFilt={kind:"",srv:"",model:""}}
+  if(!bulkFiltOn())return all;
+  const part=all.filter(n=>bulkMatch(n,bulkFilt));
   if(part.length)return part;
-  bulkScope="all";return all;
+  bulkFilt={kind:"",srv:"",model:""};return all;
 }
-function bulkSetScope(k){
-  if(k===bulkScope)return;
+// Повторный клик по чипу снимает его; «Все» снимает весь фильтр.
+function bulkFiltSet(patch){
+  bulkScopeNodes();
+  const next={...bulkFilt};
+  Object.entries(patch).forEach(([d,v])=>{next[d]=next[d]===v&&Object.keys(patch).length===1?"":v});
+  if(JSON.stringify(next)===JSON.stringify(bulkFilt))return;
   const had=Object.keys(bulkDraft).length;
-  bulkScope=k;bulkDraft={};tab=bulkTabFix(tab);gear();
-  if(had)toast("Черновик сброшен: правка теперь для другого типа");
+  bulkFilt=next;bulkDraft={};tab=bulkTabFix(tab);gear();
+  if(had)toast("Черновик сброшен: правка теперь для других объектов");
+}
+function bulkFiltClear(){bulkFiltSet({kind:"",srv:"",model:""})}
+function bulkFiltLabel(){
+  return BULK_DIMS.filter(([d])=>bulkFilt[d]).map(([d,,,lab])=>lab(bulkFilt[d])).join(" · ");
+}
+// Оставить в выборке только то, что сейчас правится, — явно и с «Отменить».
+function bulkKeepScope(){
+  closeTreeCtx();
+  const keep=bulkScopeNodes(),was=[...treeSel].map(id=>[id,selWhere.get(id)??null]);
+  if(keep.length===bulkSelNodes().length)return;
+  treeSel.clear();keep.forEach(n=>treeSel.add(n.id));
+  bulkFilt={kind:"",srv:"",model:""};
+  afterSelChange(keep[0]?.id);
+  toastAction("bkkeep",`${i18n("В выборке оставлено")}: ${keep.length}`,i18n("Отменить"),()=>{treeSel.clear();was.forEach(([id,c])=>treeSel.add(id,c));afterSelChange(null)},8000);
 }
 function bulkScopeHtml(all){
-  const kinds=bulkKinds(all);
-  if(kinds.length<2)return"";
-  const[sk,sm]=bulkScope.split("@");
-  if(kinds.length<2&&sm==null)return"";
-  const esc=k=>JSON.stringify(k).replace(/"/g,"&quot;");
-  const chip=(k,l,c)=>`<button type="button" class="stchip ${bulkScope===k?"on":""}" onclick="bulkSetScope(${esc(k)})"><span class="stchip-lab">${escHtml(l)}</span><span class="stchip-cnt">${c}</span></button>`;
-  const modelChip=sm!=null?chip(bulkScope,`${kindLabel(sk)} · ${sm||i18n("модель не указана")}`,bulkScopeNodes().length):"";
-  return`<div class="bk-scope"><span class="bk-sum-l">${i18n("Править")}</span>${chip("all",i18n("Все"),all.length)}${kinds.map(([k,c])=>chip(k,kindLabel(k),c)+(k===sk?modelChip:"")).join("")}</div>
-    <p class="sub">${bulkScope==="all"?i18n("Показано то, что умеют все отмеченные. Чтобы править параметры одного типа, выберите его — выборка останется целой, правка пойдёт только ему.")
-      :`${i18n("Правка — только для")} «${escHtml(kindLabel(sk))}${sm!=null?" · "+escHtml(sm):""}» (${bulkScopeNodes().length} ${i18n("из")} ${all.length}). ${i18n("Остальные отмеченные не меняются.")}`}</p>`;
+  const esc=v=>JSON.stringify(v).replace(/"/g,"&quot;");
+  const rows=BULK_DIMS.map(([d,label,fn,lab])=>{
+    // Счётчик чипа — сколько их при остальных выбранных фильтрах.
+    // Модель есть только у камер и устройств с моделью: реле и службы её не
+    // имеют, и чип «модель не указана» был бы про них, а не про модель.
+    const ent=countBy(all.filter(n=>bulkMatch(n,bulkFilt,d)&&(d!=="model"||modelOf(n))),fn);
+    if(ent.length<2&&!bulkFilt[d])return"";
+    return`<div class="bk-sum-row"><span class="bk-sum-l">${i18n(label)}</span>${ent.map(([k,c])=>`<button type="button" class="stchip bk-chip ${bulkFilt[d]===k?"on":""}" onclick="bulkFiltSet({${d}:${esc(k)}})"><span class="stchip-lab">${escHtml(lab(k))}</span><span class="stchip-cnt">${c}</span></button>`).join("")}</div>`;
+  }).join("");
+  const n=bulkScopeNodes().length;
+  const head=`<div class="bk-scope-h"><span class="bk-sum-l">${i18n("Править")}</span><button type="button" class="stchip ${bulkFiltOn()?"":"on"}" onclick="bulkFiltClear()"><span class="stchip-lab">${i18n("Все")}</span><span class="stchip-cnt">${all.length}</span></button>
+    ${bulkFiltOn()?`<span class="bk-scope-cur">${escHtml(bulkFiltLabel())} — ${n} ${i18n("из")} ${all.length}</span><button type="button" class="lk" onclick="bulkKeepScope()">${i18n("Оставить в выборке только их")}</button>`:""}</div>`;
+  return`<div class="bk-sum bk-scope">${head}${rows}</div>
+    <p class="sub">${bulkFiltOn()?i18n("Правка и кнопки сверху — только для них; остальные отмеченные не меняются и остаются в выборке.")
+      :i18n("Показано то, что умеют все отмеченные. Тип, сервер или модель сужают правку — выборка остаётся целой.")}</p>`;
 }
 // Что умеет объект — из этого собирается пересечение для «Все».
 const CREDS_TYPES=new Set(["camera","ipsrv","acfa","eventsrc"]);
@@ -12681,17 +12707,6 @@ function bulkStats(nodes){
     offline:nodes.filter(n=>{const s=srv(n.id);return s&&hasNoSignal(s)})
   };
 }
-function bulkKeep(kind,key){
-  const keep=bulkScopeNodes().filter(n=>{
-    const v=kind==="server"?serverNameOf(n):kind==="model"?(modelOf(n)||i18n("модель не указана")):(LB[n.type]||n.type);
-    return v===key;
-  });
-  treeSel.clear();keep.forEach(n=>treeSel.add(n.id));
-  afterSelChange(keep[0]?.id);
-}
-function bkChips(entries,kind,sel){
-  return entries.map(([k,c])=>`<button type="button" class="stchip bk-chip ${sel===k?"on":""}" title="${i18n("Оставить в выборке только")}: ${escHtml(k)}" onclick="bulkKeep('${kind}',${JSON.stringify(k).replace(/"/g,"&quot;")})"><span class="stchip-lab">${escHtml(k)}</span><span class="stchip-cnt">${c}</span></button>`).join("");
-}
 // Поле выборки: по умолчанию «— не менять —», при разных значениях —
 // «— разные —» (тоже «не менять», но честно), под полем — раскладка значений.
 function bkHint(entries){
@@ -12716,18 +12731,17 @@ function bulkCardHtml(){
   const unit=sel.every(n=>n.type==="camera")?"камера|камеры|камер":"объект|объекта|объектов";
   const title=`<span class="hd-ic bk-hd-ic">${SEL_IC}</span>${sel.length} ${i18n(plural(sel.length,unit))}`;
   const cr=`<button type="button" class="cr-link" onclick="pick('${domains[0].id}')">${escHtml(domainLabel())}</button><span class="cr-sep">/</span><span class="cr-cur">${i18n("Выборка")}</span>`;
-  const act=`<button type="button" class="btn s" title="${i18n("Включить все выбранные — сразу, с «Отменить»")}" onclick="bulkQuick('on')">${i18n("Включить")}</button>
-    <button type="button" class="btn s" title="${i18n("Выключить все выбранные — сразу, с «Отменить»")}" onclick="bulkQuick('off')">${i18n("Выключить")}</button>
-    ${nodes.some(canFolder)?`<button type="button" class="btn s" title="${i18n("Добавить выбранные в папку — сразу, с «Отменить»")}" onclick="bulkFolderMenu(event)">${i18n("В папку")}…</button>`:""}
+  // Кнопки правят то, что выбрано в «Править»; при фильтре число на кнопке
+  // говорит, скольким объектам из отмеченных это достанется.
+  const on=bulkFiltOn(),who=on?`«${bulkFiltLabel()}»`:i18n("все отмеченные"),cnt=k=>on?` (${k})`:"";
+  const tg=nodes.filter(canToggleEnabled).length,fd=nodes.filter(canFolder).length;
+  const act=`${tg?`<button type="button" class="btn s" title="${i18n("Включить")} ${escHtml(who)} — ${i18n("сразу, с «Отменить»")}" onclick="bulkQuick('on')">${i18n("Включить")}${cnt(tg)}</button>
+    <button type="button" class="btn s" title="${i18n("Выключить")} ${escHtml(who)} — ${i18n("сразу, с «Отменить»")}" onclick="bulkQuick('off')">${i18n("Выключить")}${cnt(tg)}</button>`:""}
+    ${fd?`<button type="button" class="btn s" title="${i18n("Добавить в папку")} ${escHtml(who)} — ${i18n("сразу, с «Отменить»")}" onclick="bulkFolderMenu(event)">${i18n("В папку")}${cnt(fd)}…</button>`:""}
     ${allCams?`<button type="button" class="btn s" title="${i18n("Архив и режим записи выбранных")}" onclick="bulkGoTab('rec')">${i18n("Архив и запись")}…</button>`:""}
     <button type="button" class="btn s" onclick="bulkMenu(event)">${i18n("Ещё")} ▾</button>${fullCardBtn()}`;
-  const sum=`<div class="bk-sum">
-      <div class="bk-sum-row"><span class="bk-sum-l">${i18n("Серверы")}</span>${bkChips(st.servers,"server")}</div>
-      <div class="bk-sum-row"><span class="bk-sum-l">${i18n("Модели")}</span>${bkChips(st.models,"model")}</div>
-    </div>
-    <p class="sub">${i18n("Клик по серверу или модели оставляет в выборке только их объекты. Параметры видео и встроенные детекторы правятся у одной модели.")}</p>`;
   const offNote=st.offline.length?`<div class="nt" role="status">${st.offline.length} ${i18n(plural(st.offline.length,"объект|объекта|объектов"))} ${i18n("на сервере без связи")} (${[...new Set(st.offline.map(serverNameOf))].map(escHtml).join(", ")}). ${i18n("Изменения к ним не применятся — в отчёте они будут «не применено».")}</div>`:"";
-  const body=bulkScopeHtml(sel)+offNote+sum+(tab==="vid"?bulkVidHtml(nodes,st):tab==="rec"?bulkRecHtml(nodes):tab==="det"?bulkDetHtml(nodes,st):bulkGenHtml(nodes,allCams))+bulkListCard(sel);
+  const body=bulkScopeHtml(sel)+offNote+(tab==="vid"?bulkVidHtml(nodes,st):tab==="rec"?bulkRecHtml(nodes):tab==="det"?bulkDetHtml(nodes,st):bulkGenHtml(nodes,allCams))+bulkListCard(sel);
   return mainHd(cr,title,"",tabsH,act,false)+`<div class="sc">${body}</div><div class="main-actions bk-foot" id="bulkFoot">${bulkFootHtml()}</div>`;
 }
 // Карточка «Основные» — пересечение: раздел показан, только если его умеют
@@ -12749,9 +12763,9 @@ function bulkGenHtml(nodes,allCams){
     const addOpts=flatFolders().map(f=>[f.id,folderPathName(f.id)]);
     h+=card("Расположение",`<div class="g">${bkSelect("Добавить в папку","folderAdd",addOpts,null,"")}${bkSelect("Убрать из папки","folderRemove",removeOpts,null,removeOpts.length?"":`<div class="bk-hint">${i18n("ни один объект не входит в папки")}</div>`)}</div>`);
   }
-  if(!one&&kinds.length>1)miss.push(`${i18n("Параметры типов")} — ${i18n("у каждого типа свои; выберите тип вверху")}`);
+  if(!one&&kinds.length>1)miss.push(`${i18n("Параметры типов")} — ${i18n("у каждого типа свои")}`);
   if(miss.length)h+=card("Не показано",`<ul class="bk-miss">${miss.map(x=>`<li>${x}</li>`).join("")}</ul>
-    <p class="sub" style="margin:0">${i18n("Это не запрет: выберите тип в строке «Править», и его параметры появятся — правка пойдёт только ему.")}</p>`);
+    <p class="sub" style="margin:0">${i18n("Это не запрет: выберите тип в строке «Типы» — его параметры появятся, правка пойдёт только ему, выборка останется целой.")}</p>`);
   h+=card("Идентификация",`<p class="sub" style="margin:0">${i18n("Имя, короткое имя, ID и IP у каждого объекта свои — массово не меняются. Имена по шаблону: «Ещё → Переименовать по шаблону…».")}</p>`);
   return h;
 }
@@ -12780,7 +12794,7 @@ function bulkRecHtml(nodes){
 }
 function bulkVidHtml(nodes,st){
   if(st.models.length>1)return card("Видео",`<div class="nt">${i18n("Выбрано моделей")}: ${st.models.length}. ${i18n("Параметры видео доступны, если выбрать камеры одной модели.")}</div>
-    <div class="bk-keep">${st.models.map(([k,c])=>`<button type="button" class="btn s" title="${i18n("Выборка останется целой — правка пойдёт только камерам этой модели")}" onclick="bulkSetScope(${JSON.stringify("camera@"+(k===i18n("модель не указана")?"":k)).replace(/"/g,"&quot;")})">${i18n("Править только")} ${escHtml(k)} (${c})</button>`).join("")}</div>`);
+    <div class="bk-keep">${st.models.map(([k,c])=>`<button type="button" class="btn s" title="${i18n("Выборка останется целой — правка пойдёт только камерам этой модели")}" onclick="bulkFiltSet({kind:'camera',model:${JSON.stringify(k).replace(/"/g,"&quot;")}})">${i18n("Править только")} ${escHtml(k)} (${c})</button>`).join("")}</div>`);
   const codecD=countBy(nodes,n=>n.codec||"H.265"),resD=countBy(nodes,n=>n.res||"1920×1080"),fpsD=countBy(nodes,n=>n.fps||25),brD=countBy(nodes,n=>n.bitrate||4096);
   return card("Видео",`<div class="g">${bkSelect("Кодек","codec",[["H.265","H.265"],["H.264","H.264"]],codecD)}${bkSelect("Разрешение","res",[["1920×1080","1920×1080"],["4K","4K"]],resD)}${bkInput("к/с","fps","number",fpsD)}${bkInput("Битрейт","bitrate","number",brD)}</div>
     <p class="sub">${i18n("Одна модель")}: ${escHtml(st.models[0][0])}. ${i18n("Значения проверяются по пересечению допустимых диапазонов выбранных камер; поток переоткроется, поэтому через план.")}</p>`);
@@ -12789,7 +12803,7 @@ function bulkDetHtml(nodes,st){
   const kinds=countBy(nodes.flatMap(n=>camDetectors(n).map(d=>d.kind||DET_TYPES[0])),k=>k);
   const have=`<p class="sub">${kinds.length?`${i18n("Есть детекторы")}: ${kinds.map(([k,c])=>`${escHtml(i18n(k))} ×${c}`).join(" · ")}`:i18n("Детекторов у выбранных камер нет.")}</p>`;
   if(st.models.length>1)return card("Детекторы",`<div class="nt">${i18n("Выбрано моделей")}: ${st.models.length}. ${i18n("Детекторы добавляются сразу всем камерам одной модели.")}</div>
-    <div class="bk-keep">${st.models.map(([k,c])=>`<button type="button" class="btn s" title="${i18n("Выборка останется целой — правка пойдёт только камерам этой модели")}" onclick="bulkSetScope(${JSON.stringify("camera@"+(k===i18n("модель не указана")?"":k)).replace(/"/g,"&quot;")})">${i18n("Править только")} ${escHtml(k)} (${c})</button>`).join("")}</div>${have}`);
+    <div class="bk-keep">${st.models.map(([k,c])=>`<button type="button" class="btn s" title="${i18n("Выборка останется целой — правка пойдёт только камерам этой модели")}" onclick="bulkFiltSet({kind:'camera',model:${JSON.stringify(k).replace(/"/g,"&quot;")}})">${i18n("Править только")} ${escHtml(k)} (${c})</button>`).join("")}</div>${have}`);
   const kind=bulkDraft.addDet||"";
   const missing=kind?nodes.filter(n=>!camDetectors(n).some(d=>(d.kind||DET_TYPES[0])===kind)).length:0;
   return card("Детекторы",`<div class="g">${bkSelect("Добавить детектор всем","addDet",DET_TYPES.map(k=>[k,i18n(k)]),null,kind?`<div class="bk-hint">${i18n("нет у")} ${missing} ${i18n("из")} ${nodes.length} — ${i18n("добавится только им")}</div>`:"")}</div>${have}
@@ -12878,7 +12892,7 @@ function bulkChanges(draft){
       const had=Object.prototype.hasOwnProperty.call(n,k),prev=n[k];
       return mkOp(n,`${i18n(p[1])}: ${v}`,"param",()=>paramPut(n,k,v,p[2]),null,()=>{if(had)n[k]=prev;else delete n[k]});
     });
-    const lab=(typeParams(bulkScope.split("@")[0])||[]).find(x=>x[0]===k)?.[1]||k;
+    const lab=(typeParams(bulkFilt.kind)||[]).find(x=>x[0]===k)?.[1]||k;
     step(key,`${i18n(lab)}: ${v}`,ops);
   });
   if(d.arch){
@@ -12980,14 +12994,21 @@ function bulkOpenMenuAt(btn,html){
   menu.style.left=Math.max(8,Math.min(Math.round(r.left),innerWidth-mw-8))+"px";
   menu.style.top=Math.round(r.bottom+4+mh>innerHeight-8?Math.max(8,r.top-mh-4):r.bottom+4)+"px";
 }
+// Меню в два раздела: правка — тем, что выбрано в «Править», действия над
+// выборкой — всем отмеченным. Число в каждом пункте — кому достанется.
 function bulkMenu(e){
   e.stopPropagation();
-  const n=bulkSelNodes().length;
+  const n=bulkSelNodes().length,sc=bulkScopeNodes(),on=bulkFiltOn(),of=k=>on?` (${k} ${i18n("из")} ${n})`:` (${k})`;
+  const cr=sc.filter(canCreds).length;
   bulkOpenMenuAt(e.currentTarget,[
-    tctxItem(i18n("Учётные данные…"),`closeTreeCtx();bulkGoTab('gen','bkUser')`),
-    tctxItem(i18n("Переименовать по шаблону…"),`closeTreeCtx();bulkRenameDialog()`),
+    `<div class="tctx-head">${on?`${i18n("Править")}: ${escHtml(bulkFiltLabel())}`:i18n("Править все отмеченные")}</div>`,
+    ...(cr?[tctxItem(`${i18n("Учётные данные…")}${of(cr)}`,`closeTreeCtx();bulkGoTab('gen','bkUser')`)]:[]),
+    tctxItem(`${i18n("Переименовать по шаблону…")}${of(sc.length)}`,`closeTreeCtx();bulkRenameDialog()`),
+    ...(on?[tctxItem(`${i18n("Оставить в выборке только их")} (${sc.length})`,`bulkKeepScope()`)]:[]),
+    tctxSep(),
+    `<div class="tctx-head">${i18n("Вся выборка")} (${n})</div>`,
     tctxItem(`${i18n("В избранное")} (${n})`,`closeTreeCtx();favSelected()`,tctxStarIcon()),
-    tctxItem(i18n("Экспорт выборки в CSV"),`closeTreeCtx();bulkExportCsv()`),
+    tctxItem(`${i18n("Экспорт выборки в CSV")} (${n})`,`closeTreeCtx();bulkExportCsv()`),
     tctxItem(i18n("Снять выделение"),`closeTreeCtx();clearTreeSel()`),
     tctxSep(),
     tctxItem(`${i18n("Удалить")}… (${n})`,`closeTreeCtx();deleteSelected()`)
@@ -13011,6 +13032,7 @@ function bulkRenameDialog(){
   const preview=tpl=>nodes.slice(0,3).map(n=>`<li>${escHtml(locName(n))} → <b>${escHtml(bulkName(n,tpl))}</b></li>`).join("");
   window._bkPreview=preview;
   openBulkModal(i18n("Переименовать по шаблону"),`<div class="g" style="grid-template-columns:1fr"><div><label>${i18n("Шаблон имени")}</label><select id="bkTpl" onchange="document.getElementById('bkPrev').innerHTML=_bkPreview(this.value)">${opts}</select></div></div>
+    ${bulkFiltOn()?`<div class="nt" style="margin-top:10px">${i18n("Переименуются")} ${nodes.length} — «${escHtml(bulkFiltLabel())}»; ${i18n("остальные")} ${bulkSelNodes().length-nodes.length} ${i18n("отмеченных не меняются.")}</div>`:""}
     <p class="sub" style="margin-top:10px">${i18n("Как будут называться первые три")}:</p><ul class="bk-prev" id="bkPrev">${preview("default")}</ul>
     <p class="sub">${i18n("Короткие имена не меняются. Новые имена попадут в план вместе с остальными изменениями черновика.")}</p>`,
     `<button type="button" class="btn" onclick="closeBulkModal()">${i18n("Отменить")}</button><button type="button" class="btn pri" onclick="bulkSet('rename',document.getElementById('bkTpl').value);closeBulkModal();bulkShowPlan()">${i18n("В план")}</button>`);
