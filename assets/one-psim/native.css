@@ -1,0 +1,89 @@
+/* ONE PSIM Prototype Kit — native form controls (D-040).
+ *
+ * The ladders of §2.13 (Checkbox, Radio, Switch) and §2.9 (select options) on NATIVE elements, so a foreign
+ * prototype gets them without any kit class: a restyle bridge adds `@import "theme/native.css"` after
+ * one-psim.css and its checkboxes, radios, switches (checkbox[role=switch]) and selects are the DS's.
+ * Every selector is wrapped in :where() — zero specificity — so any rule the prototype has for these
+ * elements wins property by property; the agent then checks the screenshots and drops or overrides
+ * (RESTYLE-RULES.md §2.13). The kit's own classes (.check, .radio, .switch, select.field) are listed in the
+ * same selectors, so this file is the single source for both modes; tailwind.css imports it.
+ * Values from one-psim.css only (--one-*), never Tailwind names — bridges do not load tailwind.
+ */
+
+/* ---- Checkbox / Radio (MuiCheckbox / MuiRadio) ---------------------------------------------------- */
+:where(input[type="checkbox"]:not([role="switch"]):not(.switch), input[type="radio"], .check, .radio) {
+  appearance: none; flex: none; position: relative; box-sizing: border-box; margin: 0; cursor: pointer;
+  width: 1.125rem; height: 1.125rem; border: 1px solid var(--one-selection-outline); border-radius: var(--one-radius-control);
+  background-color: var(--one-editor-bg); color: var(--one-accent-on); transition: background-color 120ms, border-color 120ms;
+  vertical-align: middle;
+}
+:where(input[type="radio"], .radio) { border-radius: var(--one-radius-pill); }
+:where(input[type="checkbox"]:not([role="switch"]):not(.switch), input[type="radio"], .check, .radio):hover:not(:disabled) { background-color: var(--one-editor-hover); }
+:where(input[type="checkbox"]:not([role="switch"]):not(.switch), input[type="radio"], .check, .radio):active:not(:disabled) { background-color: var(--one-editor-pressed); }
+:where(input[type="checkbox"]:not([role="switch"]):not(.switch), input[type="radio"], .check, .radio):is(:checked, :indeterminate) { background-color: var(--one-accent); border-color: var(--one-accent); }
+:where(input[type="checkbox"]:not([role="switch"]):not(.switch), input[type="radio"], .check, .radio):is(:checked, :indeterminate):hover:not(:disabled) { background-color: var(--one-primary-hover); border-color: var(--one-primary-hover); }
+:where(input[type="checkbox"]:not([role="switch"]):not(.switch), input[type="radio"], .check, .radio):is(:checked, :indeterminate):active:not(:disabled) { background-color: var(--one-primary-pressed); border-color: var(--one-primary-pressed); }
+:where(input[type="checkbox"]:not([role="switch"]):not(.switch), input[type="radio"], .check, .radio)::before {
+  content: ""; position: absolute; inset: -1px; background: currentColor; opacity: 0;
+  -webkit-mask: center / 100% 100% no-repeat; mask: center / 100% 100% no-repeat;
+}
+:where(input[type="checkbox"]:not([role="switch"]):not(.switch), .check)::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.6 8.3l2.9 2.9 5.9-5.9' fill='none' stroke='%23000' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.6 8.3l2.9 2.9 5.9-5.9' fill='none' stroke='%23000' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+:where(input[type="checkbox"]:not([role="switch"]):not(.switch), .check):indeterminate::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 8h8' fill='none' stroke='%23000' stroke-width='1.9' stroke-linecap='round'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 8h8' fill='none' stroke='%23000' stroke-width='1.9' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+:where(input[type="radio"], .radio)::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='3.1'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='3.1'/%3E%3C/svg%3E");
+}
+:where(input[type="checkbox"]:not([role="switch"]):not(.switch), input[type="radio"], .check, .radio):is(:checked, :indeterminate)::before { opacity: 1; }
+:where(input[type="checkbox"], input[type="radio"], .check, .radio, .switch):focus-visible { outline: 2px solid var(--one-focus-ring); outline-offset: 2px; }
+:where(input[type="checkbox"]:not([role="switch"]):not(.switch), input[type="radio"], .check, .radio):disabled { cursor: not-allowed; border-color: var(--one-fg-disabled); background-color: var(--one-editor-disabled); }
+:where(input[type="checkbox"]:not([role="switch"]):not(.switch), input[type="radio"], .check, .radio):disabled:is(:checked, :indeterminate) { background-color: var(--one-fg-disabled); border-color: var(--one-fg-disabled); }
+
+/* ---- Switch (MuiSwitch): a checkbox with role="switch", or the kit's .switch ----------------------- */
+:where(input[type="checkbox"][role="switch"], .switch) {
+  appearance: none; flex: none; position: relative; box-sizing: border-box; margin: 0; cursor: pointer;
+  width: 2.375rem; height: 1.25rem; border: 1px solid var(--one-switch-off-border); border-radius: var(--one-radius-pill);
+  background-color: var(--one-switch-off-track); transition: background-color 120ms, border-color 120ms;
+  --switch-thumb: 1rem; --switch-travel: 1.125rem; vertical-align: middle;
+}
+:where(input[type="checkbox"][role="switch"], .switch)::before { content: ""; position: absolute; top: 1px; left: 1px; width: var(--switch-thumb); height: var(--switch-thumb); border-radius: var(--one-radius-pill); background: var(--one-switch-off-thumb); transition: transform 120ms, background-color 120ms; }
+:where(input[type="checkbox"][role="switch"], .switch):hover:not(:disabled) { background-color: var(--one-switch-off-track-hover); }
+:where(input[type="checkbox"][role="switch"], .switch):active:not(:disabled) { background-color: var(--one-switch-off-track-pressed); }
+:where(input[type="checkbox"][role="switch"], .switch):checked { background-color: var(--one-accent); border-color: var(--one-accent); }
+:where(input[type="checkbox"][role="switch"], .switch):checked::before { background: var(--one-accent-on); transform: translateX(var(--switch-travel)); }
+:where(input[type="checkbox"][role="switch"], .switch):checked:hover:not(:disabled) { background-color: var(--one-primary-hover); border-color: var(--one-primary-hover); }
+:where(input[type="checkbox"][role="switch"], .switch):checked:active:not(:disabled) { background-color: var(--one-primary-pressed); border-color: var(--one-primary-pressed); }
+:where(input[type="checkbox"][role="switch"], .switch):disabled { cursor: not-allowed; background-color: var(--one-control-disabled); border-color: var(--one-selection-outline-disabled); }
+:where(input[type="checkbox"][role="switch"], .switch):disabled::before { background: var(--one-fg-disabled); }
+
+/* ---- <select> = ComboBox: the arrow, and the options popup where the browser lets CSS style it (§2.9) -- */
+:where(select, select.field) {
+  appearance: none; padding-right: 2rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238C8C8C' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 0.5rem center; background-size: 1rem;
+}
+@supports (appearance: base-select) {
+  /* base-select is a capability switch, not a look: without it the popup is the browser's native one and none of the
+     option rules below can apply (Chromium's native dark popup even draws its own light edge — seen in a restyled
+     prototype whose own `.langsel { appearance: none }` had switched it off). A prototype's `appearance: none` on a
+     <select> only means «hide the native arrow», which base-select also does (::picker-icon below) — so this one
+     declaration is !important on purpose and stays inside @supports. */
+  select, select::picker(select) { appearance: base-select !important; }
+  /* base-select turns the <select> into a flex box with align-items: normal — a prototype's fixed height then
+     leaves the label at the top (seen in TimeZones' .langsel). Centre it; zero specificity, a prototype can override. */
+  :where(select) { align-items: center; }
+  :where(select, select.field) selectedcontent { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :where(select, select.field)::picker-icon { display: none; }
+  :where(select, select.field)::picker(select) { border: 1px solid var(--one-border); border-radius: var(--one-radius-container); background: var(--one-popup); padding: 4px; margin-top: 4px; box-shadow: var(--one-shadow); }
+  :where(select, select.field) option { padding: 6px 10px; border-radius: var(--one-radius-control); color: var(--one-fg); }
+  :where(select, select.field) option::checkmark { display: none; }
+  :where(select, select.field) option:is(:hover, :focus) { background: var(--one-control-hover); outline: none; }
+  :where(select, select.field) option:checked { background: var(--one-accent); color: var(--one-accent-on); }
+  :where(select, select.field) option:checked:hover { background: var(--one-primary-hover); }
+  :where(select, select.field) option:disabled { color: var(--one-fg-disabled); }
+}

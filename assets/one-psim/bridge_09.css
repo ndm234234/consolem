@@ -1,0 +1,222 @@
+/* Прототип 09 — макет в визуальном семействе ONE PSIM.
+ * Мост по ONE.PSIM.PrototypeKit (режим «переделать», docs/RESTYLE-RULES.md §0–§4), кит @ 6505778.
+ * Подключается после <style> прототипа. Разметка и JS прототипа не тронуты; сырые hex в его <style>
+ * заранее переложены на токены --one-* (§0.2: hex вне переменных было больше 10 %).
+ * one-psim.css и native.css — копии из кита, не править: обновляются копированием заново. */
+@import url("one-psim.css");
+@import url("native.css");
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("fonts/InterVariable.woff2") format("woff2-variations"), url("fonts/InterVariable.woff2") format("woff2");
+}
+
+/* ---- §1. Переменные прототипа → словарь --------------------------------------------------------- */
+:root, html[data-theme="light"], html[data-theme="dark"] {
+  --bg: var(--one-canvas);
+  --p: var(--one-surface);
+  --p2: var(--one-surface-muted);
+  --tx: var(--one-fg);
+  --mu: var(--one-fg-muted);
+  --bl: var(--one-accent);
+  --gn: var(--one-success-icon);
+  --rd: var(--one-danger);
+  --pu: var(--one-palette-purple);
+  --ln: var(--x-region);
+}
+/* Граница между регионами (D-024): в Light — surface-subtle, в Dark — border. */
+:root, html[data-theme="light"] { --x-region: var(--one-surface-subtle); --x-tint: 16%; }
+html[data-theme="dark"] { --x-region: var(--one-border); --x-tint: 30%; }
+
+html[data-theme] {
+  body { font-family: var(--one-font-ui); background: var(--one-canvas); color: var(--one-fg); }
+  button, input, select, textarea { font-family: var(--one-font-ui); }
+
+  /* ---- Фокус (§2.6, D-025): кнопки и строки — кольцо, поля — halo ----------------------------- */
+  :is(button, [role="button"], [tabindex], a):focus-visible { outline: 2px solid var(--one-focus-ring); outline-offset: 2px; }
+
+  /* ---- Заголовки (§2.2b, D-021) ---------------------------------------------------------------- */
+  h1 { font: var(--one-type-heading-lg); letter-spacing: var(--one-type-heading-lg-tracking); }
+  .ch, .chead { font: var(--one-type-heading-sm); letter-spacing: var(--one-type-heading-sm-tracking); text-transform: none; color: var(--one-fg); }
+
+  /* ---- Поверхности: карточки, попапы, диалоги, шторки ------------------------------------------ */
+  .card { background: var(--one-surface); border-color: var(--x-region); border-radius: var(--one-radius-window); }
+  aside, .gear-body { background: var(--one-surface); }
+  .hd { background: var(--one-surface); }
+  .ph { background: var(--one-surface); border-bottom-color: var(--x-region); }
+  :is(.upop, .filt-pop, .tctx, .acc-menu, .nav-menu, .status-pop) {
+    background: var(--one-popup); border: 1px solid var(--one-border); border-radius: var(--one-radius-container);
+    box-shadow: var(--one-shadow); color: var(--one-fg);
+  }
+  :is(.cbox, .jbox) { background: var(--one-dialog); border: 1px solid var(--one-border); border-radius: var(--one-radius-window); box-shadow: var(--one-shadow); }
+  .chead { font: var(--one-type-heading-md); letter-spacing: var(--one-type-heading-md-tracking); }
+  .dr { background: var(--one-dialog); border-left-color: var(--one-border); box-shadow: var(--one-shadow); }
+  :is(.mask, .jump, .confirm) { background: var(--one-scrim); }
+  .ttu { background: var(--one-popup); border-color: var(--one-border); box-shadow: var(--one-shadow); }
+  .ttu-act:hover { color: var(--one-link-hover); }
+
+  /* ---- Кнопки (§2.8, D-015): .btn = secondary, .pri = primary ----------------------------------- */
+  .btn {
+    background: var(--one-control-bg); border: 1px solid var(--one-border); border-radius: var(--one-radius-control);
+    color: var(--one-fg); font-weight: 500; transition: background-color 120ms, border-color 120ms;
+  }
+  .btn:hover:not(:disabled) { background: var(--one-control-hover); border-color: var(--one-border); color: var(--one-fg); }
+  .btn:active:not(:disabled) { background: var(--one-control-pressed); }
+  .btn:disabled, .btn:disabled:hover { opacity: 1; color: var(--one-fg-disabled); background: var(--one-control-disabled); border-color: var(--one-border); }
+  .btn.pri, .pri { background: var(--one-accent); border-color: var(--one-accent); color: var(--one-accent-on); }
+  .btn.pri:hover:not(:disabled), .pri:hover:not(:disabled) { background: var(--one-primary-hover); border-color: var(--one-primary-hover); color: var(--one-accent-on); }
+  .btn.pri:active:not(:disabled), .pri:active:not(:disabled) { background: var(--one-primary-pressed); border-color: var(--one-primary-pressed); }
+  .btn.pri:disabled { background: var(--one-control-disabled); border-color: var(--one-border); color: var(--one-fg-disabled); }
+  /* Удаление: у Button нет danger appearance — палитра (D-012), подпись не меняется на hover (D-022). */
+  .btn.danger { background: transparent; color: var(--one-danger); border-color: var(--one-danger); }
+  .btn.danger:hover:not(:disabled) { background: var(--one-danger-bg); color: var(--one-danger); border-color: var(--one-danger); }
+  .btn.danger:active:not(:disabled) { background: color-mix(in srgb, var(--one-danger) 22%, var(--one-surface)); }
+  .ttu.danger .ttu-act, .ttu.danger .ttu-act:hover { background: var(--one-palette-red); color: #fff; }
+  .ttu.danger .ttu-act:hover { background: var(--one-palette-red-hover); }
+
+  /* Иконочные кнопки шапки и рельса = subtle / icon-only. */
+  :is(.hd-nav button, .hd-railtg, .ch-act, .full-btn, .n-menu, .sel-close) { color: var(--one-fg-muted); border-radius: var(--one-radius-control); }
+  :is(.hd-nav button, .hd-railtg, .ch-act, .full-btn):hover:not(:disabled) { background: var(--one-control-hover); color: var(--one-fg); }
+  :is(.hd-nav button, .hd-railtg, .ch-act, .full-btn):active:not(:disabled) { background: var(--one-control-pressed); }
+  .hd-nav button:disabled { opacity: 1; color: var(--one-fg-disabled); }
+
+  /* ---- Переключатели и сегменты = ToggleButton (§2.4, D-018): включённое — лестница primary ------ */
+  :is(.ph-choice, .acc-seg button, .acc-subtabs button, .acc-pill, .acc-filt, .dev-mode-opt, .dev-tpl-opt,
+      .dev-view-act, .stchip, .fchip, .hchip, .pg-b, .pf-chip, .chc, .full-btn) {
+    border-radius: var(--one-radius-control);
+  }
+  :is(.ph-choice, .acc-seg button, .acc-subtabs button, .acc-pill, .acc-filt, .dev-mode-opt, .dev-tpl-opt,
+      .stchip, .fchip, .hchip, .pg-b, .pf-chip, .chc):not(.on):hover:not(:disabled) {
+    background: var(--one-control-hover); color: var(--one-fg);
+  }
+  :is(.ph-choice, .acc-seg button, .acc-subtabs button, .acc-pill, .acc-filt, .dev-mode-opt, .dev-tpl-opt,
+      .dev-fields-wrap > .dev-view-act, .stchip, .fchip, .hchip, .pg-b, .pf-chip, .chc, .full-btn, .ch-act).on {
+    background: var(--one-accent); border-color: var(--one-accent); color: var(--one-accent-on); box-shadow: none;
+  }
+  :is(.ph-choice, .acc-seg button, .acc-subtabs button, .acc-pill, .acc-filt, .dev-mode-opt, .dev-tpl-opt,
+      .dev-fields-wrap > .dev-view-act, .stchip, .fchip, .hchip, .pg-b, .pf-chip, .chc, .full-btn, .ch-act).on:hover:not(:disabled) {
+    background: var(--one-primary-hover); border-color: var(--one-primary-hover); color: var(--one-accent-on);
+  }
+  :is(.ph-choice, .acc-seg button, .acc-subtabs button, .acc-pill, .acc-filt, .dev-mode-opt, .dev-tpl-opt,
+      .stchip, .fchip, .hchip, .pg-b, .pf-chip, .chc, .full-btn, .ch-act).on:active:not(:disabled) {
+    background: var(--one-primary-pressed); border-color: var(--one-primary-pressed);
+  }
+  /* Кнопки, открывающие меню (статус, домен), — не переключатели: открытое меню или выбранный фильтр —
+     лестница selected у Button (нейтральная заливка + индикатор), не primary. */
+  .ph-choice[aria-haspopup].on, .ph-choice[aria-haspopup][aria-expanded="true"] {
+    background: var(--one-selected-neutral); border-color: var(--one-selected-indicator); color: var(--one-fg);
+  }
+  .ph-choice[aria-haspopup].on:hover:not(:disabled) { background: var(--one-selected-neutral-hover); border-color: var(--one-selected-indicator); color: var(--one-fg); }
+  .ph-choice[aria-haspopup].on:active:not(:disabled) { background: var(--one-selected-neutral-pressed); }
+
+  /* Счётчик внутри включённого сегмента — на заливке accent. */
+  :is(.ph-choice, .stchip).on :is(.ph-cnt, .stchip-cnt) { background: color-mix(in srgb, var(--one-accent-on) 22%, transparent); color: var(--one-accent-on); }
+  .ph-cnt, .stchip-cnt { background: var(--one-surface-subtle); color: var(--one-fg-muted); }
+  .hchip:not(.on):hover { border-color: var(--one-border); }
+
+  /* ---- Рельс разделов = боковая навигация (D-031, D-051) ---------------------------------------- */
+  .rail { background: var(--one-surface); border-right-color: var(--x-region); }
+  .asw { color: var(--one-fg); border-radius: var(--one-radius-control); font-weight: 500; }
+  .asw .ici { color: var(--one-fg-muted); opacity: 1; }
+  .asw:hover:not(.on) { background: var(--one-nav-hover); color: var(--one-fg); }
+  .asw.on { background: var(--one-accent-soft); color: var(--one-nav-selected-text); font-weight: 600; }
+  .asw.on .ici { color: var(--one-nav-selected-text); }
+  .asw.on:hover { background: var(--one-nav-selected-hover); }
+  .ubtn { background: var(--one-control-bg); border-color: var(--one-border); }
+  .ubtn:hover, .ubtn.on { background: var(--one-control-hover); border-color: var(--one-border); }
+  .uav { background: var(--one-surface-subtle); color: var(--one-fg-muted); }
+  .usign { color: var(--one-danger); border-color: var(--one-danger); background: transparent; border-radius: var(--one-radius-control); }
+  .usign:hover { background: var(--one-danger-bg); color: var(--one-danger); }
+
+  /* ---- Вкладки (MuiTab, D-031): выбранная — nav-selected, индикатор 2px ------------------------- */
+  .tab { color: var(--one-fg); font-weight: 500; }
+  .tab:hover:not(.on) { color: var(--one-fg); }
+  .tab.on { color: var(--one-nav-selected-text); border-bottom-color: var(--one-nav-selected-text); }
+
+  /* ---- Дерево (D-049, D-050, D-051): выбранная строка — accent-soft, подпись и иконки nav-selected;
+         без разделителя, подложка скруглена; иконка в покое — fg-muted ---------------------------- */
+  .n { color: var(--one-fg); border-left-color: transparent; border-radius: var(--one-radius-control); }
+  .n .ici { color: var(--one-fg-muted); }
+  .n:hover { background: var(--one-nav-hover); }
+  .n.on, .n.mark, .n.on.mark { background: var(--one-accent-soft); border-left-color: transparent; color: var(--one-nav-selected-text); }
+  .n:is(.on, .mark) :is(.ici, .nm, .tw) { color: var(--one-nav-selected-text); }
+  .n:is(.on, .mark):hover { background: var(--one-nav-selected-hover); }
+  .n.off .nm, .n.off .nm-inp { color: var(--one-fg-subtle); }
+  .tree { scrollbar-color: var(--one-border) transparent; }
+
+  /* ---- Пункты меню = MenuItem (§2.9a): выбранный — accent-soft + полоса 3px, подпись fg ----------- */
+  :is(.filt-pop, .tctx, .acc-menu, .nav-menu, .status-pop) .mi { color: var(--one-fg); }
+  :is(.filt-pop, .acc-menu, .nav-menu, .status-pop) .mi:hover:not(:disabled), .tctx button:hover { background: var(--one-control-hover); }
+  :is(.filt-pop, .acc-menu, .nav-menu, .status-pop) .mi:is(.on, .cur) { background: var(--one-accent-soft); box-shadow: inset 3px 0 0 0 var(--one-selected-indicator); color: var(--one-fg); }
+  :is(.filt-pop, .acc-menu, .nav-menu, .status-pop) .mi:is(.on, .cur):hover { background: var(--one-accent-soft-hover); }
+  .acc-menu .mi.danger { color: var(--one-danger); }
+  .filt-pop .mi input { transform: none; }
+  /* Найденное в поиске и результаты перехода — строки списка: выбор фоном (D-011). */
+  :is(.res, .gores):is(:hover, .on) { background: var(--one-control-hover); border-left-color: transparent; }
+
+  /* ---- Поля ввода = TextField / ComboBox (§2.6, §2.13): halo, не кольцо ------------------------ */
+  :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea) {
+    background-color: var(--one-editor-bg); border: 1px solid var(--one-editor-border); border-radius: var(--one-radius-control); color: var(--one-fg);
+  }
+  :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea):hover:not(:disabled):not(:focus) {
+    background-color: var(--one-editor-hover); border-color: var(--one-editor-border-hover);
+  }
+  :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea):focus {
+    outline: none; background-color: var(--one-editor-focus); border-color: var(--one-editor-border-focus); box-shadow: 0 0 0 2px var(--one-focus-halo);
+  }
+  :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea):disabled {
+    background-color: var(--one-editor-disabled); border-color: var(--one-border); color: var(--one-fg-disabled);
+  }
+  :where(input[readonly]:not([type="checkbox"]):not([type="radio"])) { background-color: var(--one-editor-readonly); color: var(--one-fg-muted); }
+  ::placeholder { color: var(--one-fg-placeholder); }
+  .dev-inline-input, .dev-inline-select, .ip-bulk-ta, .acc-imp-ta { background-color: var(--one-editor-bg); border-color: var(--one-editor-border); border-radius: var(--one-radius-control); }
+  :is(.ip-bulk-ta, .acc-imp-ta):focus { border-color: var(--one-editor-border-focus); box-shadow: 0 0 0 2px var(--one-focus-halo); }
+  /* Поиск — обёртка-поле: рамка и halo на обёртке, внутренний input прозрачный. */
+  :is(.sq, .gojump, .lst-sq) {
+    background: var(--one-editor-bg); border: 1px solid var(--one-editor-border); border-radius: var(--one-radius-control); box-shadow: none;
+  }
+  :is(.sq, .gojump, .lst-sq):hover:not(:focus-within) { background: var(--one-editor-hover); border-color: var(--one-editor-border-hover); }
+  :is(.sq, .gojump, .lst-sq):focus-within { background: var(--one-editor-focus); border-color: var(--one-editor-border-focus); box-shadow: 0 0 0 2px var(--one-focus-halo); }
+  .gear-tree-head .sq { background: var(--one-editor-bg); border-color: var(--one-editor-border); }
+  .gear-tree-head .sq:hover:not(:focus-within) { background: var(--one-editor-hover); border-color: var(--one-editor-border-hover); }
+  .gear-tree-head .sq:focus-within { background: var(--one-editor-focus); border-color: var(--one-editor-border-focus); box-shadow: 0 0 0 2px var(--one-focus-halo); }
+  :is(.sq, .gojump) > input, .jbox input { background: transparent; border: 0; box-shadow: none; }
+  :is(.sq, .gojump) > input:hover, :is(.sq, .gojump) > input:focus, .jbox input:hover, .jbox input:focus { background: transparent; box-shadow: none; }
+  .jbox input { border-bottom: 1px solid var(--x-region); border-radius: 0; }
+  label { color: var(--one-fg-muted); font: var(--one-type-label); letter-spacing: var(--one-type-label-tracking); }
+  .fld-err { color: var(--one-danger); }
+
+  /* ---- Переключатель .sw = Switch (§2.13) ----------------------------------------------------- */
+  .sw { width: 38px; height: 20px; box-sizing: border-box; background: var(--one-switch-off-track); border: 1px solid var(--one-switch-off-border); }
+  .sw:after { width: 16px; height: 16px; left: 1px; top: 1px; background: var(--one-switch-off-thumb); }
+  .sw:hover { background: var(--one-switch-off-track-hover); }
+  .sw.on { background: var(--one-accent); border-color: var(--one-accent); }
+  .sw.on:hover { background: var(--one-primary-hover); border-color: var(--one-primary-hover); }
+  .sw.on:after { left: 19px; background: var(--one-accent-on); }
+
+  /* ---- Таблицы (D-052): заголовок — кегль ячейки, +100 веса, приглушённый ---------------------- */
+  th { color: var(--one-fg-muted); font-weight: 500; }
+  :is(th, td) { border-bottom-color: var(--one-table-row-divider); }
+  table.gtbl-cams thead th { background: var(--one-surface-muted); }
+
+  /* ---- Ссылки (§2.14): inline — подчёркнута всегда; действия и путь — без подчёркивания --------- */
+  .cr .cr-link { color: var(--one-link); font-weight: 500; }
+  .cr .cr-link:hover { color: var(--one-link-hover); text-decoration: underline; text-underline-offset: 2px; }
+  .lk { color: var(--one-link); text-decoration: underline; text-decoration-color: var(--one-link-underline); text-underline-offset: 2px; text-decoration-thickness: 1px; }
+  .lk:hover { color: var(--one-link-hover); text-decoration-color: currentColor; }
+
+  /* ---- Бейджи статусов — тройки MessageBar ------------------------------------------------------ */
+  .bd { background: var(--one-success-bg); color: var(--one-success-text); }
+  .bd.off { background: var(--one-danger-bg); color: var(--one-danger-text); }
+
+  /* Иконка в покое — один тон (D-051), и у лупы в поле поиска тоже. */
+  .ici-search { color: var(--one-fg-muted); }
+  /* base-select (D-043) рисует стрелку сам: узкому select на странице нужно место под неё. */
+  .pg-size select { width: auto; min-width: 60px; padding-right: 24px; }
+
+  /* ---- Полосы прокрутки --------------------------------------------------------------------- */
+  * { scrollbar-color: var(--one-border) transparent; }
+}
