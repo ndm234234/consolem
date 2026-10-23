@@ -357,5 +357,7 @@ window.I18N_EN={
 "Все домены":"All domains",
 "Добавить найденные":"Add discovered","Удалить архив":"Delete archive","будет удалён.":"will be deleted.",
 "Перестанут писать камер:":"Cameras that will stop recording:","Сами камеры останутся в системе — в разделе «Без записи».":"The cameras stay in the system, under “Not recording”.","Архив удалён":"Archive deleted",
-"Создать сетевой архив":"Create network archive","Создать архив":"Create archive"
+"Создать сетевой архив":"Create network archive","Создать архив":"Create archive",
+// Прототип 09: кнопка темы в шапке.
+"Сменить тему":"Switch theme"
 };
