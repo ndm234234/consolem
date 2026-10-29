@@ -26,7 +26,32 @@
     }
     document.getElementById("confirmOk").click();
   }
+  // Разметка без кода в атрибутах: консоль VMS отдаёт страницу под CSP «script-src 'self'», где onclick="…"
+  // не выполняется (index.html, onEv). Всё, что появилось за сценарий: ни одного on…, у data-on-… — JSON
+  // со списком вызовов существующих функций. Строка в отчёте — только если что-то не так
+  const cspBad = new Set();
+  function cspCheck(el) {
+    if (el.nodeType !== 1) return;
+    for (const a of el.attributes) {
+      if (/^on/.test(a.name)) cspBad.add(`<${el.tagName.toLowerCase()} ${a.name}>`);
+      else if (a.name.startsWith("data-on-"))
+        try {
+          JSON.parse(a.value).forEach(([n]) => n[0] !== "." && typeof window[n] !== "function" && cspBad.add(`${a.name}: нет функции ${n}`));
+        } catch (e) {
+          cspBad.add(`${a.name}: не JSON`);
+        }
+    }
+  }
+  const cspScan = (root) => {
+    cspCheck(root);
+    if (root.querySelectorAll) root.querySelectorAll("*").forEach(cspCheck);
+  };
+  new MutationObserver((list) =>
+    list.forEach((m) => (m.type === "attributes" ? cspCheck(m.target) : m.addedNodes.forEach(cspScan)))
+  ).observe(document.documentElement, { subtree: true, childList: true, attributes: true });
   function report() {
+    cspScan(document.documentElement);
+    if (cspBad.size) ok(false, "разметка без кода в атрибутах: " + [...cspBad].slice(0, 6).join("; "));
     const el = document.createElement("script");
     el.type = "text/plain";
     el.id = "__ui";

@@ -162,8 +162,10 @@ def main():
     ids = normalize.ids
     back = {uid: old for old, uid in ids.items()}
     uuid_re = re.compile(r"[0-9a-f]{8}-[0-9]{4}-4000-8000-000000000000")
-    before = capture(BEFORE, {})
-    after = [uuid_re.sub(lambda m: back.get(m.group(0), m.group(0)), s) for s in capture(AFTER, ids)]
+    # Обработчики — не вид: в эталоне они в атрибутах onclick="…", в макете — data-on-… (onEv, под CSP)
+    handlers = re.compile(r''' (?:on[a-z]+|data-on-[a-z]+)=(?:"[^"]*"|'[^']*')''')
+    before = [handlers.sub("", s) for s in capture(BEFORE, {})]
+    after = [handlers.sub("", uuid_re.sub(lambda m: back.get(m.group(0), m.group(0)), s)) for s in capture(AFTER, ids)]
     bad = 0
     for i, (screen, a, b) in enumerate(zip(SCREENS, before, after)):
         name = " · ".join(str(x) for x in screen[:3] if x) + (f" · {', '.join(screen[3])}" if screen[3] else "")
