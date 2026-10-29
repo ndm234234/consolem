@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Проверки целостности API прототипа API (index_api_server.html).
+"""Проверки целостности API основного макета (index.html).
 
 1. Контракт api/openapi.json: OpenAPI 3.1, у каждой операции operationId (без повторов) и тег
    из списка тегов, каждая ссылка $ref ведёт в существующую схему.
@@ -27,7 +27,7 @@ import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PROTOTYPE = "index_api_server.html"
+PROTOTYPE = "index.html"
 METHODS = ("get", "post", "put", "patch", "delete")
 
 # Константы с данными сервера в HTML прототипа: образец → что это

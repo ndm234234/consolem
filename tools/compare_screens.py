@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Внешний вид не изменился: прототип API (через API) рисует то же, что основной макет index.html (константы).
+"""Внешний вид не изменился: макет через API (index.html) рисует то же, что последний макет на константах.
 
-Оба прототипа открываются в headless Chrome с остановленными часами (как при сборке набора), проходят
+Макет на константах — index.html до того, как основным стал макет через API; берётся из истории git
+(extract_fixture.BASELINE). После намеренных правок вида index.html расхождения ожидаемы: сравнение
+подтверждает перевод на API, а не каждую правку. Оба макета открываются в headless Chrome с остановленными часами (как при сборке набора), проходят
 одни и те же экраны — разделы, срезы, карточки с вкладками, светлая и тёмная тема, RU и EN — и после
 каждого шага снимается разметка страницы. В разметке прототипа API UUID заменяются старыми id
 макета (по выгрузке tools/extract_fixture.py), затем снимки сравниваются построчно.
@@ -42,8 +44,8 @@ KNOWN = [
      "который хранит сервер; внешне то же"),
 ]
 
-BEFORE = "index.html"
-AFTER = "index_api_server.html"
+BEFORE = extract_fixture.BASELINE
+AFTER = "index.html"
 
 # Экраны: [раздел, id объекта макета или null, вкладка или null, действия до показа]
 SCREENS = [
@@ -123,8 +125,7 @@ ready.then(()=>{
 
 
 def capture(page_name, ids):
-    with open(os.path.join(ROOT, page_name), encoding="utf-8") as f:
-        page = f.read()
+    page = extract_fixture.read_source(page_name)
     run = RUN.replace("__IDS__", json.dumps(ids)).replace("__SCREENS__", json.dumps(SCREENS))
     page = page.replace("<head>", '<head><base href="file://%s/">' % ROOT + extract_fixture.FREEZE + RANDOM, 1)
     page = page.replace("</body>", run + "</body>", 1)

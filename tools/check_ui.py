@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Сценарии интерфейса прототипа API: действия пользователя → запросы API → то, что видно на экране.
 
-Каждый сценарий tests/ui-*.js выполняется на свежей странице index_api_server.html в headless
+Каждый сценарий tests/ui-*.js выполняется на свежей странице index.html в headless
 Chrome: страница загружает данные со встроенного сервера, сценарий жмёт кнопки и вызывает те же
 функции, что и клики, и сверяет кэш интерфейса, разметку и ответы сервера. Виртуальное время:
 отсчёты удаления и шаги операций идут без ожидания.
@@ -11,7 +11,7 @@ Chrome: страница загружает данные со встроенно
   python3 tools/check_ui.py --latency 300         с задержкой ответа, как по медленной сети
   python3 tools/check_ui.py tests/ui-domains.js   один сценарий
   python3 tools/check_ui.py --selftest            самопроверка прототипа (?selftest): те же сценарии изнутри страницы
-  python3 tools/check_ui.py --page index.html                 другой файл (например, макет на константах)
+  python3 tools/check_ui.py --page FILE.html      другой файл (прототип, скопированный с index.html)
 Код выхода 1, если хоть одна проверка не прошла.
 """
 import glob
@@ -26,7 +26,7 @@ import tempfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Chrome — в часовом поясе системы: в нём сервер считает расписания и время, в нём же макет на константах
 TZ = "Europe/Moscow"
-PAGE = "index_api_server.html"
+PAGE = "index.html"
 
 # Помощники сценариев — те же, что у самопроверки прототипа (?selftest)
 HELPERS = '<script src="tests/ui-harness.js"></script>'

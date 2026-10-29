@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Собрать эталонный набор api/fixtures/demo.json из основного макета index.html.
+"""Собрать эталонный набор api/fixtures/demo.json из макета на константах.
 
 Перенос: данные макета живут константами в HTML и достраиваются демо-генерацией
-при старте. Скрипт открывает index.html в headless Chrome с остановленными
+при старте. Такой макет — index.html до того, как основным стал макет через API;
+он есть только в истории git (BASELINE). Скрипт открывает его в headless Chrome с остановленными
 часами (CAPTURED_AT) в часовом поясе системы, после старта забирает из памяти
 всё, что в продукте хранит бэкенд, и приводит к виду контракта api/openapi.json:
 идентификаторы — UUID, коды вместо русских строк, числа вместо «4 ТБ», связи — id.
@@ -16,8 +17,8 @@
 Запуск из корня репозитория:
   python3 tools/extract_fixture.py --raw /tmp/raw.json   только снимок памяти
   python3 tools/extract_fixture.py --force               перезаписать набор
-  python3 tools/extract_fixture.py --source index.html --raw /tmp/raw.json
-                                                         снимок другого макета
+  python3 tools/extract_fixture.py --source index_09_one-psim.html --raw /tmp/raw.json
+                                                         снимок другого макета (файл или «коммит:путь»)
 """
 import argparse
 import html
@@ -30,7 +31,8 @@ import sys
 import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SOURCE = os.path.join(ROOT, "index.html")
+# Последний index.html на константах — «Макет: сверка с дизайн-системой после переноса»
+BASELINE = "9dc16881cebf66286e2af1bfd7bd3224d676d483:index.html"
 OUT = os.path.join(ROOT, "api", "fixtures", "demo.json")
 # Момент снимка: 12:00 по Москве. Демо-данные прав считают сроки от «сегодня»
 CAPTURED_AT = "2026-10-29T09:00:00Z"
@@ -71,9 +73,17 @@ document.body.appendChild(el);
 })();</script>"""
 
 
-def snapshot(source=SOURCE):
-    with open(source, encoding="utf-8") as f:
-        page = f.read()
+def read_source(source):
+    """Текст макета: файл в корне репозитория или «коммит:путь» из истории git."""
+    if ":" in source and not os.path.exists(os.path.join(ROOT, source)):
+        return subprocess.run(["git", "show", source], cwd=ROOT, capture_output=True, encoding="utf-8",
+                              check=True).stdout
+    with open(os.path.join(ROOT, source), encoding="utf-8") as f:
+        return f.read()
+
+
+def snapshot(source=BASELINE):
+    page = read_source(source)
     base = '<base href="file://%s/">' % ROOT
     page = page.replace("<head>", "<head>" + base + FREEZE, 1)
     page = page.replace("</body>", DUMP + "</body>", 1)
@@ -99,10 +109,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--raw", help="записать снимок памяти как есть и выйти")
     ap.add_argument("--force", action="store_true", help="перезаписать существующий набор")
-    ap.add_argument("--source", default=os.path.relpath(SOURCE, ROOT),
+    ap.add_argument("--source", default=BASELINE,
                     help="макет, из которого снимать данные (по умолчанию %(default)s)")
     args = ap.parse_args()
-    raw = snapshot(os.path.join(ROOT, args.source))
+    raw = snapshot(args.source)
     if args.raw:
         with open(args.raw, "w", encoding="utf-8") as f:
             json.dump(raw, f, ensure_ascii=False, indent=1)
