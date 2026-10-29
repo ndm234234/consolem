@@ -60,12 +60,11 @@ SCREENS = [
     ["hw", "c1", "gen", ["setUiLang('en')"]],
     ["hw", "s1", "gen", ["setUiLang('en')", "setTheme('dark')"]],
     ["rules", None, None, []],
-    # Этап А: правила ещё константы макета, их id — старые («r2»), без перевода в UUID
-    ["rules", None, None, ["rule='r1'"]],
-    ["rules", None, None, ["rule='r2'"]],
-    ["rules", None, None, ["rule='r3'"]],
-    ["rules", None, None, ["rule='r6'"]],
-    ["rules", None, None, ["rule='r1'", "ruleTab='hist'"]],
+    ["rules", None, None, ["rule=id('r1')"]],
+    ["rules", None, None, ["rule=id('r2')"]],
+    ["rules", None, None, ["rule=id('r3')"]],
+    ["rules", None, None, ["rule=id('r6')"]],
+    ["rules", None, None, ["rule=id('r1')", "ruleTab='hist'"]],
     ["rules", None, None, ["rule='overview'"]],
     ["rules", None, None, ["rule='modes'"]],
     ["rules", None, None, ["rule='maint'"]],
@@ -153,6 +152,8 @@ def main():
     raw = extract_fixture.snapshot()
     normalize(raw, extract_fixture.CAPTURED_AT)
     ids = normalize.ids
+    # Этап А: правил основного макета в наборе ещё нет — у прототипа 11 они с теми же UUID по порядку
+    ids.update({f"r{i}": f"7000000{i}-0000-4000-8000-000000000000" for i in range(5, 10)})
     back = {uid: old for old, uid in ids.items()}
     uuid_re = re.compile(r"[0-9a-f]{8}-0000-4000-8000-000000000000")
     before = capture(BEFORE, {})
