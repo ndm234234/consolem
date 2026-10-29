@@ -87,10 +87,14 @@
     assert.status(res, 202);
     assert.eq(res.body.status, "run", "идёт");
     assert.status(await env.call("POST", `/access/catalogs/${c.id}/sync`, { groupId: null }), 409, "BUSY");
-    const fired = await env.advance(2);
-    assert.ok(fired.some((f) => f.kind === "catalog"), "в ответе часов");
-    const a = await env.ok("GET", "/access");
-    const now = a.catalogs.find((x) => x.id === c.id);
+    if (env.frozen) {
+      const fired = await env.advance(2);
+      assert.ok(fired.some((f) => f.kind === "catalog"), "в ответе часов");
+    }
+    const now = await env.until(async () => {
+      const x = (await env.ok("GET", "/access")).catalogs.find((y) => y.id === c.id);
+      return x.status !== "run" && x;
+    }, "синхронизация закончилась");
     assert.eq([now.status, Date.parse(now.lastSyncAt) > Date.parse(c.lastSyncAt)], ["ok", true], "закончена");
     const g = A.groups.find((x) => x.source && x.source.catalogId === c.id);
     await env.ok("POST", `/access/catalogs/${c.id}/sync`, { groupId: g.id });

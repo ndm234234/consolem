@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Собрать api/openapi.js и api/fixture.js из api/openapi.json и api/fixtures/demo.json.
+"""Собрать api/openapi.js и api/fixture.js из api/openapi.json и наборов api/fixtures/*.json.
 
 Страница прототипа и тесты открываются и с диска (file://), а там fetch JSON не
-работает. Поэтому контракт и эталонный набор подключаются обычным <script>:
-window.CONSOLEM_OPENAPI и window.CONSOLEM_FIXTURE. Собранные файлы руками не правят.
+работает. Поэтому контракт и наборы подключаются обычным <script>: window.CONSOLEM_OPENAPI,
+window.CONSOLEM_FIXTURES (набор по имени) и window.CONSOLEM_FIXTURE (эталонный demo).
+Собранные файлы руками не правят.
 
 Запуск из корня репозитория:
   python3 tools/build_api.py          собрать
@@ -14,24 +15,32 @@ import os
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-TARGETS = [
-    ("api/openapi.json", "api/openapi.js", "CONSOLEM_OPENAPI"),
-    ("api/fixtures/demo.json", "api/fixture.js", "CONSOLEM_FIXTURE"),
-]
+FIXTURES = ["demo", "one-domain"]
 
 
-def render(src, name):
-    with open(os.path.join(ROOT, src), encoding="utf-8") as f:
-        data = json.load(f)
-    body = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
-    return f"/* Собрано tools/build_api.py из {src} — руками не править */\nwindow.{name}={body};\n"
+def compact(rel):
+    with open(os.path.join(ROOT, rel), encoding="utf-8") as f:
+        return json.dumps(json.load(f), ensure_ascii=False, separators=(",", ":"))
+
+
+def render_openapi():
+    return f"/* Собрано tools/build_api.py из api/openapi.json — руками не править */\nwindow.CONSOLEM_OPENAPI={compact('api/openapi.json')};\n"
+
+
+def render_fixtures():
+    body = ",".join(f"{json.dumps(n)}:{compact(f'api/fixtures/{n}.json')}" for n in FIXTURES)
+    return (f"/* Собрано tools/build_api.py из api/fixtures/{{{','.join(FIXTURES)}}}.json — руками не править */\n"
+            f"window.CONSOLEM_FIXTURES={{{body}}};\nwindow.CONSOLEM_FIXTURE=window.CONSOLEM_FIXTURES.demo;\n")
+
+
+TARGETS = [("api/openapi.json", "api/openapi.js", render_openapi), ("api/fixtures/*.json", "api/fixture.js", render_fixtures)]
 
 
 def main():
     check = "--check" in sys.argv[1:]
     stale = []
-    for src, dst, name in TARGETS:
-        text = render(src, name)
+    for src, dst, render in TARGETS:
+        text = render()
         path = os.path.join(ROOT, dst)
         if check:
             try:

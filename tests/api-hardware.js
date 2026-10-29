@@ -3,7 +3,7 @@
   const { test, makeEnv, assert, key, FX } = ApiTest;
   const UNKNOWN = "30009999-0000-4000-8000-000000000000";
   const byName = (name, type) => FX.devices.find((d) => d.name === name && (!type || d.type === type));
-  // Камера сервера без связи и камера с превышенной лицензией — из эталонного набора
+  // Камера сервера без связи и камера с превышенной лицензией — из набора (в системе без лицензий её нет)
   const offlineServer = FX.servers.find((s) => !s.online && s.allocated);
   const camOffline = FX.devices.find((d) => d.type === "camera" && d.serverId === offlineServer.id);
   const camLicense = FX.devices.find((d) => d.type === "camera" && d.licenseExceeded);
@@ -78,10 +78,11 @@
     ], { [cam.id]: cam.version }));
     assert.status(res, 202);
     assert.eq([res.body.state, res.body.total, res.body.done], ["running", 3, 0], "принята, ещё не выполнялась");
-    await env.advance(0);
-    assert.eq((await env.ok("GET", `/operations/${res.body.id}`)).done, 0, "часы стоят — шаги ждут");
-    for (let i = 0; i < 5 && (await env.ok("GET", `/operations/${res.body.id}`)).state !== "done"; i++) await env.advance(1);
-    const done = await env.ok("GET", `/operations/${res.body.id}`);
+    if (env.frozen) {
+      await env.advance(0);
+      assert.eq((await env.ok("GET", `/operations/${res.body.id}`)).done, 0, "часы стоят — шаги ждут");
+    }
+    const done = await env.finished(res.body.id);
     assert.eq([done.state, done.ok, done.failed, done.items.map((x) => x.state)], ["done", 3, 0, ["ok", "ok", "ok"]], "итог");
     const d = await env.ok("GET", `/devices/${cam.id}`);
     assert.eq([d.name, d.recordMode, d.preRecordSec], ["Вход — главный", "motion", 7], "устройство");
@@ -107,7 +108,7 @@
     assert.status(await env.call("POST", "/operations", plan([{ targetId: cam.id, set: { name: "x" }, folderIds: [] }], v)), 422, "VALIDATION_FAILED", "оба");
     assert.status(await env.call("POST", "/operations", plan([{ targetId: cam.id }], v)), 422, "VALIDATION_FAILED", "ни одного");
     const alien = FX.folders.find((f) => f.domainId !== cam.domainId);
-    assert.status(await env.call("POST", "/operations", plan([{ targetId: cam.id, folderIds: [alien.id] }], v)), 422, "VALIDATION_FAILED", "чужой домен");
+    if (alien) assert.status(await env.call("POST", "/operations", plan([{ targetId: cam.id, folderIds: [alien.id] }], v)), 422, "VALIDATION_FAILED", "чужой домен");
     assert.status(await env.call("POST", "/operations", plan([{ targetId: UNKNOWN, set: { name: "x" } }], { [UNKNOWN]: "1" })), 404, "NOT_FOUND");
     assert.status(await env.call("POST", "/operations", { idempotencyKey: key(), items: [], expectedVersions: {} }), 422, "VALIDATION_FAILED", "пустой план");
   });
@@ -119,48 +120,59 @@
     const b = await env.call("POST", "/operations", body);
     assert.status(b, 202);
     assert.eq(b.body.id, a.body.id, "та же операция");
-    await env.advance(2);
-    const op = await env.ok("GET", `/operations/${a.body.id}`);
+    const op = await env.finished(a.body.id);
     assert.eq((await env.ok("GET", `/devices/${cam.id}`)).version, op.items[0].version, "изменение одно: версия — та, что дал единственный шаг");
   });
 
+  // Длинная операция: 20 камер на серверах со связью, cam — последним шагом. Пока она идёт, с ней можно
+  // делать что угодно и при часах, которые не остановить
+  function longPlan() {
+    const online = new Set(FX.servers.filter((s) => s.online).map((s) => s.id));
+    const cams = FX.devices.filter((d) => d.type === "camera" && d.id !== cam.id && online.has(d.serverId)).slice(0, 19).concat(cam);
+    return plan(cams.map((c) => ({ targetId: c.id, set: { short: c.short || "x" } })), Object.fromEntries(cams.map((c) => [c.id, c.version])));
+  }
+
   test("Операция: над объектом уже идёт другая — 409 BUSY", async () => {
     const env = await makeEnv();
-    await env.ok("POST", "/operations", plan([{ targetId: cam.id, set: { short: "1c" } }], { [cam.id]: cam.version }));
+    await env.ok("POST", "/operations", longPlan());
     assert.status(await env.call("POST", "/operations", plan([{ targetId: cam.id, set: { short: "1d" } }], { [cam.id]: cam.version })), 409, "BUSY");
   });
 
   test("Операция: частичный успех — сервер без связи и превышенная лицензия дают fail с кодом, остальное выполняется", async () => {
     const env = await makeEnv();
-    const lic = await env.ok("PATCH", `/devices/${camLicense.id}`, { enabled: false }, { "If-Match": `"${camLicense.version}"` });
-    const op = await env.runOperation(plan([
-      { targetId: cam.id, set: { short: "1e" } },
-      { targetId: camOffline.id, set: { short: "9z" } },
-      { targetId: camLicense.id, set: { enabled: true } },
-    ], { [cam.id]: cam.version, [camOffline.id]: camOffline.version, [camLicense.id]: lic.version }));
-    assert.eq(op.items.map((x) => [x.state, x.code]), [["ok", null], ["fail", "SERVER_OFFLINE"], ["fail", "LICENSE_EXCEEDED"]], "по шагам");
-    assert.eq([op.ok, op.failed], [1, 2], "счётчики");
+    const items = [{ targetId: cam.id, set: { short: "1e" } }, { targetId: camOffline.id, set: { short: "9z" } }];
+    const versions = { [cam.id]: cam.version, [camOffline.id]: camOffline.version };
+    if (camLicense) {
+      const lic = await env.ok("PATCH", `/devices/${camLicense.id}`, { enabled: false }, { "If-Match": `"${camLicense.version}"` });
+      items.push({ targetId: camLicense.id, set: { enabled: true } });
+      versions[camLicense.id] = lic.version;
+    }
+    const op = await env.runOperation(plan(items, versions));
+    assert.eq(op.items.map((x) => [x.state, x.code]), [["ok", null], ["fail", "SERVER_OFFLINE"]].concat(camLicense ? [["fail", "LICENSE_EXCEEDED"]] : []), "по шагам");
+    assert.eq([op.ok, op.failed], [1, items.length - 1], "счётчики");
     assert.eq((await env.ok("GET", `/devices/${camOffline.id}`)).short, camOffline.short, "без связи — не изменилось");
-    assert.eq((await env.ok("GET", `/devices/${camLicense.id}`)).enabled, false, "лицензия — осталось выключенным");
+    if (camLicense) assert.eq((await env.ok("GET", `/devices/${camLicense.id}`)).enabled, false, "лицензия — осталось выключенным");
+    return camLicense ? "" : "камер с превышенной лицензией в наборе нет";
   });
 
   test("Операция: пауза — шаги стоят; продолжить — идут; отменить оставшееся — cancel", async () => {
     const env = await makeEnv();
-    const cams = FX.devices.filter((d) => d.type === "camera" && d.serverId === cam.serverId).slice(0, 20);
-    const res = await env.ok("POST", "/operations", plan(cams.map((c) => ({ targetId: c.id, set: { short: c.short || "x" } })), Object.fromEntries(cams.map((c) => [c.id, c.version]))));
-    await env.advance(1);
+    const res = await env.ok("POST", "/operations", longPlan());
+    if (env.frozen) await env.advance(1);
     const paused = await env.ok("POST", `/operations/${res.id}/pause`);
     assert.eq(paused.state, "paused", "пауза");
-    await env.advance(5);
+    await env.wait(env.frozen ? 5 : 1);
     const still = await env.ok("GET", `/operations/${res.id}`);
     assert.eq(still.done, paused.done, "на паузе не выполняется");
     assert.status(await env.call("POST", `/operations/${res.id}/pause`), 409, "BUSY", "уже на паузе");
     assert.eq((await env.ok("POST", `/operations/${res.id}/resume`)).state, "running", "продолжить");
     assert.status(await env.call("POST", `/operations/${res.id}/resume`), 409, "BUSY", "уже идёт");
-    await env.advance(1);
+    // Часы стоят — дать пройти секунде и проверить, что шаги пошли; идут — отменить сразу, пока есть что отменять
+    if (env.frozen) await env.advance(1);
     const cancelled = await env.ok("POST", `/operations/${res.id}/cancel`);
     assert.eq(cancelled.state, "done", "завершена");
-    assert.ok(cancelled.cancelled > 0 && cancelled.ok > paused.done, `выполненное осталось, оставшееся отменено: ok ${cancelled.ok}, cancel ${cancelled.cancelled}`);
+    assert.ok(cancelled.cancelled > 0 && cancelled.ok >= paused.done && cancelled.ok + cancelled.failed + cancelled.cancelled === cancelled.total, `выполненное осталось, оставшееся отменено: ok ${cancelled.ok}, cancel ${cancelled.cancelled}`);
+    if (env.frozen) assert.ok(cancelled.ok > paused.done, "после «продолжить» шаги шли");
     assert.status(await env.call("POST", `/operations/${res.id}/cancel`), 409, "BUSY", "уже завершена");
   });
 
@@ -173,8 +185,7 @@
     const res = await env.call("POST", `/operations/${op.id}/retry-failed`);
     assert.status(res, 202);
     assert.eq([res.body.retryOf, res.body.items.map((x) => x.targetId)], [op.id, [camOffline.id]], "что повторяется");
-    await env.advance(2);
-    assert.eq((await env.ok("GET", `/operations/${res.body.id}`)).items[0].code, "SERVER_OFFLINE", "сервер всё ещё без связи");
+    assert.eq((await env.finished(res.body.id)).items[0].code, "SERVER_OFFLINE", "сервер всё ещё без связи");
     const clean = await env.runOperation(plan([{ targetId: cam.id, set: { short: "1g" } }], { [cam.id]: (await env.ok("GET", `/devices/${cam.id}`)).version }));
     assert.status(await env.call("POST", `/operations/${clean.id}/retry-failed`), 409, "BUSY", "неудачных нет");
   });
@@ -189,8 +200,7 @@
     const res = await env.call("POST", `/operations/${op.id}/revert`);
     assert.status(res, 202);
     assert.eq(res.body.revertOf, op.id, "чья отмена");
-    await env.advance(2);
-    const back = await env.ok("GET", `/operations/${res.body.id}`);
+    const back = await env.finished(res.body.id);
     assert.eq([back.ok, back.failed], [2, 0], "откат выполнен");
     const d = await env.ok("GET", `/devices/${cam.id}`);
     assert.eq([d.name, d.recordMode], [cam.name, cam.recordMode], "поля вернулись");
@@ -204,8 +214,7 @@
     const op = await env.runOperation(plan([{ targetId: cam.id, set: { name: "Моё имя" } }], { [cam.id]: cam.version }));
     await env.ok("PATCH", `/devices/${cam.id}`, { short: "чужое" }, { "If-Match": `"${op.items[0].version}"` });
     const res = await env.ok("POST", `/operations/${op.id}/revert`);
-    await env.advance(2);
-    const done = await env.ok("GET", `/operations/${res.id}`);
+    const done = await env.finished(res.id);
     assert.eq(done.items.map((x) => [x.state, x.code]), [["fail", "VERSION_MISMATCH"]], "откат не выполнен");
     const d = await env.ok("GET", `/devices/${cam.id}`);
     assert.eq([d.name, d.short], ["Моё имя", "чужое"], "чужая правка цела");

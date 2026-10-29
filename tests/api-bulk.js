@@ -1,25 +1,25 @@
 /* Тесты API: групповые операции над выборкой и групповое удаление. */
 (() => {
   const { test, makeEnv, assert, key, FX } = ApiTest;
-  const nvr = FX.devices.find((d) => d.type === "ipsrv" && FX.devices.some((x) => x.parentId === d.id));
+  // Родитель с дочерним: регистратор с каналом или камера с детектором — что есть в наборе
+  const nvr = FX.devices.find((d) => !d.parentId && FX.devices.some((x) => x.parentId === d.id));
   const nvrKid = FX.devices.find((x) => x.parentId === nvr.id);
   const cam = FX.devices.find((d) => d.type === "camera" && !d.parentId && d.id !== nvr.id);
-  const folder = FX.folders.find((f) => !FX.folders.some((x) => x.parentId === f.id));
+  // Папка без подпапок, где нет удаляемых устройств: иначе её версия сменится раньше, чем дойдёт черёд
+  const folder = FX.folders.find((f) => !FX.folders.some((x) => x.parentId === f.id) && !f.deviceIds.some((id) => id === nvr.id || id === nvrKid.id));
   const vol = FX.volumes[0];
 
   test("Групповое удаление: устройства, папка, том одним запросом; дочернее удалённого родителя — тоже удалено", async () => {
     const env = await makeEnv();
-    const res = await env.ok("POST", "/objects/delete", { idempotencyKey: key(), items: [
-      { id: nvr.id, version: nvr.version },
-      { id: nvrKid.id, version: nvrKid.version },
-      { id: folder.id, version: folder.version },
-      { id: vol.id, version: vol.version },
+    // Том — только в системе, где тома удаляют (deleteVolume): иначе у хранилища ровно один том
+    const gone = [["devices", nvr], ["devices", nvrKid], ["folders", folder]].concat(ApiTest.can("deleteVolume") ? [["volumes", vol]] : []);
+    const res = await env.ok("POST", "/objects/delete", { idempotencyKey: key(), items: gone.map(([, r]) => ({ id: r.id, version: r.version })).concat([
       { id: cam.id, version: "stale" },
       { id: "30009999-0000-4000-8000-000000000000", version: "1" },
-    ] });
-    assert.eq(res.done, [nvr.id, nvrKid.id, folder.id, vol.id], "удалено");
+    ]) });
+    assert.eq(res.done, gone.map(([, r]) => r.id), "удалено");
     assert.eq(res.failed.map((f) => f.code), ["VERSION_MISMATCH", "NOT_FOUND"], "отказы");
-    for (const [path, id] of [["devices", nvr.id], ["devices", nvrKid.id], ["folders", folder.id], ["volumes", vol.id]]) {
+    for (const [path, id] of gone.map(([table, r]) => [table, r.id])) {
       assert.status(await env.call("GET", `/${path}/${id}`), 404, "NOT_FOUND", `${path} ${id}`);
     }
     assert.status(await env.call("GET", `/devices/${cam.id}`), 200, null, "устаревшая версия — не тронут");
@@ -48,8 +48,7 @@
     assert.eq([op.ok, op.failed], [6, 0], "выполнено");
     assert.ok((await env.ok("GET", `/folders/${f.id}`)).deviceIds.includes(cams[1].id), "в папке");
     const back = await env.ok("POST", `/operations/${op.id}/revert`);
-    await env.advance(3);
-    const done = await env.ok("GET", `/operations/${back.id}`);
+    const done = await env.finished(back.id);
     assert.eq([done.ok, done.failed], [6, 0], "откат выполнен");
     assert.ok(!(await env.ok("GET", `/folders/${f.id}`)).deviceIds.some((id) => cams.some((c) => c.id === id)), "из папки убраны");
     const c0 = await env.ok("GET", `/devices/${cams[0].id}`);

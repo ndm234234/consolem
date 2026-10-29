@@ -8,7 +8,10 @@
    с идущими часами (данные у стенда одни на всех). С ?report=<адрес> итог уходит туда POST-запросом. */
 (() => {
   const q = new URLSearchParams(location.search);
-  const SCENARIOS = ["ui-hardware.js", "ui-domains.js", "ui-storage.js", "ui-devices.js", "ui-bulk.js", "ui-rules.js", "ui-access.js"];
+  const SCENARIOS = ["ui-hardware.js", "ui-domains.js", "ui-storage.js", "ui-devices.js", "ui-bulk.js", "ui-rules.js", "ui-access.js", "ui-profile.js"];
+  // Сценарии не на эталонном наборе: страница сценария открывается с ?fixture=, стенд сбрасывается на него.
+  // Отсюда же берёт наборы tools/check_ui.py
+  const FIXTURE_OF = { "ui-profile.js": "one-domain" };
   const load = (src) =>
     new Promise((resolve, reject) => {
       const s = document.createElement("script");
@@ -73,7 +76,7 @@
   const extra = (q.get("latency") ? `&latency=${encodeURIComponent(q.get("latency"))}` : "") + (stand ? `&api=${encodeURIComponent(stand)}` : "");
   const frame = (name) => {
     const f = document.createElement("iframe");
-    f.src = `${base}?selftest-run=${name}${extra}`;
+    f.src = `${base}?selftest-run=${name}${extra}${FIXTURE_OF[name] ? `&fixture=${FIXTURE_OF[name]}` : ""}`;
     f.title = `Самопроверка: ${name}`;
     f.style.cssText = "position:absolute;left:-20000px;top:0;width:1600px;height:1000px;border:0";
     document.body.appendChild(f);
@@ -85,7 +88,7 @@
     SCENARIOS.reduce(
       (p, name) =>
         p
-          .then(() => API.raw("POST", "/test/reset", { fixture: "demo", freezeClock: false }))
+          .then(() => API.raw("POST", "/test/reset", { fixture: FIXTURE_OF[name] || "demo", freezeClock: false }))
           .then((r) => {
             if (r.status !== 200) throw new Error(`POST /test/reset → ${r.status}: у стенда нет служебных операций`);
             return frame(name);

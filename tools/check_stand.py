@@ -6,9 +6,15 @@
 index_10_api-server.html?api=<стенд>&selftest и ждёт отчёты: страницы присылают их POST-запросом.
 Это те же критерии готовности, что у бэкенда (api/BACKEND.md, «Когда готово»).
 
+Без флагов прогоняются: тесты API на эталонном наборе с остановленными часами, они же на профиле
+one-domain на настоящих часах (так, как их гоняет система, которая умеет часть контракта), самопроверка
+прототипа. С --fixture и --clock — только тесты API с ними; самопроверка — если набор demo.
+
 Запуск из корня репозитория:
   python3 tools/check_stand.py                       против образца стенда
   python3 tools/check_stand.py https://адрес-стенда  против стенда бэкенда (отчёты — на локальный приёмник)
+  python3 tools/check_stand.py https://адрес-стенда --fixture one-domain --clock real
+                                                     стенд с набором профиля и часами, которые не остановить
 Код выхода 1, если что-то не прошло или отчёт не пришёл.
 """
 import http.server
@@ -91,7 +97,14 @@ def run_page(page, stand, report):
 
 
 def main():
-    stand = sys.argv[1] if len(sys.argv) > 1 else None
+    args = sys.argv[1:]
+    flags = {}
+    for flag in ("fixture", "clock"):
+        if f"--{flag}" in args:
+            i = args.index(f"--{flag}")
+            flags[flag] = args[i + 1]
+            del args[i:i + 2]
+    stand = args[0] if args else None
     node = None
     if not stand:
         port = free_port()
@@ -101,7 +114,17 @@ def main():
     report = receiver()
     ok = True
     try:
-        for name, page in [("Тесты API", "tests/api.html"), ("Прототип ?selftest", "index_10_api-server.html?selftest")]:
+        if flags:
+            pages = [(f"Тесты API ({', '.join(f'{k} {v}' for k, v in flags.items())})", "tests/api.html?" + urllib.parse.urlencode(flags))]
+            if flags.get("fixture", "demo") == "demo":
+                pages.append(("Прототип ?selftest", "index_10_api-server.html?selftest"))
+        else:
+            pages = [
+                ("Тесты API", "tests/api.html"),
+                ("Тесты API (профиль one-domain, часы идут)", "tests/api.html?fixture=one-domain&clock=real"),
+                ("Прототип ?selftest", "index_10_api-server.html?selftest"),
+            ]
+        for name, page in pages:
             passed, text = run_page(page, stand, report)
             ok &= passed
             print(f"== {name} против {stand}: {'pass' if passed else 'fail'}\n{text}")

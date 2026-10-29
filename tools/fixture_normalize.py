@@ -8,6 +8,8 @@
 - поля с сокращёнными именами получают понятные (FIELD), служебные и вычисляемые убраны;
 - местное время журнала и прав — UTC по часовому поясу системы (TZ_OFFSET).
 """
+import json
+import os
 import re
 from datetime import datetime, timedelta, timezone
 
@@ -496,6 +498,7 @@ def normalize(raw, captured_at):
     ]
 
     out["reference"] = reference(raw["refs"])
+    out["reference"]["capabilities"] = capabilities()
     # Старый id → UUID: по нему tools/compare_screens.py сопоставляет экраны прототипов 09 и 10
     normalize.ids = {old: uid for (kind, old), uid in ids.map.items()}
     # Версия записи в API — непрозрачная строка; у самого набора version — номер формата, он остаётся числом
@@ -513,6 +516,17 @@ def normalize(raw, captured_at):
         if k != "version":
             opaque(v)
     return out
+
+
+def capabilities():
+    """Эталонный набор — система, которая умеет весь контракт: все операции, кроме служебных /test/…,
+    все виды устройств и все необязательные возможности."""
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "api", "openapi.json"), encoding="utf-8") as f:
+        spec = json.load(f)
+    ops = [o["operationId"] for item in spec["paths"].values() for m, o in item.items()
+           if m in ("get", "post", "put", "patch", "delete") and "test-support" not in o.get("tags", [])]
+    schemas = spec["components"]["schemas"]
+    return {"operations": ops, "deviceTypes": schemas["DeviceType"]["enum"], "features": schemas["Feature"]["enum"]}
 
 
 def reference(r):

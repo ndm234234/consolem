@@ -11,7 +11,9 @@
   const freeDisks = srv.disks.filter((d) => !d.system && !usedDisks(srv.id).has(d.disk)).map((d) => d.disk);
   const localArch = FX.archives.find((a) => a.kind === "local" && a.serverId === srv.id) || null;
   const offlineArch = FX.archives.find((a) => a.serverId && !FX.servers.find((s) => s.id === a.serverId).online);
-  const local = (over) => ({ name: "Хранилище — тест", kind: "local", storage: "object", encrypted: true, retentionDays: 14, provider: null, serverId: srv.id, domainId: null,
+  // Шифрование — необязательная возможность: без неё хранилища создаются нешифрованными
+  const enc = () => ApiTest.can("feature:archiveEncryption");
+  const local = (over) => ({ name: "Хранилище — тест", kind: "local", storage: "object", encrypted: enc(), retentionDays: 14, provider: null, serverId: srv.id, domainId: null,
     firstVolume: { name: `${freeDisks[0]}\\AxxonArchive\\Тест`, disk: freeDisks[0], sizeBytes: 500 * GB, mode: "dir", dir: `${freeDisks[0]}\\AxxonArchive\\Тест` }, ...over });
 
   test("Хранилище: создать локальное с первым томом — 201, оба в списках", async () => {
@@ -19,18 +21,18 @@
     const res = await env.call("POST", "/archives", local());
     assert.status(res, 201);
     const { archive, volumes } = res.body;
-    assert.eq([archive.kind, archive.storage, archive.encrypted, archive.serverId, volumes.length, volumes[0].state, volumes[0].usedPercent], ["local", "object", true, srv.id, 1, "ready", 0], "запись");
+    assert.eq([archive.kind, archive.storage, archive.encrypted, archive.serverId, volumes.length, volumes[0].state, volumes[0].usedPercent], ["local", "object", enc(), srv.id, 1, "ready", 0], "запись");
     assert.ok((await env.list("/archives")).some((a) => a.id === archive.id), "хранилище в списке");
     assert.eq((await env.ok("GET", `/volumes/${volumes[0].id}`)).archiveId, archive.id, "том в списке");
   });
 
   test("Хранилище: блочное не шифруется; облачное — всегда объектное; раздел целиком — неотформатирован", async () => {
     const env = await makeEnv();
-    const block = await env.ok("POST", "/archives", local({ storage: "block", encrypted: true, firstVolume: { name: freeDisks[0], disk: freeDisks[0], sizeBytes: 4096 * GB, mode: "part" } }));
+    const block = await env.ok("POST", "/archives", local({ storage: "block", encrypted: enc(), firstVolume: { name: freeDisks[0], disk: freeDisks[0], sizeBytes: 4096 * GB, mode: "part" } }));
     assert.eq([block.archive.encrypted, block.volumes[0].state], [false, "unfmt"], "блочное, раздел");
-    const cloud = await env.ok("POST", "/archives", { name: "Облако", kind: "cloud", storage: "block", encrypted: true, retentionDays: 30, provider: "s3", serverId: null, domainId: FX.domains[0].id,
+    const cloud = await env.ok("POST", "/archives", { name: "Облако", kind: "cloud", storage: "block", encrypted: enc(), retentionDays: 30, provider: "s3", serverId: null, domainId: FX.domains[0].id,
       firstVolume: { name: "s3://b/v", disk: "s3", sizeBytes: 10240 * GB, bucket: "b", region: "eu-central-1", path: "v", keyId: "AKIA", secret: "s" } });
-    assert.eq([cloud.archive.storage, cloud.archive.encrypted, cloud.volumes[0].hasSecret, "secret" in cloud.volumes[0]], ["object", true, true, false], "облачное, секрет скрыт");
+    assert.eq([cloud.archive.storage, cloud.archive.encrypted, cloud.volumes[0].hasSecret, "secret" in cloud.volumes[0]], ["object", enc(), true, false], "облачное, секрет скрыт");
   });
 
   test("Хранилище: отказы — нет имени, двух владельцев, локальное без сервера, облако без бакета, чужой диск", async () => {
@@ -53,7 +55,7 @@
     const other = await env.ok("POST", "/archives", local({ name: "Второе", firstVolume: { name: freeDisks[2], disk: freeDisks[2], sizeBytes: GB, mode: "dir" } }));
     assert.status(await env.call("POST", `/archives/${other.archive.id}/volumes`, { name: second, disk: second, sizeBytes: GB, mode: "part" }), 409, "DISK_TAKEN", "раздел на диске с томами");
     assert.status(await env.call("POST", `/archives/20009999-0000-4000-8000-000000000000/volumes`, { name: "x", disk: "x", sizeBytes: GB }), 404, "NOT_FOUND");
-  });
+  }, { needs: ["createVolume"] });
 
   test("Хранилище и том: PATCH с версией; пароль NAS — только запись", async () => {
     const env = await makeEnv();
@@ -76,9 +78,14 @@
     assert.status(res, 202);
     assert.eq(res.body.state, "format", "начато");
     assert.status(await env.call("POST", `/volumes/${vol.id}/format`), 409, "BUSY");
-    const fired = await env.advance(2);
-    assert.ok(fired.some((f) => f.kind === "volume" && f.id === vol.id), "в ответе часов — форматирование завершилось");
-    const done = await env.ok("GET", `/volumes/${vol.id}`);
+    if (env.frozen) {
+      const fired = await env.advance(2);
+      assert.ok(fired.some((f) => f.kind === "volume" && f.id === vol.id), "в ответе часов — форматирование завершилось");
+    }
+    const done = await env.until(async () => {
+      const x = await env.ok("GET", `/volumes/${vol.id}`);
+      return x.state === "ready" && x;
+    }, "форматирование закончилось");
     assert.eq([done.state, done.usedPercent], ["ready", 0], "готов, пуст");
   });
 
@@ -88,7 +95,7 @@
     assert.status(await env.call("DELETE", `/volumes/${vol.id}`, undefined, v(vol)), 204);
     assert.status(await env.call("GET", `/volumes/${vol.id}`), 404, "NOT_FOUND");
     assert.status(await env.call("GET", `/archives/${vol.archiveId}`), 200, null, "хранилище на месте");
-  });
+  }, { needs: ["deleteVolume"] });
 
   test("Хранилище: удалить — тома удалены, камеры остаются: основным — следующее, без него запись выключена", async () => {
     const env = await makeEnv();

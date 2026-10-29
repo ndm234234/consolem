@@ -3,7 +3,7 @@
   "info": {
     "title": "Конфигуратор — API",
     "version": "0.1.0",
-    "description": "Контракт конфигуратора: всё, что интерфейс читает и меняет. Источник истины: встроенный сервер прототипа (api/server.js) и бэкенд отвечают по нему. Договорённости — api/README.md: версии записей (ETag / If-Match, 428, 412), ошибки application/problem+json с машинным code, групповые операции с частичным успехом и idempotencyKey, поток событий SSE. Операции с тегом test-support есть только на тестовом стенде.",
+    "description": "Контракт конфигуратора: всё, что интерфейс читает и меняет. Источник истины: встроенный сервер прототипа (api/server.js) и бэкенд отвечают по нему. Договорённости — api/README.md: версии записей (ETag / If-Match, 428, 412), ошибки application/problem+json с машинным code, групповые операции с частичным успехом и idempotencyKey, поток событий SSE. Система может поддерживать не весь контракт: что она умеет — GET /reference → capabilities; остальные операции отвечают 404 NO_ROUTE, неподдержанные виды устройств и настройки — 422 NOT_SUPPORTED. Операции с тегом test-support есть только на тестовом стенде.",
     "license": {
       "name": "Внутренний документ",
       "identifier": "LicenseRef-Internal"
@@ -127,7 +127,8 @@
           "default": {
             "$ref": "#/components/responses/Problem"
           }
-        }
+        },
+        "description": "Справочники и возможности системы (capabilities): какие операции, виды устройств и необязательные настройки она поддерживает. Интерфейс читает их при старте"
       }
     },
     "/domains": {
@@ -2818,7 +2819,7 @@
             "$ref": "#/components/responses/Problem"
           }
         },
-        "description": "Только на тестовом стенде. Загружает api/fixtures/demo.json (с fixturePatch, если задан), сдвигает времена набора на «сейчас − capturedAt», по умолчанию останавливает часы.",
+        "description": "Только на тестовом стенде. Загружает набор fixture (с fixturePatch, если задан), сдвигает времена набора на «сейчас − capturedAt», по умолчанию останавливает часы. Стенд может уметь не все наборы и не уметь останавливать часы: тогда 404 NOT_FOUND и 422 VALIDATION_FAILED, а тесты запускают с подходящим набором и ?clock=real",
         "requestBody": {
           "required": true,
           "content": {
@@ -3437,26 +3438,7 @@
             "format": "uuid"
           },
           "type": {
-            "type": "string",
-            "enum": [
-              "camera",
-              "ipsrv",
-              "channel",
-              "mic",
-              "spk",
-              "sensor",
-              "relay",
-              "storage",
-              "det",
-              "eventsrc",
-              "acfa",
-              "acfa_sensor",
-              "acfa_lock",
-              "acfa_fence",
-              "export",
-              "email",
-              "sms"
-            ]
+            "$ref": "#/components/schemas/DeviceType"
           },
           "subtype": {
             "type": "string",
@@ -5454,6 +5436,9 @@
               "ipScanMax",
               "defaultServerPort"
             ]
+          },
+          "capabilities": {
+            "$ref": "#/components/schemas/Capabilities"
           }
         },
         "additionalProperties": false,
@@ -5474,8 +5459,79 @@
           "ruleTriggers",
           "ruleActions",
           "access",
-          "limits"
+          "limits",
+          "capabilities"
         ]
+      },
+      "DeviceType": {
+        "type": "string",
+        "enum": [
+          "camera",
+          "ipsrv",
+          "channel",
+          "mic",
+          "spk",
+          "sensor",
+          "relay",
+          "storage",
+          "det",
+          "eventsrc",
+          "acfa",
+          "acfa_sensor",
+          "acfa_lock",
+          "acfa_fence",
+          "export",
+          "email",
+          "sms"
+        ],
+        "description": "Вид устройства"
+      },
+      "Feature": {
+        "type": "string",
+        "enum": [
+          "serverRoles",
+          "serverNetwork",
+          "archiveEncryption"
+        ],
+        "description": "Необязательная возможность системы: без неё поле есть в записи, но менять его нельзя (422 NOT_SUPPORTED)",
+        "x-enum-descriptions": {
+          "serverRoles": "Роль сервера (role в ServerPatch): основной, узел, резервный",
+          "serverNetwork": "Сетевые настройки сервера (netmask, gateway, dns в ServerPatch)",
+          "archiveEncryption": "Шифрование хранилища (encrypted: true в ArchiveCreate и ArchivePatch)"
+        }
+      },
+      "Capabilities": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "operations",
+          "deviceTypes",
+          "features"
+        ],
+        "description": "Что умеет эта система. Контракт один для всех систем, но система может поддерживать его часть: интерфейс прячет неподдержанное, тесты API его пропускают, покрытие считается по объявленному. Объявленное обязано работать по контракту целиком",
+        "properties": {
+          "operations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "operationId операций контракта, которые система выполняет. Остальные отвечают 404 NO_ROUTE. getMe, getReference и stream есть всегда; служебные операции стенда (test-support) сюда не входят"
+          },
+          "deviceTypes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeviceType"
+            },
+            "description": "Виды устройств, которые есть в системе. Создать устройство другого вида — 422 NOT_SUPPORTED (в групповых — по строке)"
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Feature"
+            },
+            "description": "Необязательные возможности, которые есть. Незнакомый код клиент пропускает"
+          }
+        }
       },
       "StreamMessage": {
         "type": "object",
@@ -5560,8 +5616,10 @@
           "fixture": {
             "type": "string",
             "enum": [
-              "demo"
-            ]
+              "demo",
+              "one-domain"
+            ],
+            "description": "Набор: demo — эталонный, весь контракт (api/fixtures/demo.json); one-domain — профиль «один домен, камеры и детекторы, хранилища, правила, пользователи» (api/fixtures/one-domain.json). Стенд, который не умеет набор, отвечает 404 NOT_FOUND"
           },
           "fixturePatch": {
             "type": "object",
@@ -5571,7 +5629,7 @@
           },
           "freezeClock": {
             "type": "boolean",
-            "description": "Остановить часы (по умолчанию): время в тестах идёт только по /test/clock"
+            "description": "Остановить часы (по умолчанию): время в тестах идёт только по /test/clock. false — часы идут по-настоящему; стенд, который не умеет их останавливать, принимает только false"
           },
           "actAs": {
             "type": "string",
@@ -6518,13 +6576,14 @@
           "DOMAIN_NOT_EMPTY",
           "DISK_TAKEN",
           "CONNECTION_FAILED",
-          "PARENT_MISMATCH"
+          "PARENT_MISMATCH",
+          "NOT_SUPPORTED"
         ],
         "description": "Машинный код ошибки: интерфейс показывает свой текст по коду",
         "x-enum-descriptions": {
           "UNAUTHORIZED": "Нет сессии администратора (401)",
           "NOT_FOUND": "Записи нет или она не видна текущему администратору (404)",
-          "NO_ROUTE": "Такой операции нет в контракте (404)",
+          "NO_ROUTE": "Такой операции нет в контракте или система её не поддерживает — её нет в capabilities.operations (404)",
           "PERMISSION_DENIED": "Нет права на операцию (403). Встроенный сервер права администратора не проверяет — см. api/BACKEND.md",
           "PRECONDITION_REQUIRED": "Изменение без заголовка If-Match (428)",
           "VERSION_MISMATCH": "Запись изменилась с момента чтения: в теле — актуальная (412)",
@@ -6547,7 +6606,8 @@
           "DOMAIN_NOT_EMPTY": "В домене есть серверы, папки или устройства, а куда их перенести, не указано (422)",
           "DISK_TAKEN": "Диск уже занят: раздел другого хранилища или том этого хранилища (409)",
           "CONNECTION_FAILED": "Не удалось подключиться к NAS или бакету: адрес, учётная запись, бакет",
-          "PARENT_MISMATCH": "Родитель — в другом домене или такого вида дочерних у него не бывает (422)"
+          "PARENT_MISMATCH": "Родитель — в другом домене или такого вида дочерних у него не бывает (422)",
+          "NOT_SUPPORTED": "Система этого не поддерживает: вид устройства или настройка вне GET /reference → capabilities (422; в групповых — по объекту)"
         }
       },
       "ServerPatch": {
@@ -7536,26 +7596,7 @@
             "type": "string"
           },
           "type": {
-            "type": "string",
-            "enum": [
-              "camera",
-              "ipsrv",
-              "channel",
-              "mic",
-              "spk",
-              "sensor",
-              "relay",
-              "storage",
-              "det",
-              "eventsrc",
-              "acfa",
-              "acfa_sensor",
-              "acfa_lock",
-              "acfa_fence",
-              "export",
-              "email",
-              "sms"
-            ]
+            "$ref": "#/components/schemas/DeviceType"
           },
           "vendor": {
             "type": "string"

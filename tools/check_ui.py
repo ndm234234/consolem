@@ -29,6 +29,13 @@ PAGE = "index_10_api-server.html"
 HELPERS = '<script src="tests/ui-harness.js"></script>'
 
 
+def fixture_of():
+    """Сценарии не на эталонном наборе — FIXTURE_OF в tests/selftest.js: одно место на оба запуска."""
+    with open(os.path.join(ROOT, "tests", "selftest.js"), encoding="utf-8") as f:
+        m = re.search(r"const FIXTURE_OF = \{(.*?)\};", f.read())
+    return dict(re.findall(r'"([\w.-]+)":\s*"([\w-]+)"', m.group(1))) if m else {}
+
+
 def run(scenario, query):
     with open(os.path.join(ROOT, PAGE), encoding="utf-8") as f:
         page = f.read()
@@ -82,9 +89,11 @@ def main():
         return selftest(query)
     # Сценарии — tests/ui-*.js, кроме самих помощников
     files = args or sorted(f for f in glob.glob(os.path.join(ROOT, "tests", "ui-*.js")) if not f.endswith("ui-harness.js"))
+    fixtures = fixture_of()
     failed = 0
     for f in files:
-        lines = run(f, query)
+        fx = fixtures.get(os.path.basename(f))
+        lines = run(f, query + (("&" if query else "?") + "fixture=" + fx if fx else ""))
         bad = [x for x in lines if not x.startswith("PASS")]
         failed += len(bad)
         print(f"== {os.path.relpath(f, ROOT)}{' ' + query if query else ''}: {len(lines) - len(bad)} из {len(lines)}")

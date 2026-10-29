@@ -32,7 +32,7 @@
     for (const table of ["domains", "servers", "devices", "folders", "archives", "volumes", "rules"]) {
       assert.status(await env.call("GET", `/${table}/${UNKNOWN}`), 404, "NOT_FOUND", table);
     }
-    assert.status(await env.call("GET", `/domains/${UNKNOWN}/discovery`), 404, "NOT_FOUND", "поиск в неизвестном домене");
+    if (ApiTest.can("getDiscovery")) assert.status(await env.call("GET", `/domains/${UNKNOWN}/discovery`), 404, "NOT_FOUND", "поиск в неизвестном домене");
     assert.status(await env.call("GET", `/rules/${UNKNOWN}/fires`), 404, "NOT_FOUND", "срабатывания неизвестного правила");
     assert.status(await env.call("GET", "/no-such-thing"), 404, "NO_ROUTE");
   });
@@ -43,14 +43,18 @@
     const u = FX.access.users.find((x) => x.id === FX.me.userId);
     assert.eq([me.userId, me.login], [u.id, u.login], "кто");
     assert.eq(me.timezone, FX.timezone, "часовой пояс системы");
-    assert.eq(Date.parse(me.serverTime), env.now, "часы сервера — часы стенда");
+    if (env.frozen) assert.eq(Date.parse(me.serverTime), env.now, "часы сервера — часы стенда");
+    else assert.ok(Math.abs(Date.parse(me.serverTime) - Date.now()) < 120000, `часы сервера — сейчас: ${me.serverTime}`);
   });
 
   test("Времена набора сдвинуты на «сейчас − capturedAt»: моменты — точно, даты — на целые сутки", async () => {
     const env = await makeEnv();
     const shift = env.now - Date.parse(FX.capturedAt);
     const journal = await env.list("/journal");
-    assert.eq(Date.parse(journal[0].at) - Date.parse(FX.journal[0].at), shift, "момент в журнале");
+    const moved = Date.parse(journal[0].at) - Date.parse(FX.journal[0].at);
+    // Часы идут — между сдвигом набора и ответом сброса проходит доля секунды
+    if (env.frozen) assert.eq(moved, shift, "момент в журнале");
+    else assert.ok(Math.abs(moved - shift) < 5000, `момент в журнале: сдвиг ${moved} вместо ${shift}`);
     const access = await env.ok("GET", "/access");
     const u = FX.access.users.find((x) => x.lastLoginDate);
     const got = access.users.find((x) => x.id === u.id).lastLoginDate;
@@ -65,6 +69,46 @@
     assert.ok(!JSON.stringify(ref.detectorKinds).match(/[а-яё]/i), "виды детекторов — кодами");
   });
 
+  test("Возможности системы: объявлены в справочниках, как в наборе; обязательный минимум есть", async () => {
+    const env = await makeEnv();
+    const caps = (await env.ok("GET", "/reference")).capabilities;
+    assert.eq(caps, FX.reference.capabilities, "как в наборе");
+    const known = new Set(Object.values(ApiTest.spec.paths).flatMap((item) => Object.values(item).map((o) => o && o.operationId)));
+    assert.eq(caps.operations.filter((id) => !known.has(id)), [], "операции — из контракта");
+    assert.eq(["getMe", "getReference", "stream"].filter((id) => !caps.operations.includes(id)), [], "минимум");
+    assert.eq(caps.operations.filter((id) => ["testReset", "testClock", "testEvent"].includes(id)), [], "служебных стенда — нет");
+    return `операций ${caps.operations.length}, виды устройств: ${caps.deviceTypes.join(", ")}; необязательные: ${caps.features.join(", ") || "нет"}`;
+  });
+
+  test("Неподдержанные вид устройства и настройки — 422 NOT_SUPPORTED, ничего не меняется", async () => {
+    const env = await makeEnv();
+    const caps = ApiTest.caps();
+    const notes = [];
+    const type = ["mic", "sensor", "relay", "eventsrc", "acfa", "email"].find((t) => !caps.deviceTypes.includes(t));
+    const dom = FX.domains[0];
+    if (type && caps.operations.includes("createDevices")) {
+      const res = await env.ok("POST", "/devices", { idempotencyKey: ApiTest.key(), items: [{ domainId: dom.id, parentId: null, folderId: null, device: { type, name: "Не тот вид" } }] });
+      assert.eq([res.done.length, res.failed.map((x) => [x.code, x.field])], [0, [["NOT_SUPPORTED", "type"]]], `вид ${type}`);
+      assert.ok(!(await env.list("/devices")).some((d) => d.name === "Не тот вид"), "не создано");
+      notes.push(`вид ${type}`);
+    }
+    const srv = FX.servers.find((s) => s.allocated && s.online);
+    for (const [feature, patch] of [["serverRoles", { role: "standby" }], ["serverNetwork", { dns: "10.0.0.53" }]]) {
+      if (caps.features.includes(feature)) continue;
+      const res = await env.call("PATCH", `/servers/${srv.id}`, patch, { "If-Match": `"${srv.version}"` });
+      assert.status(res, 422, "NOT_SUPPORTED", feature);
+      assert.eq(res.body.field, Object.keys(patch)[0], `${feature}: поле`);
+      notes.push(feature);
+    }
+    if (!caps.features.includes("archiveEncryption")) {
+      const a = FX.archives[0];
+      assert.status(await env.call("PATCH", `/archives/${a.id}`, { encrypted: true }, { "If-Match": `"${a.version}"` }), 422, "NOT_SUPPORTED", "шифрование");
+      assert.eq((await env.ok("GET", `/archives/${a.id}`)).version, a.version, "хранилище не изменилось");
+      notes.push("archiveEncryption");
+    }
+    return notes.length ? `проверено: ${notes.join(", ")}` : "система поддерживает всё — проверять нечего";
+  });
+
   test("Права, опции, лицензии: снимок с версией в ETag", async () => {
     const env = await makeEnv();
     const acc = await env.call("GET", "/access");
@@ -74,7 +118,7 @@
     const st = await env.call("GET", "/settings");
     assert.eq(st.headers.etag, `"${st.body.version}"`, "ETag опций");
     assert.eq(st.body.values["sec.2fa"], "off", "значения опций — кодами");
-    assert.eq((await env.list("/licenses")).map((l) => l.kind), ["cameras", "acfa"], "лицензии");
+    if (ApiTest.can("listLicenses")) assert.eq((await env.list("/licenses")).map((l) => l.kind), FX.licenses.map((l) => l.kind), "лицензии");
   });
 
   test("Журнал: новые первыми, фильтр по категории", async () => {
@@ -104,7 +148,7 @@
     const silent = FX.domains.find((x) => !FX.discovery.some((y) => y.domainId === x.id));
     const idle = await env.ok("GET", `/domains/${silent.id}/discovery`);
     assert.eq([idle.state, idle.candidates.length], ["idle", 0], "без поиска");
-  });
+  }, { needs: ["getDiscovery"] });
 
   test("Стенд: fixturePatch меняет набор только на этот прогон", async () => {
     const env = await makeEnv({ fixturePatch: { timezone: "UTC" } });
@@ -130,7 +174,7 @@
     assert.eq(Date.parse((await env.ok("GET", "/me")).serverTime), t0 + 90000, "сдвинулись на 90 с");
     assert.status(await env.call("POST", "/test/clock", { advanceSec: -5 }), 422, "VALIDATION_FAILED", "назад");
     assert.status(await env.call("POST", "/test/clock", {}), 422, "VALIDATION_FAILED", "без advanceSec");
-  });
+  }, { needs: ["clock"] });
 
   test("Стенд: устройство потеряло и вернуло связь — запись и поток, версия не растёт", async () => {
     const env = await makeEnv();

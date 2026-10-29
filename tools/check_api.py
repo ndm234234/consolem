@@ -3,8 +3,10 @@
 
 1. Контракт api/openapi.json: OpenAPI 3.1, у каждой операции operationId (без повторов) и тег
    из списка тегов, каждая ссылка $ref ведёт в существующую схему.
-2. Эталонный набор api/fixtures/demo.json: каждая запись соответствует схеме контракта, id уникальны,
-   ссылки между записями ведут в существующие записи.
+2. Наборы api/fixtures/demo.json и one-domain.json: каждая запись соответствует схеме контракта, id
+   уникальны, ссылки между записями ведут в существующие записи. Возможности (reference.capabilities) —
+   из контракта, demo умеет весь контракт, данные набора не противоречат объявленному; one-domain.json
+   собран из нынешнего demo.json (tools/profile_fixture.py --check).
 3. api/openapi.js и api/fixture.js собраны из нынешних JSON (tools/build_api.py --check).
 4. В HTML прототипа не осталось констант с данными сервера. Пока раздел не переведён, его константы
    перечислены в PENDING: такой список сокращается от этапа к этапу и не может отставать —
@@ -241,7 +243,7 @@ def check_contract(rep, spec):
 
 # ===== 2. Эталонный набор =====
 
-def check_fixture(rep, spec, fx):
+def check_fixture(rep, spec, fx, label="Эталонный набор"):
     # Раздел набора → схема записи. network и discovery — данные стенда, а не ответы API:
     # их строение проверяется ниже, в ссылках
     collections = {
@@ -264,7 +266,7 @@ def check_fixture(rep, spec, fx):
         validate(spec, net_schema, rec, f"network[{i}]", problems)
     known = set(collections) | set(singles) | {"$comment", "version", "capturedAt", "timezone", "me", "network", "discovery"}
     problems += [f"раздел {k} не описан в check_api.py" for k in fx if k not in known]
-    rep.check("Эталонный набор соответствует схемам контракта", problems, f"{total} записей + access, settings, reference")
+    rep.check(f"{label} соответствует схемам контракта", problems, f"{total} записей + access, settings, reference")
 
     # Уникальность и ссылки
     problems = []
@@ -382,7 +384,43 @@ def check_fixture(rep, spec, fx):
     logins = [u["login"] for u in users.values()]
     if len(set(logins)) != len(logins):
         problems.append("логины пользователей повторяются")
-    rep.check("Эталонный набор цел: id уникальны, ссылки ведут в существующие записи", problems, f"{len(ids)} записей")
+    rep.check(f"{label} цел: id уникальны, ссылки ведут в существующие записи", problems, f"{len(ids)} записей")
+
+
+def check_capabilities(rep, spec, fixtures):
+    """Возможности системы в наборах: из контракта; эталонный — весь контракт; данные набора не
+    противоречат объявленному (нет устройств неподдержанных видов, шифрования без archiveEncryption…)."""
+    product = [o["operationId"] for item in spec["paths"].values() for m, o in item.items()
+               if m in ("get", "post", "put", "patch", "delete") and "test-support" not in o.get("tags", [])]
+    schemas = spec["components"]["schemas"]
+    types, features = schemas["DeviceType"]["enum"], schemas["Feature"]["enum"]
+    problems = []
+    for name, fx in fixtures.items():
+        caps = fx["reference"]["capabilities"]
+        ops = caps["operations"]
+        problems += [f"{name}: операции {o} нет в контракте или она служебная" for o in ops if o not in product]
+        problems += [f"{name}: нет обязательной {o}" for o in ("getMe", "getReference", "stream") if o not in ops]
+        if len(set(ops)) != len(ops):
+            problems.append(f"{name}: операции повторяются")
+        problems += [f"{name}: устройство {d['name']} вида {d['type']} — вид не объявлен" for d in fx["devices"] if d["type"] not in caps["deviceTypes"]]
+        if "archiveEncryption" not in caps["features"]:
+            problems += [f"{name}: хранилище {a['name']} зашифровано без archiveEncryption" for a in fx["archives"] if a["encrypted"]]
+        if "createVolume" not in ops:
+            per = {}
+            for v in fx["volumes"]:
+                per[v["archiveId"]] = per.get(v["archiveId"], 0) + 1
+            problems += [f"{name}: у хранилища {a} томов {n} без createVolume" for a, n in per.items() if n > 1]
+        if "listLicenses" not in ops and fx["licenses"]:
+            problems.append(f"{name}: лицензии без listLicenses")
+        if "getDiscovery" not in ops and (fx["discovery"] or fx["network"]):
+            problems.append(f"{name}: итоги поиска без getDiscovery")
+        if "createDomain" not in ops and len(fx["domains"]) > 1:
+            problems.append(f"{name}: доменов {len(fx['domains'])} без createDomain")
+    demo = fixtures["demo"]["reference"]["capabilities"]
+    if demo != {"operations": product, "deviceTypes": types, "features": features}:
+        problems.append("demo: возможности — не весь контракт (соберите: tools/fixture_normalize.capabilities())")
+    rep.check("Возможности в наборах: из контракта, demo — весь контракт, данные не противоречат объявленному", problems,
+              "; ".join(f"{n}: операций {len(f['reference']['capabilities']['operations'])}" for n, f in fixtures.items()))
 
 
 # ===== 4–5. HTML прототипа =====
@@ -486,8 +524,13 @@ def main():
     rep = Report()
     spec = load("api/openapi.json")
     fx = load("api/fixtures/demo.json")
+    profile = load("api/fixtures/one-domain.json")
     check_contract(rep, spec)
     check_fixture(rep, spec, fx)
+    check_fixture(rep, spec, profile, "Набор one-domain")
+    check_capabilities(rep, spec, {"demo": fx, "one-domain": profile})
+    res = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "profile_fixture.py"), "--check"], capture_output=True, text=True)
+    rep.check("one-domain.json собран из нынешнего demo.json", [l for l in res.stdout.splitlines() if l] if res.returncode else [])
     res = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "build_api.py"), "--check"], capture_output=True, text=True)
     rep.check("openapi.js и fixture.js собраны из нынешних JSON", [l for l in res.stdout.splitlines() if l] if res.returncode else [])
     check_prototype(rep)

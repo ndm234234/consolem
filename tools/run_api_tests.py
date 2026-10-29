@@ -4,7 +4,10 @@
 Страница открывается с диска, как двойным кликом, и проверяет встроенный сервер прототипа.
 Итог берётся из data-apitest у <html> и текста отчёта. Петля по HTTP — tools/check_loopback.py.
 
-Запуск из корня репозитория: python3 tools/run_api_tests.py [--only "имя теста"]
+Запуск из корня репозитория:
+  python3 tools/run_api_tests.py [--only "имя теста"] [--fixture one-domain] [--clock real]
+--fixture — набор и с ним возможности системы (по умолчанию demo — весь контракт); --clock real — часы
+идут по-настоящему, /test/clock не вызывается: так тесты проходят против системы, чьи часы не остановить.
 Код выхода 1, если тесты не прошли или отчёт не получен.
 """
 import html
@@ -21,8 +24,12 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def main():
     url = "file://" + os.path.join(ROOT, "tests", "api.html")
-    if "--only" in sys.argv:
-        url += "?only=" + urllib.parse.quote(sys.argv[sys.argv.index("--only") + 1])
+    query = {}
+    for flag in ("only", "fixture", "clock"):
+        if f"--{flag}" in sys.argv:
+            query[flag] = sys.argv[sys.argv.index(f"--{flag}") + 1]
+    if query:
+        url += "?" + urllib.parse.urlencode(query)
     profile = tempfile.mkdtemp(prefix="consolem-apitest-")
     chrome = shutil.which("google-chrome") or shutil.which("chromium") or "google-chrome"
     try:

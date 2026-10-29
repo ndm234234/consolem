@@ -6,9 +6,14 @@
    Данные — эталонный набор api/fixtures/demo.json (api/fixture.js): его же загружает бэкенд на тестовом
    стенде. Записи хранятся в том виде, в каком уходят в ответах.
 
-   Параметры create(): fixture — эталонный набор; openapi — контракт (api/openapi.js): по нему
-   проверяются тела запросов; now — часы; autoTick: false — шаги операций не выполняются сами, только
-   по /test/clock; testSupport: true — служебные операции тестового стенда /test/… */
+   Параметры create(): fixture — набор, с которым сервер стартует; fixtures — наборы по имени для
+   POST /test/reset (по умолчанию { demo: fixture }); openapi — контракт (api/openapi.js): по нему
+   проверяются тела запросов и находится operationId запроса; now — часы; autoTick: false — шаги операций
+   не выполняются сами, только по /test/clock; testSupport: true — служебные операции тестового стенда /test/….
+
+   Что система умеет — reference.capabilities набора: операции не из списка отвечают 404 NO_ROUTE,
+   виды устройств и необязательные настройки не из списка — 422 NOT_SUPPORTED. Так один сервер
+   изображает и систему со всем контрактом (demo), и систему с его частью (one-domain). */
 (() => {
   // Изменения на один прогон стенда — JSON Merge Patch (RFC 7396): объекты сливаются, null удаляет поле,
   // массивы и значения заменяются целиком. Исходник не меняется
@@ -54,7 +59,15 @@
 
   function create(opts) {
     const SPEC = opts.openapi || null;
-    const FIXTURE = opts.fixture;
+    const FIXTURES = opts.fixtures || { demo: opts.fixture };
+    const FIXTURE = opts.fixture || FIXTURES.demo;
+    // operationId по методу и шаблону пути контракта: {deviceId} и {id} — одно и то же
+    const shape = (template) => template.replace(/\{\w+\}/g, "{}");
+    const OPERATION = {};
+    if (SPEC)
+      Object.entries(SPEC.paths).forEach(([path, item]) =>
+        Object.entries(item).forEach(([m, o]) => o && o.operationId && (OPERATION[`${m.toUpperCase()} ${shape(path)}`] = o.operationId))
+      );
     const testSupport = !!opts.testSupport;
 
     // Часы. Тестовый стенд их останавливает и сдвигает (/test/clock), иначе идут вместе с настоящими
@@ -93,6 +106,9 @@
       return `${k}${String(seq[k]).padStart(7, "0")}-0000-4000-8000-000000000000`;
     };
     const byId = (table, id) => db[table].find((r) => r.id === id) || null;
+    // Возможности системы — из набора: так же их объявляет бэкенд в GET /reference
+    const caps = () => db.reference.capabilities;
+    const can = (feature) => caps().features.includes(feature);
 
     /* ===== Поток событий ===== */
 
@@ -238,7 +254,15 @@
         }
       }
       if (t.kind === "domain" && "name" in patch) return domainNameProblem(patch.name, t.rec.id);
-      return patchProblem(patch);
+      return featureProblem(t.kind, patch) || patchProblem(patch);
+    }
+    // Необязательные настройки, которых в системе нет (capabilities.features), менять нельзя
+    const FEATURE_FIELDS = { server: { role: "serverRoles", netmask: "serverNetwork", gateway: "serverNetwork", dns: "serverNetwork" } };
+    function featureProblem(kind, patch) {
+      const field = Object.keys(patch).find((k) => FEATURE_FIELDS[kind] && FEATURE_FIELDS[kind][k] && !can(FEATURE_FIELDS[kind][k]));
+      if (field) return problem(422, "NOT_SUPPORTED", `Система не поддерживает: ${field}`, { field });
+      if (kind === "archive" && patch.encrypted === true && !can("archiveEncryption")) return problem(422, "NOT_SUPPORTED", "Система не поддерживает шифрование хранилищ", { field: "encrypted" });
+      return null;
     }
     // Значения до изменения — для отката: поля, которых не было, — null
     function applyPatch(rec, patch) {
@@ -269,6 +293,8 @@
       return String(Math.max(0, ...db.devices.filter((d) => NUMBERED.has(d.type)).map((d) => Number(numberOf(d)) || 0)) + 1);
     }
     function createProblem(spec, domainId, parentId, folderId) {
+      const alien = (s) => !caps().deviceTypes.includes(s.type) || (s.children || []).some(alien);
+      if (alien(spec)) return { code: "NOT_SUPPORTED", field: "type" };
       if (!byId("domains", domainId)) return { code: "NOT_FOUND", field: "domainId" };
       if (parentId) {
         const p = byId("devices", parentId);
@@ -910,6 +936,8 @@
           if (body.serverId && !byId("servers", body.serverId)) return notFound("Сервер");
           if (body.domainId && !byId("domains", body.domainId)) return notFound("Домен");
           if (body.kind === "local" && !body.serverId) return problem(422, "VALIDATION_FAILED", "Локальное хранилище — на сервере", { field: "serverId" });
+          const unsupported = featureProblem("archive", body);
+          if (unsupported) return unsupported;
           const a = {
             id: uuid("archive"),
             name: body.name.trim(),
@@ -1349,17 +1377,18 @@
         "POST",
         "/test/reset",
         (p, q, body) => {
-          if (body.fixture !== "demo") return problem(404, "NOT_FOUND", `Набора ${body.fixture} нет`);
+          const base = FIXTURES[body.fixture];
+          if (!base) return problem(404, "NOT_FOUND", `Набора ${body.fixture} нет`);
           // Часы останавливаются: время в тестах идёт только по /test/clock
           clock.frozenAt = body.freezeClock === false ? null : realNow() + clock.offset;
-          load(body.fixturePatch ? mergePatch(FIXTURE, body.fixturePatch) : FIXTURE);
+          load(body.fixturePatch ? mergePatch(base, body.fixturePatch) : base);
           if (body.actAs) {
             const u = db.access.users.find((x) => x.login === body.actAs);
             if (!u) return problem(404, "NOT_FOUND", `Пользователя ${body.actAs} нет`);
             me = u.id;
           }
           send("test.reset", { payload: {} });
-          return { status: 200, body: { fixture: "demo", now: iso(now()), frozen: clock.frozenAt != null } };
+          return { status: 200, body: { fixture: body.fixture, now: iso(now()), frozen: clock.frozenAt != null } };
         },
       ],
       [
@@ -1420,6 +1449,8 @@
       const route = fits[0];
       if (!route) return problem(404, "NO_ROUTE", `${method} ${path}: такой операции нет`);
       if (route.test && !testSupport) return problem(404, "TEST_SUPPORT_OFF", "Служебные операции тестового стенда выключены");
+      const operationId = OPERATION[`${method} ${shape(route.template)}`];
+      if (!route.test && operationId && !caps().operations.includes(operationId)) return problem(404, "NO_ROUTE", `${method} ${path}: система этого не поддерживает (${operationId} нет в capabilities)`);
       const m = path.match(route.re);
       const params = {};
       route.names.forEach((name, i) => (params[name] = decodeURIComponent(m[i + 1])));

@@ -20,7 +20,7 @@
     assert.ok((await env.list("/domains")).some((d) => d.id === res.body.id), "в списке");
     assert.status(await env.call("POST", "/domains", { name: d1.name.toUpperCase() }), 409, "NAME_TAKEN");
     assert.status(await env.call("POST", "/domains", { name: "  " }), 422, "NAME_REQUIRED");
-  });
+  }, { needs: ["createDomain"] });
 
   test("Домен: переименовать и задать лицензию — PATCH с версией; чужое имя — 409", async () => {
     const env = await makeEnv();
@@ -28,7 +28,7 @@
     assert.status(res, 200);
     assert.eq([res.body.name, res.body.license], ["Центральный", "LIC-1"], "изменено");
     assert.ok(res.body.version !== d1.version, "версия изменилась");
-    assert.status(await env.call("PATCH", `/domains/${d1.id}`, { name: d2.name }, { "If-Match": `"${res.body.version}"` }), 409, "NAME_TAKEN");
+    if (d2) assert.status(await env.call("PATCH", `/domains/${d1.id}`, { name: d2.name }, { "If-Match": `"${res.body.version}"` }), 409, "NAME_TAKEN");
     assert.status(await env.call("PATCH", `/domains/${d1.id}`, { name: "x" }), 428, "PRECONDITION_REQUIRED");
     assert.status(await env.call("PATCH", `/domains/${d1.id}`, { name: "x" }, v(d1)), 412, "VERSION_MISMATCH");
   });
@@ -48,11 +48,13 @@
     assert.eq((await env.list("/folders")).filter((f) => f.domainId === d1.id).length, 0, "папок старого домена нет");
     assert.eq((await env.list("/devices")).filter((d) => d.domainId === d1.id).length, 0, "устройств старого домена нет");
     assert.eq((await env.list("/archives")).filter((a) => a.domainId === d1.id).length, 0, "хранилищ старого домена нет");
-    const disc = await env.ok("GET", `/domains/${d2.id}/discovery`);
-    const old = FX.discovery.find((x) => x.domainId === d1.id).candidateIds;
-    assert.ok(old.every((c) => disc.candidates.some((x) => x.id === c)), "найденное поиском перенесено");
+    if (ApiTest.can("getDiscovery")) {
+      const disc = await env.ok("GET", `/domains/${d2.id}/discovery`);
+      const old = FX.discovery.find((x) => x.domainId === d1.id).candidateIds;
+      assert.ok(old.every((c) => disc.candidates.some((x) => x.id === c)), "найденное поиском перенесено");
+    }
     return `перенесено: серверов ${before.servers}, папок ${before.folders}, устройств ${before.devices}, хранилищ ${before.archives}`;
-  });
+  }, { needs: ["deleteDomain"] });
 
   test("Домен: пустой удаляется без moveTo; последний — 409 LAST_DOMAIN", async () => {
     const env = await makeEnv();
@@ -60,7 +62,7 @@
     assert.status(await env.call("DELETE", `/domains/${fresh.id}`, undefined, v(fresh)), 204, null, "пустой");
     const only = await makeEnv({ fixturePatch: { domains: [d1], servers: [], devices: [], folders: [], archives: [], volumes: [], discovery: [] } });
     assert.status(await only.call("DELETE", `/domains/${d1.id}`, undefined, v(d1)), 409, "LAST_DOMAIN");
-  });
+  }, { needs: ["createDomain", "deleteDomain"] });
 
   /* ===== Серверы ===== */
 
@@ -125,11 +127,13 @@
     assert.eq([probe.status, probe.serverId], ["found", res.body.id], "опрос его видит");
   });
 
-  test("Сервер: PATCH — имя, роль, сеть; неизвестная роль — 422", async () => {
+  test("Сервер: PATCH — имя, роль и сеть (если система их умеет); неизвестная роль — 422", async () => {
     const env = await makeEnv();
-    const res = await env.call("PATCH", `/servers/${inDomain.id}`, { name: "Сервер — Главный", role: "standby", netmask: "255.255.0.0" }, v(inDomain));
+    // Роль и сеть — необязательные возможности (capabilities.features)
+    const patch = Object.assign({ name: "Сервер — Главный" }, ApiTest.can("feature:serverRoles") ? { role: "standby" } : {}, ApiTest.can("feature:serverNetwork") ? { netmask: "255.255.0.0" } : {});
+    const res = await env.call("PATCH", `/servers/${inDomain.id}`, patch, v(inDomain));
     assert.status(res, 200);
-    assert.eq([res.body.name, res.body.role, res.body.netmask], ["Сервер — Главный", "standby", "255.255.0.0"], "изменено");
+    assert.eq(Object.keys(patch).map((k) => res.body[k]), Object.values(patch), "изменено: " + Object.keys(patch).join(", "));
     assert.status(await env.call("PATCH", `/servers/${inDomain.id}`, { role: "boss" }, { "If-Match": `"${res.body.version}"` }), 422, "VALIDATION_FAILED");
     assert.status(await env.call("PATCH", `/servers/${inDomain.id}`, { allocated: false }, { "If-Match": `"${res.body.version}"` }), 422, "VALIDATION_FAILED", "домен — через assign");
   });
@@ -143,8 +147,10 @@
     ], expectedVersions: { [inDomain.id]: inDomain.version, [d1.id]: d1.version, [offlineServer.id]: offlineServer.version } });
     assert.eq(op.items.map((x) => [x.state, x.code]), [["ok", null], ["ok", null], ["fail", "SERVER_OFFLINE"]], "по шагам");
     assert.eq((await env.ok("GET", `/domains/${d1.id}`)).license, "LIC-2", "домен");
-    const bad = await env.call("POST", "/operations", { idempotencyKey: key(), items: [{ targetId: d1.id, set: { name: d2.name } }], expectedVersions: { [d1.id]: (await env.ok("GET", `/domains/${d1.id}`)).version } });
-    assert.status(bad, 409, "NAME_TAKEN", "занятое имя домена — до выполнения");
+    if (d2) {
+      const bad = await env.call("POST", "/operations", { idempotencyKey: key(), items: [{ targetId: d1.id, set: { name: d2.name } }], expectedVersions: { [d1.id]: (await env.ok("GET", `/domains/${d1.id}`)).version } });
+      assert.status(bad, 409, "NAME_TAKEN", "занятое имя домена — до выполнения");
+    }
     const wrong = await env.call("POST", "/operations", { idempotencyKey: key(), items: [{ targetId: inDomain.id, folderIds: [] }], expectedVersions: { [inDomain.id]: (await env.ok("GET", `/servers/${inDomain.id}`)).version } });
     assert.status(wrong, 422, "VALIDATION_FAILED", "в папках только устройства");
   });
@@ -157,7 +163,7 @@
     assert.status(root, 201);
     const sub = await env.ok("POST", "/folders", { name: "Вложенная", domainId: d1.id, parentId: root.body.id });
     assert.eq([sub.parentId, sub.deviceIds], [root.body.id, []], "вложенная");
-    assert.status(await env.call("POST", "/folders", { name: "x", domainId: d2.id, parentId: root.body.id }), 422, "VALIDATION_FAILED");
+    if (d2) assert.status(await env.call("POST", "/folders", { name: "x", domainId: d2.id, parentId: root.body.id }), 422, "VALIDATION_FAILED");
     assert.status(await env.call("POST", "/folders", { name: " ", domainId: d1.id, parentId: null }), 422, "NAME_REQUIRED");
     assert.status(await env.call("POST", "/folders", { name: "x", domainId: UNKNOWN_DOMAIN, parentId: null }), 404, "NOT_FOUND");
   });
@@ -170,7 +176,8 @@
     assert.eq([res.name, res.deviceIds.length], ["Переименованная", 0], "очищена");
     assert.ok(res.version !== f.version, "версия изменилась");
     const alien = FX.devices.find((d) => d.domainId !== f.domainId);
-    assert.status(await env.call("PATCH", `/folders/${f.id}`, { deviceIds: [alien.id] }, { "If-Match": `"${res.version}"` }), 422, "VALIDATION_FAILED");
+    const nobody = "30009999-0000-4000-8000-000000000000";
+    assert.status(await env.call("PATCH", `/folders/${f.id}`, { deviceIds: [alien ? alien.id : nobody] }, { "If-Match": `"${res.version}"` }), 422, "VALIDATION_FAILED", alien ? "чужой домен" : "нет устройства");
     assert.eq((await env.list("/devices")).length, FX.devices.length, "устройства на месте");
   });
 

@@ -4,7 +4,7 @@
    досылка по Last-Event-ID) и CORS для страницы с диска (Origin: null) — так, как это описано в
    api/BACKEND.md. Часы идут по-настоящему, пока их не остановит /test/reset.
 
-   Запуск из корня репозитория:  node tools/serve_api.mjs [порт]   (по умолчанию 8787)
+   Запуск из корня репозитория:  node tools/serve_api.mjs [порт] [--fixture one-domain]   (порт по умолчанию 8787)
    Затем: index_10_api-server.html?api=http://127.0.0.1:8787  или  tests/api.html?api=http://127.0.0.1:8787
    POST /__report — принять отчёт страницы (?report=…) и напечатать его; с --exit-on-report — и выйти. */
 import http from "node:http";
@@ -14,9 +14,12 @@ const require = createRequire(import.meta.url);
 globalThis.window = globalThis;
 require("../api/contract.js");
 require("../api/server.js");
-const fixture = require("../api/fixtures/demo.json");
+const fixtures = { demo: require("../api/fixtures/demo.json"), "one-domain": require("../api/fixtures/one-domain.json") };
 const openapi = require("../api/openapi.json");
-const server = window.ConsolemServer.create({ fixture, openapi, testSupport: true });
+// --fixture one-domain — стартовать с набором профиля (тесты всё равно начинают с /test/reset)
+const start = process.argv.includes("--fixture") ? process.argv[process.argv.indexOf("--fixture") + 1] : "demo";
+if (!fixtures[start]) throw new Error(`Набора ${start} нет: ${Object.keys(fixtures).join(", ")}`);
+const server = window.ConsolemServer.create({ fixture: fixtures[start], fixtures, openapi, testSupport: true });
 
 const port = Number(process.argv.find((a) => /^\d+$/.test(a)) || 8787);
 const exitOnReport = process.argv.includes("--exit-on-report");

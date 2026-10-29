@@ -8,7 +8,7 @@ importScripts("../api/openapi.js", "../api/fixture.js", "../api/contract.js", ".
 
 // Адрес «бэкенда» — рядом с этим файлом: /tests/loopback-api, где бы ни лежал репозиторий
 const PREFIX = new URL("loopback-api", self.location).pathname;
-const server = ConsolemServer.create({ fixture: self.CONSOLEM_FIXTURE, openapi: self.CONSOLEM_OPENAPI, autoTick: false, testSupport: true });
+const server = ConsolemServer.create({ fixture: self.CONSOLEM_FIXTURE, fixtures: self.CONSOLEM_FIXTURES, openapi: self.CONSOLEM_OPENAPI, autoTick: false, testSupport: true });
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));

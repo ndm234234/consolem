@@ -22,29 +22,34 @@
 
   test("Добавить: частичный успех — занятый номер, чужой родитель, папка другого домена", async () => {
     const env = await makeEnv();
+    // Чужой родитель и папка другого домена — только если в наборе есть второй домен
+    const d2 = FX.domains[1];
     const alien = FX.folders.find((f) => f.domainId !== d1.id);
-    const res = await env.ok("POST", "/devices", create([
-      { device: newCam({ name: "ок" }), domainId: d1.id, parentId: null, folderId: null },
-      { device: newCam({ identifier: cam.identifier }), domainId: d1.id, parentId: null, folderId: null },
-      { device: { type: "sensor", name: "Датчик" }, domainId: FX.domains[1].id, parentId: cam.id, folderId: null },
-      { device: newCam(), domainId: d1.id, parentId: null, folderId: alien.id },
-    ]));
+    const rows = [
+      [{ device: newCam({ name: "ок" }), domainId: d1.id, parentId: null, folderId: null }, null],
+      [{ device: newCam({ identifier: cam.identifier }), domainId: d1.id, parentId: null, folderId: null }, "IDENTIFIER_TAKEN"],
+    ];
+    if (d2) rows.push([{ device: { type: "det", name: "Детектор" }, domainId: d2.id, parentId: cam.id, folderId: null }, "PARENT_MISMATCH"]);
+    if (alien) rows.push([{ device: newCam(), domainId: d1.id, parentId: null, folderId: alien.id }, "VALIDATION_FAILED"]);
+    const res = await env.ok("POST", "/devices", create(rows.map((r) => r[0])));
     assert.eq(res.done.map((x) => x.index), [0], "выполнено");
-    assert.eq(res.failed.map((x) => [x.index, x.code]), [[1, "IDENTIFIER_TAKEN"], [2, "PARENT_MISMATCH"], [3, "VALIDATION_FAILED"]], "отказы");
+    assert.eq(res.failed.map((x) => [x.index, x.code]), rows.map((r, i) => [i, r[1]]).slice(1), "отказы");
   });
 
   test("Добавить: дочерний объект под камерой и служба сервера; повтор с тем же ключом — второй раз не создаёт", async () => {
     const env = await makeEnv();
     const s = FX.servers.find((x) => x.allocated && x.online);
-    const body = create([
-      { device: { type: "sensor", name: "Датчик двери", channel: 3 }, domainId: cam.domainId, parentId: cam.id, folderId: null },
-      { device: { type: "email", name: "Email — тест", serverId: s.id, smtp: "smtp.local" }, domainId: s.domainId, parentId: null, folderId: null },
-    ]);
+    // Дочерний — датчик или, если датчиков в системе нет, детектор; служба — если есть email-оповещатели
+    const child = ApiTest.can("type:sensor") ? { type: "sensor", name: "Датчик двери", channel: 3 } : { type: "det", name: "Детектор — тест", detectorKind: "motion" };
+    const rows = [{ device: child, domainId: cam.domainId, parentId: cam.id, folderId: null }];
+    if (ApiTest.can("type:email")) rows.push({ device: { type: "email", name: "Email — тест", serverId: s.id, smtp: "smtp.local" }, domainId: s.domainId, parentId: null, folderId: null });
+    const body = create(rows);
     const a = await env.ok("POST", "/devices", body);
     const b = await env.ok("POST", "/devices", body);
     assert.eq(b, a, "тот же ответ");
-    assert.eq([a.done[0].devices[0].parentId, a.done[1].devices[0].serverId], [cam.id, s.id], "куда легли");
-    assert.eq((await env.list("/devices")).length, FX.devices.length + 2, "создано один раз");
+    assert.eq(a.done[0].devices[0].parentId, cam.id, "дочерний — под камерой");
+    if (rows[1]) assert.eq(a.done[1].devices[0].serverId, s.id, "служба — на сервере");
+    assert.eq((await env.list("/devices")).length, FX.devices.length + rows.length, "создано один раз");
   });
 
   test("Добавить из найденного: строка уходит из итога поиска", async () => {
@@ -54,7 +59,7 @@
     await env.ok("POST", "/devices", create([{ device: newCam({ ip: c.ip, mac: c.mac }), domainId: disc.domainId, parentId: null, folderId: null, candidateId: c.id }]));
     const now = await env.ok("GET", `/domains/${disc.domainId}/discovery`);
     assert.ok(!now.candidates.some((x) => x.id === c.id), "добавленное — не в найденных");
-  });
+  }, { needs: ["getDiscovery"] });
 
   test("Изменить сразу: несколько устройств одним запросом, устаревшая версия — в failed", async () => {
     const env = await makeEnv();
@@ -99,8 +104,7 @@
     const id = op.items[0].createdId;
     assert.eq([op.ok, (await env.ok("GET", `/devices/${id}`)).parentId], [1, cam.id], "создан под камерой");
     const back = await env.ok("POST", `/operations/${op.id}/revert`);
-    await env.advance(1);
-    assert.eq((await env.ok("GET", `/operations/${back.id}`)).ok, 1, "откат выполнен");
+    assert.eq((await env.finished(back.id)).ok, 1, "откат выполнен");
     assert.status(await env.call("GET", `/devices/${id}`), 404, "NOT_FOUND", "созданного нет");
     assert.status(await env.call("POST", "/operations", { idempotencyKey: key(), items: [{ targetId: cam.id, create: { type: "det", name: "x" }, set: { name: "y" } }], expectedVersions: { [cam.id]: cam.version } }), 422, "VALIDATION_FAILED", "create вместе с set");
   });
@@ -116,8 +120,10 @@
     assert.status(res, 202);
     assert.eq([res.body.state, res.body.candidates.map((c) => c.id)], ["searching", expect.slice(0, 1)], "начат, прежний итог сброшен, первая находка — сразу");
     assert.status(await env.call("POST", `/domains/${did}/discovery`), 409, "BUSY");
-    await env.advance(5);
-    const done = await env.ok("GET", `/domains/${did}/discovery`);
+    const done = await env.until(async () => {
+      const x = await env.ok("GET", `/domains/${did}/discovery`);
+      return x.state === "done" && x;
+    }, "поиск закончился");
     assert.eq([done.state, done.progress, done.candidates.map((c) => c.id)], ["done", 100, expect], "найдено всё, по порядку");
     await ApiTest.settle();
     stop();
@@ -126,7 +132,7 @@
     const stopped = await env.ok("DELETE", `/domains/${did}/discovery`);
     assert.eq(stopped.state, "stopped", "остановлен");
     assert.status(await env.call("DELETE", "/domains/10009999-0000-4000-8000-000000000000/discovery"), 404, "NOT_FOUND");
-  });
+  }, { needs: ["startDiscovery", "getDiscovery", "stopDiscovery"] });
 
   ApiTest.loaded("api-devices.js");
 })();
