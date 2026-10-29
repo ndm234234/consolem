@@ -7858,10 +7858,16 @@ const ACTION_KINDS=[
   {grp:"Другое",sub:"rule",action:"runrule",label:"Запустить правило",devTypes:[],
    lab:a=>`${i18n("Запустить правило")} «${(rules.find(x=>x.id===a.rule)||{}).name||"—"}»`,fields:[{id:"rule",label:"Правило",sel:"rule"}]}];
 const ACT_DEFAULT=ACTION_KINDS.find(k=>k.action==="output");
+const ACT_ADD=ACTION_KINDS.find(k=>k.action==="record");   // базовый сценарий: новое действие — запись
 // Новое действие этого вида; устройство прежнего пункта остаётся, если подходит.
-function ruleNewAct(k,old){
+// Запись по умолчанию — камера из события, пока идёт событие; без такого события — 10 минут.
+function ruleNewAct(k,old,r){
   const a={sub:k.sub,action:k.action,...ruleClone(k.def||{})};
   if(k.devTypes.length)a.ref=old&&old.action&&old.ref&&refFits(old.ref,k.devTypes,"then")?old.ref:"";
+  if(k.action==="record"&&r){
+    if(!a.ref&&ruleSrcOk(r,k.devTypes))a.ref="$src";
+    if(ruleHasEnds(r)){a.dur="event";a.after=0}else a.minutes=10;
+  }
   return a;
 }
 // Шаги внутри «То» — управляющие пункты {ctl}. Общий механизм: br — ветки [[ключ,подпись]], make — новый пункт,
@@ -9104,7 +9110,7 @@ function setStepKind(ps,v){
   const go=()=>ruleEdit(r=>{
     const l=ruleThenList(r,ps),ix=ruleLastIdx(ps),old=l&&l[ix];if(!old)return;
     if(toK){const nw=toK.make();if(keeps)ctlBranches(nw).forEach(([b])=>{if(old[b])nw[b]=old[b]});l[ix]=nw}
-    else l[ix]=ruleNewAct(ACTION_KINDS[+v.slice(2)],old);
+    else l[ix]=ruleNewAct(ACTION_KINDS[+v.slice(2)],old,r);
   });
   if(n&&!keeps)askConfirm("Убрать ветки?",`<p>${i18n("Убрать ветки вместе с")} ${n} ${i18n(plural(n,"действием|действиями|действиями"))}?</p><p class="sub">${i18n("Это можно вернуть кнопкой «Сбросить» до применения.")}</p>`,"",i18n("Убрать"),go,{html:true,cancelLabel:"Отмена",onCancel:()=>paint()});
   else go();
@@ -9127,10 +9133,10 @@ function setWevField(ps,f,v){ruleEdit(r=>{const c=ruleThenAt(r,ps);if(!c||!c.ev)
 // Одна кнопка на уровень: добавляет пункт и ставит фокус на выбор его вида (там же выбирается действие или шаг).
 function addItem(lp){
   let ps="";
-  ruleEdit(r=>{const l=ruleListAt(r,lp);if(l){l.push(ruleNewAct(ACT_DEFAULT));ps=lp?`${lp}.${l.length-1}`:String(l.length-1)}});
+  ruleEdit(r=>{const l=ruleListAt(r,lp);if(l){l.push(ruleNewAct(ACT_ADD,null,r));ps=lp?`${lp}.${l.length-1}`:String(l.length-1)}});
   if(ps)document.querySelector(`select[data-ks="${ps}"]`)?.focus();
 }
-function addAction(lp){ruleEdit(r=>{const l=ruleListAt(r,lp);if(l)l.push(ruleNewAct(ACT_DEFAULT))})}
+function addAction(lp){ruleEdit(r=>{const l=ruleListAt(r,lp);if(l)l.push(ruleNewAct(ACT_ADD,null,r))})}
 function addStep(lp){ruleEdit(r=>{const l=ruleListAt(r,lp);if(l)l.push(CTL_KINDS[0].make())})}
 function delAction(ps){
   const cr=curRule(),o=cr&&ruleThenAt(cr,ps),n=o?ruleNestCount(o):0;
