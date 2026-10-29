@@ -18,12 +18,13 @@
     const env = await makeEnv();
     const seen = [];
     const stop = ApiTest.subscribeForTest((m) => m.entityId === cam.id && seen.push(m.type));
+    await ApiTest.settle();
     const res = await env.call("PATCH", `/devices/${cam.id}`, { name: "Главный вход — новый" }, { "If-Match": await env.etag(`/devices/${cam.id}`) });
     assert.status(res, 200);
     assert.eq([res.body.name, res.body.version], ["Главный вход — новый", cam.version + 1], "имя и версия");
     assert.eq(res.headers.etag, `"${cam.version + 1}"`, "ETag");
     assert.eq((await env.ok("GET", `/devices/${cam.id}`)).name, "Главный вход — новый", "сохранено");
-    await new Promise((r) => setTimeout(r, 20));
+    await ApiTest.settle();
     stop();
     assert.ok(seen.includes("entity.changed"), "в потоке");
   });
@@ -66,6 +67,7 @@
     const env = await makeEnv();
     const seen = [];
     const stop = ApiTest.subscribeForTest((m) => m.kind === "operation" && seen.push(m.type));
+    await ApiTest.settle();
     const folders = folderOf(cam.id).concat(otherFolder.id);
     const res = await env.call("POST", "/operations", plan([
       { targetId: cam.id, set: { name: "Вход — главный" } },
@@ -82,7 +84,7 @@
     const d = await env.ok("GET", `/devices/${cam.id}`);
     assert.eq([d.name, d.recordMode, d.preRecordSec, d.version], ["Вход — главный", "motion", 7, cam.version + 2], "устройство");
     assert.eq((await env.ok("GET", `/folders/${otherFolder.id}`)).deviceIds.slice(-1), [cam.id], "добавлено в папку");
-    await new Promise((r) => setTimeout(r, 20));
+    await ApiTest.settle();
     stop();
     assert.eq([seen.filter((t) => t === "operation.progress").length, seen.filter((t) => t === "operation.finished").length], [3, 1], "ход в потоке");
   });

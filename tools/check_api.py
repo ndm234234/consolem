@@ -428,6 +428,30 @@ def check_server(rep, spec):
     if res.returncode:
         rep.fail("Встроенный сервер запускается в Node", res.stderr.strip().splitlines()[-5:])
         return
+    # Досылка потока после переподключения: по Last-Event-ID — пропущенное по порядку, по неизвестному — stream.reset.
+    # Через браузер её не проверить (заголовок EventSource ставит сам при обрыве), поэтому — сервер напрямую
+    stream = (
+        "global.window=global;require('./api/contract.js');require('./api/server.js');"
+        "const fx=require('./api/fixtures/demo.json');"
+        "const s=window.ConsolemServer.create({fixture:fx,autoTick:false,testSupport:true});"
+        "const d=fx.devices[0];const got=[];s.subscribe(m=>got.push(m));"
+        "const h=(v,n)=>s.handle('PATCH','/devices/'+d.id,{name:n},{'If-Match':'\"'+v+'\"'});"
+        "h(1,'a');h(2,'b');h(3,'c');"
+        "setTimeout(()=>{const first=got[0].id,missed=[],reset=[];"
+        "s.subscribe(m=>missed.push(m),first);s.subscribe(m=>reset.push(m),'999999');"
+        "setTimeout(()=>console.log(JSON.stringify({sent:got.map(m=>m.id),missed:missed.map(m=>m.id),reset:reset.map(m=>m.type)})),10)},10)"
+    )
+    sres = subprocess.run(["node", "-e", stream], capture_output=True, text=True, cwd=ROOT)
+    problems = []
+    if sres.returncode:
+        problems = sres.stderr.strip().splitlines()[-3:]
+    else:
+        r = json.loads(sres.stdout)
+        if r["missed"] != r["sent"][1:]:
+            problems.append(f"после Last-Event-ID={r['sent'][0]} дослано {r['missed']} вместо {r['sent'][1:]}")
+        if r["reset"] != ["stream.reset"]:
+            problems.append(f"по неизвестному Last-Event-ID пришло {r['reset']} вместо stream.reset")
+    rep.check("Поток событий: досылка по Last-Event-ID, stream.reset при потере", problems)
     bare = lambda p: re.sub(r"\{\w+\}", "{}", p)
     routes = {(r.split(" ", 1)[0], bare(r.split(" ", 1)[1])) for r in json.loads(res.stdout)}
     ops = {(m.upper(), bare(p)) for p, item in spec["paths"].items() for m in METHODS if m in item}

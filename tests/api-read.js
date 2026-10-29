@@ -137,6 +137,7 @@
     const cam = (await env.list("/devices")).find((d) => d.type === "camera" && d.online);
     const seen = [];
     const stop = ApiTest.subscribeForTest((m) => m.entityId === cam.id && seen.push(m));
+    await ApiTest.settle();
     assert.status(await env.call("POST", "/test/events", { type: "device.signal", deviceId: cam.id, online: false, fault: "auth" }), 200);
     let now = await env.ok("GET", `/devices/${cam.id}`);
     assert.eq([now.online, now.fault, now.version], [false, "auth", cam.version], "без связи");
@@ -146,7 +147,7 @@
     assert.status(await env.call("POST", "/test/events", { type: "device.fault", deviceId: cam.id, fault: "drv" }), 200, null, "причина");
     assert.eq((await env.ok("GET", `/devices/${cam.id}`)).fault, "drv", "причина записана");
     assert.status(await env.call("POST", "/test/events", { type: "device.signal", deviceId: "30009999-0000-4000-8000-000000000000", online: true }), 404, "NOT_FOUND");
-    await new Promise((r) => setTimeout(r, 20));
+    await ApiTest.settle();
     stop();
     assert.ok(seen.filter((m) => m.type === "entity.changed").length >= 2, `в потоке — изменения записи: ${seen.length}`);
   });

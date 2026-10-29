@@ -1988,7 +1988,7 @@ function apiOnEvent(m){
     renderTree();if(sel===m.entityId&&!cardDraft&&!(bq&&!bq.finished))paint();
   }).catch(()=>{});
 }
-function apiReload(){hwLoad().then(()=>{if(!find(sel))sel=domains[0]?.id||null;paint()})}
+function apiReload(){Promise.all([hwLoad(),appLoad()]).then(()=>{if(!find(sel))sel=domains[0]?.id||null;if(!rules.some(r=>r.id===rule))rule=rules[0]?.id||null;paint()})}
 // Код ошибки сервера → текст для показа: интерфейс говорит своими словами
 function problemText(e,n){
   const code=e?.problem?.code||e?.code||e;
@@ -14492,6 +14492,8 @@ window.appReady=Promise.all([hwLoad(),appLoad()]).then(()=>{
 }).catch(e=>{
   document.body.insertAdjacentHTML("afterbegin",`<div class="nt bk-warn" style="margin:16px">${i18n("Сервер не ответил")}: ${escHtml(e?.problem?.message||e?.message||String(e))}</div>`);
 });
+// ?selftest — самопроверка прототипа через API (tests/selftest.js); ?selftest-run=… — страница одного её сценария
+if(/[?&]selftest(-run)?\b/.test(location.search)){const s=document.createElement("script");s.src="tests/selftest.js";document.body.appendChild(s)}
 </script>
 </body>
 </html>

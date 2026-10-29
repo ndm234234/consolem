@@ -187,8 +187,10 @@
     finish(lines, failed ? `Тесты API: ${failed} из ${total} не прошли` : `Тесты API: все ${total} прошли`, failed);
   }
 
-  // Сообщения потока для одного теста; возвращает «отписаться»
+  // Сообщения потока для одного теста; возвращает «отписаться». По сети поток подключается не сразу, а
+  // события до подключения не досылаются: settle() — дождаться подключения (и доставки после действий)
   const subscribeForTest = (fn) => api.subscribe(fn);
+  const settle = () => new Promise((r) => setTimeout(r, apiBase ? 400 : 20));
 
-  window.ApiTest = { test, loaded, run, makeEnv, assert, key, subscribeForTest, FX, external: Boolean(apiBase) };
+  window.ApiTest = { test, loaded, run, makeEnv, assert, key, subscribeForTest, settle, FX, external: Boolean(apiBase) };
 })();

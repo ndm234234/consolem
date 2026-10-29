@@ -111,6 +111,7 @@
     const expect = FX.network.filter((c) => c.domainIds.includes(did)).map((c) => c.id);
     const seen = [];
     const stop = ApiTest.subscribeForTest((m) => m.kind === "discovery" && m.entityId === did && seen.push(m.type));
+    await ApiTest.settle();
     const res = await env.call("POST", `/domains/${did}/discovery`);
     assert.status(res, 202);
     assert.eq([res.body.state, res.body.candidates.map((c) => c.id)], ["searching", expect.slice(0, 1)], "начат, прежний итог сброшен, первая находка — сразу");
@@ -118,7 +119,7 @@
     await env.advance(5);
     const done = await env.ok("GET", `/domains/${did}/discovery`);
     assert.eq([done.state, done.progress, done.candidates.map((c) => c.id)], ["done", 100, expect], "найдено всё, по порядку");
-    await new Promise((r) => setTimeout(r, 20));
+    await ApiTest.settle();
     stop();
     assert.eq([seen.filter((t) => t === "discovery.progress").length, seen.filter((t) => t === "discovery.finished").length], [expect.length, 1], "в потоке");
     await env.ok("POST", `/domains/${did}/discovery`);

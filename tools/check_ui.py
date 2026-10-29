@@ -10,6 +10,7 @@ Chrome: страница загружает данные со встроенно
   python3 tools/check_ui.py                       все сценарии
   python3 tools/check_ui.py --latency 300         с задержкой ответа, как по медленной сети
   python3 tools/check_ui.py tests/ui-domains.js   один сценарий
+  python3 tools/check_ui.py --selftest            самопроверка прототипа (?selftest): те же сценарии изнутри страницы
 Код выхода 1, если хоть одна проверка не прошла.
 """
 import glob
@@ -24,18 +25,8 @@ import tempfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PAGE = "index_10_api-server.html"
 
-HELPERS = r"""<script>(()=>{
-const log=[];
-const ok=(c,m)=>log.push((c?"PASS  ":"FAIL  ")+m);
-const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-// Ждать условия: ответ сервера и событие потока приходят не сразу
-async function until(fn,ms=20000){const t=Date.now();while(Date.now()-t<ms){try{if(fn())return true}catch(e){}await sleep(25)}return false}
-// Подтвердить диалог: ввести число удаляемых объектов (если спрашивают) и нажать кнопку
-async function confirmWith(n){const inp=document.getElementById("confirmCountInp");if(inp&&n!=null){inp.value=String(n);inp.dispatchEvent(new Event("input"))}document.getElementById("confirmOk").click()}
-window.UiCheck=(fn)=>window.appReady.then(()=>fn({ok,until,sleep,confirmWith})).catch(e=>ok(false,"исключение: "+e.message+" "+(e.stack||"").split("\n")[1])).then(()=>{
-  const el=document.createElement("script");el.type="text/plain";el.id="__ui";el.textContent=JSON.stringify(log).replace(/</g,"\\u003c");document.body.appendChild(el);
-});
-})();</script>"""
+# Помощники сценариев — те же, что у самопроверки прототипа (?selftest)
+HELPERS = '<script src="tests/ui-harness.js"></script>'
 
 
 def run(scenario, query):
@@ -61,6 +52,25 @@ def run(scenario, query):
     return json.loads(m.group(1)) if m else ["FAIL  сценарий не дошёл до конца"]
 
 
+def selftest(query):
+    """Прототип с ?selftest: сценарии гоняет сама страница, итог — data-selftest у <html>."""
+    tmp = tempfile.mkdtemp(prefix="consolem-selftest-")
+    try:
+        chrome = shutil.which("google-chrome") or shutil.which("chromium") or "google-chrome"
+        url = "file://" + os.path.join(ROOT, PAGE) + "?selftest" + query.replace("?", "&")
+        res = subprocess.run(
+            [chrome, "--headless=new", "--disable-gpu", "--no-sandbox", "--no-first-run", "--allow-file-access-from-files",
+             f"--user-data-dir={tmp}/profile", "--window-size=1600,1000", "--virtual-time-budget=300000", "--dump-dom", url],
+            capture_output=True, text=True, timeout=400)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    state = re.search(r'data-selftest="(\w+)"', res.stdout)
+    head = re.search(r'<div id="selftest"[^>]*><b[^>]*>(.*?)</b>', res.stdout, re.S)
+    print(head.group(1) if head else "Самопроверка не дошла до конца")
+    print(f"RESULT {state.group(1) if state else 'fail'}")
+    return 0 if state and state.group(1) == "pass" else 1
+
+
 def main():
     args = sys.argv[1:]
     query = ""
@@ -68,6 +78,8 @@ def main():
         i = args.index("--latency")
         query = f"?latency={int(args[i + 1])}"
         del args[i:i + 2]
+    if "--selftest" in args:
+        return selftest(query)
     files = args or sorted(glob.glob(os.path.join(ROOT, "tests", "ui-*.js")))
     failed = 0
     for f in files:
