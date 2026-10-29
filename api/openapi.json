@@ -2783,6 +2783,47 @@
           }
         }
       }
+    },
+    "/objects/delete": {
+      "post": {
+        "operationId": "deleteObjects",
+        "tags": [
+          "hardware"
+        ],
+        "summary": "Удалить несколько объектов",
+        "description": "Групповое удаление после отсчёта «Отменить» в интерфейсе: частичный успех, каскады — как у одиночного DELETE. Серверы и домены так не удаляют",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ObjectsDeleteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Готово",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectsDeleteResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -7513,6 +7554,80 @@
               "null"
             ],
             "description": "Модель, которую сообщило устройство; null — не определилась"
+          }
+        }
+      },
+      "ObjectsDeleteRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "idempotencyKey",
+          "items"
+        ],
+        "description": "Удалить выбранное одним запросом: устройства (с дочерними), папки (с подпапками), хранилища (с томами), тома. Вид объекта сервер узнаёт по id",
+        "properties": {
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 8
+          },
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "version"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "version": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            }
+          }
+        }
+      },
+      "ObjectsDeleteResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "done",
+          "failed"
+        ],
+        "properties": {
+          "done": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "failed": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "code"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "code": {
+                  "$ref": "#/components/schemas/ProblemCode"
+                }
+              }
+            }
           }
         }
       }

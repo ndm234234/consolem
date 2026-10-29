@@ -1741,6 +1741,8 @@ const DEV_FLD={rtspUrl:"RTSP",codec:"Кодек",res:"Разрешение",fps:
 const DEV_FLD_API=Object.fromEntries(Object.entries(DEV_FLD).map(([k,v])=>[v,k]));
 const DEV_NUM=new Set(["port","fps","bitrate","preRecordSec","channel","videoChannel","sensitivity","pulse","debounce","gain","vol"]);
 const DEV_SKIP=new Set(["id","type","parentId","domainId","version","hasPassword"]);
+const NORM_RU={open:"Разомкнуто",closed:"Замкнуто"};
+const NORM_CODE={"Разомкнуто":"open","Замкнуто":"closed"};
 const SVC_TYPES=new Set(["export","email","sms"]);
 // У этих видов список дочерних есть всегда, даже пустой
 const DEV_WITH_KIDS=new Set(["camera","ipsrv","channel","acfa","acfa_lock","storage"]);
@@ -1759,6 +1761,7 @@ function devNode(r){
     else if(k==="azimuth")n[k]=v==null?"":String(v);
     else if(k==="extraArchives")n.archx=v.map(x=>({arch:x.archiveId,rec:x.recordMode,stream:x.stream}));
     else if(k==="mode"&&r.type==="email")n.mode=EMAIL_MODE_RU[v]||v;
+    else if(k==="norm")n.norm=NORM_RU[v]||v;
     else n[DEV_KEY[k]||k]=v;
   });
   if(DEV_WITH_KIDS.has(r.type))n.devices=[];
@@ -2058,10 +2061,6 @@ function foldersOfDevice(id){
   return flatFolders().filter(fd=>fd.items.some(x=>own.has(x)));
 }
 function folderDeviceNodes(f){return(f.items||[]).map(id=>find(id)?.n).filter(Boolean)}
-function folderRemoveDevice(ids){
-  const gone=ids instanceof Set?ids:new Set([ids]);
-  walkFolders(f=>{f.items=f.items.filter(x=>!gone.has(x))});
-}
 function folderAddDevice(fid,deviceId){
   const f=folderById(fid);if(!f||!deviceId)return;
   if(!f.items.includes(deviceId))f.items.push(deviceId);
@@ -4929,18 +4928,6 @@ function deleteTreeNode(id){
   confirmDeleteNodes([id],back);
 }
 // Корневые устройства лежат в общем пуле, вложенные — под родительским объектом
-function removeNodeFromParent(f){
-  const list=f.p?f.p.devices:devicePool;
-  if(!list)return false;
-  const i=list.findIndex(x=>x.id===f.n.id);if(i<0)return false;
-  const gone=new Set();
-  function collect(n){gone.add(n.id);(n.devices||[]).forEach(collect)}
-  collect(f.n);
-  list.splice(i,1);
-  gone.forEach(id=>open.delete(id));
-  folderRemoveDevice(gone);
-  return true;
-}
 function clearTreeSel(){
   // Снять всё — то же, что снять последнюю отметку: режим выбора закрывается.
   treeSel.clear();treeAnchor=null;
@@ -13571,7 +13558,8 @@ function bulkChanges(draft){
     const lic=want?ops.filter(o=>o.n.licenseExceeded).length:0;
     step("enabled",want?"Включить":"Выключить",ops,lic?`${i18n("лицензия")}: ${lic} ${i18n(plural(lic,"камера|камеры|камер"))} ${i18n("сверх лимита не включатся")}`:"");
   }
-  if(d.user||d.pass)step("creds","Учётные данные",nodes.filter(canCreds).map(n=>mkOp(n,"Учётные данные","creds",()=>{if(d.user)n.user=d.user;if(d.pass)n.pass="•".repeat(8)})),i18n("устройство переподключится"));
+  if(d.user||d.pass)step("creds","Учётные данные",nodes.filter(canCreds).map(n=>Object.assign(mkOp(n,"Учётные данные","creds",()=>{if(d.user)n.user=d.user;if(d.pass)n.pass="•".repeat(8)}),
+    {api:{set:Object.assign({},d.user?{login:d.user}:{},d.pass?{password:d.pass}:{})}})),i18n("устройство переподключится"));
   [...(d.folderAdd?[d.folderAdd]:[]),...(d.folderAddMany||[])].forEach(fid=>{
     const f=folderById(fid);
     if(f)step("folderAdd:"+fid,`В папку «${folderPathName(f.id)}»`,nodes.filter(n=>canFolder(n)&&!f.items.includes(n.id)).map(n=>mkOp(n,"В папку","folder",()=>folderAddDevice(f.id,n.id),null,()=>{f.items=f.items.filter(x=>x!==n.id)})));
@@ -13794,11 +13782,53 @@ function bulkApply(opts){
   bulkDraft={};
   gear();
 }
+// Шаги очереди (замыкания run) → шаги операции на сервере. Шаги прогоняются по
+// порядку на объектах кэша: что поменял каждый, то и уходит (поля, папки или
+// новый дочерний объект); затем кэш возвращается к «до» — итог придёт с сервера.
+// null — какой-то шаг так не выразить
+function opsToItems(ops){
+  const snaps=new Map(),folderItems=new Map(flatFolders().map(f=>[f.id,[...(f.items||[])]]));
+  const items=[];
+  try{
+    for(const o of ops){
+      const n=o.n;if(!isApiDevice(n))return null;
+      if(o.api){items.push({targetId:n.id,...o.api});continue}
+      if(!snaps.has(n.id))snaps.set(n.id,[n,cardClone(n)]);
+      const before=cardClone(n),fBefore=cardFolders(n.id);
+      o.run();
+      const set={};
+      for(const k of new Set([...Object.keys(n),...Object.keys(before)])){
+        if(k==="devices"||k.startsWith("_")||CARD_SKIP.has(k)||JSON.stringify(n[k])===JSON.stringify(before[k]))continue;
+        const one=keyToApi(n,k,n[k]);if(!one)return null;
+        Object.assign(set,one);
+      }
+      const was=new Set((before.devices||[]).map(x=>x.id)),made=(n.devices||[]).filter(x=>!was.has(x.id));
+      const fNow=cardFolders(n.id),moved=JSON.stringify(fNow)!==JSON.stringify(fBefore);
+      const kinds=[Object.keys(set).length>0,made.length>0,moved].filter(Boolean).length;
+      if(kinds!==1||made.length>1)return null;
+      items.push(made.length?{targetId:n.id,create:nodeCreate(made[0])}:moved?{targetId:n.id,folderIds:fNow}:{targetId:n.id,set});
+    }
+    return items;
+  }finally{
+    snaps.forEach(([n,s])=>cardRestoreNode(n,s));
+    flatFolders().forEach(f=>{if(folderItems.has(f.id))f.items=folderItems.get(f.id)});
+    treeMatchCache.clear();searchMatchCache.clear();
+  }
+}
 function bulkRun(ch,opts,nodesIn){
   const nodes=nodesIn||bulkScopeNodes();
   const excluded=new Set(bulkStats(nodes).offline.map(n=>n.id));
   const steps=ch.map(c=>({label:c.label,ops:c.ops.map(o=>({...o,state:o.skip?"skip":excluded.has(o.n.id)?"excl":"wait",msg:o.skip||(excluded.has(o.n.id)?i18n("сервер без связи"):""),done:!!o.skip||excluded.has(o.n.id)}))}));
-  startQueue(steps,`${nodes.length} ${i18n(plural(nodes.length,"объект|объекта|объектов"))}`,opts);
+  const title=`${nodes.length} ${i18n(plural(nodes.length,"объект|объекта|объектов"))}`;
+  // Выполняет сервер: одна операция, ход — в потоке; пропущенные и исключённые не уходят
+  const live=steps.flatMap(s=>s.ops).filter(o=>!o.done);
+  const items=live.length?opsToItems(live):null;
+  if(items){
+    const targets=[...new Set(items.map(x=>x.targetId))];
+    apiQueue(steps,title,opts||{},()=>API.post("/operations",{idempotencyKey:opKey(),items,expectedVersions:Object.fromEntries(targets.map(x=>[x,hwVer.get(x)]))}),live);
+    return;
+  }
+  startQueue(steps,title,opts);
 }
 // ── Очередь на сервере ─────────────────────────────────────────────────────
 // План карточки устройства уходит на сервер одной операцией (POST /operations):
@@ -13880,6 +13910,7 @@ function keyToApi(node,key,v){
   if(key==="archx")return{extraArchives:v===undefined?null:v.map(x=>({archiveId:x.arch,recordMode:x.rec??null,stream:x.stream??null}))};
   if(key==="mode"&&node.type==="email")return{mode:v===undefined?null:EMAIL_MODE_CODE[v]||v};
   if(key==="pass")return{password:v===undefined?null:v};
+  if(key==="norm")return{norm:v===undefined?null:NORM_CODE[v]||v};
   const k=DEV_API[key]||key;
   if(!DEVICE_PATCH.has(k))return null;
   return{[k]:apiVal(k,v)};
@@ -13913,9 +13944,10 @@ const opKey=()=>`ui-${Date.now().toString(36)}-${++opKeySeq}`;
 let opEarly=[];
 // Кто ждёт конца операции, которую очередь не показывает (откат по «Отменить»)
 const opWait=new Map();
-function apiQueue(steps,title,opts,call){
+function apiQueue(steps,title,opts,call,apiOps){
   startQueue(steps,title,Object.assign({},opts,{api:"pending"}));
   const q=bq;if(!q||q.api!=="pending")return;
+  q.apiOps=apiOps||steps.flatMap(s=>s.ops);
   opEarly=[];
   call().then(op=>{q.api=op.id;const early=opEarly;opEarly=[];early.forEach(opOnEvent)}).catch(e=>{
     // Сервер не принял операцию целиком (план устарел, объект занят, ошибка в поле): ни один шаг не выполнен
@@ -13930,7 +13962,7 @@ function opOnEvent(m){
   if(!bq)return;
   if(bq.api==="pending"){opEarly.push(m);return}
   if(bq.api!==m.entityId)return;
-  const ops=bq.steps.flatMap(s=>s.ops);
+  const ops=bq.apiOps||bq.steps.flatMap(s=>s.ops);
   if(m.type==="operation.progress"){
     const it=m.payload.item,o=ops[it.index];if(!o||o.done)return;
     // Шаг create создал устройство — в кэш, как только сервер его отдаст
@@ -13938,6 +13970,7 @@ function opOnEvent(m){
     if(it.state==="ok"){o.state="ok";o.msg="";bq.ok++}else{o.state="fail";o.msg=problemText(it.code,o.n);bq.fail++}
     o.done=true;bq.done++;
     const nx=ops.find(x=>!x.done);if(nx&&!bq.paused)nx.state="run";
+    bq.steps.forEach(s=>s.ops.forEach(x=>{if(x.state==="run"&&x!==nx)x.state=x.done?x.state:"wait"}));
     bq.cur=bq.steps.find(s=>s.ops.some(x=>!x.done))?.label||"";
     treeMatchCache.clear();searchMatchCache.clear();
     renderTree();renderRailStatus();syncQueueModal();
@@ -14137,25 +14170,6 @@ function deleteSelected(only){
   if(!roots.length){toast("Выбранное уже в очереди на удаление");return}
   confirmDeleteNodes(roots,null,skipped);
 }
-// Удаление одного объекта любого рода: устройство — из родителя, папка — из
-// дерева папок (устройства остаются), хранилище — с томами (камеры уходят в
-// «Без записи»), том — из хранилища.
-function removeAnyNode(id){
-  const f=find(id);if(!f)return false;
-  const n=f.n;
-  if(n.type==="folder"){
-    const parent=folderParent(id);
-    if(parent)parent.folders=parent.folders.filter(x=>x.id!==id);
-    else{const i=folders.findIndex(x=>x.id===id);if(i<0)return false;folders.splice(i,1)}
-    open.delete(id);if(selFolder===id)selFolder=null;return true;
-  }
-  if(n.type==="archive"){
-    walkAll(c=>{if(c.type==="camera"&&camArchs(c).some(x=>x.arch===id))camDropArch(c,id)});
-    const i=arch.indexOf(n);if(i<0)return false;arch.splice(i,1);open.delete(id);return true;
-  }
-  if(n.type==="vol"){const a=archById(n.archId);if(!a)return false;a.vols.splice(a.vols.indexOf(n),1);return true}
-  return removeNodeFromParent(f);
-}
 function confirmDeleteNodes(roots,back,skipped){
   const nodes=roots.map(id=>find(id).n);
   const cams=[];nodes.forEach(n=>walk(x=>{if(x.type==="camera")cams.push(x)},[n]));
@@ -14211,13 +14225,18 @@ function commitDelete(key){
   const p=pendingDel.get(key);if(!p)return;
   pendingDel.delete(key);removeToastAction(key);
   if(p.commit){p.commit();return}
-  let n=0;
   const kinds=new Set(p.ids.map(id=>find(id)?.n.type));
-  p.ids.forEach(id=>{if(removeAnyNode(id))n++});
-  remakeAcfa();treeMatchCache.clear();searchMatchCache.clear();
-  if(!find(sel)){const b=p.back&&(find(p.back)||folderById(p.back))?p.back:domains[0]?.id;sel=b||sel;tab="gen";resetTreeSel(sel);expandTo(sel)}
-  toast(n===1?(kinds.has("folder")||kinds.has("archive")||kinds.has("vol")?"Объект удалён":"Устройство удалено"):`${i18n("Удалено объектов")}: ${n}`);
-  paint();
+  // Отсчёт кончился — удаляет сервер, одним запросом; каскады (дочерние, тома,
+  // запись камер) — его, поэтому кэш «Оборудования» перечитывается целиком
+  const items=p.ids.filter(id=>hwVer.has(id)).map(id=>({id,version:hwVer.get(id)}));
+  API.post("/objects/delete",{idempotencyKey:opKey(),items}).then(res=>hwLoad().then(()=>res)).then(res=>{
+    const n=res.done.length;
+    p.ids.forEach(id=>open.delete(id));if(selFolder&&!folderById(selFolder))selFolder=null;
+    if(!find(sel)){const b=p.back&&(find(p.back)||folderById(p.back))?p.back:domains[0]?.id;sel=b||sel;tab="gen";resetTreeSel(sel);expandTo(sel)}
+    if(res.failed.length)toast(`${i18n("Удалено объектов")}: ${n} · ${i18n("не удалено")}: ${res.failed.length} — ${problemText(res.failed[0].code)}`);
+    else toast(n===1?(kinds.has("folder")||kinds.has("archive")||kinds.has("vol")?"Объект удалён":"Устройство удалено"):`${i18n("Удалено объектов")}: ${n}`);
+    paint();
+  }).catch(e=>{toast(problemText(e));paint()});
 }
 // Тост с действием: для удаления отсчёт ведёт очередь удаления (и замирает
 // при наведении), для «Отменить» после применения — свой таймер.

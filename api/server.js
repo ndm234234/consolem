@@ -345,8 +345,50 @@
       });
       gone.forEach((x) => {
         secrets.delete(x);
+        wasRemoved.add(x);
         send("entity.deleted", { kind: "device", entityId: x });
       });
+    }
+
+    // Папка — вместе с подпапками; сами устройства остаются в системе
+    function removeFolder(f) {
+      const gone = new Set([f.id]);
+      for (let grew = true; grew; ) {
+        grew = false;
+        db.folders.forEach((x) => {
+          if (x.parentId && gone.has(x.parentId) && !gone.has(x.id)) {
+            gone.add(x.id);
+            grew = true;
+          }
+        });
+      }
+      db.folders = db.folders.filter((x) => !gone.has(x.id));
+      gone.forEach((id) => send("entity.deleted", { kind: "folder", entityId: id }));
+    }
+    // Хранилище — с томами. Камеры остаются: основным становится первое дополнительное хранилище, без него
+    // запись выключается
+    function removeArchive(a) {
+      db.devices.forEach((d) => {
+        const extra = (d.extraArchives || []).filter((x) => x.archiveId !== a.id);
+        const main = d.archiveId === a.id;
+        if (!main && extra.length === (d.extraArchives || []).length) return;
+        if (d.extraArchives) d.extraArchives = extra;
+        if (main) {
+          const next = extra.shift();
+          if (next) Object.assign(d, { archiveId: next.archiveId, recordMode: next.recordMode, stream: next.stream });
+          else Object.assign(d, { archiveId: null, recordMode: "none" });
+        }
+        d.version += 1;
+        changed("device", d);
+      });
+      db.volumes.filter((v) => v.archiveId === a.id).forEach(removeVolume);
+      db.archives = db.archives.filter((x) => x !== a);
+      send("entity.deleted", { kind: "archive", entityId: a.id });
+    }
+    function removeVolume(v) {
+      db.volumes = db.volumes.filter((x) => x !== v);
+      formatting.delete(v.id);
+      send("entity.deleted", { kind: "volume", entityId: v.id });
     }
 
     /* ===== Поиск устройств в сети ===== */
@@ -354,6 +396,7 @@
     // Находка — раз в 140 мс по часам сервера: столько, сколько в макете
     const DISCOVERY_STEP_MS = 140;
     let searches = new Map();
+    const wasRemoved = new Set();
     function discoveryOf(domainId) {
       let d = db.discovery.find((x) => x.domainId === domainId);
       if (!d) db.discovery.push((d = { domainId, state: "idle", progress: 0, startedAt: null, finishedAt: null, candidateIds: [] }));
@@ -772,19 +815,7 @@
           if (!f) return notFound("Папка");
           const bad = precondition(f, headers);
           if (bad) return bad;
-          // Вместе с подпапками; сами устройства остаются в системе
-          const gone = new Set([f.id]);
-          for (let grew = true; grew; ) {
-            grew = false;
-            db.folders.forEach((x) => {
-              if (x.parentId && gone.has(x.parentId) && !gone.has(x.id)) {
-                gone.add(x.id);
-                grew = true;
-              }
-            });
-          }
-          db.folders = db.folders.filter((x) => !gone.has(x.id));
-          gone.forEach((id) => send("entity.deleted", { kind: "folder", entityId: id }));
+          removeFolder(f);
           return { status: 204, body: null };
         },
       ],
@@ -851,24 +882,7 @@
           if (!a) return notFound("Хранилище");
           const bad = precondition(a, headers);
           if (bad) return bad;
-          // Камеры остаются: основным становится первое дополнительное хранилище, без него запись выключается
-          db.devices.forEach((d) => {
-            const extra = (d.extraArchives || []).filter((x) => x.archiveId !== a.id);
-            const main = d.archiveId === a.id;
-            if (!main && extra.length === (d.extraArchives || []).length) return;
-            if (d.extraArchives) d.extraArchives = extra;
-            if (main) {
-              const next = extra.shift();
-              if (next) Object.assign(d, { archiveId: next.archiveId, recordMode: next.recordMode, stream: next.stream });
-              else Object.assign(d, { archiveId: null, recordMode: "none" });
-            }
-            d.version += 1;
-            changed("device", d);
-          });
-          db.volumes.filter((v) => v.archiveId === a.id).forEach((v) => send("entity.deleted", { kind: "volume", entityId: v.id }));
-          db.volumes = db.volumes.filter((v) => v.archiveId !== a.id);
-          db.archives = db.archives.filter((x) => x !== a);
-          send("entity.deleted", { kind: "archive", entityId: a.id });
+          removeArchive(a);
           return { status: 204, body: null };
         },
       ],
@@ -906,9 +920,7 @@
           if (!v) return notFound("Том");
           const bad = precondition(v, headers);
           if (bad) return bad;
-          db.volumes = db.volumes.filter((x) => x !== v);
-          formatting.delete(v.id);
-          send("entity.deleted", { kind: "volume", entityId: v.id });
+          removeVolume(v);
           return { status: 204, body: null };
         },
       ],
@@ -1011,6 +1023,26 @@
           if (!byId("domains", p.id)) return notFound("Домен");
           if (searches.has(p.id)) finishDiscovery(p.id, "stopped");
           return { status: 200, body: discoveryView(p.id) };
+        },
+      ],
+      [
+        "POST",
+        "/objects/delete",
+        (p, q, body) => {
+          const done = [];
+          const failed = [];
+          const kinds = { devices: (r) => removeDevice(r.id), folders: removeFolder, archives: removeArchive, volumes: removeVolume };
+          body.items.forEach((x) => {
+            const table = Object.keys(kinds).find((k) => byId(k, x.id));
+            // Уже удалён вместе с родителем из этого же запроса — тоже удалён
+            if (!table) return done.includes(x.id) || wasRemoved.has(x.id) ? done.push(x.id) : failed.push({ id: x.id, code: "NOT_FOUND" });
+            const rec = byId(table, x.id);
+            if (rec.version !== x.version) return failed.push({ id: x.id, code: "VERSION_MISMATCH" });
+            kinds[table](rec);
+            done.push(x.id);
+          });
+          wasRemoved.clear();
+          return { status: 200, body: { done, failed } };
         },
       ],
       [
