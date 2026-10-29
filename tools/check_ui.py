@@ -11,7 +11,7 @@ Chrome: страница загружает данные со встроенно
   python3 tools/check_ui.py --latency 300         с задержкой ответа, как по медленной сети
   python3 tools/check_ui.py tests/ui-domains.js   один сценарий
   python3 tools/check_ui.py --selftest            самопроверка прототипа (?selftest): те же сценарии изнутри страницы
-  python3 tools/check_ui.py --page index_10_api-server.html   другой прототип
+  python3 tools/check_ui.py --page index.html                 другой файл (например, макет на константах)
 Код выхода 1, если хоть одна проверка не прошла.
 """
 import glob
