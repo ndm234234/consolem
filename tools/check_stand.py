@@ -3,7 +3,7 @@
 
 Поднимает образец тестового стенда (node tools/serve_api.mjs — встроенный сервер за HTTP с CORS и SSE),
 открывает в headless Chrome с диска (Origin: null) tests/api.html?api=<стенд> и
-index_11_api-server-main.html?api=<стенд>&selftest и ждёт отчёты: страницы присылают их POST-запросом.
+index_api_server.html?api=<стенд>&selftest и ждёт отчёты: страницы присылают их POST-запросом.
 Это те же критерии готовности, что у бэкенда (api/BACKEND.md, «Когда готово»).
 
 Без флагов прогоняются: тесты API на эталонном наборе с остановленными часами, они же на профиле
@@ -117,12 +117,12 @@ def main():
         if flags:
             pages = [(f"Тесты API ({', '.join(f'{k} {v}' for k, v in flags.items())})", "tests/api.html?" + urllib.parse.urlencode(flags))]
             if flags.get("fixture", "demo") == "demo":
-                pages.append(("Прототип ?selftest", "index_11_api-server-main.html?selftest"))
+                pages.append(("Прототип ?selftest", "index_api_server.html?selftest"))
         else:
             pages = [
                 ("Тесты API", "tests/api.html"),
                 ("Тесты API (профиль one-domain, часы идут)", "tests/api.html?fixture=one-domain&clock=real"),
-                ("Прототип ?selftest", "index_11_api-server-main.html?selftest"),
+                ("Прототип ?selftest", "index_api_server.html?selftest"),
             ]
         for name, page in pages:
             passed, text = run_page(page, stand, report)

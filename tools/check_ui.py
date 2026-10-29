@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Сценарии интерфейса прототипа 11: действия пользователя → запросы API → то, что видно на экране.
+"""Сценарии интерфейса прототипа API: действия пользователя → запросы API → то, что видно на экране.
 
-Каждый сценарий tests/ui-*.js выполняется на свежей странице index_11_api-server-main.html в headless
+Каждый сценарий tests/ui-*.js выполняется на свежей странице index_api_server.html в headless
 Chrome: страница загружает данные со встроенного сервера, сценарий жмёт кнопки и вызывает те же
 функции, что и клики, и сверяет кэш интерфейса, разметку и ответы сервера. Виртуальное время:
 отсчёты удаления и шаги операций идут без ожидания.
@@ -24,7 +24,7 @@ import sys
 import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PAGE = "index_11_api-server-main.html"
+PAGE = "index_api_server.html"
 
 # Помощники сценариев — те же, что у самопроверки прототипа (?selftest)
 HELPERS = '<script src="tests/ui-harness.js"></script>'
