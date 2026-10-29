@@ -110,8 +110,9 @@
     if (waiting[d.name]) waiting[d.name]();
   });
   const base = location.href.split("?")[0].split("#")[0];
-  const stand = q.get("api");
-  const extra = (q.get("latency") ? `&latency=${encodeURIComponent(q.get("latency"))}` : "") + (stand ? `&api=${encodeURIComponent(stand)}` : "");
+  // Стенд — ?api=… или адрес API в разметке сборки (<meta name="consolem-api">): его страницы сценариев берут сами
+  const stand = q.get("api") || document.querySelector('meta[name="consolem-api"]')?.content;
+  const extra = (q.get("latency") ? `&latency=${encodeURIComponent(q.get("latency"))}` : "") + (q.get("api") ? `&api=${encodeURIComponent(q.get("api"))}` : "");
   const frame = (name) => {
     const f = document.createElement("iframe");
     f.src = `${base}?selftest-run=${name}${extra}${FIXTURE_OF[name] ? `&fixture=${FIXTURE_OF[name]}` : ""}`;

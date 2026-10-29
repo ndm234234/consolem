@@ -2090,10 +2090,22 @@ function setUiLang(v){
 // никогда до ответа. С ?api=https://… тот же интерфейс работает с настоящим
 // бэкендом, с ?latency=300 — с задержкой, как по медленной сети, с
 // ?fixture=one-domain — встроенный сервер с набором профиля: системой, которая
-// умеет только часть контракта.
+// умеет только часть контракта. В сборке для консоли VMS (tools/build_webui.py)
+// адрес API — в разметке: <meta name="consolem-api" content="api">, относительно
+// адреса страницы; вход — <meta name="consolem-login" content="../">.
+const pageMeta=name=>document.querySelector(`meta[name="${name}"]`)?.content||"";
+// 401 — сессии нет: на страницу входа консоли (один раз, остальные ответы уже не важны).
+// Без адреса входа (стенд с ?api=) — тостом
+let apiLoggedOut=false;
+function apiUnauthorized(){
+  if(apiLoggedOut)return;apiLoggedOut=true;
+  const login=pageMeta("consolem-login");
+  if(login)location.assign(new URL(login,location.href).href);
+  else setTimeout(()=>toast(i18n("Сессия истекла — войдите снова")),0);
+}
 const API=(()=>{
-  const q=new URLSearchParams(location.search),base=q.get("api"),latency=+q.get("latency")||0;
-  if(base)return ConsolemApi.create({baseUrl:base,latency});
+  const q=new URLSearchParams(location.search),base=q.get("api")||pageMeta("consolem-api"),latency=+q.get("latency")||0;
+  if(base)return ConsolemApi.create({baseUrl:base,latency,onUnauthorized:apiUnauthorized});
   const all=window.CONSOLEM_FIXTURES||{demo:window.CONSOLEM_FIXTURE};
   return ConsolemApi.create({server:ConsolemServer.create({fixture:all[q.get("fixture")]||all.demo,fixtures:all,openapi:window.CONSOLEM_OPENAPI}),latency});
 })();

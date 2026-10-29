@@ -209,6 +209,8 @@ const raw = (method, path, body, headers) =>
 
 Образец стенда — [`tools/serve_api.mjs`](../tools/serve_api.mjs): встроенный сервер за HTTP, с CORS и потоком SSE ровно так, как их ждёт клиент (`node tools/serve_api.mjs`). На нём проверено, что всё ниже работает со страницы с диска.
 
+С `--webui <папка>` он ещё и изображает консоль VMS: сборка WebUI ([`tools/build_webui.py`](../tools/build_webui.py)) — под `/backend/` с заголовком CSP консоли, API — под `/backend/api/`. Так проверяется сборка для w2c — [TESTS.md, раздел 7](TESTS.md#7-сборка-webui-под-csp-консоли).
+
 Запуск: откройте `tests/api.html?api=https://адрес-стенда` — с диска (двойной клик) или со своей раздачи. Итог — строка вверху страницы и `data-apitest="pass|fail"` у `<html>`, чтобы гонять без человека. Один тест — `&only=<имя>`.
 
 - **Набор:** `&fixture=one-domain` — тесты берут ожидаемое из этого набора, а стенд сбрасывается на него. По умолчанию — `demo`.

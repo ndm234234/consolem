@@ -36,6 +36,7 @@
 | [Проверки целостности](#4-проверки-целостности) | всё сходится: контракт, набор, сборка, сервер, документы | тем, кто правит контракт, сервер или набор | `python3 tools/check_api.py --lint` |
 | [Сравнение экранов](#5-сравнение-экранов) | внешний вид не изменился относительно макета на константах | тем, кто правит прототип | `python3 tools/compare_screens.py` |
 | [Петля и стенд](#6-петля-и-стенд-по-http) | клиент работает по настоящему HTTP, CORS, SSE | бэкенду и фронтенду перед подключением к бэкенду | `python3 tools/check_loopback.py`, `python3 tools/check_stand.py` |
+| [Сборка WebUI под CSP](#7-сборка-webui-под-csp-консоли) | сборка для консоли VMS работает под её заголовком CSP, с API по относительному адресу | тем, кто правит `index.html`; команде w2c | `python3 tools/check_webui.py` |
 
 Для запуска из `tools/` нужны Python 3, Node.js и Google Chrome; для `--lint` — ещё `npx` с доступом к npm. Страницы `tests/api.html` и `?selftest` ничего не требуют: открываются в браузере.
 
@@ -197,6 +198,16 @@
 - **Петля** — [`tools/check_loopback.py`](../tools/check_loopback.py). Поднимает раздачу репозитория и открывает `tests/api.html?api=loopback`. Service Worker ([`tests/loopback-sw.js`](../tests/loopback-sw.js)) отвечает на запросы страницы тем же встроенным сервером, но настоящими HTTP-ответами с заголовками `ETag` и потоком SSE. Проверяется сетевой путь клиента без бэкенда; CORS и вход здесь не проверяются.
 - **Стенд** — [`tools/check_stand.py`](../tools/check_stand.py). Поднимает образец стенда `node tools/serve_api.mjs` (встроенный сервер за HTTP с CORS и SSE) и открывает **с диска** (`Origin: null`) страницы: `tests/api.html?api=<стенд>`, её же на профиле `one-domain` с идущими часами и `index.html?api=<стенд>&selftest`. Проверяет внешний режим целиком: CORS, куки, поток, работу прототипа против сервера по сети, тесты на настоящем времени.
 - **`python3 tools/check_stand.py https://адрес`** — то же против стенда бэкенда; `--fixture one-domain --clock real` — только тесты API с этим набором и часами.
+
+## 7. Сборка WebUI под CSP консоли
+
+Консоль VMS (w2c) отдаёт WebUI под `Content-Security-Policy: script-src 'self'; object-src 'none'; base-uri 'none'` ([запрос](requests/2026-10-29-w2c-webui-csp-request.md)): встроенный `<script>` и атрибуты `onclick="…"` там не выполняются.
+
+- **Сборка** — [`tools/build_webui.py`](../tools/build_webui.py) собирает из `index.html` папку `build/webui/` (в git её нет): `index.html` без встроенного кода, `app.js`, `app.css`, `client.js`, `openapi.js`, `i18n-en.js`, шрифт и `MANIFEST.json` (имя, тип, назначение, размер, SHA-256). Встроенного сервера и наборов в сборке нет: адрес API — `<meta name="consolem-api" content="api">` (страница `/backend/`, API `/backend/api/…`), по `401` — переход на `<meta name="consolem-login" content="../">`. Сборка сама падает, если во входной странице остался встроенный код.
+- **Проверка** — [`tools/check_webui.py`](../tools/check_webui.py). Собирает во временную папку, поднимает `node tools/serve_api.mjs --webui <папка>` — консоль, как её видит WebUI: сборка под `/backend/` с тем же заголовком CSP, API под `/backend/api/`, — и открывает `/backend/?selftest`. Не прошло, если не прошёл хоть один сценарий или браузер сообщил о нарушении политики (стенд печатает их строкой `CSP-VIOLATION`).
+- **Посмотреть сборку руками:** `node tools/serve_api.mjs 8787 --webui build/webui` → `http://127.0.0.1:8787/backend/`. С диска сборка не открывается: API у неё — на сервере консоли.
+
+**Когда запускать:** перед тем как отдать сборку w2c и после правок `index.html`, которые меняют подключение файлов или запуск.
 
 ## Чего проверки не покрывают
 

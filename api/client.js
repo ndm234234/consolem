@@ -1,8 +1,10 @@
 /* Клиент API конфигуратора (api/openapi.json). Интерфейс говорит только с ним. Два режима:
    - встроенный (по умолчанию): запрос уходит во встроенный сервер api/server.js в этой же вкладке —
      прототип работает без сети и с диска;
-   - внешний (?api=https://…): тот же запрос уходит на настоящий бэкенд по HTTP, поток событий — по SSE.
-     Бэкенд должен разрешать запросы со страницы (CORS, api/BACKEND.md).
+   - внешний (baseUrl: ?api=https://… или относительный «api» из <meta name="consolem-api"> сборки):
+     тот же запрос уходит на настоящий бэкенд по HTTP, поток событий — по SSE. Относительный адрес
+     считается от адреса страницы. С другого адреса бэкенд должен разрешать запросы (CORS, api/BACKEND.md).
+     Ответ 401 — сессии нет: вызывается onUnauthorized (интерфейс ведёт на вход).
    Ответы всегда приходят обещанием, как по сети, и копируются: интерфейс не может поменять данные
    сервера. Ошибка — объект { status, problem }. Версия записи уходит в If-Match, приходит в ETag.
    latency — искусственная задержка ответа, мс (?latency=300): интерфейс должен её выдерживать. */
@@ -21,6 +23,7 @@
           body: body === undefined ? undefined : JSON.stringify(body),
           credentials: "include",
         }).then(async (res) => {
+          if (res.status === 401 && opts.onUnauthorized) opts.onUnauthorized();
           const text = await res.text();
           // Имена заголовков — строчными, как их отдаёт fetch. ETag виден странице, только если
           // бэкенд перечислил его в Access-Control-Expose-Headers
@@ -29,18 +32,36 @@
           return later({ status: res.status, body: text ? JSON.parse(text) : null, headers: got });
         });
       // onReconnect — поток переподключился после обрыва: пока он стоял, могло пропасть то, что сервер
-      // не дошлёт по Last-Event-ID, — клиент перечитывает данные
+      // не дошлёт по Last-Event-ID, — клиент перечитывает данные.
+      // Обрыв связи браузер переподключает сам. Ответ не 200 (в том числе 401) он не переподключает и кода
+      // не показывает: поток закрыт. Тогда — GET /me: 401 уходит в onUnauthorized, иначе через 3 с новое
+      // подключение (Last-Event-ID у нового нет — данные перечитываются по onReconnect)
       const subscribe = (fn, onReconnect) => {
-        const source = new EventSource(`${base}/stream`, { withCredentials: true });
+        let source = null;
         let dropped = false;
-        source.onerror = () => (dropped = true);
-        source.onopen = () => {
-          if (dropped && onReconnect) onReconnect();
-          dropped = false;
+        let stopped = false;
+        const open = () => {
+          source = new EventSource(`${base}/stream`, { withCredentials: true });
+          source.onerror = () => {
+            dropped = true;
+            if (source.readyState !== EventSource.CLOSED || stopped) return;
+            raw("GET", "/me").then(
+              (res) => res.status !== 401 && !stopped && setTimeout(() => !stopped && open(), 3000),
+              () => !stopped && setTimeout(() => !stopped && open(), 3000)
+            );
+          };
+          source.onopen = () => {
+            if (dropped && onReconnect) onReconnect();
+            dropped = false;
+          };
+          // Сообщения без имени (без строки event:), тип — в data.type; id: — для Last-Event-ID
+          source.onmessage = (e) => fn(JSON.parse(e.data));
         };
-        // Сообщения без имени (без строки event:), тип — в data.type; id: — для Last-Event-ID
-        source.onmessage = (e) => fn(JSON.parse(e.data));
-        return () => source.close();
+        open();
+        return () => {
+          stopped = true;
+          source.close();
+        };
       };
       return wrap(raw, subscribe);
     }
