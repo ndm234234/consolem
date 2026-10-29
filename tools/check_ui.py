@@ -80,7 +80,8 @@ def main():
         del args[i:i + 2]
     if "--selftest" in args:
         return selftest(query)
-    files = args or sorted(glob.glob(os.path.join(ROOT, "tests", "ui-*.js")))
+    # Сценарии — tests/ui-*.js, кроме самих помощников
+    files = args or sorted(f for f in glob.glob(os.path.join(ROOT, "tests", "ui-*.js")) if not f.endswith("ui-harness.js"))
     failed = 0
     for f in files:
         lines = run(f, query)
