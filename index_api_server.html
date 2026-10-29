@@ -1583,6 +1583,7 @@ html[data-theme="light"] .cp-step{background:var(--one-control-hover);color:var(
 <script src="api/openapi.js"></script>
 <script src="api/fixture.js"></script>
 <script src="api/contract.js"></script>
+<script src="api/rule-engine.js"></script>
 <script src="api/server.js"></script>
 <script src="api/client.js"></script>
 </head>
@@ -2009,7 +2010,8 @@ function can(need){
   return CAPS.operations.has(need);
 }
 async function capsLoad(){
-  const c=(await API.get("/reference")).capabilities;
+  const ref=await API.get("/reference"),c=ref.capabilities;
+  autoRef(ref);
   CAPS.operations=new Set(c.operations);CAPS.deviceTypes=new Set(c.deviceTypes);CAPS.features=new Set(c.features);
   capsApply();
 }
@@ -2038,7 +2040,7 @@ const DET_KIND_CODE=Object.fromEntries(Object.entries(DET_KIND_RU).map(([k,v])=>
 const EMAIL_MODE_RU={axxonnet:"Облачный AxxonNet",smtp:"SMTP сервер"};
 const EMAIL_MODE_CODE={"AxxonNet":"axxonnet","Облачный AxxonNet":"axxonnet","SMTP сервер":"smtp"};
 // Поле API → свойство объекта кэша
-const DEV_KEY={serverId:"srvId",archiveId:"arch",recordMode:"rec",recordDetectorIds:"recDets",fault:"err",disabledByRule:"ruleOff",
+const DEV_KEY={serverId:"srvId",archiveId:"arch",recordMode:"rec",recordDetectorIds:"recDets",fault:"err",disabledByRuleId:"ruleOff",
   videoChannel:"vch",channel:"ch",onServer:"server",cameraId:"camera",login:"user",preRecordSec:"pre"};
 const DEV_API=Object.fromEntries(Object.entries(DEV_KEY).map(([k,v])=>[v,k]));
 // Поля, у которых в объекте нет своего свойства: карточка хранит их в n._f по подписи поля
@@ -2067,6 +2069,7 @@ function devNode(r){
     else if(k==="extraArchives")n.archx=v.map(x=>({arch:x.archiveId,rec:x.recordMode,stream:x.stream}));
     else if(k==="mode"&&r.type==="email")n.mode=EMAIL_MODE_RU[v]||v;
     else if(k==="norm")n.norm=NORM_RU[v]||v;
+    else if(k==="disabledByRuleAt")n.ruleOffAt=v?clockText(v,true):"";
     else n[DEV_KEY[k]||k]=v;
   });
   if(DEV_WITH_KIDS.has(r.type))n.devices=[];
@@ -2131,13 +2134,8 @@ async function hwLoad(){
   const lists=await Promise.all(HW_LISTS.map(p=>API.get("/"+p).then(r=>r.items)));
   const L=Object.fromEntries(HW_LISTS.map((p,i)=>[p,lists[i]]));
   const disc=can("getDiscovery")?await Promise.all(L.domains.map(d=>API.get(`/domains/${d.id}/discovery`))):[];
-  const was=hwDeviceNames();
   hwFill(L);
   seedFound(disc);
-  // Этап А: правила ещё у клиента — устройства, которых после перечитывания нет, отмечаются в них
-  // удалёнными (на этапе Б это делает сервер)
-  const now=hwDeviceNames(),gone=new Map([...was].filter(([id])=>!now.has(id)));
-  if(gone.size)ruleRefsGone(gone);
 }
 // Запись пришла с сервера (ответ или событие потока): объект кэша меняется на
 // месте — на него ссылаются дерево, папки и выборка. Если у объекта открыта
@@ -2196,7 +2194,6 @@ function hwAddDevices(list,flds){
 function hwRemoveDevice(id){
   const f=find(id);if(!f)return;
   const gone=new Set();walk(n=>gone.add(n.id),[f.n],null);gone.add(id);
-  ruleRefsGone(new Map([...gone].map(x=>[x,locName(find(x).n)])));   // этап А: правила ещё у клиента
   const list=f.p?f.p.devices:devicePool.includes(f.n)?devicePool:servers.find(s=>s.devices.includes(f.n))?.devices;
   if(list){const i=list.indexOf(f.n);if(i>=0)list.splice(i,1)}
   walkFolders(x=>{x.items=(x.items||[]).filter(y=>!gone.has(y))});
@@ -2293,6 +2290,7 @@ function apiOnEvent(m){
   if(m.kind==="discovery"){discOnEvent(m);return}
   if(m.kind==="access"&&m.version!==accVer&&m.version!==accLast?.version){accRefresh().catch(()=>{});return}
   if(m.kind==="settings"&&m.version!==settingsVer){API.get("/settings").then(s=>{settingsApply(s);if(app==="sys")paint()}).catch(()=>{});return}
+  if(AUTO_KINDS.has(m.kind)){autoEvent(m);return}
   const h=HW_EVENT[m.kind];
   if(!h)return;
   if(m.type==="entity.created"&&m.kind==="device"&&!hwVer.has(m.entityId)){
@@ -2309,8 +2307,7 @@ function apiOnEvent(m){
     renderTree();if(sel===m.entityId&&!cardDraft&&!(bq&&!bq.finished))paint();
   }).catch(()=>{});
 }
-function hwDeviceNames(){const m=new Map();walkAll(n=>{if(n.type!=="domain"&&n.type!=="server")m.set(n.id,locName(n))});devicePool.forEach(function w(n){m.set(n.id,locName(n));(n.devices||[]).forEach(w)});return m}
-function apiReload(){Promise.all([hwLoad(),appLoad()]).then(()=>{if(!find(sel))sel=domains[0]?.id||null;paint()})}
+function apiReload(){Promise.all([hwLoad(),appLoad()]).then(autoLoad).then(()=>{if(!find(sel))sel=domains[0]?.id||null;paint()})}
 // Код ошибки сервера → текст для показа: интерфейс говорит своими словами
 function problemText(e,n){
   const code=e?.problem?.code||e?.code||e;
@@ -2584,75 +2581,12 @@ function unrecordedCameras(did){const out=[];walkAll(n=>{if(n.type==="camera"&&!
 // ref — ссылка на объект: id устройства из «Оборудования», "$src" (устройство,
 // вызвавшее запуск), "folder:<id>" (любая камера папки) или "gone:<имя>"
 // (устройство удалено — битая ссылка).
-const rules=[
-  {id:"70000001-0000-4000-8000-000000000000",name:"Охрана входа ночью",on:true,start:"event",run:{mode:"always",modes:[]},menu:false,rate:6,within:30,sched:null,repeat:"queue",
-   when:[{sub:"det",kind:"motion",ref:"c1",match:{}},
-         {sub:"vms",kind:"io.input",ref:"e1",match:{port:"1",value:"closed"}}],
-   cond:[{kind:"mode",modes:["night"]},{kind:"armed",ref:"c1",val:true}],
-   then:[{sub:"rec",action:"record",ref:"set:c1,c2r",dur:"event",minutes:10,after:10},
-         {sub:"vms",action:"output",ref:"r1b",port:2,state:"pulse",pulse_ms:500},
-         {ctl:"waitev",ev:{sub:"vms",kind:"io.input",ref:"e1",match:{port:"1",value:"closed"}},sec:30,yes:[],
-          no:[{sub:"alarm",action:"alarm",ref:"c1",prio:"high",text:"Тревога: {камера}"},
-              {sub:"ntf",action:"email",to:"ohrana@object.local",subj:"Тревога: {камера}, {время}",body:"{событие}: {устройство}"}]}],
-   owner:"admin",purpose:"Ночью движение у входа при закрытой двери — запись и сигнал на реле",
-   created:{by:"admin",at:"2026-09-03 11:20"},changed:{by:"it.chief",at:"2026-10-02 09:45"},server:"s1",runAs:"system"},
-  {id:"70000002-0000-4000-8000-000000000000",name:"Сирена по двери",on:true,start:"event",run:{mode:"always",modes:[]},menu:false,rate:6,within:0,sched:null,
-   when:[{sub:"vms",kind:"io.input",ref:"s2a",match:{value:"open"}}],
-   cond:[{kind:"time",sched:"s_offh"}],
-   then:[{sub:"vms",action:"output",ref:"r2a",port:1,state:"pulse",pulse_ms:10000},
-         {sub:"ntf",action:"email",to:"ohrana@object.local",subj:"Открыта дверь: {устройство}",body:"{время}: {событие}"},
-         {ctl:"escalate",levels:[{to:"gd",via:"client",wait:5},{to:"sg",via:"tg",wait:10},{to:"adm",via:"email",wait:15}],stop:"ack"}],
-   owner:"it.chief",purpose:"Дверь склада открыли — включить сирену на десять секунд, письмо охране и эскалация до квитирования",
-   created:{by:"it.chief",at:"2026-09-08 15:02"},changed:{by:"it.chief",at:"2026-10-15 11:40"},server:"s1",runAs:"system"},
-  {id:"70000003-0000-4000-8000-000000000000",name:"Тревога на периметре",on:true,start:"event",run:{mode:"always",modes:[]},menu:false,rate:3,within:15,sched:null,
-   when:[{sub:"det",kind:"linecross",ref:"domain:d1",match:{}},
-         {sub:"vms",kind:"io.input",ref:"s2b",match:{value:"closed"}}],
-   then:[{ctl:"ask",text:"Тревога на периметре: {камера}. Подтвердить?",to:"gd",sec:60,def:"yes",
-          yes:[{sub:"vms",action:"preset",ref:"gone:Купол 1",n:4},
-               {sub:"rec",action:"record",ref:"$src",minutes:5}],no:[]}],
-   owner:"admin",purpose:"Пересечение линии вместе с сигналом ограждения — спросить охрану; если подтвердила, навести купол и писать",
-   created:{by:"admin",at:"2026-09-12 10:30"},changed:{by:"admin",at:"2026-10-09 17:12"},server:"s1",runAs:"system"},
-  {id:"70000004-0000-4000-8000-000000000000",name:"Камера пропала — писать соседнюю",on:false,start:"event",run:{mode:"always",modes:[]},menu:false,rate:6,within:0,sched:null,
-   when:[{sub:"vms",kind:"silent",ref:"server:s1",match:{}}],
-   then:[{sub:"rec",action:"record",ref:"$src",minutes:15}],
-   owner:"it.chief",purpose:"Парковка перестала отвечать — писать с запасного входа",
-   created:{by:"it.chief",at:"2026-09-20 12:00"},changed:{by:"it.chief",at:"2026-09-27 08:15"},server:"s1",runAs:"system"},
-  {id:"70000005-0000-4000-8000-000000000000",name:"Открыть шлагбаум",on:true,start:"manual",run:{mode:"manual",modes:[]},menu:true,rate:6,within:0,sched:null,
-   when:[],
-   then:[{sub:"vms",action:"output",ref:"lk0r",port:1,state:"pulse",pulse_ms:3000},
-         {sub:"rule",action:"runrule",rule:"70000007-0000-4000-8000-000000000000"}],
-   owner:"admin",purpose:"Кнопка оператора: открыть шлагбаум на три секунды и запустить обслуживание входа",
-   created:{by:"admin",at:"2026-09-14 09:10"},changed:{by:"admin",at:"2026-09-14 09:10"},server:"s1",runAs:"system"},
-  {id:"70000006-0000-4000-8000-000000000000",name:"Проверка сирены по понедельникам",on:true,start:"sched",run:{mode:"always",modes:[]},menu:false,rate:6,within:0,sched:{days:[1],at:"10:00"},
-   when:[],
-   then:[{sub:"vms",action:"output",ref:"r2a",port:1,state:"pulse",pulse_ms:1000}],
-   owner:"it.chief",purpose:"Раз в неделю коротко включить сирену, чтобы убедиться, что реле живо",
-   created:{by:"it.chief",at:"2026-10-01 10:05"},changed:{by:"it.chief",at:"2026-10-01 10:05"},server:"s1",runAs:"system",
-   watch:true,watchSince:"2026-10-10",mute:{since:ruleStamp(new Date(Date.now()-30*36e5)),until:ruleStamp(new Date(Date.now()+2*864e5)).slice(0,10)+" 18:00",by:"it.chief",why:"пусконаладка сирены"}},
-  {id:"70000007-0000-4000-8000-000000000000",name:"Обслуживание — выключить камеры входа",on:true,start:"manual",run:{mode:"manual",modes:[]},menu:true,rate:6,within:0,sched:null,
-   when:[],
-   then:[{sub:"vms",action:"disable",ref:"c2r",minutes:60},
-         {sub:"vms",action:"disable",ref:"d2c11",minutes:60}],
-   owner:"it.chief",purpose:"На время работ у входа и на рампе камеры не пишут и не дают тревог; через час включатся сами",
-   created:{by:"it.chief",at:"2026-10-05 08:40"},changed:{by:"it.chief",at:"2026-10-05 08:40"},server:"s1",runAs:"system"},
-  // Выключено: образует петлю с r2 — реле того же устройства (MOXA E1214), на чьём входе стоит датчик этого правила.
-  {id:"70000008-0000-4000-8000-000000000000",name:"Свет на складе по датчику",on:false,start:"event",run:{mode:"always",modes:[]},menu:false,rate:6,within:0,sched:null,
-   when:[{sub:"vms",kind:"io.input",ref:"s2c",match:{value:"open"}}],
-   cond:[{kind:"time",sched:"s_dark"}],
-   then:[{sub:"vms",action:"output",ref:"r2b",port:2,state:"pulse",pulse_ms:30000}],
-   owner:"it.chief",purpose:"Открылась дверь у стеллажей в тёмное время — включить свет на 30 секунд",
-   created:{by:"it.chief",at:"2026-10-12 14:20"},changed:{by:"it.chief",at:"2026-10-12 14:20"},server:"s1",runAs:"system"},
-  // На то же движение у входа, что и r1, но другое действие на ту же камеру: порядок выполнения решает, что оператор увидит первым.
-  {id:"70000009-0000-4000-8000-000000000000",name:"Вход на видеостене по движению",on:true,start:"event",run:{mode:"always",modes:[]},menu:false,rate:6,within:0,sched:null,
-   when:[{sub:"det",kind:"motion",ref:"c1",match:{}}],
-   then:[{sub:"client",action:"wall",ref:"c1",mon:"Монитор 1"}],
-   owner:"it.chief",purpose:"Движение у входа — показать камеру на видеостене",
-   created:{by:"it.chief",at:"2026-10-14 16:30"},changed:{by:"it.chief",at:"2026-10-14 16:30"},server:"s1",runAs:"system"}];
+// Правила — с сервера (GET /rules): autoLoad. Запись — в виде, по которому рисует раздел (ruleNode)
+const rules=[]
 // watch — режим «Только журнал» (имеет смысл при on:true): правило срабатывает и пишет в журнал,
 // что сделало бы, но ничего не делает. repeat — что делать с событием, пришедшим, пока правило
 // ещё выполняется: skip (пропустить) | restart (начать заново) | queue (после текущего).
 // chain — может ли правило запускаться другими правилами (по умолчанию да); order — порядок выполнения среди правил на одно событие.
-rules.forEach((r,i)=>{if(r.watch===undefined)r.watch=false;if(!r.repeat)r.repeat="skip";if(!r.cond)r.cond=[];if(r.chain===undefined)r.chain=true;if(r.order===undefined)r.order=i+1});
 // Последние срабатывания — ответ на единственный вопрос, который задают об
 // автоматизации после того, как она заработала: «почему в 14:02 открылась
 // дверь». Событие пишет сам вычислитель, в бакет правила.
@@ -2663,17 +2597,15 @@ rules.forEach((r,i)=>{if(r.watch===undefined)r.watch=false;if(!r.repeat)r.repeat
 //  src:[id устройств события], ev:[{label,sub,kind,match,ref,t}],
 //  checks:[{label,ok,why}], steps:[{label,ref,ai,st:"ok"|"fail"|"skip"|"would",why}],
 //  res:"ok"|"part"|"fail"|"skip"|"watch"}
-// Наполняется после загрузки данных (ruleFiresInit в конце скрипта): подписи и
-// причины отказов берутся из тех же устройств, что и карточка.
+// Запуски считает сервер (трасса кодами), здесь — та же запись с подписями (fireNode): autoLoad.
 const ruleFires={};
 let ruleFireSeq=0;   // запись трассы однозначна по номеру, а не по времени: два запуска в одну секунду бывают
 // Настоящие запуски: пробный запуск (by:"test") журнал пополняет, но запуском не считается.
 function ruleRealFires(id){return(ruleFires[id]||[]).filter(f=>f.by!=="test")}
 function ruleClock(d){const p=n=>String(n).padStart(2,"0");return`${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`}
-// Камера выключена правилом (строка — id правила). В демо правило r7 запускали сегодня в 09:05 на час:
+// Камера выключена правилом (строка — id правила) с ruleOffAt (время суток, сервер — disabledByRuleAt):
 // записи журнала до этого момента камера ещё работала.
-const ruleOffAt="09:05:00";
-function ruleOffNow(n,t){return n.type==="camera"&&typeof n.ruleOff==="string"&&(!t||t>=ruleOffAt)}
+function ruleOffNow(n,t){return n.type==="camera"&&typeof n.ruleOff==="string"&&(!t||!n.ruleOffAt||t>=n.ruleOffAt)}
 // Почему устройство не примет команду: без связи оно само или любой его предок.
 // keepOff — действие «выключить камеру»: уже выключенная камера не отказ.
 function ruleDevDown(n,keepOff){
@@ -2682,12 +2614,7 @@ function ruleDevDown(n,keepOff){
   if(ruleOffNow(n)){const r=rules.find(x=>x.id===n.ruleOff);return`${locName(n)}: ${i18n("выключена правилом")}${r?` «${r.name}»`:""}`}
   return n.enabled===false?`${locName(n)}: ${i18n("выключено")}`:"";
 }
-function ruleOffN(n){return n.type==="camera"&&typeof n.ruleOff==="string"}
 // То же без «выключена правилом» — для записей журнала до запуска этого правила.
-function ruleDevDownNoRule(n,keepOff){
-  for(const x of ruleAncestors(n))if(x.online===false)return`${locName(x)}: ${i18n("без связи")}`;
-  return keepOff||n.enabled!==false||ruleOffN(n)?"":`${locName(n)}: ${i18n("выключено")}`;
-}
 // Единственное место, где ссылка шага раскрывается в устройства: трасса, повтор, проверка и
 // «Проверка правил» спрашивают его, а не refNode. src — устройства события для «$src».
 // Группа (set:/folder:/server:/domain:) раскрывается в устройства подходящего типа, без исключённых.
@@ -2739,61 +2666,6 @@ function ruleRefCovers(ref,id,dt){
 // (ждать, ждать событие…) — свой шаг без устройства, и выполняется только выбранная ветка, остальные — строкой серым.
 // Шаг: {label,ref,ai (путь пункта строкой),act,st,why,note,depth,ctl (не действие: в итог не считается)}.
 // o: {src, watch, only (Set путей действий), flaky(ai), vars (подстановки в тексты), br ({путь:исход шага}), i, test, via, endAt, chain (номер правила в цепочке)}.
-function ruleStepsFor(r,o){
-  const out=[],vars=o.vars||ruleVarsOf(r,null),mo={r,vars};
-  const walk=(list,pre,depth)=>list.forEach((a,i)=>{
-    const path=[...pre,i],key=path.join(".");
-    if(a.ctl){
-      const k=ctlKind(a),res=k.run(a,{...o,key,vars,r}),st=o.watch?"would":"ok";
-      out.push({label:res.label,ref:res.ref||"",ai:key,ctl:true,st,why:"",note:res.note||"",depth});
-      // Дочерние строки шага (уровни эскалации): res.subs — [{label,note,skip}].
-      (res.subs||[]).forEach(x=>out.push({label:x.label,ref:"",ai:key,ctl:true,skip:!!x.skip,st:x.skip?"skip":st,why:"",note:x.note||"",depth:depth+1}));
-      ctlBranches(a).forEach(([b,l])=>{
-        if(b===res.pick)walk(a[b]||[],[...path,b],depth+1);
-        else out.push({label:`${i18n("ветка")} «${i18n(l)}»: ${i18n(o.test?"не выполнилась бы":"пропущена")}`,ref:"",ai:key+"."+b,ctl:true,skip:true,st:"skip",why:"",note:"",depth:depth+1});
-      });
-      return;
-    }
-    if(o.only&&!o.only.has(key))return;
-    const k=actionKind(a),label=actionLabelBare(a,mo),devs=ruleStepDevices(a,o.src),keep=k.action==="disable";
-    let note="";
-    if(k.action==="record"&&a.dur==="event"&&o.via==="event"){
-      const ev=r.when.find(t=>triggerKind(t).ends);
-      note=`${i18n("до окончания")} ${i18n(ev?triggerKind(ev).endsOf:"события")} ${i18n("в")} ${o.endAt}${a.after?` (+${a.after} ${i18n("с")})`:""}`;
-    }
-    const mk=(ref,why)=>out.push({label,ref,ai:key,act:ruleClone(a),st:why?"fail":o.watch?"would":"ok",why:why||"",note,depth});
-    // «Запустить правило»: цепочка. Шаги запущенного правила идут следом вложенными строками и в итог этого запуска не входят.
-    if(k.action==="runrule"){
-      const t=rules.find(x=>x.id===a.rule),lvl=(o.chain||1)+1;
-      let why=!t?i18n("правило удалено"):t.chain===false?`${i18n("правило")} «${t.name}» ${i18n("не разрешает запуск другими правилами")}`
-        :lvl>RULE_CHAIN_MAX?`${i18n("цепочка прервана: больше")} ${RULE_CHAIN_MAX} ${i18n("уровней")}`:!t.on?i18n("правило выключено"):"";
-      // Запущенное правило проверяется так же, как при своём запуске: ошибка, условия, приглушение, окно обслуживания.
-      if(t&&!why){
-        const iss=ruleIssues(t);
-        if(iss.length)why=`${i18n("правило")} «${t.name}»: ${i18n(iss[0])}`;
-        else{
-          const bad=ruleChecksFor(t,{via:"chain",date:o.date||new Date(),now:o.now}).find(c=>!c.ok);
-          if(bad)why=`${i18n("правило")} «${t.name}»: ${bad.label}${bad.why&&bad.why!==i18n("запуск пропущен")?` — ${bad.why}`:""}`;
-        }
-      }
-      if(t&&!why)note=`${i18n("уровень цепочки")} ${lvl} (${i18n("максимум")} ${RULE_CHAIN_MAX})`;
-      mk("",why);
-      if(t&&!why)ruleStepsFor(t,{src:o.src,watch:o.watch||t.watch,date:o.date,at:o.at,now:o.now,i:o.i,test:o.test,via:"chain",chain:lvl,vars:{...vars,"правило":t.name}})
-        .forEach(x=>out.push({...x,ctl:true,ai:"",act:undefined,depth:x.depth+depth+1}));
-      return;
-    }
-    // Удалённые части набора — отдельные отказавшие шаги: остальные устройства выполняются.
-    refBrokenToks(a.ref).forEach(t=>mk(t,i18n(refIsArea(t)?"область удалена":"устройство удалено")));
-    if(!devs.length&&!refBroken(a.ref)){
-      if(k.via)return mk("",i18n("оповещатель удалён"));              // письмо идёт через оповещатель: его нет
-      if(!k.devTypes.length)return mk("","");                       // действие без устройства: веб-запрос, Telegram
-      return mk(a.ref||"",!a.ref?i18n("устройство не выбрано"):a.ref==="$src"?i18n("нет устройства из события"):refIsGroup(a.ref)?i18n("в области нет подходящих устройств"):i18n("устройство удалено"));
-    }
-    devs.forEach(n=>mk(n.id,(o.at&&!o.now&&ruleOffN(n)&&!ruleOffNow(n,o.at)?ruleDevDownNoRule(n,keep):ruleDevDown(n,keep))||(o.flaky&&o.flaky(key)?i18n("реле не ответило за 2 с"):"")));
-  });
-  walk(r.then,[],0);
-  return out;
-}
 // Тексты с переменными: {камера} {устройство} {событие} {время} {правило}. Неизвестная — ошибка правила.
 const TPL_VARS=["камера","устройство","событие","время","правило"];
 function ruleTplFill(s,v){return String(s??"").replace(/\{([^{}]+)\}/g,(m,k)=>TPL_VARS.includes(k)&&v[k]!==undefined?v[k]:m)}
@@ -2852,50 +2724,11 @@ function ruleChecksFor(r,o){
 }
 // Одна запись трассы. Демо, «Запустить сейчас», повтор и проверка строятся этим же кодом.
 // o: {via, by, date, now, i (номер запуска для демо), watch, ev, src, pre, only, flaky, rateHit, rateN, busy}.
-function ruleFireBuild(r,o){
-  const d=o.date||new Date(),via=o.via||r.start,i=o.i||0,watch=o.watch!==undefined?o.watch:!!r.watch;
-  let ev=o.ev;
-  if(!ev){
-    ev=[];
-    if(via==="event")r.when.forEach((tk,j)=>{
-      const n=ruleEventDevices(tk,i)[0];
-      ev.push({label:triggerBare(tk),sub:tk.sub,kind:tk.kind,match:tk.match||{},ref:n?n.id:(tk.ref||""),
-        t:ruleClock(new Date(d.getTime()-(r.when.length-1-j)*(6+i%5)*1000))});
-    });
-  }
-  const src=o.src||ev.map(e=>e.ref).filter(Boolean);
-  const checks=ruleChecksFor(r,{...o,via,date:d});
-  const skip=checks.some(c=>!c.ok);
-  const vars=ruleVarsOf(r,{t:ruleClock(d),ev,by:via}),endAt=ruleClock(new Date(d.getTime()+(25+(i*13)%40)*1000));   // конец события в демо — через полминуты-минуту
-  let steps=ruleStepsFor(r,{src,watch,only:o.only,flaky:o.flaky,at:ruleClock(d),now:o.now,vars,i,br:o.br,test:o.by==="test",via,endAt});
-  if(skip)steps=steps.map(s=>({...s,st:"skip",why:i18n("запуск пропущен")}));
-  const acts=steps.filter(s=>!s.ctl),n=acts.length,good=acts.filter(s=>s.st==="ok"||s.st==="would").length;
-  const res=skip?"skip":watch?(good||!n?"watch":"fail"):good===n?"ok":good?"part":"fail";
-  return{t:ruleClock(d),seq:++ruleFireSeq,by:o.by||via,watch,src,ev,checks,steps,res};
-}
 // Запуск «по-настоящему»: запись в журнал правила.
-function ruleFireRun(r,by,o){
-  const rec=ruleFireBuild(r,{...o,via:by,by,date:new Date(),now:true});
-  (ruleFires[r.id]=ruleFires[r.id]||[]).unshift(rec);
-  return rec;
-}
+// Запуск вручную — на сервере (POST /rules/{id}/run): трасса приходит ответом
+function ruleFireRun(r){return API.post(`/rules/${r.id}/run`,{idempotencyKey:opKey()}).then(f=>fireAdd(r.id,f))}
 // Журнал за сутки — столько, сколько его и разбирают: не две строки, а список,
 // по которому ищут нужную минуту. Без случайных чисел: отказы объясняются данными.
-function ruleFiresInit(){
-  const mk=(id,n,from)=>{
-    const r=rules.find(x=>x.id===id);
-    ruleFires[id]=Array.from({length:n},(_,i)=>{
-      let m=from-i*17;
-      if(id==="70000002-0000-4000-8000-000000000000"&&i>=9)m=170-(i-9)*20;   // старшие записи — в ночь на среду 21 октября: условие r2 выполняется, три первые попадают в окно обслуживания 02:00–03:00
-      const d=r.start==="sched"?new Date(2026,9,19-7*i,10,0,i+1):new Date(2026,9,id==="70000002-0000-4000-8000-000000000000"&&i>=9?21:23,Math.floor(m/60),m%60,(i*7+11)%60);
-      return ruleFireBuild(r,{date:d,i,rateN:1+(i*2)%r.rate,
-        rateHit:id==="70000001-0000-4000-8000-000000000000"&&i%7===6,busy:id==="70000003-0000-4000-8000-000000000000"&&(i===3||i===8),
-        flaky:id==="70000001-0000-4000-8000-000000000000"?ai=>ai==="1"&&(i+1)%5===0:null});
-    });
-  };
-  mk("70000001-0000-4000-8000-000000000000",16,470);mk("70000002-0000-4000-8000-000000000000",13,1400);mk("70000003-0000-4000-8000-000000000000",12,1310);mk("70000005-0000-4000-8000-000000000000",3,905);mk("70000006-0000-4000-8000-000000000000",2,600);mk("70000007-0000-4000-8000-000000000000",1,545);mk("70000009-0000-4000-8000-000000000000",4,520);   // r1 — ночное правило, запуски ночью
-  ruleFires.r4=[];ruleFires.r8=[];
-}
 
 // ── Опции, лицензии, журнал — с сервера ───────────────────────────────────
 // Время с сервера — в UTC; показывается в часовом поясе системы (GET /me)
@@ -2928,6 +2761,347 @@ async function appLoad(){
   LOG_ROWS.length=0;jr.items.forEach(e=>LOG_ROWS.push([clockText(e.at,false),LOG_KIND_RU[e.category]||e.category,e.text]));
   Object.keys(LOG_BY_CAT).forEach(k=>{LOG_BY_CAT[k].length=0;LOG_BY_CAT[k].push(...LOG_ROWS.filter(r=>k==="all"||r[1]===LOG_KIND_RU[k]))});
 }
+// ── «Автоматизация» — с сервера ───────────────────────────────────────────
+// Правила с историей и запусками, расписания, особые дни, режимы объекта, окна обслуживания читаются через
+// API и переводятся в структуры, по которым рисует раздел. Меняет их только ответ сервера или событие потока;
+// черновик правила и расписания в редакторе — у клиента.
+const autoVer=new Map();let modesVer=null;
+const AUTO_KINDS=new Set(["rule","ruleFire","schedule","dayGroup","modes","objectMode","maintenanceWindow"]);
+function autoRef(ref){
+  RULE_LAYOUTS.length=0;RULE_MONS.length=0;REF_LAYOUT.clear();REF_MONITOR.clear();
+  (ref.layouts||[]).forEach(x=>{RULE_LAYOUTS.push(x.name);REF_LAYOUT.set(x.name,x.id);REF_LAYOUT.set(x.id,x.name)});
+  (ref.monitors||[]).forEach(x=>{RULE_MONS.push(x.name);REF_MONITOR.set(x.name,x.id);REF_MONITOR.set(x.id,x.name)});
+}
+// Цель: {include, exclude, gone, fromEvent} ↔ строка раздела («c1», «set:a,b,-c», «folder:…», «gone:имя», «$src»)
+function refOf(t){
+  if(!t)return"";
+  if(t.fromEvent)return"$src";
+  return refMake([...t.include.map(x=>x.kind==="device"?x.id:`${x.kind}:${x.id}`),...t.gone.map(refGone)],t.exclude);
+}
+function targetOf(ref){
+  if(!ref)return null;
+  if(ref==="$src")return{include:[],exclude:[],gone:[],fromEvent:true};
+  const t={include:[],exclude:[],gone:[],fromEvent:false};
+  refToks(ref).forEach(x=>{
+    if(x[0]==="-")t.exclude.push(x.slice(1));
+    else if(x.startsWith("gone:"))t.gone.push(x.slice(5).replace(/;/g,","));
+    else if(refIsArea(x)){const i=x.indexOf(":");t.include.push({kind:x.slice(0,i),id:x.slice(i+1)})}
+    else t.include.push({kind:"device",id:x});
+  });
+  return t;
+}
+const autoNum=v=>typeof v==="string"&&/^-?\d+$/.test(v.trim())?Number(v):v;
+function trigNode(t){return{sub:t.source,kind:t.kind,ref:refOf(t.target),match:{...(t.match||{})}}}
+function trigBody(t){return{source:t.sub,kind:t.kind,target:targetOf(t.ref),match:Object.fromEntries(Object.entries(t.match||{}).filter(([,v])=>v!==""&&v!=null))}}
+function condNode(c){
+  if(c.kind==="time")return{kind:c.kind,sched:c.scheduleId};
+  if(c.kind==="mode")return{kind:c.kind,modes:(c.modeIds||[]).slice()};
+  return c.kind==="armed"?{kind:c.kind,ref:refOf(c.target),val:c.value!==false}:{kind:c.kind,ref:refOf(c.target)};
+}
+function condBody(c){
+  if(c.kind==="time")return{kind:c.kind,scheduleId:c.sched};
+  if(c.kind==="mode")return{kind:c.kind,modeIds:(c.modes||[]).slice()};
+  return c.kind==="armed"?{kind:c.kind,target:targetOf(c.ref),value:c.val!==false}:{kind:c.kind,target:targetOf(c.ref)};
+}
+const ACT_IN={source:"sub",target:"ref",preset:"n",duration:"dur",afterSec:"after",priority:"prio",layoutId:"layout",monitorId:"mon",subject:"subj",pulseMs:"pulse_ms",ruleId:"rule"};
+const ACT_OUT=Object.fromEntries(Object.entries(ACT_IN).map(([k,v])=>[v,k]));
+const CTL_IN={wait:"wait",waitEvent:"waitev",ask:"ask",escalate:"escalate"},CTL_OUT={wait:"wait",waitev:"waitEvent",ask:"ask",escalate:"escalate"};
+function stepNode(a){
+  if(a.control){
+    const c=CTL_IN[a.control];
+    if(c==="wait")return{ctl:c,sec:a.sec};
+    if(c==="waitev")return{ctl:c,ev:trigNode(a.event),sec:a.sec,yes:a.yes.map(stepNode),no:a.no.map(stepNode)};
+    if(c==="ask")return{ctl:c,text:a.text,to:a.roleId||"",sec:a.sec,def:a.default,yes:a.yes.map(stepNode),no:a.no.map(stepNode)};
+    return{ctl:c,levels:a.levels.map(l=>({to:l.roleId||"",via:l.via,wait:l.waitMin})),stop:a.stop};
+  }
+  const n={};
+  Object.entries(a).forEach(([k,v])=>{
+    if(k==="roleId"&&a.action==="layout"){n.to=v||"";return}
+    const f=ACT_IN[k]||k;
+    n[f]=k==="target"?refOf(v):k==="layoutId"?REF_LAYOUT.get(v)||"":k==="monitorId"?REF_MONITOR.get(v)||"":v;
+  });
+  return n;
+}
+function stepBody(a){
+  if(a.ctl){
+    const c=CTL_OUT[a.ctl],sec=+a.sec||0;
+    if(c==="wait")return{control:c,sec};
+    if(c==="waitEvent")return{control:c,event:trigBody(a.ev),sec,yes:(a.yes||[]).map(stepBody),no:(a.no||[]).map(stepBody)};
+    if(c==="ask")return{control:c,text:a.text||"",roleId:a.to||null,sec,default:a.def==="yes"?"yes":"no",yes:(a.yes||[]).map(stepBody),no:(a.no||[]).map(stepBody)};
+    return{control:c,levels:(a.levels||[]).map(l=>({roleId:l.to||null,via:l.via||"client",waitMin:+l.wait||0})),stop:a.stop==="reset"?"reset":"ack"};
+  }
+  const o={};
+  Object.entries(a).forEach(([k,v])=>{
+    if(k==="to"&&a.action==="layout"){if(v)o.roleId=v;return}
+    const f=ACT_OUT[k]||k;
+    if(f==="target"){o.target=targetOf(v);return}
+    if(v===""||v==null)return;
+    o[f]=f==="layoutId"?REF_LAYOUT.get(v)||v:f==="monitorId"?REF_MONITOR.get(v)||v:["preset","port","minutes","afterSec","pulseMs"].includes(f)?autoNum(v):v;
+  });
+  return o;
+}
+// Правило: запись API → правило раздела (поля, как их читает редактор) и обратно — содержимое (RuleContent)
+function ruleContentNode(r,id){
+  const n={id,name:r.name,on:r.enabled,start:r.start==="schedule"?"sched":r.start,run:{mode:r.runMode,modes:[]},menu:r.operatorMenu,rate:r.ratePerMinute,within:r.windowSec,
+    sched:r.runAt?{days:r.runAt.days.slice(),at:r.runAt.time}:null,repeat:r.repeat,
+    when:r.triggers.map(trigNode),cond:r.conditions.map(condNode),then:r.steps.map(stepNode),
+    owner:r.owner,purpose:r.purpose,server:r.serverId||"",runAs:r.runAsRoleId||"system",watch:r.logOnly,chain:r.allowChain};
+  if(r.logOnlySince)n.watchSince=r.logOnlySince;
+  return n;
+}
+function ruleNode(r){
+  const n=ruleContentNode(r,r.id);
+  Object.assign(n,{created:{by:r.createdBy,at:localStamp(r.createdAt)},changed:{by:r.changedBy,at:localStamp(r.changedAt)},order:r.order});
+  if(r.mute)n.mute={since:localStamp(r.mute.since),until:localStamp(r.mute.until),by:r.mute.by,why:r.mute.reason};
+  return n;
+}
+function ruleBody(n){
+  return{name:n.name,enabled:!!n.on,logOnly:!!n.watch,logOnlySince:n.watchSince||null,start:n.start==="sched"?"schedule":n.start,runMode:n.run&&n.run.mode==="manual"?"manual":"always",
+    operatorMenu:!!n.menu,ratePerMinute:+n.rate||0,windowSec:+n.within||0,runAt:n.start==="sched"&&n.sched?{days:(n.sched.days||[]).slice(),time:n.sched.at||""}:null,
+    repeat:n.repeat||"skip",triggers:(n.when||[]).map(trigBody),conditions:(n.cond||[]).map(condBody),steps:(n.then||[]).map(stepBody),
+    owner:n.owner||"",purpose:n.purpose||"",serverId:n.server||null,runAsRoleId:n.runAs&&n.runAs!=="system"?n.runAs:null,allowChain:n.chain!==false};
+}
+// Ответ сервера → правило в кэше. Открыт черновик этого правила — нетронутые поля берут новое значение,
+// правки пользователя остаются поверх (как у карточки «Оборудования»)
+function ruleSet(x,oldId){
+  const n=ruleNode(x),id=oldId||x.id,i=rules.findIndex(r=>r.id===id);
+  if(ruleDraft&&ruleDraft.id===x.id&&ruleDraft.snap&&i>=0){
+    const live=rules[i],old=ruleDraft.snap,J=JSON.stringify;
+    new Set([...Object.keys(n),...Object.keys(old)]).forEach(k=>{if(J(live[k])===J(old[k])){if(k in n)live[k]=ruleClone(n[k]);else delete live[k]}});
+    ruleDraft.snap=n;
+  }else if(i>=0)rules[i]=n;else rules.push(n);
+  if(oldId&&oldId!==x.id){
+    ruleFires[x.id]=ruleFires[oldId]||[];delete ruleFires[oldId];ruleHist[x.id]=ruleHist[oldId]||[];delete ruleHist[oldId];
+    if(rule===oldId)rule=x.id;
+  }
+  autoVer.set(x.id,x.version);
+  ruleIdxDrop();treeMatchCache.clear();searchMatchCache.clear();
+  return n;
+}
+function ruleDrop(id){
+  const i=rules.findIndex(r=>r.id===id);if(i<0)return;
+  rules.splice(i,1);delete ruleHist[id];autoVer.delete(id);
+  if(!ruleSpecial(rule)&&rule===id){ruleTab="cfg";rule=(rules[Math.min(i,rules.length-1)]||{}).id||"overview"}
+}
+// История версий: подписи пометок — по коду
+function verNote(n){
+  if(!n)return"";
+  if(n.code==="created")return i18n("Правило создано");
+  if(n.code==="state")return`${i18n("Состояние")}: ${i18n(RULE_MODE_NAME[n.params.mode])}`;
+  if(n.code==="restore")return`${i18n("Возврат к версии")} ${n.params.number}${n.params.edited?`, ${i18n("с дополнительными правками")}`:""}`;
+  if(n.code==="undo")return i18n(n.params.state?"Отмена изменения состояния":"Отмена изменения");
+  return"";
+}
+async function ruleHistLoad(id){
+  const v=await API.get(`/rules/${id}/versions`);
+  ruleHist[id]=v.items.map(x=>({v:x.number,at:localStamp(x.at),by:x.by,snap:ruleContentNode(x.rule,id),note:verNote(x.note)}));
+}
+// Части времени в часовом поясе системы: день недели и ЧЧ:ММ
+function sysParts(iso){
+  const p=new Intl.DateTimeFormat("en-US",{timeZone:sysTz,weekday:"short",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(new Date(iso));
+  const g=k=>p.find(x=>x.type===k)?.value;
+  return{dow:["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].indexOf(g("weekday"))+1,hm:`${g("hour")}:${g("minute")}`};
+}
+// Запуск: трасса кодами → запись раздела с подписями (label, why, note), как её строил макет
+const STEP_WHY={"relay.timeout":"реле не ответило за 2 с","target.gone":"устройство удалено","target.areaGone":"область удалена","target.deviceGone":"устройство удалено",
+  "notifier.gone":"оповещатель удалён","target.none":"устройство не выбрано","target.noEventDevice":"нет устройства из события","target.areaEmpty":"в области нет подходящих устройств",
+  skipped:"запуск пропущен","chain.ruleGone":"правило удалено","chain.ruleOff":"правило выключено","busy.skip":"новое событие пропущено",
+  "busy.restart":"прежний запуск остановлен, начат заново","busy.queue":"запуск поставлен в очередь после текущего","event.none":"событие не получено"};
+function fireDev(id){const n=id?find(id)?.n:null;return n}
+function fireWhy(m,ctx){
+  if(!m)return"";
+  const p=m.params||{},nm=id=>locName(fireDev(id))||id;
+  if(STEP_WHY[m.code])return i18n(STEP_WHY[m.code]);
+  if(m.code==="device.offline")return`${nm(p.deviceId)}: ${i18n("без связи")}`;
+  if(m.code==="device.ruleOff"){const r=rules.find(x=>x.id===p.ruleId);return`${nm(p.deviceId)}: ${i18n("выключена правилом")}${r?` «${r.name}»`:""}`}
+  if(m.code==="device.disabled")return`${nm(p.deviceId)}: ${i18n("выключено")}`;
+  const t=p.ruleId&&rules.find(x=>x.id===p.ruleId);
+  if(m.code==="chain.forbidden")return`${i18n("правило")} «${t?t.name:""}» ${i18n("не разрешает запуск другими правилами")}`;
+  if(m.code==="chain.max")return`${i18n("цепочка прервана: больше")} ${p.max} ${i18n("уровней")}`;
+  if(m.code==="chain.invalid")return`${i18n("правило")} «${t?t.name:""}»: ${i18n((t&&ruleIssues(t)[0])||"")}`;
+  if(m.code==="chain.check"){const c=fireCheck(p.check,ctx);return`${i18n("правило")} «${t?t.name:""}»: ${c.label}${c.why&&c.why!==i18n("запуск пропущен")?` — ${c.why}`:""}`}
+  if(m.code==="event.expected")return`${i18n("не подходит: правило ждёт")} «${triggerLabel(trigNode(p.trigger))}»`;
+  if(m.code==="event.notInWindow")return`${i18n("ещё одно событие не пришло в пределах")} ${p.sec} ${i18n("с")}`;
+  const fail=w=>`${i18n("условие не выполнено")}: ${w}`;
+  if(m.code==="cond.time"){const x=sysParts(p.at);return fail(`${i18n("сейчас")} ${ruleDaysText([x.dow])} ${x.hm} — ${i18n("вне расписания")}`)}
+  if(m.code==="cond.mode")return fail(`${i18n("сейчас режим")} «${i18n(ruleModeName(p.modeId))}»`);
+  if(m.code==="cond.devices"){
+    const one=x=>x.code==="offline"?`${nm(x.viaId)}: ${i18n("без связи")}`:x.code==="notRecording"?`${i18n("камера")} «${nm(x.deviceId)}» ${i18n("не пишет в архив")}`
+      :`${i18n("камера")} «${nm(x.deviceId)}» ${i18n(x.code==="disarmed"?"снята с охраны":"на охране")}`;
+    return fail(p.items.map(one).join("; ")+(p.more?`; ${i18n("и ещё")} ${p.more}`:""));
+  }
+  if(/^target\./.test(m.code))return fail(i18n(STEP_WHY[m.code]||""));
+  return m.code;
+}
+function fireCheck(c,ctx){
+  const p=c.params||{},out=l=>({label:l,ok:c.ok,...(c.reason?{why:fireWhy(c.reason,ctx)}:{})});
+  const dev=id=>id?refName(id):i18n("устройство не определено");
+  if(c.code==="cond"){const x=condNode(p.condition);return out(x.kind==="time"||x.kind==="mode"?`${i18n("Условие")} «${i18n(condKind(x).label)}»: ${condLabel(x).replace(/^[^:]+: /,"")}`:`${i18n("Условие")}: ${condLabel(x)}`)}
+  if(c.code==="window")return out(`${i18n("События пришли в окне")} ${p.sec} ${i18n("с")}`);
+  if(c.code==="muted"){const m={until:localStamp(p.until),by:p.by,why:p.reason};return out(`${i18n("Действия не выполнены")}: ${i18n("приглушено до")} ${ruleMuteTill(m)}${m.why?` (${m.by}: ${m.why})`:""}`)}
+  if(c.code==="maintenance")return out(`${i18n("Действия не выполнены")}: ${i18n("окно обслуживания")} «${p.name}»`);
+  if(c.code==="rateHit")return out(`${i18n("Лимит в минуту")}: ${i18n("превышен")} (${p.max})`);
+  if(c.code==="rate")return out(`${i18n("Лимит в минуту")}: ${p.n} ${i18n("из")} ${p.max}`);
+  if(c.code==="busy")return out(i18n("Прежний запуск ещё шёл"));
+  if(c.code==="testOff")return out(i18n("Правило выключено — проверка покажет, как оно отработает после включения"));
+  if(c.code==="event.came")return out(`${i18n("Событие")} «${triggerBare(trigNode(p.trigger))} · ${dev(p.deviceId)}» ${i18n("пришло")}`);
+  if(c.code==="event.other")return out(`${i18n("Событие")} «${triggerBare({sub:p.event.source,kind:p.event.kind,match:p.event.match})} · ${dev(p.deviceId)}»`);
+  if(c.code==="event.missing")return out(`${i18n("Событие")} «${triggerLabel(trigNode(p.trigger))}»`);
+  return out(c.code);
+}
+const ESC_VIA_TXT=v=>RULE_ESC_VIA[v]||RULE_ESC_VIA.client;
+function fireLabel(m,ctx){
+  const p=m.params||{},ck=t=>clockText(t,true);
+  if(m.code==="ctl.wait")return`${i18n("Ждать")} ${p.sec} ${i18n("с")}`;
+  if(m.code==="ctl.waitEvent")return`${i18n("Ждать событие")} «${triggerBare({sub:p.event.source,kind:p.event.kind,match:p.event.match})}»`;
+  if(m.code==="ctl.ask")return`${i18n("Спросить оператора")} «${ruleTplFill(p.text,ctx.vars)}» · ${ruleRoleName(p.roleId)}`;
+  if(m.code==="ctl.escalate")return`${i18n("Эскалация")}: ${p.roleIds.map(ruleRoleName).join(" → ")}`;
+  if(m.code==="esc.level")return`${i18n("Уровень")} ${p.n}: «${ruleRoleName(p.roleId)}» — ${i18n(p.needed?ESC_VIA_TXT(p.via):"не потребовался")}`;
+  if(m.code==="esc.ack")return`${i18n("Квитировал")} ${p.login} ${i18n("в")} ${ck(p.at)} — ${i18n("эскалация остановлена")}`;
+  if(m.code==="esc.reset")return`${i18n("Событие закончилось в")} ${ck(p.at)} — ${i18n("эскалация остановлена")}`;
+  if(m.code==="esc.none")return i18n("Никто не квитировал — эскалация закончена");
+  if(m.code==="esc.wait")return`${i18n("Ждать квитирования")} ${p.min} ${i18n("мин")} — ${i18n("не квитировали")}`;
+  if(m.code==="branch"){const l=(ctlBranches({ctl:CTL_IN[p.control]}).find(([b])=>b===p.branch)||[,p.branch])[1];
+    return`${i18n("ветка")} «${i18n(l)}»: ${i18n(p.test?"не выполнилась бы":"пропущена")}`}
+  return m.code;
+}
+function fireNote(m){
+  if(!m)return"";
+  const p=m.params||{},ck=t=>clockText(t,true);
+  if(m.code==="record.untilEnd")return`${i18n("до окончания")} ${i18n(p.trigger?triggerKind({sub:p.trigger.source,kind:p.trigger.kind}).endsOf:"события")} ${i18n("в")} ${ck(p.at)}${p.afterSec?` (+${p.afterSec} ${i18n("с")})`:""}`;
+  if(m.code==="chain.level")return`${i18n("уровень цепочки")} ${p.level} (${i18n("максимум")} ${p.max})`;
+  if(m.code==="waitEvent.came")return`${i18n("пришло через")} ${p.sec} ${i18n("с")}`;
+  if(m.code==="waitEvent.timeout")return`${i18n("не пришло за")} ${p.sec} ${i18n("с")}`;
+  if(m.code==="ask.answer")return`${i18n(p.answer==="yes"?"подтвердил":"отклонил")} ${p.login} ${i18n("в")} ${ck(p.at)}`;
+  if(m.code==="ask.noAnswer")return`${i18n("нет ответа за")} ${p.sec} ${i18n("с")} — ${i18n("засчитано")} «${i18n(p.counted==="yes"?"подтвердил":"отклонил")}»`;
+  if(m.code==="escalate.until")return i18n(p.stop==="reset"?"пока не закончится событие":"пока тревогу не квитируют");
+  if(m.code==="clock")return ck(p.at);
+  return"";
+}
+function fireNode(f,r){
+  const rec={id:f.id,t:clockText(f.at,true),seq:++ruleFireSeq,by:f.by,watch:f.logOnly,src:f.sourceDeviceIds.slice(),
+    ev:f.events.map(e=>({label:triggerBare({sub:e.source,kind:e.kind,match:e.match}),sub:e.source,kind:e.kind,match:{...e.match},ref:e.deviceId||"",t:clockText(e.at,true)})),
+    checks:[],steps:[],res:f.result};
+  const ctx={vars:r?ruleVarsOf(r,rec):{}};
+  rec.checks=f.checks.map(c=>fireCheck(c,ctx));
+  let chain=null;   // шаги правила, запущенного «Запустить правило», идут следом с пустым путём
+  rec.steps=f.steps.map(s=>{
+    const act=s.action?stepNode(s.action):undefined,nested=s.path===""&&s.control;
+    if(!nested)chain=act&&act.action==="runrule"&&s.state!=="fail"?rules.find(x=>x.id===act.rule):null;
+    const cr=nested&&chain?chain:r,cv=nested&&chain?{...ctx.vars,"правило":chain.name}:ctx.vars;
+    const ref=s.deviceId||(s.reason&&s.reason.code==="target.gone"?refGone(s.reason.params.name):s.reason&&s.reason.params&&s.reason.params.token)
+      ||(act?act.ref||"":s.label&&s.label.params&&s.label.params.target?refOf(s.label.params.target):"");
+    const o={label:act?actionLabelBare(act,{r:cr,vars:cv}):fireLabel(s.label,{vars:cv}),ref,ai:s.path,...(act&&!nested?{act}:{}),...(s.control?{ctl:true}:{}),...(s.skip?{skip:true}:{}),
+      st:s.state,why:fireWhy(s.reason,ctx),note:fireNote(s.note),depth:s.depth};
+    return o;
+  });
+  return rec;
+}
+function fireAdd(ruleId,f){
+  const r=rules.find(x=>x.id===ruleId),rec=fireNode(f,r);
+  (ruleFires[ruleId]=ruleFires[ruleId]||[]).unshift(rec);
+  return rec;
+}
+async function firesLoad(id){
+  const r=rules.find(x=>x.id===id),l=await API.get(`/rules/${id}/fires`);
+  ruleFires[id]=l.items.map(f=>fireNode(f,r));
+}
+// Расписание: запись API ↔ структура библиотеки «Расписания»
+const ivCopy=l=>(l||[]).map(x=>x.slice());
+function schNode(s){
+  const n={id:s.id,name:s.name,kind:s.kind,week:s.week.map(ivCopy),ovr:s.overrides.map(o=>Object.assign({g:o.dayGroupId,m:o.mode},o.dow?{dow:o.dow}:{},o.intervals?{iv:ivCopy(o.intervals)}:{})),
+    valid:{...s.valid},cycle:{len:s.cycle.length,start:s.cycle.start,days:s.cycle.days.map(ivCopy)},dates:s.dates.map(d=>({d:d.date,iv:ivCopy(d.intervals)})),
+    astro:{win:s.astro.window,off1:s.astro.offsetStartMin,off2:s.astro.offsetEndMin,lat:s.astro.lat,lon:s.astro.lon,tz:s.astro.utcOffsetHours}};
+  if(s.builtin)n.builtin=true;
+  if(s.owner)n.own={k:"maint",id:s.owner.id};
+  return n;
+}
+function schBody(n){
+  const a=n.astro||{},c=n.cycle||{};
+  return{name:(n.name||"").trim(),kind:n.kind,week:(n.week||[[],[],[],[],[],[],[]]).map(ivCopy),
+    overrides:(n.ovr||[]).map(o=>Object.assign({dayGroupId:o.g,mode:o.m},o.dow?{dow:+o.dow}:{},o.iv?{intervals:ivCopy(o.iv)}:{})),
+    valid:{from:(n.valid||{}).from||"",to:(n.valid||{}).to||""},cycle:{length:+c.len||1,start:c.start||schIso(new Date()),days:(c.days||[]).map(ivCopy)},
+    dates:(n.dates||[]).map(d=>({date:d.d,intervals:ivCopy(d.iv)})),
+    astro:{window:a.win||"night",offsetStartMin:+a.off1||0,offsetEndMin:+a.off2||0,lat:+a.lat||0,lon:+a.lon||0,utcOffsetHours:+a.tz||0},
+    owner:n.own?{kind:"maintenanceWindow",id:n.own.id}:null};
+}
+function schSet(x,oldId){
+  const n=schNode(x),i=SCHEDS.findIndex(s=>s.id===(oldId||x.id));
+  if(i>=0)SCHEDS[i]=n;else SCHEDS.push(n);
+  autoVer.set(x.id,x.version);
+  return n;
+}
+function grpNode(g){return{id:g.id,name:g.name,rules:g.rules.map(({type,...x})=>({t:type,...x}))}}
+function grpBody(g){return{name:(g.name||"").trim(),rules:g.rules.map(({t,_gone,...x})=>({type:t,...x}))}}
+function grpSet(x){const n=grpNode(x),i=DAY_GROUPS.findIndex(g=>g.id===x.id);if(i>=0)DAY_GROUPS[i]=n;else DAY_GROUPS.push(n);autoVer.set(x.id,x.version);return n}
+// Режимы объекта: code — системный режим
+const modeCodes=new Map();
+const modeCode=id=>modeCodes.get(id)||"";
+const modeByCode=c=>(OBJ_MODES.find(m=>modeCode(m.id)===c)||{}).id||"";
+function modesApply(M){
+  modesVer=M.version;modeCodes.clear();
+  OBJ_MODES.splice(0,OBJ_MODES.length,...M.items.map(m=>{modeCodes.set(m.id,m.system);return Object.assign({id:m.id,name:m.name,sched:m.scheduleId},m.system?{sys:true}:{},m.color?{color:m.color}:{})}));
+  objModeElse=M.otherwise;
+}
+const modeBody=m=>({id:m.id,name:(m.name||"").trim(),scheduleId:m.sched||null,system:modeCode(m.id),color:m.color||null});
+function modeCurApply(c){objMode=c.modeId;objModeManual=c.manual?{until:c.manual.until?schWhenText(new Date(c.manual.until)):""}:null;modeCurRaw=c}
+let modeCurRaw=null;
+async function modeCurLoad(){const c=await API.get("/modes/current");const was=objMode;modeCurApply(c);if(was!==objMode&&app==="rules")paint()}
+function winNode(w){return{id:w.id,name:w.name,sched:w.scheduleId,scope:w.ruleIds==null?"all":w.ruleIds.slice(),on:w.enabled}}
+function winBody(w){return{name:(w.name||"").trim(),scheduleId:w.sched,ruleIds:w.scope==="all"?null:(w.scope||[]).slice(),enabled:!!w.on}}
+function winSet(x){const n=winNode(x),i=MAINT_WINDOWS.findIndex(w=>w.id===x.id);if(i>=0)MAINT_WINDOWS[i]=Object.assign(n,MAINT_WINDOWS[i]._pend?{_pend:true}:{});else MAINT_WINDOWS.push(n);autoVer.set(x.id,x.version);return n}
+// Всё «Автоматизации» заново: при старте и когда поток потерян
+async function autoLoad(){
+  const [rl,sc,dg,M,cur,mw]=await Promise.all(["/rules","/schedules","/day-groups","/modes","/modes/current","/maintenance-windows"].map(p=>API.get(p)));
+  modesApply(M);modeCurApply(cur);
+  SCHEDS.length=0;sc.items.forEach(x=>schSet(x));
+  DAY_GROUPS.length=0;dg.items.forEach(grpSet);
+  MAINT_WINDOWS.length=0;mw.items.forEach(winSet);
+  rules.length=0;rl.items.forEach(x=>ruleSet(x));
+  if(!schLast||!SCHEDS.some(s=>s.id===schLast))schLast=(SCHEDS.find(s=>!s.builtin)||{}).id||null;
+  Object.keys(ruleFires).forEach(k=>delete ruleFires[k]);Object.keys(ruleHist).forEach(k=>delete ruleHist[k]);
+  ruleFireSeq=0;
+  // Порядок номеров записей — как у макета: правило за правилом, новые запуски первыми
+  for(const r of rules){await firesLoad(r.id)}
+  await Promise.all(rules.map(r=>ruleHistLoad(r.id)));
+}
+// Поток: чужие изменения «Автоматизации». Своя запись могла прийти ответом раньше события — тогда ничего
+let autoT=null;const autoDirty=new Set();
+function autoEvent(m){
+  if(m.kind==="objectMode"){modeCurLoad().catch(()=>{});return}
+  if(m.kind==="modes"&&m.version===modesVer)return;
+  if(m.type==="entity.changed"&&m.version&&autoVer.get(m.entityId)===m.version)return;
+  if(m.type==="entity.created"&&autoVer.has(m.entityId))return;
+  if(m.type==="entity.deleted"&&!autoVer.has(m.entityId)&&m.kind!=="ruleFire")return;
+  if(m.kind==="ruleFire"){const id=m.payload&&m.payload.ruleId;if(id&&!(ruleFires[id]||[]).some(f=>f.id===m.entityId))autoDirty.add("fires:"+id)}
+  else if(m.kind==="rule"&&m.type==="entity.changed")autoDirty.add("rule:"+m.entityId);
+  else autoDirty.add(m.kind);
+  clearTimeout(autoT);autoT=setTimeout(autoFlush,60);
+}
+async function autoFlush(){
+  const d=[...autoDirty];autoDirty.clear();
+  try{
+    for(const k of d){
+      if(k.startsWith("rule:")){const id=k.slice(5);if(!rules.some(r=>r.id===id))continue;ruleSet(await API.get(`/rules/${id}`));await ruleHistLoad(id)}
+      else if(k.startsWith("fires:"))await firesLoad(k.slice(6));
+      else if(k==="rule"){const l=await API.get("/rules");const keep=new Set(l.items.map(x=>x.id));rules.filter(r=>!r._new&&!keep.has(r.id)).map(r=>r.id).forEach(ruleDrop);l.items.forEach(x=>{if(autoVer.get(x.id)!==x.version)ruleSet(x)})}
+      else if(k==="schedule"){const l=await API.get("/schedules");SCHEDS.length=0;l.items.forEach(x=>schSet(x))}
+      else if(k==="dayGroup"){const l=await API.get("/day-groups");DAY_GROUPS.length=0;l.items.forEach(grpSet)}
+      else if(k==="maintenanceWindow"){const l=await API.get("/maintenance-windows");MAINT_WINDOWS.length=0;l.items.forEach(winSet)}
+      else if(k==="modes"){modesApply(await API.get("/modes"));await modeCurLoad()}
+    }
+  }catch(e){}
+  ruleIdxDrop();treeMatchCache.clear();searchMatchCache.clear();
+  if(app==="rules"||app==="hw")paint();
+}
+// Быстрые групповые по правилам: состояние, приглушение — один запрос, частичный успех
+async function rulesUpdate(items){
+  const res=await API.post("/rules/update",{idempotencyKey:opKey(),items:items.map(x=>Object.assign({ruleId:x.ruleId,version:autoVer.get(x.ruleId)},x))});
+  res.done.forEach(x=>ruleSet(x));
+  await Promise.all(res.done.map(x=>ruleHistLoad(x.id)));
+  return res;
+}
+
 function walk(fn,list,parent){(list||[]).forEach(n=>{fn(n,parent);walk(fn,n.devices,n)})}
 function unallocId(domainId){return"unalloc:"+domainId}
 function unallocNode(d){return{id:unallocId(d.id),type:"unalloc",name:"Нераспределённые серверы",online:true,domainId:d.id,servers:d.unallocServers}}
@@ -7979,8 +8153,9 @@ const TRIGGER_KINDS=[
 // via — устройство, через которое оно идёт (письмо — «Email-оповещатель»). def — значения нового пункта.
 // fields: ref — устройство; opts — выбор ([значение, подпись] или строка); sel — выбор из роли/раскладки/правила;
 // tpl — текст с переменными; on(a) — поле видно не всегда; req:false — не обязательно; lab(a) — свой заголовок подписи.
-const RULE_LAYOUTS=["Вход","Периметр","Склад"];
-const RULE_MONS=["Монитор 1","Монитор 2","Монитор 3","Монитор 4"];
+// Раскладки и мониторы видеостены — справочник системы (GET /reference): по имени в правиле, id — на сервере
+const RULE_LAYOUTS=[]
+const RULE_MONS=[],REF_LAYOUT=new Map(),REF_MONITOR=new Map()
 const STEP_GROUPS=["Камера","Тревога","Оператор","Уведомления","Другое","Ход выполнения"];
 const ACTION_KINDS=[
   {grp:"Камера",sub:"vms",action:"arm",label:"Поставить на охрану",short:"На охрану",devTypes:["camera"],fields:[{id:"ref",label:"Камера"}]},
@@ -8039,7 +8214,6 @@ const CTL_KINDS=[
    make:()=>({ctl:"wait",sec:10}),
    text:c=>`${i18n("Ждать")} ${c.sec||0} ${i18n("с")}`,
    check:c=>c.sec>=1&&c.sec<=3600?"":`«${i18n("Ждать")}»: от 1 до 3600 секунд`,
-   run:c=>({label:`${i18n("Ждать")} ${c.sec} ${i18n("с")}`}),
    fieldsHtml:(c,ps)=>ctlSecHtml(c,ps)},
   {ctl:"waitev",label:"Ждать событие",grp:"Ход выполнения",br:[["yes","если пришло"],["no","если не пришло"]],
    make:()=>({ctl:"waitev",ev:{sub:"det",kind:"motion",ref:"",match:{}},sec:30,yes:[],no:[]}),
@@ -8050,13 +8224,6 @@ const CTL_KINDS=[
      if(refIsGroup(c.ev.ref)&&!refBroken(c.ev.ref)&&!refNodes(c.ev.ref,triggerKind(c.ev).devTypes).length)return`${t}: в выбранной области нет подходящих устройств`;
      return c.sec>=1&&c.sec<=3600?"":`${t}: от 1 до 3600 секунд`;
    },
-   // В демо исход детерминирован номером запуска; в пробном запуске — выбором в окне (по умолчанию «пришло»).
-   run:(c,o)=>{
-     const i=o.i||0,pick=(o.br&&o.br[o.key])||(!o.test&&i%3===2?"no":"yes");
-     const n=ruleEventDevices(c.ev,i)[0],s=Math.max(1,Math.min((c.sec||1)-1,5+(i*7)%20));
-     return{label:`${i18n("Ждать событие")} «${triggerBare(c.ev)}»`,ref:n?n.id:(c.ev.ref||""),pick,
-       note:pick==="yes"?`${i18n("пришло через")} ${s} ${i18n("с")}`:`${i18n("не пришло за")} ${c.sec} ${i18n("с")}`};
-   },
    fieldsHtml:(c,ps)=>{
      const k=triggerKind(c.ev);
      return`<div class="rl-f">${selHtml(TRIGGER_KINDS.map((x,j)=>[j,x.label]),TRIGGER_KINDS.indexOf(k),`setWevKind('${ps}',this.value)`,"Вид ожидаемого события")}</div>
@@ -8064,7 +8231,7 @@ const CTL_KINDS=[
    }},
   // «Спросить оператора»: вопрос роли, ответ в клиенте. Нет ответа за sec — действует def («как подтвердил / как отклонил»).
   {ctl:"ask",label:"Спросить оператора",grp:"Ход выполнения",br:[["yes","если подтвердил"],["no","если отклонил"]],
-   make:()=>({ctl:"ask",text:"Подтвердить: {камера}?",to:"gd",sec:60,def:"no",yes:[],no:[]}),
+   make:()=>({ctl:"ask",text:"Подтвердить: {камера}?",to:"",sec:60,def:"no",yes:[],no:[]}),
    text:(c,v)=>`${i18n("Спросить оператора")} «${v?ruleTplFill(c.text||"",v):c.text||""}» · ${ruleRoleName(c.to)} · ${i18n("ответ до")} ${c.sec||0} ${i18n("с")}`,
    check:c=>{
      const t=`«${i18n("Спросить оператора")}»`;
@@ -8074,21 +8241,13 @@ const CTL_KINDS=[
      return c.sec>=1&&c.sec<=3600?"":`${t}: от 1 до 3600 секунд`;
    },
    outs:()=>[["yes","подтвердил"],["no","отклонил"],["none","нет ответа"]],
-   // В демо исход детерминирован номером запуска; в пробном запуске — выбором в окне (по умолчанию «подтвердил»).
-   run:(c,o)=>{
-     const i=o.i||0,out=(o.br&&o.br[o.key])||(!o.test&&i%5===4?"none":!o.test&&i%3===1?"no":"yes"),pick=out==="none"?(c.def==="yes"?"yes":"no"):out;
-     const s=Math.max(1,Math.min((c.sec||1)-1,4+(i*11)%40)),who=ruleRoleUser(c.to);
-     return{label:`${i18n("Спросить оператора")} «${ruleTplFill(c.text,o.vars||ruleVarsOf(o.r,null))}» · ${ruleRoleName(c.to)}`,pick,
-       note:out==="none"?`${i18n("нет ответа за")} ${c.sec} ${i18n("с")} — ${i18n("засчитано")} «${i18n(pick==="yes"?"подтвердил":"отклонил")}»`
-         :`${i18n(out==="yes"?"подтвердил":"отклонил")} ${who} ${i18n("в")} ${ruleClockAdd(o.at,s)}`};
-   },
    fieldsHtml:(c,ps)=>`${tplFieldHtml(curRule(),c,ps,{id:"text",label:"Вопрос оператору"})}
      <div class="rl-f">${selHtml([["","Выберите роль…"],...accRoles().map(x=>[x.id,x.n])],c.to||"",`setCtlField('${ps}','to',this.value)`,"Кому задать вопрос")}</div>
      ${ctlSecHtml(c,ps)}<div class="rl-f rl-dflt">${i18n("если нет ответа — считать")} ${selHtml([["yes","подтвердил"],["no","отклонил"]],c.def==="yes"?"yes":"no",`setCtlField('${ps}','def',this.value)`,"Если нет ответа — считать")}</div>`},
   // «Эскалация»: уведомить роль, ждать квитирования, потом следующий уровень. Останавливают квитирование тревоги
   // или конец события (reset, только для событий с окончанием). Последнему уровню ждать нечего: wait у него не используется.
   {ctl:"escalate",label:"Эскалация",grp:"Ход выполнения",br:[],
-   make:()=>({ctl:"escalate",levels:[{to:"gd",via:"client",wait:5},{to:"sg",via:"tg",wait:10}],stop:"ack"}),
+   make:()=>({ctl:"escalate",levels:[{to:"",via:"client",wait:5},{to:"",via:"tg",wait:10}],stop:"ack"}),
    text:c=>`${i18n("Эскалация")}: ${(c.levels||[]).map(l=>ruleRoleName(l.to)).join(" → ")||"—"}`,
    check:(c,r)=>{
      const t=`«${i18n("Эскалация")}»`,l=c.levels||[];
@@ -8100,25 +8259,6 @@ const CTL_KINDS=[
      return"";
    },
    outs:c=>[...(c.levels||[]).map((l,j)=>["ack:"+(j+1),`${i18n("квитировали на уровне")} ${j+1}`]),["none","никто не квитировал"],...(c.stop==="reset"?[["reset","событие закончилось"]]:[])],
-   run:(c,o)=>{
-     const i=o.i||0,L=c.levels||[],out=(o.br&&o.br[o.key])||(!o.test?(i%3===0?"ack:1":i%3===1?"ack:2":c.stop==="reset"?"reset":"none"):"ack:1");
-     const stopAt=out==="none"?L.length:out==="reset"?1:Math.min(+out.split(":")[1],L.length),subs=[];
-     let t=0;
-     L.forEach((l,j)=>{
-       const via=RULE_ESC_VIA[l.via]||RULE_ESC_VIA.client;
-       if(j>=stopAt){subs.push({label:`${i18n("Уровень")} ${j+1}: «${ruleRoleName(l.to)}» — ${i18n("не потребовался")}`,skip:true});return}
-       subs.push({label:`${i18n("Уровень")} ${j+1}: «${ruleRoleName(l.to)}» — ${i18n(via)}`,note:ruleClockAdd(o.at,t)});
-       const last=j===stopAt-1,wait=(l.wait||0)*60;
-       if(last&&out!=="none"){
-         const w=Math.max(1,Math.min(wait?wait-1:600,50+(i*37)%240));
-         subs.push({label:out==="reset"?`${i18n("Событие закончилось в")} ${ruleClockAdd(o.at,t+w)} — ${i18n("эскалация остановлена")}`
-           :`${i18n("Квитировал")} ${ruleRoleUser(l.to)} ${i18n("в")} ${ruleClockAdd(o.at,t+w)} — ${i18n("эскалация остановлена")}`});
-       }else if(last)subs.push({label:i18n("Никто не квитировал — эскалация закончена")});
-       else subs.push({label:`${i18n("Ждать квитирования")} ${l.wait} ${i18n("мин")} — ${i18n("не квитировали")}`});
-       t+=wait;
-     });
-     return{label:`${i18n("Эскалация")}: ${L.map(l=>ruleRoleName(l.to)).join(" → ")}`,note:i18n(c.stop==="reset"?"пока не закончится событие":"пока тревогу не квитируют"),subs};
-   },
    fieldsHtml:(c,ps)=>`<div class="rl-lv">${(c.levels||[]).map((l,j,a)=>`<div class="rl-lvr"><span class="rl-n">${j+1}</span>
        <div class="rl-f">${selHtml([["","Выберите роль…"],...accRoles().map(x=>[x.id,x.n])],l.to||"",`escSet('${ps}',${j},'to',this.value)`,`${i18n("Роль уровня")} ${j+1}`)}</div>
        <div class="rl-f">${selHtml(Object.entries(RULE_ESC_VIA),l.via||"client",`escSet('${ps}',${j},'via',this.value)`,`${i18n("Способ уведомления уровня")} ${j+1}`)}</div>
@@ -8130,12 +8270,7 @@ const RULE_ESC_MAX=5;
 const RULE_ESC_VIA={client:"в клиенте",tg:"в Telegram",email:"письмом"};
 function ruleRoleName(id){const r=id&&accRoles().find(x=>x.id===id);return r?r.n:(id||"—")}
 // Кто в демо ответил от имени роли: у встроенных ролей — их пользователи, у остальных — первый пользователь роли.
-function ruleRoleUser(id){return{gd:"guard1",sg:"chief.guard",adm:"admin"}[id]||((accUsers().find(u=>(u.roles||[]).includes(id))||{}).login)||ruleRoleName(id)}
 // Время запуска плюс секунды: «03:21:40» + 46 → «03:22:26».
-function ruleClockAdd(t,s){
-  const[h,m,x]=String(t||"00:00:00").split(":").map(Number),n=((h*3600+m*60+(x||0)+Math.round(s||0))%86400+86400)%86400,p=v=>String(v).padStart(2,"0");
-  return`${p(Math.floor(n/3600))}:${p(Math.floor(n/60)%60)}:${p(n%60)}`;
-}
 // Исходы шага для выбора в пробном запуске: у шага с ветками — сами ветки, у «Спросить оператора» и «Эскалации» — свои.
 function ctlOuts(it){if(!it||!it.ctl)return[];const k=ctlKind(it);return k.outs?k.outs(it):k.br}
 // Уровни эскалации.
@@ -8154,8 +8289,8 @@ const COND_KINDS=[
 function condKind(c){return COND_KINDS.find(k=>k.kind===c.kind)||COND_KINDS[0]}
 function condNew(kind,old){
   const k=COND_KINDS.find(x=>x.kind===kind)||COND_KINDS[0];
-  if(kind==="time")return{kind,sched:"s_work"};
-  if(kind==="mode")return{kind,modes:[typeof objMode!=="undefined"?objMode:"night"]};
+  if(kind==="time")return{kind,sched:(SCHEDS.find(s=>!s.builtin)||{}).id||""};
+  if(kind==="mode")return{kind,modes:[objMode||modeByCode("night")]};
   const ref=old&&old.ref&&refFits(old.ref,k.devTypes,"cond")?old.ref:"";
   return kind==="armed"?{kind,ref,val:true}:{kind,ref};
 }
@@ -8639,8 +8774,8 @@ function ruleUnqueue(id){
 function ruleReset(){ruleRestore();paint();toast("Изменения сброшены")}
 const RULE_MODE_FALLBACK={work:"Рабочее время",night:"Ночь",weekend:"Выходной",service:"Обслуживание"};
 function ruleModeName(id){
-  const m=typeof OBJ_MODES!=="undefined"&&OBJ_MODES.find(x=>x.id===id);
-  return m?m.name:(RULE_MODE_FALLBACK[id]||id);
+  const m=OBJ_MODES.find(x=>x.id===id);
+  return m?m.name:(RULE_MODE_FALLBACK[modeCode(id)]||id);
 }
 const RULE_START_NAME={event:"По событию",sched:"По расписанию",manual:"Вручную"};
 const RULE_REPEAT=[["skip","пропустить событие"],["restart","остановить текущий запуск и начать заново"],["queue","выполнить после текущего запуска"]];
@@ -8783,26 +8918,30 @@ function rulePlan(){
     `<button type="button" class="btn" onclick="closeBulkModal()">${i18n("Назад")}</button><button type="button" class="btn pri" id="rpApply" ${block||ask.length?"disabled":""} onclick="closeBulkModal();ruleApply()">${i18n("Применить")} (${d.length})</button>`,"bbox-wide");
 }
 function ruleApply(){
-  const d=ruleDraft;if(!d)return;
+  const d=ruleDraft;if(!d||ruleSaving)return;
   const r=rules.find(x=>x.id===d.id);if(!r)return;
   if(rulePendingIds().has(r.id)){toast("Правило удаляется — изменения не сохранятся");return}
   if(r.on&&ruleIssues(r).length){toast("Правило с ошибкой нельзя применить включённым — исправьте ошибку или выключите правило");return}
-  const wasNew=!d.snap,snap=d.snap;
-  delete r._new;delete r._auto;
-  r.changed={by:ACC_ME,at:ruleNow()};
-  ruleDraft=null;
-  const hv=ruleHistPush(r,wasNew?i18n("Правило создано"):ruleHistFromNote(r,d.fromVer));   // версия — после применения; «Отменить» её уберёт
-  treeMatchCache.clear();searchMatchCache.clear();
-  paint();
-  toastAction("rundo:"+r.id+":"+(++ruleUndoSeq),`${wasNew?i18n("Правило создано"):i18n("Правило применено")}: «${r.name}»`,i18n("Отменить"),()=>{
-    const i=rules.findIndex(x=>x.id===r.id);if(i<0)return;
-    if(ruleDraft&&ruleDraft.id===r.id)ruleDraft=null;
-    if(wasNew){rules.splice(i,1);delete ruleFires[r.id];delete ruleHist[r.id];if(rule===r.id)rule=(rules[Math.min(i,rules.length-1)]||{}).id||"overview"}
-    else{snap.order=rules[i].order;if(rules[i].mute)snap.mute=rules[i].mute;else delete snap.mute;rules[i]=snap;ruleHistUndo(r.id,hv,i18n("Отмена изменения"))}
-    treeMatchCache.clear();searchMatchCache.clear();
-    paint();toast("Изменение отменено");
-  },10000);
+  const wasNew=!d.snap,snap=d.snap,body=ruleBody(r),fv=d.fromVer&&(ruleHist[r.id]||[]).find(x=>x.v===d.fromVer);
+  if(fv)body.historyNote={code:"restore",params:{number:fv.v,edited:ruleDiffOf(fv.snap,r).length>0}};
+  // «Применить» — правило целиком: новое — POST, прежнее — PUT с версией. Кэш и экран меняет ответ
+  ruleSaving=true;
+  (wasNew?API.post("/rules",body):API.put(`/rules/${r.id}`,body,autoVer.get(r.id))).then(async x=>{
+    ruleDraft=null;
+    ruleSet(x,r.id);
+    await ruleHistLoad(x.id);
+    paint();
+    const hv=((ruleHist[x.id]||[]).slice(-1)[0]||{}).v;
+    toastAction("rundo:"+x.id+":"+(++ruleUndoSeq),`${wasNew?i18n("Правило создано"):i18n("Правило применено")}: «${x.name}»`,i18n("Отменить"),()=>{
+      if(ruleDraft&&ruleDraft.id===x.id)ruleDraft=null;
+      // «Отменить» — обратный запрос: новое правило удаляется, прежнее получает содержимое «до» (новой версией)
+      const back=wasNew?API.post("/objects/delete",{idempotencyKey:opKey(),items:[{id:x.id,version:autoVer.get(x.id)}]}).then(res=>{if(res.done.length){delete ruleFires[x.id];ruleDrop(x.id)}else throw{problem:{code:res.failed[0].code}}})
+        :API.put(`/rules/${x.id}`,Object.assign(ruleBody(snap),{historyNote:{code:"undo",params:{number:hv}}}),autoVer.get(x.id)).then(y=>{ruleSet(y);return ruleHistLoad(y.id)});
+      back.then(()=>{paint();toast("Изменение отменено")}).catch(e=>toast(problemText(e)));
+    },10000);
+  }).catch(e=>{toast(problemText(e));paint()}).finally(()=>{ruleSaving=false});
 }
+let ruleSaving=false
 // Ушли с правила, не применив правки, — спрашиваем, а не теряем молча.
 function ruleLeaveAsk(go,onStay){
   const r=rules.find(x=>x.id===ruleDraft.id),d=ruleDiff();
@@ -8845,7 +8984,7 @@ const RULE_TPL=[
    make:()=>({when:[{sub:"vms",kind:"io.input",ref:"",match:{value:"open"}}],
               then:[{sub:"vms",action:"output",ref:"",port:1,state:"pulse",pulse_ms:5000}]})},
   {id:"night",start:"event",name:"Движение ночью — запись и реле",sub:"Камера с движением пишет 10 минут, реле срабатывает; действует только ночью",
-   make:()=>({cond:[{kind:"mode",modes:["night"]}],when:[{sub:"det",kind:"motion",ref:"",match:{}}],
+   make:()=>({cond:[{kind:"mode",modes:[modeByCode("night")]}],when:[{sub:"det",kind:"motion",ref:"",match:{}}],
               then:[{sub:"rec",action:"record",ref:"$src",minutes:10},{sub:"vms",action:"output",ref:"",port:1,state:"pulse",pulse_ms:1000}]})},
   {id:"lost",start:"event",name:"Камера пропала — писать соседнюю",sub:"Когда камера перестала отвечать, другая записывает 15 минут",
    make:()=>({when:[{sub:"vms",kind:"silent",ref:"",match:{}}],
@@ -8908,7 +9047,7 @@ function ruleNewCreate(){
     run:{mode:st==="manual"?"manual":"always",modes:[]},cond:ruleClone(b.cond||[]),menu:!!b.menu,rate:6,within:0,
     sched:st==="sched"?(b.sched||{days:[1],at:"10:00"}):null,
     when,then,
-    owner:ACC_ME,purpose:"",created:{by:ACC_ME,at:now},changed:{by:ACC_ME,at:now},server:"s1",runAs:"system",_new:true,_auto:!t};
+    owner:ACC_ME,purpose:"",created:{by:ACC_ME,at:now},changed:{by:ACC_ME,at:now},server:(servers[0]||{}).id||"",runAs:"system",_new:true,_auto:!t};
   if(r.when.length>1)r.within=30;
   r.name=t?t.name:ruleAutoName(r);        // шаблон задаёт стартовое имя, автоимя — только «с нуля»
   r.chain=true;r.order=Math.max(0,...rules.map(ruleOrd))+1;
@@ -9680,15 +9819,6 @@ function ruleRetryWhy(r){
 // которое с тех пор могли изменить.
 // Повторяется то, что отказало как действие: строки вложенных правил цепочки и сам запуск правила — нет.
 function ruleRetryable(s){return s.st==="fail"&&!s.ctl&&s.act&&actionKind(s.act).action!=="runrule"}
-function ruleFireRetry(r,bad){
-  const steps=bad.map(s=>{
-    const n=s.ref&&!s.ref.startsWith("gone:")?ruleNodeById(s.ref):null,keep=s.act&&actionKind(s.act).action==="disable";
-    const kd=s.act&&actionKind(s.act),why=n?ruleDevDown(n,keep):kd&&!kd.devTypes.length&&!s.ref?"":i18n(refIsArea(s.ref||"")?"область удалена":"устройство удалено");
-    return{label:s.label,ref:s.ref,ai:s.ai,act:s.act,st:why?"fail":"ok",why,note:s.note,depth:0};
-  });
-  const g=steps.filter(s=>s.st==="ok").length;
-  return{t:ruleClock(new Date()),seq:++ruleFireSeq,by:"manual",watch:false,src:[],ev:[],checks:[],steps,res:g===steps.length?"ok":g?"part":"fail"};
-}
 function ruleTraceRetry(id,k){
   const r=rules.find(x=>x.id===id),f=r&&(ruleFires[id]||[]).find(x=>ruleTraceKey(r,x)===k);if(!f)return;
   const why=ruleRetryWhy(r);if(why){toast(why);return}
@@ -9699,10 +9829,12 @@ function ruleTraceRetry(id,k){
      <p>${i18n("Остальные действия запуска не повторяются.")}</p>
      ${changed?`<div class="nt bk-warn">${i18n("Правило с тех пор изменено — повторится действие из этой записи")}</div>`:""}`,
     "","Повторить",()=>{
-      const rec=ruleFireRetry(r,bad);
-      (ruleFires[r.id]=ruleFires[r.id]||[]).unshift(rec);
-      ruleTraceOpen.add(ruleTraceKey(r,rec));listQ["fires:"+id]="";ruleTraceFilt="all";
-      paint();toast(`${i18n("Повторено: выполнено")} ${ruleStepGood(rec)} ${i18n("из")} ${rec.steps.length}`);
+      // Повтор — на сервере: шаги из той записи, на нынешних устройствах
+      API.post(`/rules/${id}/fires/${f.id}/retry`,{idempotencyKey:opKey()}).then(x=>{
+        const rec=fireAdd(id,x);
+        ruleTraceOpen.add(ruleTraceKey(r,rec));listQ["fires:"+id]="";ruleTraceFilt="all";
+        paint();toast(`${i18n("Повторено: выполнено")} ${ruleStepGood(rec)} ${i18n("из")} ${rec.steps.length}`);
+      }).catch(e=>toast(problemText(e)));
     },{html:true});
 }
 
@@ -9733,21 +9865,6 @@ function ruleCheckCands(r){
   return[...own.slice(0,6),...logs.slice(0,4)].slice(0,10);
 }
 // Сверка событий с «Если»: что совпало, а что нет и почему.
-function ruleEventChecks(r,evs){
-  const used=new Set(),out=[];
-  const dev=e=>e.ref?refName(e.ref):i18n("устройство не определено");
-  r.when.forEach((tk,j)=>{
-    const hit=evs.findIndex((e,x)=>!used.has(x)&&e.sub===tk.sub&&e.kind===tk.kind&&ruleRefCovers(tk.ref,e.ref,triggerKind(tk).devTypes)
-      &&Object.entries(tk.match||{}).every(([m,v])=>!v||(e.match||{})[m]===undefined||(e.match||{})[m]===v));
-    if(hit>=0){used.add(hit);out.push({label:`${i18n("Событие")} «${triggerBare(tk)} · ${dev(evs[hit])}» ${i18n("пришло")}`,ok:true});return}
-    const other=evs.findIndex((e,x)=>!used.has(x));
-    if(other>=0){used.add(other);const e=evs[other];
-      out.push({label:`${i18n("Событие")} «${e.label} · ${dev(e)}»`,ok:false,why:`${i18n("не подходит: правило ждёт")} «${triggerLabel(tk)}»`});return}
-    out.push({label:`${i18n("Событие")} «${triggerLabel(tk)}»`,ok:false,
-      why:j>0?`${i18n("ещё одно событие не пришло в пределах")} ${r.within} ${i18n("с")}`:i18n("событие не получено")});
-  });
-  return out;
-}
 // Устройство события при проверке вручную: сначала те, что входят в область пункта «Если» (область или набор
 // раскрыты в устройства), потом остальные — чтобы проверить и «событие не подходит».
 function ruleCheckDevSel(tk,kd,cur,j){
@@ -9818,28 +9935,29 @@ function ruleCheckRender(){
 }
 function ruleCheckRun(){
   const r=curRule();if(!r||!rck)return;
-  const pre=[];let ev;
-  if(!r.on)pre.push({label:i18n("Правило выключено — проверка покажет, как оно отработает после включения"),ok:true});
+  // Пробный запуск считает сервер (POST /rules/test): правило — как в черновике, события и время — выбранные
+  let evs=[];
   if(r.start==="event"){
-    let evs;
-    if(rck.src==="log")evs=((rck.cands[rck.pick]||{}).evs||[]).map(e=>({...e}));
+    if(rck.src==="log")evs=((rck.cands[rck.pick]||{}).evs||[]).map(e=>({source:e.sub,kind:e.kind,match:{...(e.match||{})},deviceId:e.ref&&!e.ref.startsWith("gone:")?e.ref:null}));
     else evs=rck.rows.map((w,j)=>{
       const k=TRIGGER_KINDS[w.kind],tk=r.when[j],match=tk&&triggerKind(tk)===k?{...tk.match}:{};
-      return{label:triggerBare({sub:k.sub,kind:k.kind,match}),sub:k.sub,kind:k.kind,match,ref:w.ref,t:`${rck.time}:00`};
+      return{source:k.sub,kind:k.kind,match,deviceId:w.ref||null};
     });
-    pre.push(...ruleEventChecks(r,evs));ev=evs;
   }
-  const d=new Date(),[h,m]=rck.time.split(":").map(Number),now=rck.time===rck.nowTime;
-  if(!now)d.setHours(h||0,m||0,0,0);
-  rck.rec=ruleFireBuild(r,{by:"test",date:d,now,watch:true,ev,pre,br:rck.br});
-  ruleCheckRender();
+  const now=rck.time===rck.nowTime,at=now?null:stampIso(`${schIso(new Date())} ${rck.time}`),me=rck;
+  API.post("/rules/test",{ruleId:r._new?null:r.id,rule:ruleBody(r),events:evs,at,branches:rck.br||{},log:false}).then(f=>{
+    if(rck!==me)return;
+    rck.rec=fireNode(f,r);rck.apiAt=at;rck.apiEvs=evs;
+    ruleCheckRender();
+  }).catch(e=>toast(problemText(e)));
 }
 function ruleCheckLog(){
   const r=curRule();if(!r||!rck||!rck.rec)return;
-  const rec=rck.rec;rck=null;
-  (ruleFires[r.id]=ruleFires[r.id]||[]).unshift(rec);
-  ruleTraceOpen.add(ruleTraceKey(r,rec));listQ["fires:"+r.id]="";ruleTraceFilt="all";
-  closeBulkModal();paint();toast("Проверка записана в журнал");
+  const rec=rck.rec,ev=rck.apiEvs||[],at=rck.apiAt||null,br=rck.br||{};rck=null;
+  const done=x=>{ruleTraceOpen.add(ruleTraceKey(r,x));listQ["fires:"+r.id]="";ruleTraceFilt="all";closeBulkModal();paint();toast("Проверка записана в журнал")};
+  // Журнал неприменённого нового правила — часть черновика: на сервер он уходит только у сохранённого
+  if(r._new){(ruleFires[r.id]=ruleFires[r.id]||[]).unshift(rec);done(rec);return}
+  API.post("/rules/test",{ruleId:r.id,rule:ruleBody(r),events:ev,at,branches:br,log:true}).then(f=>done(fireAdd(r.id,f))).catch(e=>toast(problemText(e)));
 }
 
 // ── Где используется ──
@@ -10006,21 +10124,6 @@ function ruleUsersOf(nodes){
 // Устройство удалено: ссылки на него остаются в правилах как «удалено: «имя»», а не
 // молча указывают в никуда. Снимок черновика переписывается так же — иначе это
 // выглядело бы правкой пользователя.
-function ruleRefsGone(names){
-  // В наборе удалённое устройство остаётся битой частью «gone:имя» (запятая в имени разделила бы набор),
-  // а исключение удалённого устройства просто снимается.
-  const fix=r=>ruleRefItems(r).forEach(it=>{
-    if(!it.ref)return;
-    if(names.has(it.ref)){it.ref=refGone(names.get(it.ref));return}
-    if(!it.ref.startsWith("set:"))return;
-    const{inc,ex}=refParts(it.ref);
-    it.ref=refMake(inc.map(t=>names.has(t)?refGone(names.get(t)):t),ex.filter(x=>!names.has(x)));
-  });
-  rules.forEach(fix);
-  if(ruleDraft&&ruleDraft.snap)fix(ruleDraft.snap);
-  Object.values(ruleHist).flat().forEach(e=>fix(e.snap));     // версии истории: иначе «Сравнить» покажет удаление как правку
-  treeMatchCache.clear();searchMatchCache.clear();
-}
 
 // ── Порядок правил на одно событие ──
 // Правила, которым пришло одно и то же событие, выполняются по порядку r.order. Это отношение между правилами,
@@ -10047,13 +10150,13 @@ function ruleOrderMove(id,d){
   // Весь список перенумеровывается подряд: одинаковые order у соседей не дают переставить одну пару.
   const prev=l.map(x=>[x.id,x.order]),vals=l.map(ruleOrd).sort((x,y)=>x-y).map((v,i,a)=>(a[i]=i&&v<=a[i-1]?a[i-1]+1:v));
   const nl=[...l],at=l.indexOf(r);nl.splice(at,1);nl.splice(at+d,0,r);
-  nl.forEach((x,i)=>{x.order=vals[i]});
-  treeMatchCache.clear();searchMatchCache.clear();
-  paint();
-  toastAction("rord:"+id+":"+(++ruleUndoSeq),`${i18n("Порядок на событие")}: «${r.name}» ${i18n(d<0?"выполняется раньше":"выполняется позже")}`,i18n("Отменить"),()=>{
-    prev.forEach(([i,v])=>{const x=rules.find(y=>y.id===i);if(x)x.order=v});
-    paint();toast("Изменение отменено");
-  },10000);
+  const send=pairs=>API.post("/rules/reorder",{items:pairs.map(([ruleId,order])=>({ruleId,version:autoVer.get(ruleId),order}))}).then(res=>{res.items.forEach(x=>ruleSet(x))});
+  send(nl.map((x,i)=>[x.id,vals[i]])).then(()=>{
+    paint();
+    toastAction("rord:"+id+":"+(++ruleUndoSeq),`${i18n("Порядок на событие")}: «${r.name}» ${i18n(d<0?"выполняется раньше":"выполняется позже")}`,i18n("Отменить"),()=>{
+      send(prev).then(()=>{paint();toast("Изменение отменено")}).catch(e=>toast(problemText(e)));
+    },10000);
+  }).catch(e=>toast(problemText(e)));
 }
 function ruleOrderHtml(r){
   const l=ruleOrdList(r);if(l.length<2)return"";
@@ -10114,20 +10217,21 @@ function ruleMuteApply(){
 function ruleMuteSetTo(ids,m){
   closeTreeCtx();
   const rs=ids.map(id=>rules.find(x=>x.id===id)).filter(Boolean);if(!rs.length)return;
-  const prev=rs.map(r=>[r.id,r.mute?ruleClone(r.mute):undefined]);
-  rs.forEach(r=>{if(m)r.mute=ruleClone(m);else delete r.mute;ids.forEach(id=>ruleSel.delete(id))});
-  treeMatchCache.clear();searchMatchCache.clear();
-  paint();
-  const n=rs.length,what=n===1?`«${rs[0].name}»`:`${n} ${i18n(plural(n,"правило|правила|правил"))}`;
-  toastAction("rmute:"+ids.join(",")+":"+(++ruleUndoSeq),m?`${i18n("Приглушено до")} ${ruleMuteTill(m)}: ${what}`:`${what}: ${i18n("приглушение снято")}`,i18n("Отменить"),()=>{
-    prev.forEach(([id,v])=>{const r=rules.find(x=>x.id===id);if(r){if(v)r.mute=v;else delete r.mute}});
-    treeMatchCache.clear();searchMatchCache.clear();
-    paint();toast("Изменение отменено");
-  },10000);
+  const prev=rs.map(r=>[r.id,r.mute?ruleClone(r.mute):null]);
+  const mute=x=>x?{until:stampIso(x.until),reason:x.why||""}:null;
+  rulesUpdate(rs.map(r=>({ruleId:r.id,set:{mute:mute(m)}}))).then(res=>{
+    ids.forEach(id=>ruleSel.delete(id));paint();
+    if(res.failed.length)toast(problemText(res.failed[0].code));
+    const n=res.done.length;if(!n)return;
+    const what=n===1?`«${res.done[0].name}»`:`${n} ${i18n(plural(n,"правило|правила|правил"))}`;
+    toastAction("rmute:"+ids.join(",")+":"+(++ruleUndoSeq),m?`${i18n("Приглушено до")} ${ruleMuteTill(m)}: ${what}`:`${what}: ${i18n("приглушение снято")}`,i18n("Отменить"),()=>{
+      rulesUpdate(prev.filter(([id])=>res.done.some(x=>x.id===id)).map(([ruleId,v])=>({ruleId,set:{mute:mute(v)}}))).then(()=>{paint();toast("Изменение отменено")}).catch(e=>toast(problemText(e)));
+    },10000);
+  }).catch(e=>toast(problemText(e)));
 }
 // Окна обслуживания: повторяющаяся тишина для выбранных правил. Когда — расписание из библиотеки
 // (обычно местное, «только для этого окна»).
-const MAINT_WINDOWS=[{id:"mw1",name:"Ночная проверка сирен — по средам",sched:"s_mw1",scope:["70000002-0000-4000-8000-000000000000","70000006-0000-4000-8000-000000000000"],on:true}];
+const MAINT_WINDOWS=[]
 let maintSeq=1;
 function ruleMaintHit(w,r,d){return!!w.on&&!w._pend&&(w.scope==="all"||(w.scope||[]).includes(r.id))&&ruleTimeIn(w,d)}
 function ruleMaintNow(r){return MAINT_WINDOWS.find(w=>ruleMaintHit(w,r,new Date()))}
@@ -10140,14 +10244,14 @@ function maintScopeText(w){
 // Правка окна — сразу, с «Отменить»: окно обслуживания — настройка объекта, а не правила.
 function maintEdit(id,what,fn){
   const w=MAINT_WINDOWS.find(x=>x.id===id);if(!w||w._pend)return;
-  const prev=ruleClone(w);
-  fn(w);ruleIdxDrop();paint();
-  // Откатывается только это окно (не массив целиком): другие правки и удаляемые окна остаются как есть.
-  toastAction("maint:"+id+":"+(++ruleUndoSeq),`${i18n("Окно обслуживания")} «${w.name}»: ${i18n(what)}`,i18n("Отменить"),()=>{
-    const x=MAINT_WINDOWS.find(y=>y.id===id);if(!x)return;
-    Object.keys(x).forEach(k=>{if(k!=="_pend")delete x[k]});Object.assign(x,prev);
-    ruleIdxDrop();paint();toast("Изменение отменено");
-  },10000);
+  // Правка — на копии, на сервер окном целиком (PUT с версией)
+  const prev=ruleClone(w),c=ruleClone(w);fn(c);
+  API.put(`/maintenance-windows/${id}`,winBody(c),autoVer.get(id)).then(x=>{
+    winSet(x);ruleIdxDrop();paint();
+    toastAction("maint:"+id+":"+(++ruleUndoSeq),`${i18n("Окно обслуживания")} «${x.name}»: ${i18n(what)}`,i18n("Отменить"),()=>{
+      API.put(`/maintenance-windows/${id}`,winBody(prev),autoVer.get(id)).then(y=>{winSet(y);ruleIdxDrop();paint();toast("Изменение отменено")}).catch(e=>toast(problemText(e)));
+    },10000);
+  }).catch(e=>{toast(problemText(e));paint()});
 }
 function maintName(id,v){maintEdit(id,"переименовано",w=>{w.name=v.trim()||w.name})}
 function maintOn(id){const w=MAINT_WINDOWS.find(x=>x.id===id);maintEdit(id,w&&w.on?"выключено":"включено",x=>{x.on=!x.on})}
@@ -10155,21 +10259,24 @@ function maintSched(id,v){
   const w=MAINT_WINDOWS.find(x=>x.id===id);if(!w)return;
   if(v==="__new"||v==="__here"){
     const d=v==="__here"?schBlank({from:schById(w.sched),own:{k:"maint",id},name:`${w.name} — ${i18n("время")}`}):schBlank();
-    schDlgOpen(d.id,{draft:d,isNew:true,onSave:sid=>{const x=MAINT_WINDOWS.find(y=>y.id===id);if(x)x.sched=sid}});paint();return;
+    schDlgOpen(d.id,{draft:d,isNew:true,onSave:sid=>maintEdit(id,"изменено расписание",x=>{x.sched=sid})});paint();return;
   }
   maintEdit(id,"изменено расписание",x=>{x.sched=v});
 }
 function maintScopeMode(id,all){maintEdit(id,"изменён состав правил",w=>{w.scope=all?"all":[]})}
 function maintRule(id,rid){maintEdit(id,"изменён состав правил",w=>{const a=Array.isArray(w.scope)?w.scope:(w.scope=[]),j=a.indexOf(rid);if(j<0)a.push(rid);else a.splice(j,1)})}
 function maintAdd(){
-  const w={id:"mw"+(++maintSeq),name:i18n("Новое окно"),sched:"",scope:"all",on:true};
-  const s=schBlank({name:`${i18n("По вторникам")} 10:00–12:00`,own:{k:"maint",id:w.id}});s.week=schW({"2":[["10:00","12:00"]]});
-  SCHEDS.push(s);w.sched=s.id;
-  MAINT_WINDOWS.push(w);paint();
-  const nm=document.querySelector(`input[data-mwn="${w.id}"]`);if(nm){nm.scrollIntoView({block:"center"});nm.focus();nm.select()}
-  toastAction("maint:"+w.id+":"+(++ruleUndoSeq),`${i18n("Окно обслуживания")} «${w.name}»: ${i18n("добавлено")}`,i18n("Отменить"),()=>{
-    const i=MAINT_WINDOWS.findIndex(x=>x.id===w.id);if(i>=0)MAINT_WINDOWS.splice(i,1);const j=SCHEDS.findIndex(x=>x.id===s.id);if(j>=0)SCHEDS.splice(j,1);paint();toast("Изменение отменено");
-  },10000);
+  const s=schBlank({name:`${i18n("По вторникам")} 10:00–12:00`});s.week=schW({"2":[["10:00","12:00"]]});delete s.own;
+  // Окно — вместе со своим расписанием одним запросом
+  API.post("/maintenance-windows",{name:i18n("Новое окно"),enabled:true,ruleIds:null,schedule:schBody(s)}).then(res=>{
+    schSet(res.schedule);const w=winSet(res.window);paint();
+    const nm=document.querySelector(`input[data-mwn="${w.id}"]`);if(nm){nm.scrollIntoView({block:"center"});nm.focus();nm.select()}
+    toastAction("maint:"+w.id+":"+(++ruleUndoSeq),`${i18n("Окно обслуживания")} «${w.name}»: ${i18n("добавлено")}`,i18n("Отменить"),()=>{
+      API.del(`/maintenance-windows/${w.id}`,autoVer.get(w.id)).then(()=>{
+        const i=MAINT_WINDOWS.findIndex(x=>x.id===w.id);if(i>=0)MAINT_WINDOWS.splice(i,1);const j=SCHEDS.findIndex(x=>x.id===res.schedule.id);if(j>=0)SCHEDS.splice(j,1);paint();toast("Изменение отменено");
+      }).catch(e=>toast(problemText(e)));
+    },10000);
+  }).catch(e=>toast(problemText(e)));
 }
 // Удаление — как у правил: число подтверждает, затем отсчёт в тосте с «Отменить»; пока он идёт, окно не действует.
 function maintDelAsk(id){
@@ -10182,7 +10289,14 @@ function maintDelAsk(id){
 function maintDelSchedule(id){
   const w=MAINT_WINDOWS.find(x=>x.id===id);if(!w)return;
   w._pend=true;ruleIdxDrop();paint();
-  const key="mdel:"+id,timer=setTimeout(()=>{removeToastAction(key);const i=MAINT_WINDOWS.findIndex(x=>x.id===id);if(i>=0&&MAINT_WINDOWS[i]._pend){MAINT_WINDOWS.splice(i,1);for(let j=SCHEDS.length-1;j>=0;j--)if(SCHEDS[j].own&&SCHEDS[j].own.k==="maint"&&SCHEDS[j].own.id===id&&!schUses(SCHEDS[j].id).length)SCHEDS.splice(j,1)}ruleIdxDrop();paint();toast("Окно обслуживания удалено")},10000);
+  const key="mdel:"+id,timer=setTimeout(()=>{removeToastAction(key);
+    const x=MAINT_WINDOWS.find(y=>y.id===id);if(!x||!x._pend)return;
+    // После отсчёта — DELETE: своё расписание окна сервер удаляет вместе с ним, если оно больше нигде не нужно
+    API.del(`/maintenance-windows/${id}`,autoVer.get(id)).then(async()=>{
+      const i=MAINT_WINDOWS.findIndex(y=>y.id===id);if(i>=0)MAINT_WINDOWS.splice(i,1);
+      autoDirty.add("schedule");await autoFlush();toast("Окно обслуживания удалено");
+    }).catch(e=>{const y=MAINT_WINDOWS.find(z=>z.id===id);if(y)delete y._pend;toast(problemText(e));paint()});
+  },10000);
   toastAction(key,`«${w.name}» — ${i18n("удаление через")}`,i18n("Отменить"),()=>{clearTimeout(timer);const x=MAINT_WINDOWS.find(y=>y.id===id);if(x)delete x._pend;ruleIdxDrop();paint();toast("Удаление отменено")},10000);
 }
 function maintCardHtml(w){
@@ -10237,26 +10351,8 @@ const SCH_DOW_G=[1,1,2,1,2,2,3];
 const SCH_DOW_ACC=["понедельник","вторник","среду","четверг","пятницу","субботу","воскресенье"];
 // Неделя: {"1,2,3,4,5":[["08:00","20:00"]]} → семь списков, пн — первый.
 function schW(o){const w=[[],[],[],[],[],[],[]];Object.entries(o).forEach(([k,v])=>k.split(",").forEach(d=>{w[+d-1]=ruleClone(v)}));return w}
-const DAY_GROUPS=[
-  {id:"g_hol",name:"Праздники РФ",rules:[
-    {t:"range",from:"2026-01-01",to:"2026-01-08",yearly:true},{t:"range",from:"2026-02-23",to:"2026-02-23",yearly:true},
-    {t:"range",from:"2026-03-08",to:"2026-03-08",yearly:true},{t:"range",from:"2026-05-01",to:"2026-05-01",yearly:true},
-    {t:"range",from:"2026-05-09",to:"2026-05-09",yearly:true},{t:"range",from:"2026-06-12",to:"2026-06-12",yearly:true},
-    {t:"range",from:"2026-11-04",to:"2026-11-04",yearly:true}]},
-  {id:"g_pre",name:"Предпраздничные дни",rules:[{t:"range",from:"2026-11-03",to:"2026-11-03"},{t:"range",from:"2026-12-30",to:"2026-12-30"}]},
-  {id:"g_san",name:"Санитарный день",rules:[{t:"ord",nth:"last",dow:4,month:0}]}];
-const SCHEDS=[
-  {id:"s_work",name:"Рабочие дни",kind:"week",week:schW({"1,2,3,4,5":[["08:00","20:00"]]}),
-   ovr:[{g:"g_hol",m:"none"},{g:"g_san",m:"none"},{g:"g_pre",m:"custom",iv:[["08:00","19:00"]]}]},
-  {id:"s_night",name:"Ночь",kind:"week",week:schW({"1,2,3,4,5,6,7":[["20:00","08:00"]]})},
-  {id:"s_wknd",name:"Выходные и праздники",kind:"week",week:schW({"6,7":[["00:00","00:00"]]}),ovr:[{g:"g_hol",m:"full"},{g:"g_san",m:"full"}]},
-  {id:"s_offh",name:"Внерабочее время в будни",kind:"week",week:schW({"1,2,3,4,5":[["20:00","08:00"]]})},
-  {id:"s_dark",name:"От заката до рассвета",kind:"astro",astro:{win:"night",off1:0,off2:0,lat:55.75,lon:37.62,tz:3}},
-  {id:"s_guard",name:"Охрана: сутки через трое",kind:"cycle",cycle:{len:4,start:"2026-10-01",days:[[["08:00","08:00"]],[],[],[]]}},
-  {id:"s_fair",name:"Ярмарка на парковке",kind:"dates",dates:[{d:"2026-11-14",iv:[["09:00","18:00"]]},{d:"2026-11-15",iv:[["09:00","16:00"]]}]},
-  {id:"s_mw1",name:"По средам 02:00–03:00",kind:"week",week:schW({"3":[["02:00","03:00"]]}),own:{k:"maint",id:"mw1"}},
-  {id:"s_always",name:"Всегда",kind:"always",builtin:true},
-  {id:"s_never",name:"Никогда",kind:"never",builtin:true}];
+const DAY_GROUPS=[]
+const SCHEDS=[]
 SCHEDS.forEach(schFill);
 // Недостающие части — пустыми, чтобы смена типа не теряла уже введённое.
 function schFill(s){
@@ -10490,14 +10586,11 @@ function schErr(s){
 // правило привязывают к режиму, и оно само замолкает вне его. Режим задаёт расписание из
 // библиотеки; порядок — приоритет: действует первый режим, чьё расписание сейчас действует,
 // а если ни одно — режим «Иначе». У «Обслуживания» расписания нет: только вручную.
-const OBJ_MODES=[
-  {id:"service",name:"Обслуживание",sched:null,sys:true},
-  {id:"night",name:"Ночь",sched:"s_night",sys:true},
-  {id:"weekend",name:"Выходной",sched:"s_wknd",sys:true},
-  {id:"work",name:"Рабочее время",sched:"s_work",sys:true}];
-let objModeElse="weekend",modeSeq=1;
+// Режимы объекта — с сервера (GET /modes); code — системный режим (service, night, weekend, work)
+const OBJ_MODES=[]
+let objModeElse=null,modeSeq=1
 const MODE_PALETTE=["var(--one-palette-magenta)","var(--one-palette-teal)","var(--one-palette-amber)","var(--one-palette-green)","var(--one-palette-purple)"];
-function modeColor(id){return{work:"var(--one-accent)",night:"var(--one-palette-purple)",weekend:"var(--one-palette-green)",service:"var(--one-palette-orange)"}[id]||(OBJ_MODES.find(m=>m.id===id)||{}).color||"var(--mu)"}
+function modeColor(id){return{work:"var(--one-accent)",night:"var(--one-palette-purple)",weekend:"var(--one-palette-green)",service:"var(--one-palette-orange)"}[modeCode(id)]||(OBJ_MODES.find(m=>m.id===id)||{}).color||"var(--mu)"}
 function modeWhenText(m){return m.sched?`${i18n("по расписанию")} «${schName(m.sched)}»`:i18n("только вручную")}
 function modeLive(){return OBJ_MODES.filter(m=>!m._pend)}
 // Режимы за сутки d: [{from,to,mode,sched}] — участки, где режим один.
@@ -10531,10 +10624,12 @@ function schWhenText(t){
   return k===0?hm:k===1?`${hm} ${i18n("завтра")}`:`${hm} ${schDateShort(t)}`;
 }
 // objModeManual — ручное переключение: {until} до конца периода ("" — пока не вернут обратно).
-let objMode=objModeSched(),objModeManual=null;
+// Текущий режим считает сервер (GET /modes/current): здесь — его ответ
+let objMode=null,objModeManual=null
 function objModeUntil(){const n=objModeNext();return n?schWhenText(n.at):""}
 // После правки расписаний и режимов: режим по расписанию пересчитывается, ручной — остаётся.
-function objModeRefresh(){if(!objModeManual)objMode=objModeSched();if(!OBJ_MODES.some(m=>m.id===objMode)){objModeManual=null;objMode=objModeSched()}}
+// Текущий режим считает сервер: после правок расписаний и режимов — перечитать
+function objModeRefresh(){modeCurLoad().catch(()=>{})}
 // Пометка для правил, которые в текущем режиме молчат.
 // Одна полоса «Сейчас не действует»: приглушение (со «Снять сейчас»), окно обслуживания, невыполненный режим.
 function ruleStatusBand(r){
@@ -10577,20 +10672,24 @@ function ruleIdleNote(r){
 function ruleCondModes(r){return(r.cond||[]).filter(c=>c.kind==="mode").flatMap(c=>c.modes||[])}
 function ruleModeSwitch(v){
   if(!v)return;
-  const prev={mode:objMode,man:objModeManual};
-  if(v==="auto"){objMode=objModeSched();objModeManual=null}
-  else if(v!==objMode){objMode=v;objModeManual={until:v==="service"?"":objModeUntil()}}
-  else return;
-  paint();
-  toastAction("rmode",`${i18n("Режим объекта")}: «${i18n(ruleModeName(objMode))}»`,i18n("Отменить"),()=>{
-    objMode=prev.mode;objModeManual=prev.man;paint();toast("Переключение отменено");
-  },10000);
+  if(v!=="auto"&&v===objMode&&objModeManual)return;
+  if(v==="auto"&&!objModeManual)return;
+  const prev=modeCurRaw;
+  // Ручное переключение — на сервер (POST /modes/current): до следующей смены по расписанию, «Обслуживание» — до отмены
+  const nx=v!=="auto"&&modeCode(v)!=="service"?objModeNext():null;
+  const set=b=>API.post("/modes/current",b).then(c=>{modeCurApply(c);ruleIdxDrop()});
+  set(v==="auto"?{modeId:null,until:null}:{modeId:v,until:nx?nx.at.toISOString():null}).then(()=>{
+    paint();
+    toastAction("rmode",`${i18n("Режим объекта")}: «${i18n(ruleModeName(objMode))}»`,i18n("Отменить"),()=>{
+      set(prev&&prev.manual?{modeId:prev.modeId,until:prev.manual.until}:{modeId:null,until:null}).then(()=>{paint();toast("Переключение отменено")}).catch(e=>toast(problemText(e)));
+    },10000);
+  }).catch(e=>toast(problemText(e)));
 }
 // ── Редактор расписания ──
 // Один редактор на двух местах: страница «Расписания» (k="p") и окно поверх любого места,
 // где расписание выбирают (k="d"): режимы, условие «Время», окна обслуживания. Правка идёт в
 // копии; «Сохранить» кладёт её в библиотеку сразу, с «Отменить» в уведомлении.
-let schEd=null,schDlg=null,schLast="s_work";
+let schEd=null,schDlg=null,schLast=null
 const schDlgSeen={key:null};
 function schE(k){return k==="d"?schDlg:schEd}
 function schEdNew(s,k,o={}){
@@ -10898,8 +10997,13 @@ function schDup(id){
   const s=schById(id);if(!s)return;
   const c=schBlank({from:s.builtin?null:s,name:`${s.name} (${i18n("копия")})`});
   if(s.builtin){c.kind=s.kind==="never"?"week":s.kind;if(s.kind==="never")c.week=schW({})}
-  SCHEDS.push(c);schEd=null;ruleOpen("sch:"+c.id,true);
-  toastAction("sdup:"+c.id,`${i18n("Расписание")} «${c.name}»: ${i18n("создано")}`,i18n("Отменить"),()=>{const i=SCHEDS.findIndex(x=>x.id===c.id);if(i>=0)SCHEDS.splice(i,1);if(schEd&&schEd.id===c.id)schEd=null;paint();toast("Изменение отменено")},10000);
+  delete c.own;
+  API.post("/schedules",schBody(c)).then(x=>{
+    schSet(x);schEd=null;ruleOpen("sch:"+x.id,true);
+    toastAction("sdup:"+x.id,`${i18n("Расписание")} «${x.name}»: ${i18n("создано")}`,i18n("Отменить"),()=>{
+      API.del(`/schedules/${x.id}`,autoVer.get(x.id)).then(()=>{const i=SCHEDS.findIndex(y=>y.id===x.id);if(i>=0)SCHEDS.splice(i,1);if(schEd&&schEd.id===x.id)schEd=null;paint();toast("Изменение отменено")}).catch(e=>toast(problemText(e)));
+    },10000);
+  }).catch(e=>toast(problemText(e)));
 }
 function schShare(id){
   const s=schById(id);if(!s||!s.own)return;
@@ -10911,19 +11015,23 @@ function schShare(id){
 function schSave(k){
   const e=schE(k);if(!e||schRO(e))return;
   const err=schErr(e.d);if(err){toast(err);document.querySelector(k==="d"?"#schdlg .cbody":"#main .sc")?.querySelector("input:invalid,#schName-"+k)?.focus();return}
-  e.d.name=e.d.name.trim();
   const id=e.id,i=SCHEDS.findIndex(s=>s.id===id),prev=i>=0?ruleClone(SCHEDS[i]):null,data=ruleClone(e.d),cb=e.onSave;
-  if(i>=0)SCHEDS[i]=data;else SCHEDS.push(data);
-  if(k==="d")schDlgHide();else{e.base=JSON.stringify(e.d);e.isNew=false}
-  objModeRefresh();ruleIdxDrop();treeMatchCache.clear();searchMatchCache.clear();
-  if(cb)cb(id);
-  paint();
-  toastAction("ssave:"+id+":"+(++ruleUndoSeq),`${i18n("Расписание")} «${data.name}»: ${i18n(prev?"сохранено":"создано")}`,i18n("Отменить"),()=>{
-    const j=SCHEDS.findIndex(s=>s.id===id);
-    if(prev){if(j>=0)SCHEDS[j]=prev}else if(j>=0)SCHEDS.splice(j,1);
-    if(schEd&&schEd.id===id&&!schDirty(schEd))schEd=null;
-    objModeRefresh();ruleIdxDrop();paint();toast("Изменение отменено");
-  },10000);
+  data.name=data.name.trim();
+  // Сохранение — на сервер: новое — POST (id даёт сервер), прежнее — PUT с версией
+  (prev?API.put(`/schedules/${id}`,schBody(data),autoVer.get(id)):API.post("/schedules",schBody(data))).then(x=>{
+    schSet(x);
+    if(k==="d")schDlgHide();else{e.id=x.id;e.d.id=x.id;e.base=JSON.stringify(e.d);e.isNew=false}
+    if(rule==="sch:"+id)rule="sch:"+x.id;
+    if(schLast===id)schLast=x.id;
+    modeCurLoad().catch(()=>{});ruleIdxDrop();treeMatchCache.clear();searchMatchCache.clear();
+    if(cb)cb(x.id);
+    paint();
+    toastAction("ssave:"+x.id+":"+(++ruleUndoSeq),`${i18n("Расписание")} «${x.name}»: ${i18n(prev?"сохранено":"создано")}`,i18n("Отменить"),()=>{
+      (prev?API.put(`/schedules/${x.id}`,schBody(prev),autoVer.get(x.id)).then(y=>{schSet(y)})
+        :API.del(`/schedules/${x.id}`,autoVer.get(x.id)).then(()=>{const j=SCHEDS.findIndex(s=>s.id===x.id);if(j>=0)SCHEDS.splice(j,1)}))
+        .then(()=>{if(schEd&&schEd.id===x.id&&!schDirty(schEd))schEd=null;modeCurLoad().catch(()=>{});ruleIdxDrop();paint();toast("Изменение отменено")}).catch(er=>toast(problemText(er)));
+    },10000);
+  }).catch(er=>toast(problemText(er)));
 }
 // Удаление — числом, затем отсчёт с «Отменить». Места переходят: режимы — на «только вручную», условия и окна — на «Никогда».
 function schDelAsk(id){
@@ -10937,17 +11045,19 @@ function schDelAsk(id){
 function schDelRun(id){
   const s=schById(id);if(!s)return;
   s._pend=true;if(schEd&&schEd.id===id)schEd=null;paint();
-  const key="sdel:"+id,timer=setTimeout(()=>{removeToastAction(key);schDelFinish(id);toast("Расписание удалено")},10000);
+  const key="sdel:"+id,timer=setTimeout(()=>{removeToastAction(key);schDelFinish(id)},10000);
   toastAction(key,`«${s.name}» — ${i18n("удаление через")}`,i18n("Отменить"),()=>{clearTimeout(timer);const x=schById(id);if(x)delete x._pend;paint();toast("Удаление отменено")},10000);
 }
 function schDelFinish(id){
   const i=SCHEDS.findIndex(s=>s.id===id);if(i<0||!SCHEDS[i]._pend)return;
-  SCHEDS.splice(i,1);if(schEd&&schEd.id===id)schEd=null;
-  OBJ_MODES.forEach(m=>{if(m.sched===id)m.sched=null});
-  rules.forEach(r=>(r.cond||[]).forEach(c=>{if(c.kind==="time"&&c.sched===id)c.sched="s_never"}));
-  MAINT_WINDOWS.forEach(w=>{if(w.sched===id)w.sched="s_never"});
-  if(schLast===id)schLast="s_work";
-  objModeRefresh();ruleIdxDrop();treeMatchCache.clear();searchMatchCache.clear();paint();
+  // После отсчёта — DELETE. Где использовалось, переводит сервер: режим — только вручную, «Время» и окна — «Никогда»
+  API.del(`/schedules/${id}`,autoVer.get(id)).then(async()=>{
+    const j=SCHEDS.findIndex(s=>s.id===id);if(j>=0)SCHEDS.splice(j,1);
+    if(schEd&&schEd.id===id)schEd=null;
+    if(schLast===id)schLast=(SCHEDS.find(s=>!s.builtin)||{}).id||null;
+    autoDirty.add("rule");autoDirty.add("modes");autoDirty.add("maintenanceWindow");await autoFlush();
+    toast("Расписание удалено");
+  }).catch(e=>{const s=schById(id);if(s)delete s._pend;toast(problemText(e));paint()});
 }
 function schGoDays(k){
   const go=()=>ruleOpen("schdays",true);
@@ -10993,21 +11103,28 @@ function schDlgToLib(){const id=schDlg&&schDlg.id;if(id)schDlgCancel(()=>ruleOpe
 let schDaysCal=null;
 function grpEdit(id,what,fn){
   const g=grpById(id);if(!g||g._pend)return;
-  const prev=ruleClone(g);fn(g);objModeRefresh();ruleIdxDrop();paint();
-  toastAction("grp:"+id+":"+(++ruleUndoSeq),`${i18n("Группа")} «${g.name}»: ${i18n(what)}`,i18n("Отменить"),()=>{
-    const x=grpById(id);if(!x)return;Object.keys(x).forEach(k=>{if(k!=="_pend")delete x[k]});Object.assign(x,prev);
-    objModeRefresh();paint();toast("Изменение отменено");
-  },10000);
+  // Правка — на копии, на сервер группой целиком (PUT с версией); кэш меняет ответ
+  const prev=ruleClone(g),c=ruleClone(g);fn(c);
+  API.put(`/day-groups/${id}`,grpBody(c),autoVer.get(id)).then(x=>{
+    grpSet(x);modeCurLoad().catch(()=>{});ruleIdxDrop();paint();
+    toastAction("grp:"+id+":"+(++ruleUndoSeq),`${i18n("Группа")} «${x.name}»: ${i18n(what)}`,i18n("Отменить"),()=>{
+      API.put(`/day-groups/${id}`,grpBody(prev),autoVer.get(id)).then(y=>{grpSet(y);modeCurLoad().catch(()=>{});paint();toast("Изменение отменено")}).catch(e=>toast(problemText(e)));
+    },10000);
+  }).catch(e=>{toast(problemText(e));paint()});
 }
 function grpRename(id,v){grpEdit(id,"переименована",g=>{g.name=v.trim()||g.name})}
 function grpRuleSet(id,i,f,v){grpEdit(id,"изменены даты",g=>{const r=g.rules[i];if(!r)return;r[f]=f==="yearly"?!!v:f==="nth"?(v==="last"?"last":+v):f==="dow"||f==="month"?+v:v;if(f==="from"&&r.to&&r.to<v)r.to=""})}
 function grpRuleAdd(id,t){grpEdit(id,"добавлено правило",g=>{g.rules.push(t==="ord"?{t:"ord",nth:2,dow:7,month:5}:{t:"range",from:schIso(schToday()),to:"",yearly:false})})}
 function grpRuleDel(id,i){grpEdit(id,"убрано правило",g=>{g.rules.splice(i,1)})}
 function grpAdd(){
-  const g={id:"g"+(++grpSeq)+"_"+Date.now().toString(36),name:i18n("Новая группа"),rules:[{t:"range",from:schIso(schToday()),to:"",yearly:false}]};
-  DAY_GROUPS.push(g);paint();
-  const n=document.querySelector(`input[data-gn="${g.id}"]`);if(n){n.scrollIntoView({block:"center"});n.focus();n.select()}
-  toastAction("grp:"+g.id+":"+(++ruleUndoSeq),`${i18n("Группа")} «${g.name}»: ${i18n("добавлена")}`,i18n("Отменить"),()=>{const i=DAY_GROUPS.findIndex(x=>x.id===g.id);if(i>=0)DAY_GROUPS.splice(i,1);paint();toast("Изменение отменено")},10000);
+  const g={name:i18n("Новая группа"),rules:[{t:"range",from:schIso(schToday()),to:"",yearly:false}]};
+  API.post("/day-groups",grpBody(g)).then(x=>{
+    const n=grpSet(x);paint();
+    const el=document.querySelector(`input[data-gn="${n.id}"]`);if(el){el.scrollIntoView({block:"center"});el.focus();el.select()}
+    toastAction("grp:"+n.id+":"+(++ruleUndoSeq),`${i18n("Группа")} «${n.name}»: ${i18n("добавлена")}`,i18n("Отменить"),()=>{
+      API.del(`/day-groups/${n.id}`,autoVer.get(n.id)).then(()=>{const i=DAY_GROUPS.findIndex(y=>y.id===n.id);if(i>=0)DAY_GROUPS.splice(i,1);paint();toast("Изменение отменено")}).catch(e=>toast(problemText(e)));
+    },10000);
+  }).catch(e=>toast(problemText(e)));
 }
 function grpDelAsk(id){
   const g=grpById(id);if(!g||g._pend)return;
@@ -11021,9 +11138,12 @@ function grpDelRun(id){
   g._pend=true;paint();
   const key="gdel:"+id,timer=setTimeout(()=>{removeToastAction(key);
     const i=DAY_GROUPS.findIndex(x=>x.id===id);if(i<0||!DAY_GROUPS[i]._pend)return;
-    DAY_GROUPS.splice(i,1);SCHEDS.forEach(s=>{s.ovr=s.ovr.filter(o=>o.g!==id)});
-    [schEd,schDlg].forEach(e=>{if(e){e.d.ovr=e.d.ovr.filter(o=>o.g!==id);const b=e.base&&JSON.parse(e.base);if(b){b.ovr=b.ovr.filter(o=>o.g!==id);e.base=JSON.stringify(b)}}});
-    objModeRefresh();paint();toast("Группа удалена")},10000);
+    // После отсчёта — DELETE: из расписаний особые дни этой группы убирает сервер
+    API.del(`/day-groups/${id}`,autoVer.get(id)).then(async()=>{
+      const j=DAY_GROUPS.findIndex(x=>x.id===id);if(j>=0)DAY_GROUPS.splice(j,1);
+      [schEd,schDlg].forEach(e=>{if(e){e.d.ovr=e.d.ovr.filter(o=>o.g!==id);const b=e.base&&JSON.parse(e.base);if(b){b.ovr=b.ovr.filter(o=>o.g!==id);e.base=JSON.stringify(b)}}});
+      autoDirty.add("schedule");await autoFlush();modeCurLoad().catch(()=>{});toast("Группа удалена");
+    }).catch(e=>{const x=grpById(id);if(x)delete x._pend;toast(problemText(e));paint()})},10000);
   toastAction(key,`«${g.name}» — ${i18n("удаление через")}`,i18n("Отменить"),()=>{clearTimeout(timer);const x=grpById(id);if(x)delete x._pend;paint();toast("Удаление отменено")},10000);
 }
 function grpRuleHtml(g,r,i,dis){
@@ -11056,12 +11176,21 @@ function schDaysUI(){
 }
 // ── Страница «Режимы объекта» ──
 let modeCal=null;
-function modeEdit(what,fn){
+function modeEdit(what,fn,after){
+  // Режимы — списком целиком (PUT /modes с версией). Новое состояние считается на копии: fn меняет список,
+  // он тут же возвращается как был, а меняет его ответ сервера
   const prev={m:ruleClone(OBJ_MODES),e:objModeElse};
-  fn();objModeRefresh();ruleIdxDrop();treeMatchCache.clear();searchMatchCache.clear();paint();
-  toastAction("mode:"+(++ruleUndoSeq),`${i18n("Режимы объекта")}: ${i18n(what)}`,i18n("Отменить"),()=>{
-    OBJ_MODES.splice(0,OBJ_MODES.length,...prev.m);objModeElse=prev.e;objModeRefresh();ruleIdxDrop();paint();toast("Изменение отменено");
-  },10000);
+  fn();
+  const body={items:OBJ_MODES.filter(m=>!m._gone).map(modeBody),otherwise:objModeElse};
+  OBJ_MODES.splice(0,OBJ_MODES.length,...prev.m);objModeElse=prev.e;
+  const put=b=>API.put("/modes",b,modesVer).then(M=>{modesApply(M);return modeCurLoad()}).then(()=>{ruleIdxDrop();treeMatchCache.clear();searchMatchCache.clear()});
+  put(body).then(()=>{
+    if(after)after();
+    paint();
+    toastAction("mode:"+(++ruleUndoSeq),`${i18n("Режимы объекта")}: ${i18n(what)}`,i18n("Отменить"),()=>{
+      put({items:prev.m.map(modeBody),otherwise:prev.e}).then(()=>{autoDirty.add("rule");return autoFlush()}).then(()=>{paint();toast("Изменение отменено")}).catch(e=>toast(problemText(e)));
+    },10000);
+  }).catch(e=>{toast(problemText(e));paint()});
 }
 function modeRename(id,v){const m=OBJ_MODES.find(x=>x.id===id);if(m&&v.trim()&&v.trim()!==m.name)modeEdit("переименован режим",()=>{m.name=v.trim()})}
 function modeMove(id,d){
@@ -11073,16 +11202,16 @@ function modeSched(id,v){
   const m=OBJ_MODES.find(x=>x.id===id);if(!m)return;
   if(v==="__new"){
     const d=schBlank({name:m.name});
-    schDlgOpen(d.id,{draft:d,isNew:true,onSave:sid=>{const x=OBJ_MODES.find(y=>y.id===id);if(x)x.sched=sid}});paint();return;
+    schDlgOpen(d.id,{draft:d,isNew:true,onSave:sid=>{const x=OBJ_MODES.find(y=>y.id===id);if(x)modeEdit(`«${x.name}» — ${i18n("расписание")} «${schName(sid)}»`,()=>{x.sched=sid})}});paint();return;
   }
   modeEdit(`«${m.name}» — ${v?`${i18n("расписание")} «${schName(v)}»`:i18n("только вручную")}`,()=>{m.sched=v||null});
 }
 function modeElseSet(v){modeEdit("изменён режим «Иначе»",()=>{objModeElse=v})}
 function modeAdd(){
   const used=OBJ_MODES.map(m=>m.color).filter(Boolean);
-  const m={id:"m"+(++modeSeq)+"_"+Date.now().toString(36),name:i18n("Новый режим"),sched:null,color:MODE_PALETTE.find(c=>!used.includes(c))||MODE_PALETTE[0]};
-  modeEdit("добавлен режим",()=>{OBJ_MODES.push(m)});
-  setTimeout(()=>{const n=document.querySelector(`tr[data-mode="${m.id}"] input`);if(n){n.focus();n.select()}},30);
+  // id нового режима задаёт клиент (UUID): список уходит целиком
+  const m={id:accNewId(),name:i18n("Новый режим"),sched:null,color:MODE_PALETTE.find(c=>!used.includes(c))||MODE_PALETTE[0]};
+  modeEdit("добавлен режим",()=>{OBJ_MODES.push(m)},()=>{setTimeout(()=>{const n=document.querySelector(`tr[data-mode="${m.id}"] input`);if(n){n.focus();n.select()}},30)});
 }
 function modeDelAsk(id){
   const m=OBJ_MODES.find(x=>x.id===id);if(!m||m.sys||m._pend)return;
@@ -11099,10 +11228,11 @@ function modeDelRun(id){
   m._pend=true;objModeRefresh();paint();
   const key="mdl:"+id,timer=setTimeout(()=>{removeToastAction(key);
     const i=OBJ_MODES.findIndex(x=>x.id===id);if(i<0||!OBJ_MODES[i]._pend)return;
-    OBJ_MODES.splice(i,1);rules.forEach(r=>(r.cond||[]).forEach(c=>{if(c.kind==="mode")c.modes=(c.modes||[]).filter(x=>x!==id)}));
-    if(objModeElse===id)objModeElse=(OBJ_MODES.find(x=>x.id!=="service")||OBJ_MODES[0]).id;
-    if(objMode===id)objModeManual=null;
-    objModeRefresh();ruleIdxDrop();paint();toast("Режим удалён")},10000);
+    // После отсчёта — список без режима: из условий правил и из «включён вручную» его убирает сервер
+    const rest=OBJ_MODES.filter(x=>x.id!==id),other=objModeElse===id?(rest.find(x=>modeCode(x.id)!=="service")||rest[0]).id:objModeElse;
+    API.put("/modes",{items:rest.map(modeBody),otherwise:other},modesVer).then(async M=>{
+      modesApply(M);await modeCurLoad();autoDirty.add("rule");await autoFlush();toast("Режим удалён");
+    }).catch(e=>{const x=OBJ_MODES.find(y=>y.id===id);if(x)delete x._pend;toast(problemText(e));paint()})},10000);
   toastAction(key,`«${m.name}» — ${i18n("удаление через")}`,i18n("Отменить"),()=>{clearTimeout(timer);const x=OBJ_MODES.find(y=>y.id===id);if(x)delete x._pend;objModeRefresh();paint();toast("Удаление отменено")},10000);
 }
 function modeSegTip(s){return`${schHM(s.from)}–${s.to>=1440?"24:00":schHM(s.to)} · ${i18n(ruleModeName(s.mode))}`}
@@ -11251,20 +11381,8 @@ function ruleCurSnap(r){
   const o=ruleClone(src);["_new","_auto","mute","order"].forEach(k=>delete o[k]);return o;
 }
 // Новая версия; 0 — правило ещё не применяли, версий у него нет.
-function ruleHistPush(r,note){
-  if(!r||r._new)return 0;
-  const snap=ruleCurSnap(r);if(!snap)return 0;
-  const h=ruleHist[r.id]=ruleHist[r.id]||[],v=h.length?h[h.length-1].v+1:1;
-  h.push({v,at:ruleNow(),by:ACC_ME,snap,note:note||""});
-  return v;
-}
 // «Отменить» в тосте: версию, добавленную только что и ещё последнюю, убираем — её как бы не было.
 // Если после неё появились другие версии, убрать нельзя: отмена записывается новой версией.
-function ruleHistUndo(id,v,note){
-  const h=ruleHist[id];if(!h||!v)return;
-  if(h.length&&h[h.length-1].v===v)h.pop();
-  else{const r=rules.find(x=>x.id===id);if(r)ruleHistPush(r,note)}
-}
 function ruleHistFromNote(r,fv){
   const e=fv&&(ruleHist[r.id]||[]).find(x=>x.v===fv);if(!e)return"";
   return`${i18n("Возврат к версии")} ${fv}${ruleDiffOf(e.snap,ruleCurSnap(r)).length?`, ${i18n("с дополнительными правками")}`:""}`;
@@ -11320,27 +11438,6 @@ function ruleHistRestore(id,v){
   if(ruleDraft&&ruleDraft.id===id){ruleDraft.fromVer=v;rulePlan()}
 }
 // Демо: у r1 и r2 версии получены откатом текущего состояния назад: undo(s) превращает снимок «после» в снимок «до».
-function ruleHistInit(){
-  const build=(id,steps)=>{
-    const r=rules.find(x=>x.id===id);if(!r)return;
-    let s=ruleCurSnap(r);const out=[];
-    for(let i=steps.length-1;i>=0;i--){
-      const[at,by,note,undo]=steps[i];
-      out.unshift({v:i+1,at,by,snap:ruleClone(s),note});
-      if(undo){s=ruleClone(s);undo(s)}
-    }
-    ruleHist[id]=out;
-  };
-  build("70000001-0000-4000-8000-000000000000",[
-    ["2026-09-03 11:20","admin","Правило создано",null],
-    ["2026-09-10 16:30","admin","",s=>{s.name="Охрана входа";s.cond=s.cond.filter(c=>c.kind!=="mode");s.when=s.when.slice(0,1);s.within=0}],
-    ["2026-09-22 14:10","it.chief","",s=>{s.rate=3;s.then[0].ref="c1";s.then[0].dur="min";delete s.then[0].after;s.cond=s.cond.filter(c=>c.kind!=="armed")}],
-    ["2026-10-02 09:45","it.chief","",s=>{s.then=s.then.filter(x=>x.ctl!=="waitev")}]]);
-  build("70000002-0000-4000-8000-000000000000",[
-    ["2026-09-08 15:02","it.chief","Правило создано",null],
-    ["2026-09-30 10:05","admin","",s=>{s.then[0].pulse_ms=5000;s.then=s.then.filter(x=>x.action!=="email")}],
-    ["2026-10-15 11:40","it.chief","",s=>{s.cond=[];s.then=s.then.filter(x=>x.ctl!=="escalate")}]]);
-}
 // «Запускать вручную могут»: роли из «Прав» с уровнем «Выполнение» на это правило — своим исключением (macro:<id>) или правом по умолчанию.
 // Роли с неограниченным доступом запускают всегда и в список не идут.
 function ruleRunners(r){
@@ -11366,10 +11463,12 @@ function ruleOvLive(r){return!!r&&r.on&&!r.watch&&!ruleMuteNow(r)&&!rulePendingI
 // Проверка без слова «Условие»: ««Режим объекта»: Ночь».
 function ruleCondTail(c){const pre=i18n("Условие");return c.label.startsWith(pre)?c.label.slice(pre.length).replace(/^:?\s*/,""):c.label}
 function ruleRtVars(r){return ruleVarsOf(r,ruleRealFires(r.id)[0]||null)}
+// Обзор: что выполняется сейчас — первое работающее правило с каждым долгим шагом (ждёт событие, эскалация,
+// вопрос оператору). Демо-нагрузка: в API её нет, считается по правилам
 function ruleLoadNow(){
   const run=[],queue=[];
-  [["70000001-0000-4000-8000-000000000000","waitev"],["70000002-0000-4000-8000-000000000000","escalate"],["70000003-0000-4000-8000-000000000000","ask"]].forEach(([id,k])=>{
-    const r=rules.find(x=>x.id===id);if(!ruleOvLive(r))return;
+  ["waitev","escalate","ask"].forEach(k=>{
+    const r=rules.find(x=>ruleItems(x).some(y=>y.it.ctl===k));if(!ruleOvLive(r))return;
     const x=ruleItems(r).find(y=>y.it.ctl===k);if(!x)return;
     const what=k==="escalate"?`${i18n("эскалация, уровень")} 2 ${i18n("из")} ${x.it.levels.length}`:ctlKind(x.it).text(x.it,ruleRtVars(r));
     run.push({r,step:`${ruleStepPathText(x.path,r,r)}: ${what}`});
@@ -11430,11 +11529,13 @@ function ruleRunNow(){
      <p>${i18n(r.watch?"Правило в режиме «Только журнал»: действия не выполнятся, в журнал запишется, что они сделали бы":"Выполнятся действия")}:</p>
      <ul class="bk-del">${acts.map(x=>`<li>${"↳ ".repeat(x.depth)}${x.a.ctl?escHtml(ctlKind(x.a).text(x.a,ruleRtVars(r))):`${escHtml(actionLabelBare(x.a,{r}))}${x.names?` · ${escHtml(x.names)}`:""}`}</li>`).join("")}</ul>`,
     down.length&&!r.watch?`${i18n("Действие не выполнится")}: ${down.join("; ")}`:"","Запустить",()=>{
-      const rec=ruleFireRun(r,"manual"),n=ruleActSteps(rec).length,g=ruleStepGood(rec);
-      ruleTraceOpen.add(ruleTraceKey(r,rec));listQ["fires:"+r.id]="";ruleTraceFilt="all";
-      paint();
-      if(rec.res==="skip"){const c=rec.checks.find(x=>!x.ok);toast(`${i18n("Запуск пропущен")}: ${c?ruleCondTail(c):""}`);return}
-      toast(`${i18n(r.watch?"Записано в журнал: выполнилось бы":"Правило выполнено:")} ${g} ${i18n("из")} ${n}`);
+      ruleFireRun(r).then(rec=>{
+        const n=ruleActSteps(rec).length,g=ruleStepGood(rec);
+        ruleTraceOpen.add(ruleTraceKey(r,rec));listQ["fires:"+r.id]="";ruleTraceFilt="all";
+        paint();
+        if(rec.res==="skip"){const c=rec.checks.find(x=>!x.ok);toast(`${i18n("Запуск пропущен")}: ${c?ruleCondTail(c):""}`);return}
+        toast(`${i18n(r.watch?"Записано в журнал: выполнилось бы":"Правило выполнено:")} ${g} ${i18n("из")} ${n}`);
+      }).catch(e=>toast(problemText(e)));
     },{html:true,rawTitle:true,cancelLabel:"Отменить",okOff:bad.length?"Условия не выполнены: запуск был бы пропущен":""});
 }
 function ruleDuplicate(id){
@@ -11526,30 +11627,20 @@ function ruleBulkApply(mode){
 // «Включить» ставит «Работает»; «Выключить» watch не трогает — у выключаемого он остаётся как был.
 let ruleUndoSeq=0;
 // Снимок черновика («до») тоже получает новое состояние: иначе сброс или отмена вернёт старое.
-function ruleSetSnap(id,on,watch){if(ruleDraft&&ruleDraft.id===id&&ruleDraft.snap){ruleDraft.snap.on=on;ruleDraft.snap.watch=watch}}
 function ruleSetMode(ids,mode){
-  const prev=ids.map(id=>{const r=rules.find(x=>x.id===id);return[id,r.on,!!r.watch,r.watchSince,ruleClone(r.changed)]});
-  const at=ruleNow();
-  ids.forEach(id=>{
-    const r=rules.find(x=>x.id===id),was=r.on&&r.watch;
-    r.on=mode!=="off";
-    if(mode!=="off")r.watch=mode==="watch";
-    if(mode==="watch"&&!was)r.watchSince=at.slice(0,10);
-    if(mode==="on")delete r.watchSince;
-    r.changed={by:ACC_ME,at};ruleSetSnap(id,r.on,r.watch);
-  });
-  const hv=ids.map(id=>[id,ruleHistPush(rules.find(x=>x.id===id),`${i18n("Состояние")}: ${i18n(RULE_MODE_NAME[mode])}`)]);
-  treeMatchCache.clear();searchMatchCache.clear();
-  paint();
-  toastAction("rundo:"+ids.join(",")+":"+(++ruleUndoSeq),`${i18n(RULE_MODE_NAME[mode])}: ${ids.length} ${i18n(plural(ids.length,"правило|правила|правил"))}`,i18n("Отменить"),()=>{
-    prev.forEach(([id,was,wasW,since,ch])=>{
-      const r=rules.find(x=>x.id===id);
-      if(r){r.on=was;r.watch=wasW;if(since===undefined)delete r.watchSince;else r.watchSince=since;r.changed=ch;ruleSetSnap(id,was,wasW)}
-    });
-    hv.forEach(([id,v])=>ruleHistUndo(id,v,i18n("Отмена изменения состояния")));
-    treeMatchCache.clear();searchMatchCache.clear();
-    paint();toast("Изменение отменено");
-  },10000);
+  const prev=ids.map(id=>{const r=rules.find(x=>x.id===id);return[id,r.on,!!r.watch]});
+  const set={on:{enabled:true,logOnly:false},watch:{enabled:true,logOnly:true},off:{enabled:false}}[mode];
+  // Состояние — быстрым групповым запросом: частичный успех, «Отменить» — обратный запрос
+  rulesUpdate(ids.map(ruleId=>({ruleId,set}))).then(res=>{
+    paint();
+    if(res.failed.length)toast(problemText(res.failed[0].code));
+    const ok=res.done.map(x=>x.id);if(!ok.length)return;
+    const hv=new Map(ok.map(id=>[id,((ruleHist[id]||[]).slice(-1)[0]||{}).v]));
+    toastAction("rundo:"+ok.join(",")+":"+(++ruleUndoSeq),`${i18n(RULE_MODE_NAME[mode])}: ${ok.length} ${i18n(plural(ok.length,"правило|правила|правил"))}`,i18n("Отменить"),()=>{
+      rulesUpdate(prev.filter(([id])=>ok.includes(id)).map(([ruleId,was,wasW])=>({ruleId,set:was?{enabled:true,logOnly:wasW}:{enabled:false},historyNote:{code:"undo",params:{number:hv.get(ruleId),state:true}}})))
+        .then(()=>{paint();toast("Изменение отменено")}).catch(e=>toast(problemText(e)));
+    },10000);
+  }).catch(e=>toast(problemText(e)));
 }
 function ruleToggleOne(id,mode){
   closeTreeCtx();
@@ -11600,14 +11691,15 @@ function ruleDeleteSchedule(ids){
 }
 function ruleDeleteCommit(ids){
   if(ruleDraft&&ids.includes(ruleDraft.id))ruleRestore();   // черновик удаляемого правила теряет смысл
-  const at=rules.findIndex(r=>r.id===rule);
-  let n=0;
-  ids.forEach(id=>{const i=rules.findIndex(x=>x.id===id);if(i>=0){rules.splice(i,1);delete ruleHist[id];n++}});
-  if(!ruleSpecial(rule)&&!rules.some(r=>r.id===rule)){ruleTab="cfg";}
-  if(!ruleSpecial(rule)&&!rules.some(r=>r.id===rule))rule=(rules[Math.min(Math.max(at,0),rules.length-1)]||{}).id||"overview";
-  treeMatchCache.clear();searchMatchCache.clear();
-  paint();
-  toast(n===1?"Правило удалено":`${i18n("Удалено правил")}: ${n}`);
+  // После отсчёта — одним запросом: частичный успех; история уходит с правилом, журнал запусков остаётся
+  const saved=ids.filter(id=>autoVer.has(id));
+  if(!saved.length){paint();return}
+  API.post("/objects/delete",{idempotencyKey:opKey(),items:saved.map(id=>({id,version:autoVer.get(id)}))}).then(res=>{
+    res.done.forEach(ruleDrop);
+    paint();
+    if(res.failed.length)toast(problemText(res.failed[0].code));
+    const n=res.done.length;if(n)toast(n===1?"Правило удалено":`${i18n("Удалено правил")}: ${n}`);
+  }).catch(e=>{toast(problemText(e));paint()});
 }
 
 // ── Меню строки ──
@@ -18719,42 +18811,14 @@ function cpApplyGeneric(){
   bulkRun(ch,null,nodes);
 }
 
-// Этап А: «Автоматизация» ещё на константах макета. У правил — те же UUID, что будут на сервере (по порядку),
-// ссылки правил на оборудование и роли переводятся со старых id на id сервера. Таблица временная: на этапе Б правила придут через API.
-const RULE_IDS_A={d1:"10000001-0000-4000-8000-000000000000",s1:"20000001-0000-4000-8000-000000000000",
-  c1:"30000013-0000-4000-8000-000000000000",e1:"30000015-0000-4000-8000-000000000000",c2:"30000038-0000-4000-8000-000000000000",
-  c2r:"30000041-0000-4000-8000-000000000000",r1b:"30000056-0000-4000-8000-000000000000",s2a:"30000073-0000-4000-8000-000000000000",
-  s2b:"30000074-0000-4000-8000-000000000000",s2c:"30000075-0000-4000-8000-000000000000",r2a:"30000076-0000-4000-8000-000000000000",
-  r2b:"30000077-0000-4000-8000-000000000000",lk0r:"30000088-0000-4000-8000-000000000000",d2c11:"30000232-0000-4000-8000-000000000000",
-  em1:"30000002-0000-4000-8000-000000000000",adm:"80000001-0000-4000-8000-000000000000",gd:"80000004-0000-4000-8000-000000000000",
-  sg:"80000005-0000-4000-8000-000000000000"};
-// …и поля устройств, которых в контракте ещё нет: «на охране» и каким правилом выключена камера
-const RULE_DEV_A={"30000013-0000-4000-8000-000000000000":{armed:true},"30000038-0000-4000-8000-000000000000":{armed:true},
-  "30000041-0000-4000-8000-000000000000":{ruleOff:"70000007-0000-4000-8000-000000000000"},"30000232-0000-4000-8000-000000000000":{ruleOff:"70000007-0000-4000-8000-000000000000"}};
-const devNodeApi=devNode;
-devNode=r=>{const n=devNodeApi(r),x=RULE_DEV_A[r.id];if(x&&(!x.ruleOff||n.ruleOff))Object.assign(n,x);return n};
-function ruleIdsA(){
-  const id=t=>RULE_IDS_A[t]&&!accRoles().some(x=>x.id===t)?RULE_IDS_A[t]:t;
-  const tok=t=>t[0]==="-"?"-"+tok(t.slice(1)):/^(folder|server|domain):/.test(t)?t.replace(/:(.*)$/,(_,x)=>":"+id(x)):id(t);
-  const ref=v=>typeof v!=="string"||!v||v.startsWith("gone:")?v:v.startsWith("set:")?"set:"+v.slice(4).split(",").map(tok).join(","):tok(v);
-  const fix=x=>{
-    if(Array.isArray(x))return x.forEach(fix);
-    if(!x||typeof x!=="object")return;
-    for(const k of Object.keys(x)){
-      if(k==="ref")x[k]=ref(x[k]);else if((k==="server"||k==="to")&&typeof x[k]==="string")x[k]=id(x[k]);else fix(x[k]);
-    }
-  };
-  fix(rules);fix(Object.values(ruleHist));
-}
 // Старт: данные с сервера, затем первая отрисовка. Раскрыто то же, что в
 // макете на константах: первый и третий домен, нераспределённые первого,
 // первый сервер, первое хранилище, первая папка с подпапкой.
-window.appReady=capsLoad().then(()=>Promise.all([hwLoad(),appLoad()])).then(()=>{
+window.appReady=capsLoad().then(()=>Promise.all([hwLoad(),appLoad()])).then(autoLoad).then(()=>{
   sel=domains[0]?.id||null;appSel.srvs=sel;
   [domains[0]?.id,domains[2]?.id,domains[0]&&unallocId(domains[0].id),servers[0]?.id,arch[0]?.id].forEach(x=>{if(x)open.add(x)});
   [folders[0],folders[0]?.folders?.[0]].forEach(f=>{if(f)open.add(f.id)});
   domains.forEach(d=>{open.add(d.id);open.add("accg:"+d.id)});
-  ruleHistInit();ruleIdsA();ruleFiresInit();   // журнал срабатываний подписывается названиями устройств
   API.subscribe(apiOnEvent,apiReload);
   syncLocalePack();applyStaticUi();
   if(!applyDeepLink()){resetTreeSel(sel);paint();}

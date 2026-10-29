@@ -22,6 +22,8 @@ import sys
 import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Chrome — в часовом поясе системы: в нём сервер считает расписания и время, в нём же макет на константах
+TZ = "Europe/Moscow"
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import extract_fixture  # noqa: E402
 from fixture_normalize import normalize  # noqa: E402
@@ -69,7 +71,7 @@ SCREENS = [
     ["rules", None, None, ["rule='modes'"]],
     ["rules", None, None, ["rule='maint'"]],
     ["rules", None, None, ["rule='schdays'"]],
-    ["rules", None, None, ["rule='sch:s_work'"]],
+    ["rules", None, None, ["rule='sch:'+id('s_work')"]],
     ["sys", None, None, ["sys='ntp'"]],
     ["sys", None, None, ["sys='sec'"]],
     ["sys", None, None, ["sys='mail'"]],
@@ -130,7 +132,7 @@ def capture(page_name, ids):
         res = subprocess.run(
             [chrome, "--headless=new", "--disable-gpu", "--no-sandbox", "--no-first-run", "--allow-file-access-from-files",
              f"--user-data-dir={tmp}/profile", "--window-size=1600,1000", "--virtual-time-budget=20000", "--dump-dom", "file://" + path],
-            capture_output=True, text=True, timeout=300)
+            capture_output=True, text=True, timeout=300, env=dict(os.environ, TZ=TZ))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     m = re.search(r'<script type="text/plain" id="__screens">(.*?)</script>', res.stdout, re.S)
@@ -152,10 +154,8 @@ def main():
     raw = extract_fixture.snapshot()
     normalize(raw, extract_fixture.CAPTURED_AT)
     ids = normalize.ids
-    # Этап А: правил основного макета в наборе ещё нет — у прототипа API они с теми же UUID по порядку
-    ids.update({f"r{i}": f"7000000{i}-0000-4000-8000-000000000000" for i in range(5, 10)})
     back = {uid: old for old, uid in ids.items()}
-    uuid_re = re.compile(r"[0-9a-f]{8}-0000-4000-8000-000000000000")
+    uuid_re = re.compile(r"[0-9a-f]{8}-[0-9]{4}-4000-8000-000000000000")
     before = capture(BEFORE, {})
     after = [uuid_re.sub(lambda m: back.get(m.group(0), m.group(0)), s) for s in capture(AFTER, ids)]
     bad = 0

@@ -56,21 +56,10 @@ DATA_CONSTANTS = {
     r"\bfunction ruleHistInit\b": "история версий правил",
     r"\bfunction ruleFiresInit\b": "демо-запуски правил",
     r"\bconst RULE_(LAYOUTS|MONS)\s*=\s*\[\s*\"": "раскладки и мониторы видеостены",
-    r"\bconst RULE_(IDS|DEV)_A\s*=": "временная таблица этапа А: старые id в правилах, поля устройств",
+    r"\bconst RULE_(IDS|DEV)_A\s*=": "старые id в правилах, поля устройств (таблица этапа А)",
 }
-# Ещё не переведены на API. Прототип API, этап А: «Автоматизация» — ещё константы макета, на этапе Б
-# переводится целиком, и PENDING снова пустеет
-PENDING = {
-    r"\bconst rules\s*=\s*\[\s*\{",
-    r"\bconst SCHEDS\s*=\s*\[\s*\{",
-    r"\bconst DAY_GROUPS\s*=\s*\[\s*\{",
-    r"\bconst OBJ_MODES\s*=\s*\[\s*\{",
-    r"\bconst MAINT_WINDOWS\s*=\s*\[\s*\{",
-    r"\bfunction ruleHistInit\b",
-    r"\bfunction ruleFiresInit\b",
-    r"\bconst RULE_(LAYOUTS|MONS)\s*=\s*\[\s*\"",
-    r"\bconst RULE_(IDS|DEV)_A\s*=",
-}
+# Ещё не переведены на API: при переводе их убирали отсюда вместе с константами; теперь переведено всё
+PENDING = set()
 
 
 class Report:

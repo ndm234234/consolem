@@ -24,6 +24,8 @@ import sys
 import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Chrome — в часовом поясе системы: в нём сервер считает расписания и время, в нём же макет на константах
+TZ = "Europe/Moscow"
 PAGE = "index_api_server.html"
 
 # Помощники сценариев — те же, что у самопроверки прототипа (?selftest)
@@ -53,7 +55,7 @@ def run(scenario, query):
         res = subprocess.run(
             [chrome, "--headless=new", "--disable-gpu", "--no-sandbox", "--no-first-run", "--allow-file-access-from-files",
              f"--user-data-dir={tmp}/profile", "--window-size=1600,1000", "--virtual-time-budget=180000", "--dump-dom", "file://" + path + query],
-            capture_output=True, text=True, timeout=300)
+            capture_output=True, text=True, timeout=300, env=dict(os.environ, TZ=TZ))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     m = re.search(r'<script type="text/plain" id="__ui">(.*?)</script>', res.stdout, re.S)
@@ -69,7 +71,7 @@ def selftest(query):
         res = subprocess.run(
             [chrome, "--headless=new", "--disable-gpu", "--no-sandbox", "--no-first-run", "--allow-file-access-from-files",
              f"--user-data-dir={tmp}/profile", "--window-size=1600,1000", "--virtual-time-budget=300000", "--dump-dom", url],
-            capture_output=True, text=True, timeout=400)
+            capture_output=True, text=True, timeout=400, env=dict(os.environ, TZ=TZ))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     state = re.search(r'data-selftest="(\w+)"', res.stdout)
