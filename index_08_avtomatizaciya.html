@@ -7850,7 +7850,7 @@ const ACTION_KINDS=[
    fields:[{id:"to",label:"Кому"},{id:"subj",label:"Тема",tpl:true},{id:"body",label:"Текст письма (необязательно)",tpl:true}]},
   {grp:"Уведомления",sub:"ntf",action:"tg",label:"Сообщение в Telegram",short:"Telegram",devTypes:[],
    fields:[{id:"chat",label:"Чат"},{id:"text",label:"Текст сообщения",tpl:true}]},
-  {grp:"Другое",sub:"vms",action:"output",label:"Щёлкнуть реле",devTypes:["relay"],
+  {grp:"Другое",sub:"vms",action:"output",label:"Щёлкнуть реле",devTypes:["relay"],def:{port:1,state:"pulse",pulse_ms:1000},
    fields:[{id:"ref",label:"Устройство"},{id:"port",label:"Выход №",opts:["1","2","3","4"]},
            {id:"pulse_ms",label:"Импульс, мс"}]},
   {grp:"Другое",sub:"net",action:"http",label:"Веб-запрос",devTypes:[],def:{method:"GET"},
@@ -8617,7 +8617,7 @@ function rulePlan(){
      ${live?`<div class="nt bk-warn">⚠ ${i18n("С этого момента правило будет выполнять действия")}: ${escHtml(ruleActs(r).map(x=>actionLabel(x.it,{r})).join("; ")||"—")}</div>`:""}
      ${wide.map(x=>`<div class="nt bk-warn" role="alert">⚠ ${i18n("Действие")} «${escHtml(actionLabelBare(x.a))}» ${i18n("коснётся")} ${escHtml(ruleCntOf(x.n,x.k.devTypes))}</div>`).join("")}
      ${ask.length?`<label class="rl-opt" style="margin-top:10px"><input type="checkbox" onchange="document.getElementById('rpApply').disabled=${block?"true":"!this.checked"}"><span>${i18n("Понимаю, что действие коснётся")} ${escHtml(ruleCntOf(top.n,top.k.devTypes))}</span></label>`:""}
-     <p class="sub" style="margin:10px 0 0">${!ruleDraft.snap?i18n("Правило появится в списке выключенным — включите его в карточке. Создание можно отменить в течение 10 секунд."):!r.on?i18n("Изменения сохранятся, правило останется выключенным."):r.watch?i18n("Правило останется в режиме «Только журнал»: действия не выполняются."):i18n("После применения правило начнёт действовать по новым условиям; в течение десяти секунд изменение можно отменить.")}</p>`,
+     <p class="sub" style="margin:10px 0 0">${!ruleDraft.snap?i18n(!r.on?"Правило появится в списке выключенным — включите его в карточке. Создание можно отменить в течение 10 секунд.":r.watch?"Правило появится в списке в режиме «Только журнал»: действия не выполняются. Создание можно отменить в течение 10 секунд.":"Правило появится в списке и сразу начнёт действовать. Создание можно отменить в течение 10 секунд."):!r.on?i18n("Изменения сохранятся, правило останется выключенным."):r.watch?i18n("Правило останется в режиме «Только журнал»: действия не выполняются."):i18n("После применения правило начнёт действовать по новым условиям; в течение десяти секунд изменение можно отменить.")}</p>`,
     `<button type="button" class="btn" onclick="closeBulkModal()">${i18n("Назад")}</button><button type="button" class="btn pri" id="rpApply" ${block||ask.length?"disabled":""} onclick="closeBulkModal();ruleApply()">${i18n("Применить")} (${d.length})</button>`,"bbox-wide");
 }
 function ruleApply(){
@@ -9257,7 +9257,8 @@ function actFieldsHtml(a,ps){
     if(f.sel||f.opts){
       let opts=f.sel==="layout"?RULE_LAYOUTS.map(x=>[x,x]):f.sel==="role"?accRoles().map(x=>[x.id,x.n]):f.sel==="rule"?rules.filter(x=>x.id!==r.id).map(x=>[x.id,x.name])
         :f.opts.map(o=>Array.isArray(o)?o:[o,o]);
-      if(f.sel)opts=[["","Выберите…"],...opts];
+      // Пустой обязательный выбор не показывает первый пункт: иначе на экране «1», а правило — с ошибкой «не заполнено поле».
+      if(f.sel||f.req!==false&&v==="")opts=[["","Выберите…"],...opts];
       if(f.id==="dur")opts=opts.map(([x,l])=>[x,l,x==="event"&&a.dur!=="event"&&!ruleHasEnds(r)]);   // «пока идёт событие» — только при событии с концом
       const cur=f.id==="dur"?a.dur||"min":v;
       return`<div class="rl-f">${selHtml(opts,cur,on,f.label)}</div>`;
