@@ -5,7 +5,7 @@
    api/BACKEND.md. Часы идут по-настоящему, пока их не остановит /test/reset.
 
    Запуск из корня репозитория:  node tools/serve_api.mjs [порт] [--fixture one-domain]   (порт по умолчанию 8787)
-   Затем: index_10_api-server.html?api=http://127.0.0.1:8787  или  tests/api.html?api=http://127.0.0.1:8787
+   Затем: index.html?api=http://127.0.0.1:8787  или  tests/api.html?api=http://127.0.0.1:8787
    POST /__report — принять отчёт страницы (?report=…) и напечатать его; с --exit-on-report — и выйти. */
 import http from "node:http";
 import { createRequire } from "node:module";
