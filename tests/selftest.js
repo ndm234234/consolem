@@ -3,7 +3,9 @@
    tools/check_ui.py. Каждый сценарий — в своей невидимой копии страницы (?selftest-run=<файл>) со своим
    встроенным сервером на эталонном наборе, все параллельно; итог приходит сообщением. Отчёт — панель
    поверх страницы, итог — data-selftest="pass|fail" у <html>. С ?latency=300 сценарии идут с задержкой
-   ответа. Отсчёты удаления настоящие, поэтому прогон занимает около минуты. */
+   ответа. Отсчёты удаления настоящие, поэтому прогон занимает около минуты.
+   С ?api=<стенд> — против тестового стенда бэкенда: сценарии идут по одному, перед каждым — POST /test/reset
+   с идущими часами (данные у стенда одни на всех). С ?report=<адрес> итог уходит туда POST-запросом. */
 (() => {
   const q = new URLSearchParams(location.search);
   const SCENARIOS = ["ui-hardware.js", "ui-domains.js", "ui-storage.js", "ui-devices.js", "ui-bulk.js", "ui-rules.js", "ui-access.js"];
@@ -54,22 +56,43 @@
     if (done) {
       document.documentElement.dataset.selftest = bad ? "fail" : "pass";
       console.log(`SELFTEST ${bad ? "fail" : "pass"} ${all.length - bad}/${all.length}`);
+      const to = q.get("report");
+      if (to) fetch(to, { method: "POST", body: all.concat(head, `RESULT ${bad ? "fail" : "pass"}`).join("\n") }).catch(() => {});
     }
   }
+  const waiting = {};
   window.addEventListener("message", (e) => {
     const d = e.data;
     if (!d || !d.uiCheck || !SCENARIOS.includes(d.name)) return;
     results[d.name] = d.log;
     render(Object.keys(results).length === SCENARIOS.length);
+    if (waiting[d.name]) waiting[d.name]();
   });
   const base = location.href.split("?")[0].split("#")[0];
-  const extra = q.get("latency") ? `&latency=${encodeURIComponent(q.get("latency"))}` : "";
-  SCENARIOS.forEach((name) => {
+  const stand = q.get("api");
+  const extra = (q.get("latency") ? `&latency=${encodeURIComponent(q.get("latency"))}` : "") + (stand ? `&api=${encodeURIComponent(stand)}` : "");
+  const frame = (name) => {
     const f = document.createElement("iframe");
     f.src = `${base}?selftest-run=${name}${extra}`;
     f.title = `Самопроверка: ${name}`;
     f.style.cssText = "position:absolute;left:-20000px;top:0;width:1600px;height:1000px;border:0";
     document.body.appendChild(f);
-  });
+    return new Promise((resolve) => (waiting[name] = () => (f.remove(), resolve())));
+  };
   render(false);
+  if (!stand) SCENARIOS.forEach(frame);
+  else
+    SCENARIOS.reduce(
+      (p, name) =>
+        p
+          .then(() => API.raw("POST", "/test/reset", { fixture: "demo", freezeClock: false }))
+          .then((r) => {
+            if (r.status !== 200) throw new Error(`POST /test/reset → ${r.status}: у стенда нет служебных операций`);
+            return frame(name);
+          }),
+      Promise.resolve()
+    ).catch((e) => {
+      SCENARIOS.filter((n) => !results[n]).forEach((n) => (results[n] = [`FAIL  ${e.message}`]));
+      render(true);
+    });
 })();

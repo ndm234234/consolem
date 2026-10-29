@@ -1961,8 +1961,19 @@ const HW_EVENT={device:["/devices",hwApplyDevice],folder:["/folders",hwApplyFold
   archive:["/archives",hwApplyArchive],volume:["/volumes",hwApplyVolume]};
 // Чужая запись появилась или пропала — кэш «Оборудования» перечитывается целиком
 // (своя уже в кэше: ответ сервера приходит раньше события)
+// По сети событие о своей новой записи может обогнать ответ на запрос: перед
+// перечитыванием ещё раз смотрим, не пришла ли она ответом
 let hwReloadT=0;
-function hwReloadSoon(){clearTimeout(hwReloadT);hwReloadT=setTimeout(apiReload,100)}
+const hwPending=new Map();
+function hwReloadSoon(m){
+  if(m)hwPending.set(m.entityId,m.type);
+  clearTimeout(hwReloadT);
+  hwReloadT=setTimeout(()=>{
+    const stale=[...hwPending].some(([id,type])=>(type==="entity.created")!==hwVer.has(id));
+    hwPending.clear();
+    if(stale||!m)apiReload();
+  },100);
+}
 // Поток событий: изменения (свои и чужие), ход операций. Запись перечитывается
 // по id; если поток потерян — весь кэш заново.
 function apiOnEvent(m){
@@ -1980,7 +1991,7 @@ function apiOnEvent(m){
     return;
   }
   if(m.type==="entity.deleted"&&m.kind==="device"&&hwVer.has(m.entityId)){hwRemoveDevice(m.entityId);renderTree();if(sel===m.entityId)paint();return}
-  if(m.type==="entity.created"||m.type==="entity.deleted"){if((m.type==="entity.created")!==hwVer.has(m.entityId))hwReloadSoon();return}
+  if(m.type==="entity.created"||m.type==="entity.deleted"){if((m.type==="entity.created")!==hwVer.has(m.entityId))hwReloadSoon(m);return}
   if(m.type!=="entity.changed")return;
   if(hwVer.get(m.entityId)===m.version&&!m.payload?.status)return;
   API.get(`${h[0]}/${m.entityId}`).then(r=>{
@@ -2522,6 +2533,8 @@ function freeDomainName(){
 }
 // Домен из ответа сервера — в кэш
 function createDomain(r){
+  // Уже пришёл с перечитанным кэшем (событие обогнало ответ)
+  if(domainById(r.id)){hwVer.set(r.id,r.version);return domainById(r.id)}
   const d={id:r.id,type:"domain",name:r.name,license:r.license,online:r.online,servers:[],unallocServers:[]};
   domains.push(d);found[d.id]=[];hwVer.set(r.id,r.version);
   open.add(d.id);
@@ -4921,8 +4934,9 @@ function addSubfolder(parentId,domainId){
   const did=parent?folderDomain(parent.id):(domainId||domains[0].id);
   API.post("/folders",{name:i18n("Новая папка"),domainId:did,parentId:parent?parent.id:null}).then(r=>{
     hwVer.set(r.id,r.version);
-    const f=folderNode(r);
-    if(parent){parent.folders.push(f);open.add(parent.id)}else{folders.push(f);open.add(did)}
+    const f=folderById(r.id)||folderNode(r);
+    if(!folderById(r.id)){if(parent)parent.folders.push(f);else folders.push(f)}
+    open.add(parent?parent.id:did);
     treeMatchCache.clear();searchMatchCache.clear();
     sel=f.id;selFolder=f.id;tab="gen";setD(false);expandTo(f.id);
     treeRenameId=f.id;treeRenameField="name";
@@ -11336,9 +11350,9 @@ function createArchive(){
   if(!an||anBlock())return;
   API.post("/archives",anArchive()).then(res=>{
   hwVer.set(res.archive.id,res.archive.version);
-  const a=archNode(res.archive);
-  arch.push(a);
-  res.volumes.forEach(r=>{hwVer.set(r.id,r.version);a.vols.push(volNode(r))});
+  const a=archById(res.archive.id)||archNode(res.archive);
+  if(!arch.includes(a))arch.push(a);
+  res.volumes.forEach(r=>{hwVer.set(r.id,r.version);if(!volById(r.id))a.vols.push(volNode(r))});
   const v=a.vols[0];
   an=null;closeBulkModal();
   open.add(a.server);sel=a.id;tab="arch";setD(true);
@@ -11352,7 +11366,7 @@ function addVolume(archId){
   if(!d){toast("Свободных дисков нет: на одном диске у хранилища один том, а разделы других хранилищ заняты");return}
   API.post(`/archives/${a.id}/volumes`,volSpec(a,d)).then(r=>{
     hwVer.set(r.id,r.version);
-    a.vols.push(volNode(r));
+    if(!volById(r.id))a.vols.push(volNode(r));
     open.add(a.id);sel=r.id;tab="gen";setD(true);
     toast(i18n("Том добавлен"));
     paint();
