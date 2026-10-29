@@ -11,7 +11,9 @@ api/requests/2026-10-29-w2c-webui-csp-request.md): код — только фа�
     (относительно страницы: страница /backend/, API /backend/api/…), по 401 уходит на
     <meta name="consolem-login" content="../">;
   - у ссылок на файлы — ?v=<начало SHA-256>, чтобы браузер не взял старый файл из кэша.
-Сборка повторяема: из одного index.html — одни и те же байты. Проверки — в tools/check_webui.py.
+Сборка повторяема: из одного index.html — одни и те же байты. Сборка падает, если во входной странице
+остался встроенный код или страница, стили, код ссылаются на свой файл, которого в сборке нет (новое
+подключение в index.html — строкой в SCRIPTS). Проверка под CSP — tools/check_webui.py.
 
 Запуск из корня репозитория:
   python3 tools/build_webui.py               собрать в build/webui/
@@ -127,9 +129,9 @@ def build(out):
     page = page.replace("<!doctype html>\n", "<!doctype html>\n<!-- Собрано tools/build_webui.py из index.html — руками не править -->\n", 1)
     files["index.html"] = (page.encode("utf-8"), "входная страница: разметка index.html, подключает файлы сборки")
 
-    problems = check_page(page)
+    problems = check_page(page) + check_refs(files)
     if problems:
-        sys.exit("Сборка не годится для CSP:\n  " + "\n  ".join(problems))
+        sys.exit("Сборка не годится для консоли:\n  " + "\n  ".join(problems))
 
     if os.path.isdir(out):
         shutil.rmtree(out)
@@ -162,6 +164,34 @@ def check_page(page):
         out.append("ссылка javascript:")
     if "<base" in page:
         out.append("<base> (base-uri 'none')")
+    return out
+
+
+# Файлы, на которые код ссылается, но в сборку они не идут: самопроверка ?selftest (в консоли её нет)
+NOT_IN_BUILD = {"tests/selftest.js"}
+FILE = r"[\w./-]+\.(?:js|css|png|svg|jpe?g|gif|webp|ico|woff2?|ttf|json|html)"
+LOCAL_FILE = r"(?![a-z][a-z0-9+.-]*:|//|#)" + FILE  # не http:, data:, blob:, //…, #…
+
+
+def check_refs(files):
+    """Свои файлы, на которые ссылается сборка, — все в сборке: новое подключение в index.html
+    (<script src>, <link href>, картинка) без строки в SCRIPTS собралось бы молча, а в консоли не загрузилось."""
+    out = []
+
+    def need(where, ref):
+        name = os.path.normpath(re.split(r"[?#]", ref)[0])
+        if name not in files and name not in NOT_IN_BUILD:
+            out.append(f"{where} ссылается на {ref}, его нет в сборке — добавьте его в tools/build_webui.py (скрипт — в SCRIPTS) или уберите ссылку")
+
+    page = files["index.html"][0].decode("utf-8")
+    for m in re.finditer(r"""\s(?:src|href|poster|data)\s*=\s*["']?(%s(?:\?[^"'\s>]*)?)""" % LOCAL_FILE, page, re.I):
+        need("index.html", m.group(1))
+    css = files["app.css"][0].decode("utf-8")
+    for m in re.finditer(r"""url\(\s*["']?(%s)""" % LOCAL_FILE, css, re.I):
+        need("app.css", m.group(1))
+    app = files["app.js"][0].decode("utf-8")
+    for m in re.finditer(r"""["'`]((?:assets|api|tests|fonts)/%s)["'`]""" % FILE, app):
+        need("app.js", m.group(1))
     return out
 
 
