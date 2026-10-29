@@ -41,14 +41,52 @@
     "font:12px/1.5 ui-monospace,monospace;box-shadow:0 8px 24px rgba(0,0,0,.25)";
   document.body.appendChild(panel);
   const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+  // «Копировать» — отчёт текстом целиком, со всеми строками сценариев: переслать тому, кто разбирается
+  let lastDone = false;
+  let copiedAt = 0;
+  function reportText() {
+    const lines = [panel.querySelector("b").textContent, location.href, new Date().toISOString(), ""];
+    SCENARIOS.forEach((n) => {
+      const log = results[n];
+      if (!log) return lines.push(`… ${n}`);
+      const fails = log.filter((l) => !l.startsWith("PASS"));
+      lines.push(`${fails.length ? "✗" : "✓"} ${n}: ${log.length - fails.length} из ${log.length}`, ...log.map((l) => `   ${l}`));
+    });
+    return lines.join("\n");
+  }
+  function copyReport() {
+    const text = reportText();
+    const done = () => {
+      copiedAt = Date.now();
+      render(lastDone);
+      setTimeout(() => render(lastDone), 1600);
+    };
+    // С диска и без разрешения буфера navigator.clipboard может отказать — тогда через выделение
+    const fallback = () => {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.cssText = "position:fixed;left:-9999px;top:0";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+      done();
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fallback);
+    else fallback();
+  }
+  panel.addEventListener("click", (e) => e.target.closest("#selftestCopy") && copyReport());
   function render(done) {
+    lastDone = done;
     const all = Object.values(results).flat();
     const bad = all.filter((l) => !l.startsWith("PASS")).length;
     const head = done
       ? `${bad ? "Самопроверка: не прошло" : "Самопроверка: всё прошло"} — ${all.length - bad} из ${all.length}, ${Math.round((Date.now() - started) / 1000)} с`
       : `Самопроверка идёт: сценариев ${Object.keys(results).length} из ${SCENARIOS.length}…`;
+    const copied = Date.now() - copiedAt < 1500;
     panel.innerHTML =
-      `<b style="font:600 14px/1.4 system-ui,sans-serif">${esc(head)}</b>` +
+      `<b style="display:block;padding-right:110px;font:600 14px/1.4 system-ui,sans-serif">${esc(head)}</b>` +
+      `<button type="button" class="btn s" id="selftestCopy" style="position:absolute;top:10px;right:12px" title="Отчёт текстом — со всеми строками сценариев">${copied ? "Скопировано" : "Копировать"}</button>` +
       SCENARIOS.map((n) => {
         const log = results[n];
         if (!log) return `<div style="margin-top:8px">… ${esc(n)}</div>`;
