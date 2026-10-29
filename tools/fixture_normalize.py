@@ -473,7 +473,7 @@ def normalize(raw, captured_at):
         if e.get("group"):
             h["groupId"] = ids("group", e["group"])
         history.append(h)
-    out["access"] = {"version": 1, "roles": roles, "users": users, "groups": groups, "catalogs": catalogs, "history": history}
+    out["access"] = {"version": 1, "roles": roles, "users": users, "groups": groups, "catalogs": catalogs, "history": history, "cellHistory": []}
     me = next(u for u in acc["users"] if u["login"] == raw["me"])
     out["me"] = {"userId": ids("user", me["id"])}
 

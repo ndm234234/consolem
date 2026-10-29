@@ -2956,6 +2956,127 @@
           }
         }
       }
+    },
+    "/access/apply": {
+      "post": {
+        "operationId": "applyAccess",
+        "tags": [
+          "access"
+        ],
+        "summary": "Применить черновик прав",
+        "description": "Сервер проверяет: имена ролей, групп, каталогов и логины не повторяются (без учёта регистра); ссылки ведут в существующие записи; остаётся хотя бы один включённый администратор с неограниченным доступом и действующим назначением, и текущий администратор его не теряет (иначе 409 SELF_LOCKOUT). Записи истории получают время и автора",
+        "parameters": [
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "Версия снимка прав из ETag: \"3\". Нет — 428, не совпала — 412",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccessApplyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Готово",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessApplyResult"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/access/catalogs/{catalogId}/sync": {
+      "post": {
+        "operationId": "syncCatalog",
+        "tags": [
+          "access"
+        ],
+        "summary": "Синхронизировать каталог или одну его группу",
+        "description": "Сразу — status=run; когда закончит (во встроенном сервере через 1,5 с), — ok, время, длительность; изменение снимка прав — в поток",
+        "parameters": [
+          {
+            "name": "catalogId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogSyncRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Начата",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Catalog"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4779,6 +4900,12 @@
             "items": {
               "$ref": "#/components/schemas/AccessHistoryEntry"
             }
+          },
+          "cellHistory": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccessCellEntry"
+            }
           }
         },
         "additionalProperties": false,
@@ -4788,7 +4915,8 @@
           "users",
           "groups",
           "catalogs",
-          "history"
+          "history",
+          "cellHistory"
         ],
         "description": "Снимок прав целиком: черновик в интерфейсе строится от него и применяется пакетом. Версия — одна на весь снимок"
       },
@@ -7843,6 +7971,234 @@
                 "type": "string"
               }
             }
+          }
+        }
+      },
+      "AccessCellEntry": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "at",
+          "actor",
+          "roleId",
+          "key",
+          "field",
+          "from",
+          "to"
+        ],
+        "description": "Изменение одной ячейки прав роли: папка или объект, поле, уровень было → стал",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "actor": {
+            "type": "string"
+          },
+          "roleId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "key": {
+            "type": "string",
+            "description": "Папка, домен или объект (ключ folderAccess / objectAccess)"
+          },
+          "field": {
+            "type": "string"
+          },
+          "from": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "to": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "AccessWrite": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "roles",
+          "users",
+          "groups",
+          "catalogs"
+        ],
+        "description": "Права целиком, как их собрал черновик. id новых записей задаёт клиент (UUID). Состояние синхронизации каталогов и групп (status, at, message, entries) ведёт сервер: присланное для существующих он не берёт",
+        "properties": {
+          "roles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Role"
+            }
+          },
+          "users": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccessUser"
+            }
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserGroup"
+            }
+          },
+          "catalogs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Catalog"
+            }
+          }
+        }
+      },
+      "AccessHistoryWrite": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "text"
+        ],
+        "description": "Запись истории о применённом: текст и кого она касается. Время и автора ставит сервер",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "roleId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "roleIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "groupId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "AccessCellWrite": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "roleId",
+          "key",
+          "field",
+          "from",
+          "to"
+        ],
+        "properties": {
+          "roleId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "key": {
+            "type": "string",
+            "description": "Папка, домен или объект (ключ folderAccess / objectAccess)"
+          },
+          "field": {
+            "type": "string"
+          },
+          "from": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "to": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "AccessApplyRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "access",
+          "history",
+          "cellHistory"
+        ],
+        "description": "Применить черновик прав одним пакетом. dryRun: true — только проверить, ничего не записывая",
+        "properties": {
+          "dryRun": {
+            "type": "boolean"
+          },
+          "access": {
+            "$ref": "#/components/schemas/AccessWrite"
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccessHistoryWrite"
+            }
+          },
+          "cellHistory": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccessCellWrite"
+            }
+          }
+        }
+      },
+      "AccessApplyResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "applied",
+          "access"
+        ],
+        "properties": {
+          "applied": {
+            "type": "boolean",
+            "description": "false — проверка (dryRun) прошла, ничего не записано"
+          },
+          "access": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Access"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Новый снимок прав; при dryRun — null"
+          }
+        }
+      },
+      "CatalogSyncRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "groupId"
+        ],
+        "properties": {
+          "groupId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Одна группа каталога; null — каталог целиком"
           }
         }
       }

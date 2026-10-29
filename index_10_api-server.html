@@ -1970,6 +1970,7 @@ function apiOnEvent(m){
   if(m.kind==="operation"){opOnEvent(m);return}
   if(m.kind==="discovery"){discOnEvent(m);return}
   if(m.kind==="rule"&&m.type==="entity.changed"&&ruleVer.get(m.entityId)!==m.version){API.get(`/rules/${m.entityId}`).then(r=>{ruleApply(r);if(app==="rules")paint()}).catch(()=>{});return}
+  if(m.kind==="access"&&m.version!==accVer&&m.version!==accLast?.version){accRefresh().catch(()=>{});return}
   if(m.kind==="settings"&&m.version!==settingsVer){API.get("/settings").then(s=>{settingsApply(s);if(app==="sys")paint()}).catch(()=>{});return}
   const h=HW_EVENT[m.kind];
   if(!h)return;
@@ -2006,6 +2007,8 @@ function problemText(e,n){
     INVALID_IP:i18n("Неверный адрес"),
     DISK_TAKEN:i18n("Диск уже занят"),
     IDENTIFIER_TAKEN:i18n("ID уже используется"),
+    LOGIN_TAKEN:i18n("Логин уже занят"),
+    SELF_LOCKOUT:i18n("Изменение оставит систему без администратора или лишит вас входа"),
     PARENT_MISMATCH:i18n("Родительский объект — в другом домене"),
     CONNECTION_FAILED:i18n("Не удалось подключиться"),
     IP_RANGE_TOO_LARGE:i18n("Слишком много адресов за раз"),
@@ -2299,8 +2302,9 @@ function settingSet(id,v){
 let licenses=[];
 const LOG_KIND_RU={audit:"Аудит",alarm:"Тревога",info:"Инфо"};
 async function appLoad(){
-  const [me,rl,st,lic,jr]=await Promise.all([API.get("/me"),API.get("/rules"),API.get("/settings"),API.get("/licenses"),API.get("/journal")]);
-  sysTz=me.timezone||sysTz;
+  const [me,rl,st,lic,jr,acc]=await Promise.all([API.get("/me"),API.get("/rules"),API.get("/settings"),API.get("/licenses"),API.get("/journal"),API.get("/access")]);
+  sysTz=me.timezone||sysTz;ACC_ME=me.login;
+  accSetSnapshot(acc);accLast=acc;
   rules.length=0;rl.items.forEach(ruleApply);
   const fires=await Promise.all(rl.items.map(r=>API.get(`/rules/${r.id}/fires`)));
   rl.items.forEach((r,i)=>{ruleFires[r.id]=fires[i].items.map(f=>[clockText(f.at,true),f.event,f.result])});
@@ -7462,7 +7466,8 @@ function rulesUI(){
 // последствия в людях перед применением.
 // Права выдаются на папки «Оборудования»; корневая папка — сам домен.
 // Все правки — в черновик, на «сервер» они уходят только через «Применить…».
-const ACC_ME="root";
+// Кто вошёл — с сервера (GET /me): appLoad
+let ACC_ME="";
 // Доступ к функциям — по группам, как их читает администратор, а не как они
 // лежат в EFeatureAccess.
 const ACC_FEATURES=[
@@ -7627,185 +7632,99 @@ function accAcctSoon(u){return!!u.expires&&accDays(u.expires)>=0&&accDays(u.expi
 function accNow(){const d=new Date();return`${accLocalIso(d)} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`}
 
 // ── Тестовые данные ──
-function accSeed(){
-  const fid=(name,dom="d1")=>flatFolders().find(f=>f.name===name&&folderDomain(f.id)===dom)?.id;
-  const objsOf=(name,type,dom)=>{const f=flatFolders().find(x=>x.name===name&&folderDomain(x.id)===(dom||"d1"));return(f?.items||[]).filter(id=>find(id)?.n?.type===type)};
-  const grp=list=>{const o={};list.forEach(([name,dom,v])=>{const id=fid(name,dom);if(id)o[id]=v});return o};
-  const kassa=objsOf("Кассовые зоны","camera"),rooms=objsOf("Помещения","camera");
-  const ofType=t=>{const out=[];walkAll(n=>{if(n.type===t&&deviceDomain(n.id)==="d1")out.push(n.id)});return out};
-  const mics=ofType("mic"),relays=ofType("relay"),sensors=ofType("sensor"),posSrc=ofType("eventsrc");
-  const objs=list=>{const o={};list.forEach(([id,v])=>{if(id)o[id]=v});return o};
-  const own=o=>({...accNoRights(),...o});
-  const roles=[
-    {id:"adm",n:"Администратор",comment:"Встроенная роль",tz:0,sup:{role:"",login:false,export:false},
-      own:{...own({}),unr:true,feat:ACC_FEATURES.map(f=>f[0]),ur:"ALL",map:"FULL",alert:"FULL",bm:"EDIT",...Object.fromEntries(ACC_DEFS.map(([k,,kind])=>[k,ACC_LV[kind].at(-1)[0]]))},groups:{},objs:{}},
-    {id:"com",n:"Пусконаладчик",comment:"Монтаж и наладка оборудования",tz:1,sup:{role:"adm",login:true,export:false},own:own({feat:[...F_LOGIN,...F_SETUP],dCam:"FULL",dArch:"FULL",dMacro:"FULL",dSens:"MANAGE",dRelay:"MANAGE"}),groups:{},objs:{}},
-    {id:"op",n:"Оператор",comment:"Дежурная смена",tz:0,sup:{role:"",login:false,export:false},own:own({feat:[...F_LOGIN,...F_CLIENT,...F_EXPORT],dCam:"MON",dArch:"FULL",dTel:"LOW",dPos:"TITLES",dSpk:"PLAY",map:"VIEW",alert:"FULL",bm:"PROTECT",depth:720}),
-      groups:grp([["Входная группа","d1",{cam:"FULL",mic:"MON",relay:"MANAGE"}],["Периметр — все площадки","d1",{cam:"ARCHIVE",tel:"NORMAL",sens:"VIEW"}],
-        ["Кассовые зоны","d1",{cam:"ARCHIVE",pos:"SEARCH"}],["Складской комплекс","d2",{cam:"MON"}]]),
-      objs:objs([[kassa[0],{cam:"FORBID"}],[kassa[1],{cam:"ONLY_ARCHIVE"}],[mics[0],{mic:"FULL"}],["macro:r1",{macro:"FULL"}]])},
-    {id:"gd",n:"Охрана",comment:"Посты охраны и КПП",tz:0,sup:{role:"",login:false,export:false},own:own({feat:[...F_LOGIN,...F_CLIENT,...F_JOURNAL],dArch:"FULL",dSens:"VIEW",map:"SCALE",alert:"FULL",restr:{watermark:true}}),
-      groups:grp([["Офис на Тверской","d1",{cam:"ONLY_ARCHIVE"}],["КПП","d1",{cam:"ARCH_MANAGE",mic:"FULL",acfa:"MANAGE",tel:"HIGH",sens:"MANAGE",relay:"MANAGE",spk:"PLAY"}],
-        ["Периметр — все площадки","d1",{cam:"FULL",tel:"HIGHEST",sens:"MANAGE"}],["Входные группы","d1",{cam:"MON",acfa:"VIEW",relay:"VIEW"}],["Пост охраны","d2",{cam:"FULL"}]]),
-      objs:objs([[rooms[0],{cam:"FULL",tel:"HIGHEST"}],["vw:s5",{vw:"FULL"}]])},
-    {id:"sg",n:"Старший охраны",comment:"Охрана + выдача прав на камеры",tz:0,sup:{role:"",login:false,export:false},own:own({feat:[...F_LOGIN,...F_CLIENT,...F_JOURNAL,...F_RIGHTS,...F_EXPORT],ur:"DEV",bm:"PROTECT",dCam:"MON",dAcfa:"VIEW",dVw:"FULL",map:"FULL",alert:"FULL"}),
-      groups:grp([["КПП","d1",{cam:"FULL",acfa:"CONF"}]]),objs:objs([["macro:r2",{macro:"FULL"}],["macro:r3",{macro:"FULL"}]])},
-    {id:"view",n:"Только просмотр",comment:"Видеостены и руководство",tz:0,sup:{role:"",login:false,export:false},own:own({feat:[...F_LOGIN],dCam:"MON",map:"VIEW",alert:"VIEW",restr:{watermark:true,noFaces:true,noLpr:true,noSimilar:true,noVehicles:true}}),
-      groups:grp([["Помещения","d1",{cam:"FORBID"}]]),objs:objs([["vw:s1",{vw:"FULL"}],["plug:bi",{plug:"READ"}]])},
-    {id:"aud",n:"Аудитор",comment:"Проверка журналов — права ещё не выданы",tz:0,sup:{role:"",login:false,export:false},own:own({}),groups:{},objs:objs([["plug:pos",{plug:"READ"}]])},
-    {id:"ext",n:"Подрядчик",comment:"Временный доступ на время работ",tz:2,sup:{role:"adm",login:true,export:true},own:own({feat:[...F_SETUP],dCam:"FULL",dArch:"FULL",dMacro:"FULL",dSens:"MANAGE",dRelay:"MANAGE",restr:{noFaces:true,noLpr:true,noSimilar:true,noVehicles:true,noPwdChange:true}}),groups:{},objs:{}},
-    {id:"old",n:"Диспетчер (старая)",comment:"Осталась от прошлой схемы дежурств",tz:0,sup:{role:"",login:false,export:false},own:own({feat:[...F_LOGIN],dCam:"MON"}),groups:{},objs:{}}
-  ];
-  // [логин, имя, e-mail, включён, роли, последний вход (дней назад; null — никогда), сроки назначений, доп. поля]
-  const U=[
-    ["root","Администратор системы","",1,["adm"],0],["admin","Сергей Волков","s.volkov@corp.local",1,["adm"],0],
-    ["it.chief","Андрей Ковалёв","a.kovalev@corp.local",1,["adm"],-1,null,{ldap:"corp.local"}],["admin.backup","Резервная учётная запись","",0,["adm"],null],
-    ["commissioning","Павел Литвинов","p.litvinov@montazh.ru",1,["com"],-3,null,{web:1,mobile:0}],["installer2","Ринат Галиев","r.galiev@montazh.ru",1,["com"],-45,{com:-10}],
-    ["ivan","Иван Петров","i.petrov@corp.local",1,["op"],0,null,{ldap:"corp.local",web:2,mobile:1}],["olga","Ольга Смирнова","o.smirnova@corp.local",1,["op","gd"],0,{gd:30},{ldap:"corp.local",web:2,mobile:1}],
-    ["petr","Пётр Соколов","p.sokolov@corp.local",1,["op"],-1,null,{ldap:"corp.local"}],["anna","Анна Кузнецова","a.kuznetsova@corp.local",1,["op"],-2,null,{ldap:"corp.local"}],
-    ["marina","Марина Попова","m.popova@corp.local",1,["op"],-12,null,{ldap:"corp.local"}],["dmitry","Дмитрий Лебедев","d.lebedev@corp.local",0,["op"],-140],
-    ["chief.guard","Николай Морозов","n.morozov@corp.local",1,["sg","view"],0,null,{web:3,mobile:2}],
-    ...Array.from({length:8},(_,i)=>["guard"+(i+1),"Пост охраны № "+(i+1),"",i!==6,["gd"],i===6?-200:-(i%4),null,{web:1,mobile:0}]),
-    ["elena","Елена Новикова","e.novikova@corp.local",1,["view"],-1],["tv.hall","Видеостена холла","",1,["view"],0,null,{web:1,mobile:0}],
-    ["director","Виктор Зайцев","v.zaitsev@corp.local",1,["view"],-97,null,{mobile:1}],
-    ["auditor","Татьяна Орлова","t.orlova@audit.ru",1,["aud"],null,null,{expires:45}],["contractor","ООО «Монтаж-Сервис»","info@montazh.ru",1,["ext"],-1,{ext:5},{expires:5,web:1,mobile:0}],
-    ["svetlana","Светлана Егорова","s.egorova@corp.local",1,[],-120,null,{expires:-30}]
-  ];
-  // Типовая установка: 12 площадок, на каждой 20 постов охраны, 6 операторов и
-  // 4 наблюдателя. Без Math.random: всё считается от номера, чтобы макет при
-  // каждой загрузке выглядел одинаково. Примерно 2% выключены и 2% «забыты»
-  // (не входили 100–200 дней): они попадают в «Проверку» как «не входил 90 дней».
-  // Просроченных назначений и пользователей без ролей среди них нет.
-  {
-    const FN=["Алексей","Борис","Виктор","Геннадий","Денис","Егор","Захар","Игорь","Кирилл","Леонид","Максим","Никита","Олег","Павел","Роман","Сергей","Тимур","Фёдор","Юрий","Ярослав"];
-    const LN=["Андреев","Беляев","Васильев","Григорьев","Денисов","Ермаков","Жуков","Зуев","Исаев","Крылов","Логинов","Миронов","Назаров","Орлов","Прохоров","Родионов","Субботин","Тарасов","Устинов","Филиппов"];
-    const pad=n=>String(n).padStart(2,"0");
-    let k=0;
-    const add=(login,name,email,role,days,x)=>{
-      const off=k%50===7,old=k%50===31;
-      U.push([login,name,email,off?0:1,[role],old?-(100+(k*7)%101):-(k%days),null,x]);k++;
-    };
-    for(let s=1;s<=12;s++){
-      for(let g=1;g<=20;g++)add(`s${s}.guard${pad(g)}`,`Охрана, площадка ${s}, пост ${pad(g)}`,"","gd",4,{web:1,mobile:0});
-      for(let o=0;o<6;o++)add(`s${s}.op${o+1}`,`${FN[(s*3+o*7)%20]} ${LN[(s*5+o*3)%20]}`,`s${s}.op${o+1}@corp.local`,"op",6,{ldap:"corp.local"});
-      for(let v=0;v<4;v++)add(`s${s}.view${v+1}`,`${FN[(s*7+v*3+5)%20]} ${LN[(s*11+v*9+2)%20]}`,`s${s}.view${v+1}@corp.local`,"view",6,{ldap:"corp.local"});
-    }
-  }
-  const users=U.map(([login,name,email,on,rs,last,until,x={}],i)=>({id:"u"+(i+1),login,name,email,on:!!on,roles:rs,
-    last:last==null?null:accIso(last),until:Object.fromEntries(Object.entries(until||{}).map(([k,v])=>[k,accIso(v)])),
-    expires:x.expires!=null?accIso(x.expires):"",web:x.web??0,mobile:x.mobile??0,ldap:x.ldap||""}));
-  const L=(off,who,text,o={})=>({t:accIso(-off)+" "+(o.h||"10:1"+(off%10)),who,text,...o});
-  const F=accFmt;
-  // История — по каждой роли своя цепочка событий: от создания до последних
-  // правок, с теми же людьми, что в списке пользователей.
-  const log=[
-    L(410,"root","Создана роль «Администратор» при установке системы",{role:"adm",h:"09:00"}),
-    L(410,"root","Назначена роль «Администратор» пользователю root",{role:"adm",user:"u1",h:"09:01"}),
-    L(402,"root","Создан пользователь admin, роль «Администратор»",{role:"adm",user:"u2",h:"14:20"}),
-    L(301,"admin","Создан пользователь it.chief из LDAP corp.local, роль «Администратор»",{role:"adm",user:"u3",h:"11:45"}),
-    L(300,"admin","Создан пользователь admin.backup, роль «Администратор»",{role:"adm",user:"u4",h:"11:52"}),
-    L(188,"it.chief","Пользователь admin.backup выключен: резервная запись, включается при восстановлении",{role:"adm",user:"u4",h:"17:30"}),
-    L(44,"root","Сброшен пароль admin",{user:"u2",h:"08:40"}),
-    L(396,"root","Создана роль «Пусконаладчик» по шаблону",{role:"com",h:"10:15"}),
-    L(396,"root","Роль «Пусконаладчик»: добавлены функции наладки — устройства, архивы, детекторы, пресеты PTZ",{role:"com",h:"10:16"}),
-    L(395,"admin","Создан пользователь commissioning, роль «Пусконаладчик»",{role:"com",user:"u5",h:"09:05"}),
-    L(262,"admin","Права по умолчанию роли «Пусконаладчик»: камеры — полный (иначе не видел добавленные камеры)",{role:"com",h:"15:48"}),
-    L(70,"admin","Создан пользователь installer2, роль «Пусконаладчик» до "+F(accIso(-10)),{role:"com",user:"u6",h:"09:15"}),
-    L(40,"it.chief","Роль «Пусконаладчик»: расписание входа — рабочие дни 08:00–20:00; вход подтверждает «Администратор»",{role:"com",h:"12:33"}),
-    L(390,"root","Создана роль «Оператор» по шаблону",{role:"op",h:"13:10"}),
-    L(389,"admin","Созданы пользователи ivan, olga, petr из LDAP corp.local, роль «Оператор»",{role:"op",h:"10:02"}),
-    L(330,"admin","Создан пользователь anna, роль «Оператор»",{role:"op",user:"u10",h:"16:21"}),
-    L(301,"it.chief","Права роли «Оператор» на папки: «Входная группа» — полный, микрофоны — прослушивание, реле — управление",{role:"op",h:"11:17"}),
-    L(240,"admin","Создан пользователь marina, роль «Оператор»",{role:"op",user:"u11",h:"09:48"}),
-    L(201,"admin","Создан пользователь dmitry, роль «Оператор»",{role:"op",user:"u12",h:"10:30"}),
-    L(150,"it.chief","Права роли «Оператор» на папки: «Периметр — все площадки» — просмотр и архив, телеметрия — обычный приоритет",{role:"op",h:"14:05"}),
-    L(96,"root","Права роли «Оператор» на папки: «Складской комплекс» — просмотр",{role:"op",h:"12:50"}),
-    L(60,"root","Глобальные права роли «Оператор»: глубина архива — 30 дней, тревоги — обработка, закладки — создавать",{role:"op",h:"13:15"}),
-    L(9,"admin","Сброшен пароль ivan",{role:"op",user:"u7",h:"08:52"}),
-    L(4,"it.chief","Пользователь dmitry выключен: уволен",{role:"op",user:"u12",h:"18:05"}),
-    L(2,"root","Права роли «Оператор» на папки: «Кассовые зоны» — просмотр и архив, POS — титры и поиск по чекам",{role:"op",h:"11:20"}),
-    L(2,"root","Исключения роли «Оператор»: касса 1 — нет, касса 2 — просмотр архива (по запросу службы безопасности)",{role:"op",h:"11:22"}),
-    L(380,"root","Создана роль «Охрана»",{role:"gd",h:"09:30"}),
-    L(380,"root","Права роли «Охрана» на папки: «КПП» — просмотр и управление архивом, микрофоны — полный, СКУД, датчики и реле — управление",{role:"gd",h:"09:35"}),
-    L(379,"admin","Созданы пользователи guard1–guard8, роль «Охрана»",{role:"gd",h:"10:00"}),
-    L(300,"it.chief","Права роли «Охрана» на папки: «Периметр — все площадки» — полный, телеметрия — самый высокий приоритет",{role:"gd",h:"15:12"}),
-    L(260,"admin","Создан пользователь chief.guard, роль «Охрана»",{role:"gd",user:"u13",h:"09:40"}),
-    L(210,"it.chief","Права роли «Охрана» на папки: «Офис на Тверской» — просмотр архива, «Входные группы» — просмотр, СКУД — просмотр",{role:"gd",h:"13:25"}),
-    L(190,"root","Исключение роли «Охрана»: переговорная — полный (охрана отвечает за ключи)",{role:"gd",h:"10:08"}),
-    L(120,"admin","Права роли «Охрана» на папки: «Пост охраны» (Домен 2) — полный; видеостена сервера КПП — управление",{role:"gd",h:"16:44"}),
-    L(33,"it.chief","Глобальные права роли «Охрана»: добавлен журнал событий; водяной знак с логином",{role:"gd",h:"10:05"}),
-    L(6,"admin","Пользователь guard7 выключен: длительный отпуск",{role:"gd",user:"u20",h:"08:15"}),
-    L(0,"admin","Назначена роль «Охрана» пользователю olga до "+F(accIso(30)),{role:"gd",user:"u8",h:"09:41"}),
-    L(15,"root","Создана роль «Старший охраны» на основе «Охрана»",{role:"sg",h:"14:12"}),
-    L(15,"root","Права роли «Старший охраны» на папки: «КПП» — полный; макрокоманды «Сирена по двери», «Тревога на периметре» — выполнение",{role:"sg",h:"14:20"}),
-    L(15,"root","Назначена роль «Старший охраны» пользователю chief.guard; роль «Охрана» снята",{role:"sg",user:"u13",h:"14:25"}),
-    L(12,"root","Роль «Старший охраны»: добавлены выдача прав на камеры, экспорт и закладки",{role:"sg",h:"14:30"}),
-    L(11,"chief.guard","Права роли «Охрана» на папки: «Входные группы» — просмотр (первая правка старшим охраны)",{role:"gd",h:"07:55"}),
-    L(250,"admin","Создана роль «Только просмотр» по шаблону",{role:"view",h:"11:00"}),
-    L(250,"admin","Создан пользователь tv.hall, роль «Только просмотр» (видеостена холла)",{role:"view",user:"u23",h:"11:05"}),
-    L(180,"admin","Создан пользователь elena, роль «Только просмотр»",{role:"view",user:"u22",h:"09:22"}),
-    L(75,"root","Права по умолчанию роли «Только просмотр»: камеры — просмотр; запрет распознавания лиц, номеров, транспорта и поиска похожих",{role:"view",h:"13:02"}),
-    L(74,"root","Права роли «Только просмотр» на папки: «Помещения» — нет (кабинеты не выводятся на видеостену)",{role:"view",h:"13:10"}),
-    L(21,"admin","Назначена роль «Только просмотр» пользователям director и chief.guard",{role:"view",h:"12:40"}),
-    L(58,"root","Создана роль «Аудитор»; плагин «Отчёты POS» — чтение",{role:"aud",h:"17:48"}),
-    L(58,"root","Создан пользователь auditor, роль «Аудитор», учётная запись до "+F(accIso(45)),{role:"aud",user:"u25",h:"17:52"}),
-    L(57,"it.chief","Глобальные права роли «Аудитор»: журнал событий снят — ждём согласования службы безопасности",{role:"aud",h:"09:30"}),
-    L(140,"admin","Создана роль «Подрядчик» на основе «Пусконаладчик»",{role:"ext",h:"10:40"}),
-    L(140,"admin","Роль «Подрядчик»: расписание входа — ночная смена 20:00–08:00; вход и экспорт подтверждает «Администратор»",{role:"ext",h:"10:42"}),
-    L(139,"it.chief","Глобальные права роли «Подрядчик»: право «Вход в веб-интерфейс» снято — подрядчик работает через клиент",{role:"ext",h:"08:50"}),
-    L(1,"admin","Создан пользователь contractor, роль «Подрядчик» до "+F(accIso(5))+", учётная запись до "+F(accIso(5)),{role:"ext",user:"u26",h:"16:03"}),
-    L(370,"root","Создана роль «Диспетчер»",{role:"old",h:"12:00"}),
-    L(369,"admin","Назначена роль «Диспетчер» пользователям ivan, petr",{role:"old",h:"09:10"}),
-    L(200,"root","Роль переименована: «Диспетчер» → «Диспетчер (старая)»; дежурства переведены на роль «Оператор»",{role:"old",h:"15:20"}),
-    L(130,"root","Роль «Диспетчер (старая)»: сняты все пользователи",{role:"old",h:"15:27"}),
-    L(150,"admin","Создан пользователь svetlana, учётная запись до "+F(accIso(-30))+" (стажировка)",{user:"u27",h:"11:11"})
-  ].sort((a,b)=>b.t.localeCompare(a.t));
-  // Группы и каталог. Роли, которые участник получает от группы, из его личных
-  // ролей убраны: они приходят только через группу (кроме chief.guard, он вне групп).
-  const ago=min=>{const d=new Date(Date.now()-min*6e4);return`${accLocalIso(d)} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`};
-  const pick=re=>users.filter(u=>re.test(u.login));
-  const ops=users.filter(u=>u.ldap&&u.roles.includes("op")&&/^(ivan|olga|petr|anna|marina|s\d+\.op\d+)$/.test(u.login));
-  const views=pick(/^s\d+\.view\d+$/);
-  const ids=list=>list.map(u=>u.id);
-  const srcOf=(dn,status,at,msg="")=>({cat:"corp",dn,kind:"group",status,at,msg});
-  const groups=[
-    {id:"ug1",n:"CORP\\VMS-Operators",comment:"Операторы смен из каталога",roles:["op"],until:"",src:srcOf("CN=VMS-Operators","ok",ago(5)),members:ids(ops)},
-    {id:"ug2",n:"CORP\\VMS-Viewers",comment:"Наблюдатели площадок из каталога",roles:["view"],until:"",src:srcOf("CN=VMS-Viewers","ok",ago(5)),members:ids(views)},
-    {id:"ug3",n:"CORP\\IT-Admins",comment:"Администраторы из каталога",roles:["adm"],until:"",src:srcOf("CN=IT-Admins","err",ago(3*1440),"Нет доступа к каталогу: истёк пароль учётной записи svc-vms"),members:ids(pick(/^it\.chief$/))},
-    {id:"ug4",n:"Охрана — Площадка 1",comment:"Посты охраны площадки 1",roles:["gd"],until:"",src:null,members:ids(pick(/^s1\.guard\d+$/))},
-    {id:"ug5",n:"Охрана — Площадка 2",comment:"Посты охраны площадки 2",roles:["gd"],until:"",src:null,members:ids(pick(/^s2\.guard\d+$/))},
-    {id:"ug6",n:"Подрядчики",comment:"Монтажные организации на время работ",roles:["ext"],until:accIso(40),src:null,members:ids(pick(/^(contractor|installer2)$/))},
-    {id:"ug7",n:"Видеостены",comment:"Учётные записи видеостен",roles:["view"],until:"",src:null,members:ids(pick(/^tv\.hall$/))},
-    {id:"ug8",n:"Ночная смена",comment:"Заготовка на график второго полугодия",roles:["gd"],until:"",src:null,members:[]},
-    {id:"ug9",n:"Стажёры",comment:"Стажёры охраны, роли пока не выданы",roles:[],until:"",src:null,members:ids(pick(/^s3\.guard0[1-3]$/))}
-  ];
-  groups.forEach(g=>g.members.forEach(id=>{const u=users.find(x=>x.id===id);g.roles.forEach(r=>{u.roles=u.roles.filter(x=>x!==r);delete u.until[r]})}));
-  const schedule={every:"day",at:"03:00",days:[1,2,3,4,5,6,7],tz:"Europe/Moscow"};
-  const cats=[{id:"corp",n:"corp.local",server:"dc1.corp.local",port:636,ssl:true,bind:"svc-vms@corp.local",baseDn:"DC=corp,DC=local",filter:"(objectClass=user)",attrLogin:"sAMAccountName",attrName:"displayName",importOthers:false,
-    schedule,status:"ok",at:ago(5),next:accNextRun(schedule),dur:12,msg:"",avail:[
-      {dn:"CN=VMS-Operators",n:"VMS-Operators",kind:"group",logins:ops.map(u=>u.login)},
-      {dn:"CN=VMS-Viewers",n:"VMS-Viewers",kind:"group",logins:views.map(u=>u.login)},
-      {dn:"CN=IT-Admins",n:"IT-Admins",kind:"group",logins:["it.chief"]},
-      {dn:"OU=Склад",n:"Склад",kind:"ou",logins:Array.from({length:6},(_,i)=>"wh.op"+(i+1))},
-      {dn:"CN=HR",n:"HR",kind:"group",logins:["hr.ivanova","hr.petrov"]},
-      {dn:"CN=Finance",n:"Finance",kind:"group",logins:["fin.sidorova","fin.kuznetsov","fin.smirnov"]}]}];
-  log.push(
-    L(60,"admin","Подключена группа каталога «CN=VMS-Operators» → группа «CORP\\VMS-Operators», роль «Оператор»",{group:"ug1",role:"op",h:"11:30"}),
-    L(60,"admin","Подключена группа каталога «CN=VMS-Viewers» → группа «CORP\\VMS-Viewers», роль «Только просмотр»",{group:"ug2",role:"view",h:"11:34"}),
-    L(45,"it.chief","Подключена группа каталога «CN=IT-Admins» → группа «CORP\\IT-Admins», роль «Администратор»",{group:"ug3",role:"adm",h:"09:12"}),
-    L(3,"система","Ошибка синхронизации группы «CORP\\IT-Admins»: нет доступа к каталогу, истёк пароль учётной записи svc-vms",{group:"ug3",h:"03:00"}),
-    L(90,"admin","Создана группа «Охрана — Площадка 1»: 20 участников, роль «Охрана»",{group:"ug4",role:"gd",h:"15:20"}),
-    L(90,"admin","Создана группа «Охрана — Площадка 2»: 20 участников, роль «Охрана»",{group:"ug5",role:"gd",h:"15:24"}),
-    L(35,"admin","Создана группа «Подрядчики»: 2 участника, роль «Подрядчик» до "+F(accIso(40)),{group:"ug6",role:"ext",h:"10:05"}),
-    L(30,"admin","Создана группа «Видеостены»: 1 участник, роль «Только просмотр»",{group:"ug7",role:"view",h:"12:10"}),
-    L(8,"admin","Создана группа «Ночная смена», роль «Охрана»; участники ещё не добавлены",{group:"ug8",role:"gd",h:"16:40"}),
-    L(6,"admin","Создана группа «Стажёры»: 3 участника, роли не заданы",{group:"ug9",h:"09:30"}));
-  log.sort((a,b)=>b.t.localeCompare(a.t));
-  const st={roles,users,log,groups,cats};
+// Права — с сервера (GET /access): снимок srv и черновик ed поверх него.
+// «Применить» уходит пакетом (POST /access/apply), версия — та, от которой строился черновик
+let accVer=null;
+function accData(){return ACC}
+// id новых ролей, пользователей, групп и каталогов — UUID: сервер принимает их как есть
+function accNewId(){
+  if(window.crypto?.randomUUID)return crypto.randomUUID();
+  return"xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx".replace(/x/g,()=>(Math.random()*16|0).toString(16));
+}
+// Время прав — «ГГГГ-ММ-ДД ЧЧ:ММ» в часовом поясе системы; на сервере — UTC
+function localStamp(iso){
+  if(!iso)return"";
+  const p=new Intl.DateTimeFormat("en-CA",{timeZone:sysTz,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(new Date(iso));
+  const g=k=>p.find(x=>x.type===k)?.value;
+  return`${g("year")}-${g("month")}-${g("day")} ${g("hour")}:${g("minute")}`;
+}
+function stampIso(s){
+  if(!s)return null;
+  const guess=Date.parse(s.replace(" ","T")+":00Z");
+  const off=Date.parse(localStamp(new Date(guess).toISOString()).replace(" ","T")+":00Z")-guess;
+  return new Date(guess-off).toISOString().replace(/\.\d{3}Z$/,"Z");
+}
+// Снимок прав: API → состояние, по которому рисует раздел, и обратно
+function accFromApi(a){
+  const catName=Object.fromEntries(a.catalogs.map(c=>[c.id,c.name]));
+  const st={
+    roles:a.roles.map(r=>({id:r.id,n:r.name,comment:r.comment,tz:r.loginSchedule,sup:{role:r.supervision.roleId||"",login:r.supervision.login,export:r.supervision.export},
+      own:accClone(r.global),groups:accClone(r.folderAccess),objs:accClone(r.objectAccess)})),
+    users:a.users.map(u=>Object.assign({id:u.id,login:u.login,name:u.name,email:u.email,on:u.enabled,roles:u.roleIds.slice(),last:u.lastLoginDate,until:{...u.roleUntil},
+      expires:u.expiresDate||"",web:u.webSessions,mobile:u.mobileSessions,ldap:u.catalogId?catName[u.catalogId]||"":""},u.syncedGroupId?{synced:u.syncedGroupId}:{},u.createdDate?{created:u.createdDate}:{})),
+    log:a.history.map(h=>Object.assign({t:localStamp(h.at),who:h.actor,text:h.text},h.roleId?{role:h.roleId}:{},h.roleIds?{roles:h.roleIds.slice()}:{},h.userId?{user:h.userId}:{},h.groupId?{group:h.groupId}:{},{h:localStamp(h.at).slice(11)})),
+    groups:a.groups.map(g=>({id:g.id,n:g.name,comment:g.comment,roles:g.roleIds.slice(),until:g.rolesUntil||"",
+      src:g.source?{cat:g.source.catalogId,dn:g.source.dn,kind:g.source.kind,status:g.source.status,at:localStamp(g.source.at),msg:g.source.message}:null,members:g.memberIds.slice()})),
+    cats:a.catalogs.map(c=>({id:c.id,n:c.name,server:c.host,port:c.port,ssl:c.ssl,bind:c.bindDn,baseDn:c.baseDn,filter:c.filter,attrLogin:c.loginAttr,attrName:c.nameAttr,
+      importOthers:c.importOthers,schedule:accClone(c.schedule),status:c.status,at:localStamp(c.lastSyncAt),next:localStamp(c.nextSyncAt),dur:c.durationSec,msg:c.message,
+      avail:c.entries.map(e=>({dn:e.dn,n:e.name,kind:e.kind,logins:e.logins.slice()}))}))
+  };
   accResolveAll(st);
   return st;
 }
-function accData(){if(!ACC){const srv=accSeed();ACC={srv,ed:accClone(srv)}}return ACC}
+function accToApi(st){
+  const catId=Object.fromEntries(st.cats.map(c=>[c.n,c.id]));
+  return{
+    roles:st.roles.map(r=>({id:r.id,name:r.n,comment:r.comment||"",loginSchedule:r.tz||0,supervision:{roleId:r.sup?.role||null,login:!!r.sup?.login,export:!!r.sup?.export},
+      global:accClone(r.own),folderAccess:accClone(r.groups||{}),objectAccess:accClone(r.objs||{})})),
+    users:st.users.map(u=>Object.assign({id:u.id,login:u.login,name:u.name,email:u.email||"",enabled:!!u.on,roleIds:u.roles.slice(),roleUntil:{...(u.until||{})},
+      lastLoginDate:u.last||null,expiresDate:u.expires||null,webSessions:u.web||0,mobileSessions:u.mobile||0,catalogId:u.ldap?catId[u.ldap]||null:null},
+      u.synced?{syncedGroupId:u.synced}:{},u.created?{createdDate:u.created}:{})),
+    groups:st.groups.map(g=>({id:g.id,name:g.n,comment:g.comment||"",roleIds:g.roles.slice(),rolesUntil:g.until||null,memberIds:g.members.slice(),
+      source:g.src?{catalogId:g.src.cat,dn:g.src.dn,kind:g.src.kind,status:g.src.status,at:stampIso(g.src.at),message:g.src.msg||""}:null})),
+    catalogs:st.cats.map(c=>({id:c.id,name:c.n,host:c.server,port:c.port,ssl:!!c.ssl,bindDn:c.bind,hasPassword:true,baseDn:c.baseDn,filter:c.filter,loginAttr:c.attrLogin,
+      nameAttr:c.attrName,importOthers:!!c.importOthers,schedule:accClone(c.schedule),status:c.status,lastSyncAt:stampIso(c.at),nextSyncAt:stampIso(c.next),
+      durationSec:c.dur||0,message:c.msg||"",entries:(c.avail||[]).map(e=>({dn:e.dn,name:e.n,kind:e.kind,logins:e.logins.slice()}))}))
+  };
+}
+function accSetSnapshot(a){
+  accVer=a.version;
+  const srv=accFromApi(a);
+  ACC={srv,ed:accClone(srv),cellLog:(a.cellHistory||[]).map(c=>({t:localStamp(c.at),who:c.actor,rid:c.roleId,gid:c.key,f:c.field,from:c.from,to:c.to}))};
+}
+// Снимок с сервера без того, что ведёт сам сервер (синхронизация каталогов и групп)
+function accNoSync(a){
+  const x=accClone(a);delete x.version;delete x.history;delete x.cellHistory;
+  x.catalogs.forEach(c=>{["status","lastSyncAt","nextSyncAt","durationSec","message","entries"].forEach(k=>delete c[k])});
+  x.groups.forEach(g=>{if(g.source)["status","at","message"].forEach(k=>delete g.source[k])});
+  return JSON.stringify(x);
+}
+// Права изменились на сервере: синхронизация — переносится и в черновик; чужое
+// «Применить» при открытом черновике — только в снимок, черновик потом получит 412
+let accLast=null;
+const accSyncWait=new Map();
+function accRefresh(){
+  return API.getWithEtag("/access").then(({body:a})=>{
+    const clean=!accPlanLines().length,onlySync=accLast&&accNoSync(accLast)===accNoSync(a);
+    if(clean)accSetSnapshot(a);
+    else{
+      const fresh=accFromApi(a);
+      accBoth(st=>{
+        st.cats.forEach(c=>{const x=fresh.cats.find(y=>y.id===c.id);if(x)["status","at","next","dur","msg","avail"].forEach(k=>c[k]=accClone({v:x[k]}).v)});
+        (st.groups||[]).forEach(g=>{const x=fresh.groups.find(y=>y.id===g.id);if(x&&g.src&&x.src)["status","at","msg"].forEach(k=>g.src[k]=x.src[k])});
+      });
+      if(onlySync)accVer=a.version;
+    }
+    accLast=a;
+    accSyncWait.forEach((w,cid)=>{
+      const c=accCat(cid),g=w.gid&&accUG(w.gid);
+      if((g?g.src?.status:c?.status)==="run")return;
+      accSyncWait.delete(cid);
+      toast(w.gid?`${i18n("Синхронизация группы")} «${accUGName(w.gid)}» ${i18n("завершена: изменений нет")}`:`${i18n("Синхронизация")} ${w.name} ${i18n("завершена: изменений нет")}`);
+    });
+    if(app==="acc")paint();
+  });
+}
 function accSt(){return accData().ed}
 function accSrv(){return accData().srv}
 function accRoles(st){return(st||accSt()).roles}
@@ -8250,11 +8169,13 @@ function accPlan(){
   const impHtml=imp.length?`<div class="acc-plan-h">${i18n("Последствия для людей")}</div>${summary}<ul class="acc-impact">${shown.map(x=>`<li class="${x.bad?"bad":"good"}"><b>${escHtml(x.u.login)}</b> ${x.text}</li>`).join("")}${imp.length>shown.length?`<li class="sub">${i18n("и ещё")} ${imp.length-shown.length}</li>`:""}</ul>`
     :`<p class="sub">${i18n("Ни у кого не меняется ни вход, ни набор видимых объектов")}</p>`;
   askConfirm("План изменений",`<div class="acc-plan-h">${i18n("Что будет записано")}</div><ol class="acc-plan">${lines.map(l=>`<li>${l}</li>`).join("")}</ol>${impHtml}`,"","Применить",()=>{
-    accLogPlan(lines);
-    accSt().users.forEach(u=>{delete u.pwdReset;delete u.pwdSet;delete u.must;delete u.imported;delete u.impUpd;delete u.impTouched});
-    accCats().forEach(c=>delete c.pwdSet);
-    const cl=accData().cellLog=accData().cellLog||[];accRoles().forEach(r=>accCellDiff(r.id,"groups").forEach(c=>cl.unshift({t:accNow(),who:ACC_ME,rid:r.id,gid:c.id,f:c.f,from:c.from,to:c.to})));
-    accData().srv=accClone(accData().ed);accOvNote=null;toast(i18n("Изменения применены"));paint();
+    const history=accLogPlan(lines);
+    const cellHistory=[];accRoles().forEach(r=>accCellDiff(r.id,"groups").forEach(c=>cellHistory.unshift({roleId:r.id,key:c.id,field:c.f,from:c.from??null,to:c.to??null})));
+    // Черновик целиком — одним пакетом; новый снимок прав приходит в ответе
+    API.post("/access/apply",{access:accToApi(accSt()),history,cellHistory},{"If-Match":`"${accVer}"`}).then(res=>{
+      accSetSnapshot(res.access);accLast=res.access;Object.keys(accCatPwd).forEach(k=>delete accCatPwd[k]);
+      accOvNote=null;toast(i18n("Изменения применены"));paint();
+    }).catch(e=>{toast(problemText(e));paint()});
   },{html:true,cancelLabel:"Закрыть"});
 }
 function accRevert(){
@@ -8265,7 +8186,9 @@ function accRevert(){
 }
 function accEdited(){accResolveAll();paint();accRefocus()}
 // История пишется при применении: что именно записали и кто.
+// Записи истории о применённом — для сервера: текст строки плана и кого она касается
 function accLogPlan(lines){
+  const out=[];
   const tmp=document.createElement("div");
   accPlanLines();const meta=accPlanMeta;  // кого затрагивают строки-«массовки»
   lines.forEach((h,i)=>{tmp.innerHTML=h;const text=tmp.textContent,m=meta[i];
@@ -8275,12 +8198,13 @@ function accLogPlan(lines){
     const role=hits[0]?.id,roles=[...new Set(hits.map(x=>x.id))];
     const words=text.split(/[\s:,()]+/);
     const user=m?null:[...accUsers(),...accSrv().users].find(u=>words.includes(u.login))?.id;
-    const e={t:accNow(),who:ACC_ME,text,...(role?{role,roles}:{}),...(user?{user}:{}),...(m?.group?{group:m.group}:{})};
-    accSt().log.unshift(e);accSrv().log.unshift(accClone(e));
+    out.push(Object.assign({text},role?{roleId:role,roleIds:roles}:{},user?{userId:user}:{},m?.group?{groupId:m.group}:{}));
     // Массовая правка: у роли одна запись (она выше), а у каждого затронутого —
     // своя короткая, чтобы история пользователя не молчала. У группы — одна запись.
-    if(m)(m.users||[{ids:m.ids,short:m.short}]).forEach(x=>x.ids.forEach(id=>{const ue={t:e.t,who:ACC_ME,text:x.short,user:id};accSt().log.unshift(ue);accSrv().log.unshift(accClone(ue))}));
+    if(m)(m.users||[{ids:m.ids,short:m.short}]).forEach(x=>x.ids.forEach(id=>out.push({text:x.short,userId:id})));
   });
+  // Сервер ставит новые записи сверху в порядке запроса — как раньше их ставил unshift
+  return out.reverse();
 }
 // ── Защита от самоблокировки ──
 // Администратор с неограниченным доступом должен остаться хотя бы один —
@@ -8544,9 +8468,10 @@ function accBulkOn(on){
 function accUserDelete(){
   const ids=accBulkIds("u"),n=ids.length;if(!n)return;
   const logins=ids.slice(0,5).map(id=>escHtml(accUser(id).login)).join(", ")+(n>5?` ${i18n("и ещё")} ${n-5}`:"");
-  askConfirm(`${i18n("Удалить")} ${accWhoGen(n)}?`,`<p>${logins}</p><p class="sub">${i18n("Изменение попадёт в черновик; на сервере пользователи останутся, пока вы не примените изменения")}</p>`,"","Удалить",()=>{
+  if(ids.some(pendingDelHas)){toast("Выбранное уже ждёт удаления — отменить можно в тосте");return}
+  askConfirm(`${i18n("Удалить")} ${accWhoGen(n)}?`,`<p>${logins}</p><p class="sub">${i18n("Изменение попадёт в черновик; на сервере пользователи останутся, пока вы не примените изменения")}</p>`,"","Удалить",()=>scheduleDelete(ids,{label:accWho(n),commit:()=>{
     if(accBulkRun(ids,null,true)){accSelMe=false;toast(`${i18n("Удалено")}: ${accWho(n)} — ${i18n("в черновике")}`)}
-  },{html:true,rawTitle:true});
+  }}),{html:true,rawTitle:true,typeCount:n});
 }
 function accUserStateText(u){return!u.on?i18n("выключен"):accAcctExpired(u)?`${i18n("срок истёк")} ${accFmt(u.expires)}`:u.expires?`${i18n("включён")}, ${i18n("до")} ${accFmt(u.expires)}`:i18n("включён")}
 // Выгрузка пользователей в CSV: заголовок — английские идентификаторы, они же
@@ -8655,10 +8580,11 @@ function accRoleUI(r){
 }
 function accDeleteRole(rid,stay){
   const r=accRole(rid),us=accRoleUsers(rid);
-  askConfirm("Удалить роль?",`${i18n("Роль")} «${r.n}» ${i18n("будет удалена")}${us.length?`, ${us.length} ${plural(us.length,"пользователь потеряет|пользователя потеряют|пользователей потеряют")} ${i18n("её права")}`:""}. ${i18n("Изменение попадёт в черновик")}`,"","Удалить",()=>{
+  if(pendingDelHas(rid)){toast("Роль уже ждёт удаления — отменить можно в тосте");return}
+  askConfirm("Удалить роль?",`${i18n("Роль")} «${r.n}» ${i18n("будет удалена")}${us.length?`, ${us.length} ${plural(us.length,"пользователь потеряет|пользователя потеряют|пользователей потеряют")} ${i18n("её права")}`:""}. ${i18n("Изменение попадёт в черновик")}`,"","Удалить",()=>scheduleDelete([rid],{label:`${i18n("Роль")} «${r.n}»`,commit:()=>{
     const ok=accGuard(st=>{st.roles=st.roles.filter(x=>x.id!==rid);st.users.forEach(u=>{u.roles=u.roles.filter(x=>x!==rid);if(u.until)delete u.until[rid]});(st.groups||[]).forEach(g=>{g.roles=g.roles.filter(x=>x!==rid)});st.roles.forEach(x=>{if(x.sup?.role===rid)x.sup={role:"",login:false,export:false}})});
     if(ok){accResolveAll();if(stay)accUI();else accGo("roles")}
-  },{rawMsg:true});
+  }}),{rawMsg:true,typeCount:1});
 }
 function accSw(on,act,ro,label,title){
   return`<div class="sw ${on?"on":""} ${ro?"dis":""}" role="switch" aria-checked="${on}" aria-label="${escHtml(label||"")}" ${title?`title="${escHtml(title)}"`:""} ${ro?'aria-disabled="true"':`tabindex="0" onclick="${act}" onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();${act}}"`}></div>`;
@@ -9122,10 +9048,11 @@ function accUserMenu(el,uid){
 function accPwdReset(uid){const u=accUser(uid);if(!u||u.ldap)return;u.pwdReset=true;toast(i18n("Сброс пароля добавлен в черновик"));accEdited()}
 function accDeleteUser(uid){
   const u=accUser(uid);
-  askConfirm("Удалить пользователя?",`${i18n("Учётная запись")} ${u.login} (${u.name}) ${i18n("будет удалена вместе с назначениями ролей. Изменение попадёт в черновик")}`,"","Удалить",()=>{
+  if(pendingDelHas(uid)){toast("Пользователь уже ждёт удаления — отменить можно в тосте");return}
+  askConfirm("Удалить пользователя?",`${i18n("Учётная запись")} ${u.login} (${u.name}) ${i18n("будет удалена вместе с назначениями ролей. Изменение попадёт в черновик")}`,"","Удалить",()=>scheduleDelete([uid],{label:u.login,commit:()=>{
     const ok=accGuard(st=>accDropUsers(st,new Set([uid])));
     if(ok)accGo("users");
-  },{rawMsg:true});
+  }}),{rawMsg:true,typeCount:1});
 }
 function accUserGenHtml(u){
   const me=u.login===ACC_ME;
@@ -9339,11 +9266,12 @@ function accUGMenu(el,gid){
 function accUGDelete(gid,stay){
   const g=accUG(gid);if(!g)return;
   const l=accLoss(st=>accUGRemove(st,gid));
-  askConfirm(g.src?"Отключить группу каталога?":"Удалить группу?",`<p>${i18n("Группа")} «${escHtml(g.n)}» ${i18n("будет удалена")}${g.members.length?` (${g.members.length} ${plural(g.members.length,"участник|участника|участников")})`:""}${g.src?`; ${i18n("в каталоге она останется")}`:""}</p>${accLossHtml(l)}<p class="sub">${i18n("Изменение попадёт в черновик")}</p>`,"",g.src?"Отключить":"Удалить",()=>{
+  if(pendingDelHas(gid)){toast("Группа уже ждёт удаления — отменить можно в тосте");return}
+  askConfirm(g.src?"Отключить группу каталога?":"Удалить группу?",`<p>${i18n("Группа")} «${escHtml(g.n)}» ${i18n("будет удалена")}${g.members.length?` (${g.members.length} ${plural(g.members.length,"участник|участника|участников")})`:""}${g.src?`; ${i18n("в каталоге она останется")}`:""}</p>${accLossHtml(l)}<p class="sub">${i18n("Изменение попадёт в черновик")}</p>`,"",g.src?"Отключить":"Удалить",()=>scheduleDelete([gid],{label:`${i18n("Группа")} «${g.n}»`,commit:()=>{
     if(!accGuard(st=>accUGRemove(st,gid)))return;
     toast(`${i18n(g.src?"Группа каталога отключена":"Группа удалена")}: «${g.n}» — ${i18n("в черновике")}`);
     if(stay)accEdited();else{accResolveAll();accGo("ugroups")}
-  },{html:true});
+  }}),{html:true,typeCount:1});
 }
 function accUGDetach(gid){
   const g=accUG(gid);if(!g||!g.src)return;
@@ -9505,7 +9433,7 @@ function accUgApply(){
     const g=accUG(d.gid);g.n=n;g.comment=c;
     accDrawerClose("accUg");accEdited();toast(`${i18n("Группа переименована")}: «${n}» — ${i18n("в черновике")}`);return;
   }
-  const id="ug"+Date.now().toString(36);
+  const id=accNewId();
   accSt().groups.push({id,n,comment:c,roles:[],until:"",src:null,members:[...d.members]});
   accDrawerClose("accUg");accResolveAll();
   toast(`${i18n("Группа")} «${n}» ${i18n("создана — в черновике")}`);
@@ -9563,16 +9491,8 @@ function accUserFromGroup(uid,gid){
 // ── Синхронизация (макет: изменений никогда нет) ──
 function accSyncRun(cid,gid){
   const c=accCat(cid);if(!c||c.status==="run")return;
-  const mine=g=>g.src?.cat===cid&&(!gid||g.id===gid);
-  accBoth(st=>{const x=accCat(cid,st);if(x&&!gid)x.status="run";(st.groups||[]).forEach(g=>{if(mine(g))g.src.status="run"})});
-  paint();
-  setTimeout(()=>{
-    const now=accNow();
-    accBoth(st=>{const x=accCat(cid,st);if(x&&!gid){x.status="ok";x.at=now;x.dur=7;x.msg=""}
-      (st.groups||[]).forEach(g=>{if(mine(g)){g.src.status="ok";g.src.at=now;g.src.msg=""}})});
-    toast(gid?`${i18n("Синхронизация группы")} «${accUGName(gid)}» ${i18n("завершена: изменений нет")}`:`${i18n("Синхронизация")} ${c.n} ${i18n("завершена: изменений нет")}`);
-    if(app==="acc")paint();
-  },1500);
+  // Синхронизирует сервер: сразу «идёт», итог приходит изменением прав в поток
+  API.post(`/access/catalogs/${cid}/sync`,{groupId:gid||null}).then(()=>{accSyncWait.set(cid,{gid,name:c.n});return accRefresh()}).catch(e=>toast(problemText(e)));
 }
 
 // ── Каталоги ──
@@ -9707,11 +9627,11 @@ function accCgApply(){
   const bad=!name?"Заполните поле":taken(accGroupsAll().map(g=>g.n),name)?"Группа с таким именем уже есть":"",badU=d.until&&accDays(d.until)<0;
   e.textContent=bad?i18n(bad):"";document.getElementById("accCgE2").textContent=badU?i18n("Срок уже прошёл"):"";
   if(bad||badU)return;
-  const st=accSt(),c=accCat(d.cid),a=c.avail[d.idx],gid="ug"+Date.now().toString(36);
+  const st=accSt(),c=accCat(d.cid),a=c.avail[d.idx],gid=accNewId();
   const by=new Map(st.users.map(u=>[u.login,u])),members=[];let made=0;
   a.logins.forEach((l,i)=>{
     let u=by.get(l);
-    if(!u){u={id:"u"+gid+i,login:l,name:l,email:"",on:true,roles:[],last:null,created:accIso(0),until:{},expires:"",web:0,mobile:0,ldap:c.n,synced:gid};st.users.push(u);by.set(l,u);made++}
+    if(!u){u={id:accNewId(),login:l,name:l,email:"",on:true,roles:[],last:null,created:accIso(0),until:{},expires:"",web:0,mobile:0,ldap:c.n,synced:gid};st.users.push(u);by.set(l,u);made++}
     members.push(u.id);
   });
   st.groups.push({id:gid,n:name,comment:"",roles:[...d.roles],until:d.until||"",src:{cat:c.id,dn:a.dn,kind:a.kind,status:"ok",at:accNow(),msg:""},members});
@@ -9746,7 +9666,7 @@ function accCtLive(){
 function accCtApply(){
   const d=accCt;if(!d)return;d.tried=true;
   if(Object.keys(accCtErrs()).length){accCtLive();return}
-  const id="c"+Date.now().toString(36);
+  const id=accNewId();
   accSt().cats.push({id,n:d.n.trim(),server:d.server.trim(),port:Math.max(1,Math.min(65535,d.port||636)),ssl:d.ssl,bind:d.bind.trim(),baseDn:d.baseDn.trim(),filter:"(objectClass=user)",attrLogin:"sAMAccountName",attrName:"displayName",importOthers:false,pwdSet:true,
     schedule:{every:"day",at:"03:00",days:[1,2,3,4,5,6,7],tz:"Europe/Moscow"},status:"never",at:"",next:"",dur:0,msg:"",avail:[]});
   const n=d.n.trim();
@@ -10276,10 +10196,10 @@ function accWzPlan(){
     <ol class="acc-plan">${steps.map(s=>`<li>${s}</li>`).join("")}</ol>`;
 }
 function accWzApply(){
-  const w=accWz,id="r"+Date.now().toString(36),st=accSt();
+  const w=accWz,id=accNewId(),st=accSt();
   st.roles.push({id,n:w.name.trim(),comment:w.comment.trim(),tz:w.tz,sup:accClone(w.sup),own:accClone(w.g),groups:Object.fromEntries(Object.entries(w.grp).map(([g,v])=>[g,{cam:v}])),objs:{}});
   const until=w.until?{[id]:w.until}:{};
-  if(w.who==="new")st.users.push({id:"u"+id,login:w.login.trim(),name:w.uname.trim(),email:w.email.trim(),on:w.on,roles:[id],last:null,created:accIso(0),until,expires:w.expires||"",web:0,mobile:0,ldap:"",pwdSet:true,must:w.must});
+  if(w.who==="new")st.users.push({id:accNewId(),login:w.login.trim(),name:w.uname.trim(),email:w.email.trim(),on:w.on,roles:[id],last:null,created:accIso(0),until,expires:w.expires||"",web:0,mobile:0,ldap:"",pwdSet:true,must:w.must});
   else if(w.who==="pick"){
     st.users.forEach(u=>{if(w.assigned.has(u.id)&&!u.roles.includes(id)){u.roles.push(id);if(w.until){u.until=u.until||{};u.until[id]=w.until}}});
     (st.groups||[]).forEach(g=>{if(w.ugs.has(g.id)&&!g.roles.includes(id))g.roles.push(id)});
@@ -10323,7 +10243,7 @@ function accUdApply(){
   const u=accUd;u.tried=true;
   const e=accUdErrs();
   if(Object.values(e).some(Boolean)){accUdRender();return}
-  const id="u"+Date.now().toString(36);
+  const id=accNewId();
   accSt().users.push({id,login:u.login.trim(),name:u.uname.trim(),email:u.email.trim(),on:u.on,roles:[...u.roles],last:null,created:accIso(0),
     until:u.until?Object.fromEntries([...u.roles].map(r=>[r,u.until])):{},expires:u.expires||"",web:u.web||0,mobile:u.mobile||0,ldap:"",pwdSet:true,must:u.must});
   accDrawerClose("accUd");toast(`${i18n("Пользователь")} ${u.login.trim()} ${i18n("добавлен в черновик")}`);
@@ -10644,7 +10564,7 @@ function accImpApply(){
   const m=accIm;if(!m||!m.res)return;
   const list=m.res.rows.filter(r=>r.status==="new"||r.status==="upd");if(!list.length)return;
   const A=m.res.cnt.new,B=m.res.cnt.upd,stamp=Date.now().toString(36);
-  let k=0;list.forEach(r=>{if(r.status==="new")r.uid="u"+stamp+(k++)});
+  let k=0;list.forEach(r=>{if(r.status==="new")r.uid=accNewId(),k++});
   const ok=accGuard(st=>list.forEach(r=>accImpMutate(st,r)));
   if(!ok)return;
   accDrawerClose("accImp");accEdited();

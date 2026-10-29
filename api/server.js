@@ -46,7 +46,7 @@
   }
 
   // Вид записи — первая цифра UUID (api/README.md, «Идентификаторы»): сервер продолжает номера набора
-  const KIND = { operation: "0", domain: "1", server: "2", device: "3", folder: "4", archive: "5", volume: "6", rule: "7" };
+  const KIND = { operation: "0", domain: "1", server: "2", device: "3", folder: "4", archive: "5", volume: "6", rule: "7", history: "e" };
   const TABLES = { domains: "domain", servers: "server", devices: "device", folders: "folder", archives: "archive", volumes: "volume", rules: "rule" };
   // Ответ на запрос с ключом повтора помнится 10 минут: повтор получает его же и ничего не выполняет снова
   const IDEMPOTENCY_MS = 10 * 60 * 1000;
@@ -78,6 +78,7 @@
       ops = new Map();
       formatting = new Map();
       searches = new Map();
+      syncing = new Map();
       answered.clear();
       // Номера новых id — после самых больших в наборе
       Object.keys(seq).forEach((k) => delete seq[k]);
@@ -391,6 +392,68 @@
       send("entity.deleted", { kind: "volume", entityId: v.id });
     }
 
+    /* ===== Права ===== */
+
+    const SYNC_MS = 1500;
+    let syncing = new Map();
+    const lower = (s) => String(s || "").trim().toLowerCase();
+    // Сегодня по часам и часовому поясу системы — для сроков назначений
+    function today() {
+      const p = new Intl.DateTimeFormat("en-CA", { timeZone: db.timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(now()));
+      return p;
+    }
+    // Кто сейчас администратор с неограниченным доступом: включён, роль с unr — личная или группы, срок не истёк
+    function admins(a) {
+      const unr = new Set(a.roles.filter((r) => r.global.unr).map((r) => r.id));
+      const t = today();
+      const live = (until) => !until || until >= t;
+      return a.users.filter((u) => {
+        if (!u.enabled || (u.expiresDate && u.expiresDate < t)) return false;
+        if (u.roleIds.some((r) => unr.has(r) && live(u.roleUntil[r]))) return true;
+        return a.groups.some((g) => g.memberIds.includes(u.id) && live(g.rolesUntil) && g.roleIds.some((r) => unr.has(r)));
+      });
+    }
+    function accessProblem(a) {
+      const dup = (list, key, code, what) => {
+        const seen = new Set();
+        for (const x of list) {
+          const k = lower(x[key]);
+          if (!k) return problem(422, "NAME_REQUIRED", `Пустое имя: ${what}`, { field: key });
+          if (seen.has(k)) return problem(409, code, `${what} «${x[key]}» повторяется`, { field: key, params: { value: x[key] } });
+          seen.add(k);
+        }
+        return null;
+      };
+      const bad =
+        dup(a.roles, "name", "NAME_TAKEN", "Роль") || dup(a.users, "login", "LOGIN_TAKEN", "Логин") || dup(a.groups, "name", "NAME_TAKEN", "Группа") || dup(a.catalogs, "name", "NAME_TAKEN", "Каталог");
+      if (bad) return bad;
+      const ids = (list) => new Set(list.map((x) => x.id));
+      const roles = ids(a.roles), users = ids(a.users), groups = ids(a.groups), cats = ids(a.catalogs);
+      const all = [...roles, ...users, ...groups, ...cats];
+      if (new Set(all).size !== all.length) return problem(422, "VALIDATION_FAILED", "id повторяются", { field: "id" });
+      const miss = (cond, what) => (cond ? null : problem(422, "VALIDATION_FAILED", `Ссылка никуда не ведёт: ${what}`, { field: what }));
+      for (const r of a.roles) {
+        const e = miss(!r.supervision.roleId || roles.has(r.supervision.roleId), "supervision.roleId");
+        if (e) return e;
+      }
+      for (const u of a.users) {
+        const e =
+          miss(u.roleIds.every((x) => roles.has(x)) && Object.keys(u.roleUntil).every((x) => roles.has(x)), "roleIds") ||
+          miss(!u.catalogId || cats.has(u.catalogId), "catalogId") ||
+          miss(!u.syncedGroupId || groups.has(u.syncedGroupId), "syncedGroupId");
+        if (e) return e;
+      }
+      for (const g of a.groups) {
+        const e = miss(g.roleIds.every((x) => roles.has(x)), "groups.roleIds") || miss(g.memberIds.every((x) => users.has(x)), "memberIds") || miss(!g.source || cats.has(g.source.catalogId), "source.catalogId");
+        if (e) return e;
+      }
+      // Защита от самоблокировки: администратор остаётся, и текущий — среди них
+      const left = admins(a);
+      if (!left.length) return problem(409, "SELF_LOCKOUT", "Не останется ни одного администратора с неограниченным доступом");
+      if (!left.some((u) => u.id === me)) return problem(409, "SELF_LOCKOUT", "Вы потеряете неограниченный доступ или вход");
+      return null;
+    }
+
     /* ===== Поиск устройств в сети ===== */
 
     // Находка — раз в 140 мс по часам сервера: столько, сколько в макете
@@ -537,6 +600,18 @@
     // Всё, что к этому моменту должно было выполниться
     function tick() {
       const fired = [];
+      syncing.forEach((s, cid) => {
+        if (s.at > now()) return;
+        syncing.delete(cid);
+        const c = db.access.catalogs.find((x) => x.id === cid);
+        if (!c) return;
+        const at = iso(now());
+        if (!s.groupId) Object.assign(c, { status: "ok", lastSyncAt: at, durationSec: 7, message: "" });
+        db.access.groups.filter((g) => g.source && g.source.catalogId === cid && (!s.groupId || g.id === s.groupId)).forEach((g) => Object.assign(g.source, { status: "ok", at, message: "" }));
+        db.access.version += 1;
+        send("entity.changed", { kind: "access", version: db.access.version });
+        fired.push({ kind: "catalog", id: cid });
+      });
       tickDiscovery(fired);
       formatting.forEach((at, id) => {
         if (at > now()) return;
@@ -1074,6 +1149,55 @@
         },
       ],
       [
+        "POST",
+        "/access/apply",
+        (p, q, body, headers) => {
+          const a = db.access;
+          const bad = precondition(a, headers);
+          if (bad) return bad;
+          const next = clone(body.access);
+          // Состояние синхронизации ведёт сервер: у существующих каталогов и групп — его значения
+          next.catalogs.forEach((c) => {
+            const was = a.catalogs.find((x) => x.id === c.id);
+            if (was) ["status", "lastSyncAt", "nextSyncAt", "durationSec", "message", "entries"].forEach((k) => (c[k] = clone(was[k])));
+          });
+          next.groups.forEach((g) => {
+            const was = a.groups.find((x) => x.id === g.id);
+            if (was && was.source && g.source) ["status", "at", "message"].forEach((k) => (g.source[k] = was.source[k]));
+          });
+          const why = accessProblem(next);
+          if (why) return why;
+          if (body.dryRun) return { status: 200, body: { applied: false, access: null }, headers: { ETag: etag(a) } };
+          const actor = (a.users.find((u) => u.id === me) || {}).login || "";
+          const at = iso(now());
+          const stamp = (kind, x) => Object.assign({ id: uuid(kind), at, actor }, clone(x));
+          Object.assign(a, next, {
+            history: body.history.map((h) => stamp("history", h)).concat(a.history),
+            cellHistory: body.cellHistory.map((h) => stamp("history", h)).concat(a.cellHistory || []),
+          });
+          a.version += 1;
+          send("entity.changed", { kind: "access", version: a.version });
+          return { status: 200, body: { applied: true, access: clone(a) }, headers: { ETag: etag(a) } };
+        },
+      ],
+      [
+        "POST",
+        "/access/catalogs/{id}/sync",
+        (p, q, body) => {
+          const c = db.access.catalogs.find((x) => x.id === p.id);
+          if (!c) return notFound("Каталог");
+          if (body.groupId && !db.access.groups.some((g) => g.id === body.groupId && g.source && g.source.catalogId === c.id)) return notFound("Группа каталога");
+          if (syncing.has(c.id)) return problem(409, "BUSY", "Синхронизация уже идёт");
+          const mine = (g) => g.source && g.source.catalogId === c.id && (!body.groupId || g.id === body.groupId);
+          if (!body.groupId) c.status = "run";
+          db.access.groups.filter(mine).forEach((g) => (g.source.status = "run"));
+          syncing.set(c.id, { at: now() + SYNC_MS, groupId: body.groupId });
+          db.access.version += 1;
+          send("entity.changed", { kind: "access", version: db.access.version });
+          return { status: 202, body: clone(c) };
+        },
+      ],
+      [
         "GET",
         "/domains/{id}/discovery",
         (p) => (byId("domains", p.id) ? { status: 200, body: discoveryView(p.id) } : notFound("Домен")),
@@ -1241,7 +1365,7 @@
           const fired = [];
           const target = now() + ms;
           for (let t = now(); ; ) {
-            const due = Math.min(target, ...[...ops.values()].filter((o) => o.state === "running").map((o) => o.nextAt), ...formatting.values(), ...[...searches.values()].map((s) => s.nextAt));
+            const due = Math.min(target, ...[...ops.values()].filter((o) => o.state === "running").map((o) => o.nextAt), ...formatting.values(), ...[...searches.values()].map((s) => s.nextAt), ...[...syncing.values()].map((s) => s.at));
             if (clock.frozenAt != null) clock.frozenAt = Math.max(t, due);
             else clock.offset += Math.max(t, due) - now();
             fired.push(...tick());

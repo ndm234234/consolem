@@ -47,10 +47,8 @@ DATA_CONSTANTS = {
     r"\bconst SETTINGS\s*=[^;]*value:": "значения опций",
     r"\bconst LOG_EVENTS\s*=": "журнал",
 }
-# Ещё не переведены на API: этапы 4–5 убирают их отсюда вместе с константами
-PENDING = {
-    r"\bfunction accSeed\b",  # права
-}
+# Ещё не переведены на API: этапы 4–5 убирали их отсюда вместе с константами; теперь переведено всё
+PENDING = set()
 
 
 class Report:

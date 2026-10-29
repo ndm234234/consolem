@@ -69,6 +69,15 @@ SCREENS = [
     ["log", None, None, ["logFilt='all'"]],
     ["log", None, None, ["logFilt='alarm'"]],
     ["acc", None, None, []],
+    ["acc", None, None, ["accGo('role:'+id('op'))"]],
+    ["acc", None, None, ["accGo('role:'+id('gd'),'groups')"]],
+    ["acc", None, None, ["accGo('users')"]],
+    ["acc", None, None, ["accGo('user:'+id('u8'))"]],
+    ["acc", None, None, ["accGo('ugroups')"]],
+    ["acc", None, None, ["accGo('ug:'+id('ug1'))"]],
+    ["acc", None, None, ["accGo('cat:'+id('corp'))"]],
+    ["acc", None, None, ["accGo('check')"]],
+    ["acc", None, None, ["accGo('history')"]],
     ["rules", None, None, ["setUiLang('en')"]],
 ]
 
@@ -84,8 +93,9 @@ const ready=Promise.all([window.appReady||Promise.resolve(),document.fonts.ready
 ready.then(()=>{
   for(const [app,obj,tab,acts] of SCREENS){
     try{
-      acts.forEach(a=>eval(a));
       goApp(app);
+      acts.forEach(a=>eval(a));
+      if(acts.length)paint();
       if(obj)pick(id(obj));
       if(tab)goTab(tab);
       out.push(snap());
