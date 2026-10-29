@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Внешний вид не изменился: прототип 10 (через API) рисует то же, что прототип 09 (константы).
+"""Внешний вид не изменился: прототип 11 (через API) рисует то же, что основной макет index.html (константы).
 
 Оба прототипа открываются в headless Chrome с остановленными часами (как при сборке набора), проходят
 одни и те же экраны — разделы, срезы, карточки с вкладками, светлая и тёмная тема, RU и EN — и после
-каждого шага снимается разметка страницы. В разметке прототипа 10 UUID заменяются старыми id
-прототипа 09 (по выгрузке tools/extract_fixture.py), затем снимки сравниваются построчно.
+каждого шага снимается разметка страницы. В разметке прототипа 11 UUID заменяются старыми id
+макета (по выгрузке tools/extract_fixture.py), затем снимки сравниваются построчно.
 
 Запуск из корня репозитория:
   python3 tools/compare_screens.py              все экраны, расхождения — в консоль
@@ -40,10 +40,10 @@ KNOWN = [
      "который хранит сервер; внешне то же"),
 ]
 
-BEFORE = "index_09_one-psim.html"
-AFTER = "index_10_api-server.html"
+BEFORE = "index.html"
+AFTER = "index_11_api-server-main.html"
 
-# Экраны: [раздел, id объекта прототипа 09 или null, вкладка или null, действия до показа]
+# Экраны: [раздел, id объекта макета или null, вкладка или null, действия до показа]
 SCREENS = [
     ["hw", None, None, []],
     ["hw", "d1", None, []],
@@ -60,8 +60,17 @@ SCREENS = [
     ["hw", "c1", "gen", ["setUiLang('en')"]],
     ["hw", "s1", "gen", ["setUiLang('en')", "setTheme('dark')"]],
     ["rules", None, None, []],
-    ["rules", None, None, ["rule=id('r2')"]],
-    ["rules", None, None, ["rule=id('r3')"]],
+    # Этап А: правила ещё константы макета, их id — старые («r2»), без перевода в UUID
+    ["rules", None, None, ["rule='r1'"]],
+    ["rules", None, None, ["rule='r2'"]],
+    ["rules", None, None, ["rule='r3'"]],
+    ["rules", None, None, ["rule='r6'"]],
+    ["rules", None, None, ["rule='r1'", "ruleTab='hist'"]],
+    ["rules", None, None, ["rule='overview'"]],
+    ["rules", None, None, ["rule='modes'"]],
+    ["rules", None, None, ["rule='maint'"]],
+    ["rules", None, None, ["rule='schdays'"]],
+    ["rules", None, None, ["rule='sch:s_work'"]],
     ["sys", None, None, ["sys='ntp'"]],
     ["sys", None, None, ["sys='sec'"]],
     ["sys", None, None, ["sys='mail'"]],
@@ -154,7 +163,7 @@ def main():
         if a == b:
             print(f"PASS  {name}")
             continue
-        diff = list(difflib.unified_diff(lines(a), lines(b), "09", "10", n=0, lineterm=""))
+        diff = list(difflib.unified_diff(lines(a), lines(b), "до", "после", n=0, lineterm=""))
         changed = [d[1:] for d in diff if d[:1] in "+-" and d[:3] not in ("+++", "---")]
         why = {note for pattern, note in KNOWN for d in changed if re.search(pattern, d)}
         if all(any(re.search(pattern, d) for pattern, _ in KNOWN) for d in changed):
@@ -166,7 +175,7 @@ def main():
             print("      " + html.unescape(d)[:220])
         if out_dir:
             os.makedirs(out_dir, exist_ok=True)
-            for tag, s in (("09", a), ("10", b)):
+            for tag, s in (("before", a), ("after", b)):
                 with open(os.path.join(out_dir, f"{i:02d}-{tag}.html"), "w", encoding="utf-8") as f:
                     f.write("\n".join(lines(s)))
     print(f"RESULT {'fail' if bad else 'pass'} — экранов {len(SCREENS)}, отличаются {bad}")

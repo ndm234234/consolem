@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Сценарии интерфейса прототипа 10: действия пользователя → запросы API → то, что видно на экране.
+"""Сценарии интерфейса прототипа 11: действия пользователя → запросы API → то, что видно на экране.
 
-Каждый сценарий tests/ui-*.js выполняется на свежей странице index_10_api-server.html в headless
+Каждый сценарий tests/ui-*.js выполняется на свежей странице index_11_api-server-main.html в headless
 Chrome: страница загружает данные со встроенного сервера, сценарий жмёт кнопки и вызывает те же
 функции, что и клики, и сверяет кэш интерфейса, разметку и ответы сервера. Виртуальное время:
 отсчёты удаления и шаги операций идут без ожидания.
@@ -11,6 +11,7 @@ Chrome: страница загружает данные со встроенно
   python3 tools/check_ui.py --latency 300         с задержкой ответа, как по медленной сети
   python3 tools/check_ui.py tests/ui-domains.js   один сценарий
   python3 tools/check_ui.py --selftest            самопроверка прототипа (?selftest): те же сценарии изнутри страницы
+  python3 tools/check_ui.py --page index_10_api-server.html   другой прототип
 Код выхода 1, если хоть одна проверка не прошла.
 """
 import glob
@@ -23,7 +24,7 @@ import sys
 import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PAGE = "index_10_api-server.html"
+PAGE = "index_11_api-server-main.html"
 
 # Помощники сценариев — те же, что у самопроверки прототипа (?selftest)
 HELPERS = '<script src="tests/ui-harness.js"></script>'
@@ -79,8 +80,13 @@ def selftest(query):
 
 
 def main():
+    global PAGE
     args = sys.argv[1:]
     query = ""
+    if "--page" in args:
+        i = args.index("--page")
+        PAGE = args[i + 1]
+        del args[i:i + 2]
     if "--latency" in args:
         i = args.index("--latency")
         query = f"?latency={int(args[i + 1])}"
