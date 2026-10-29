@@ -55,4 +55,17 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   ok((await API.raw("GET", "/devices/" + del[0])).status === 404, "на сервере — нет");
   // После удаления кэш перечитан — папка ищется заново
   ok(!folderById(folder.id).items.includes(del[0]), "из папки убраны");
+  // Имена по шаблону: в выборке и камера, и сервер — одной операцией на сервере, и у сервера тоже
+  await until(() => !bq || bq.finished);
+  const cam = devicePool.find((n) => n.type === "camera" && online(n));
+  const s1 = servers.find((s) => !hasNoSignal(s) && !isUnallocated(s.id));
+  treeSel.clear();
+  [cam, s1].forEach((x) => treeSel.add(x.id));
+  const want = [bulkName(cam, "type-ip"), bulkName(s1, "type-ip")];
+  bulkRun(bulkChanges({ rename: "type-ip" }));
+  ok(!!(bq && bq.api), "переименование камеры и сервера — операцией на сервере");
+  ok(await until(() => bq.finished) && bq.fail === 0, "без отказов");
+  const [rc, rs] = await Promise.all([API.get("/devices/" + cam.id), API.get("/servers/" + s1.id)]);
+  ok(rc.name === want[0] && rs.name === want[1], "на сервере новые имена: " + rc.name + "; " + rs.name);
+  ok(await until(() => find(cam.id)?.n.name === want[0] && find(s1.id)?.n.name === want[1]), "и в дереве");
 });

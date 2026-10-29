@@ -121,4 +121,69 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   ok(await until(() => MAINT_WINDOWS.length === w0 && SCHEDS.length === s0, 40000), "после отсчёта удалено — и его расписание");
   ok((await API.get("/maintenance-windows")).items.length === w0, "на сервере");
   ok(mv === autoVer.get(R2), "версия приглушённого правила не менялась сама");
+
+  // Новые «Спросить оператора» и «Эскалация» — с ролями охраны, как в макете
+  const roleGd = accRoles().find((x) => x.n === "Охрана"), roleSg = accRoles().find((x) => x.n === "Старший охраны");
+  const ask = CTL_KINDS.find((k) => k.ctl === "ask").make(), esc = CTL_KINDS.find((k) => k.ctl === "escalate").make();
+  ok(ask.to === roleGd.id && esc.levels[0].to === roleGd.id && esc.levels[1].to === roleSg.id, "роли новых шагов — «Охрана», «Старший охраны»");
+
+  // «Отменить» правки — «Изменено» прежнее; «Только журнал» → «Включить» → «Отменить» — с прежней даты
+  const ch0 = JSON.stringify(r(R1).changed);
+  ruleOpen(R1);
+  ruleEdit((x) => { x.name = "Охрана входа — проверка"; });
+  ruleApply();
+  ok(await until(() => !ruleDraft && r(R1).name === "Охрана входа — проверка" && undo("rundo:" + R1)), "правка применена, в тосте «Отменить»");
+  undo("rundo:" + R1).click();
+  ok(await until(() => r(R1).name !== "Охрана входа — проверка"), "и отменена");
+  ok(JSON.stringify(r(R1).changed) === ch0, "«Изменено» прежнее: " + JSON.stringify(r(R1).changed));
+  const wr = rules.find((x) => x.on && x.watch && x.watchSince);
+  if (wr) {
+    const since = wr.watchSince;
+    ruleSetMode([wr.id], "on");
+    ok(await until(() => !r(wr.id).watch && undo("rundo:" + wr.id)), "«Только журнал» → «Работает»");
+    undo("rundo:" + wr.id).click();
+    ok(await until(() => r(wr.id).watch), "«Отменить» — снова «Только журнал»");
+    ok(r(wr.id).watchSince === since, "«в наблюдении» с прежней даты: " + r(wr.id).watchSince);
+  }
+
+  // «Задать только здесь…» в условии «Время»: у сохранённого правила — владелец правило сразу,
+  // у нового — после того, как правило сохранено
+  const here = async (rid, what) => {
+    ruleOpen(rid);
+    ruleEdit((x) => { (x.cond = x.cond || []).push(condNew("time")); });
+    const i = r(rid).cond.length - 1;
+    condSched(i, "__here");
+    const n0 = SCHEDS.length;
+    schSave("d");
+    ok(await until(() => SCHEDS.length === n0 + 1 && r(rid).cond[i].sched && schById(r(rid).cond[i].sched)), what + ": расписание создано");
+    return r(rid).cond[i].sched;
+  };
+  const sid = await here(R2, "сохранённое правило");
+  ok(schById(sid).own?.k === "rule" && (await API.get("/schedules/" + sid)).owner?.kind === "rule", "владелец на сервере — правило");
+  ruleApply();
+  ok(await until(() => !ruleDraft), "правило применено");
+  ruleNewOpen(); rnw.tpl = ""; ruleNewCreate();
+  const tmpRule = ruleDraft.id;
+  const sid2 = await here(tmpRule, "новое правило");
+  ok(schById(sid2).own?.k === "rule", "в интерфейсе — местное, ещё до сохранения правила");
+  ruleEdit((x) => { delete x._auto; x.name = "Правило со своим временем"; x.then = [{ sub: "rec", action: "record", ref: "30000013-0000-4000-8000-000000000000", dur: "min", minutes: 5 }]; });
+  ruleApply();
+  ok(await until(() => rules.some((x) => x.name === "Правило со своим временем" && autoVer.has(x.id))), "новое правило сохранено");
+  const nr = rules.find((x) => x.name === "Правило со своим временем").id;
+  ok(await until(() => schById(sid2)?.own?.id === nr && autoVer.get(sid2)), "в интерфейсе владелец — сохранённое правило");
+  ok((await API.get("/schedules/" + sid2)).owner?.id === nr, "и на сервере");
+
+  // Перечитывание всего (поток потерян) не сбрасывает черновик правила и отсчёт удаления
+  const sdel = SCHEDS.find((s) => !s.builtin && !s.own && !s._pend && s.id !== sw.id);
+  schDelAsk(sdel.id);
+  await confirmWith(1);
+  ruleOpen(R1);
+  ruleEdit((x) => { x.name = "Черновик при перечитывании"; });
+  const was = r(R1);
+  apiOnEvent({ type: "stream.reset" });
+  ok(await until(() => r(R1) !== was), "всё перечитано");
+  ok(ruleDraft && ruleDraft.id === R1 && r(R1).name === "Черновик при перечитывании" && ruleDiff().length === 1, "черновик правила на месте");
+  ok(schById(sdel.id)?._pend, "расписание по-прежнему ждёт удаления");
+  ok(await until(() => !schById(sdel.id), 30000), "по истечении отсчёта удалено");
+  ruleRestore(); paint();
 });

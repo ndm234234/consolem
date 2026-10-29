@@ -74,4 +74,17 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   const c = find(cams[0])?.n;
   ok(c && c.arch !== busy.id && (c.arch || c.rec === "none"), "камера осталась, запись: " + (c?.arch || c?.rec));
   ok((await API.get("/devices/" + cams[0])).archiveId !== busy.id, "на сервере камера не ссылается на удалённое");
+  // Переименование хранилища и тома в дереве — PATCH, имя держится и после перечитывания
+  const a2 = arch.find((x) => x.vols.length && hwVer.has(x.id));
+  const v3 = a2.vols[0];
+  treeRenameId = a2.id; treeRenameField = "name";
+  commitTreeRename(a2.id, "Хранилище — новое имя");
+  ok(await until(() => treeRenameId === null && a2.name === "Хранилище — новое имя"), "хранилище переименовано");
+  ok((await API.get("/archives/" + a2.id)).name === "Хранилище — новое имя", "на сервере — новое имя хранилища");
+  treeRenameId = v3.id; treeRenameField = "name";
+  commitTreeRename(v3.id, "Том — новое имя");
+  ok(await until(() => treeRenameId === null), "том переименован");
+  ok((await API.get("/volumes/" + v3.id)).name === "Том — новое имя", "на сервере — новое имя тома");
+  apiOnEvent({ type: "stream.reset" });
+  ok(await until(() => archById(a2.id) !== a2 && archById(a2.id)?.name === "Хранилище — новое имя"), "после перечитывания имя то же");
 });

@@ -75,4 +75,18 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   const nd = devicePool[devicePool.length - 1];
   const rec = await API.get("/devices/" + nd.id);
   ok(rec.archiveId === lan.arch && rec.serverId === s.id, "на сервере: пишет в хранилище сервера, сервер — " + (rec.serverId === s.id));
+  // Введённое в «Найденных» и свёрнутый узел переживают перечитывание всего кэша
+  let did = null, fr = null;
+  for (const k of Object.keys(found)) {
+    const ids = new Set((await API.get(`/domains/${k}/discovery`)).candidates.map((c) => c.id));
+    fr = foundAll(k).find((x) => !x.added && ids.has(x.id));
+    if (fr) { did = k; break; }
+  }
+  fr.name = "Камера — введено"; fr.user = "admin"; fr.pass = "secret";
+  open.delete(foundId(did));
+  apiOnEvent({ type: "stream.reset" });
+  ok(await until(() => foundAll(did).some((x) => x.id === fr.id) && foundAll(did).find((x) => x.id === fr.id) !== fr), "«Найденные» перечитаны");
+  const fr2 = foundAll(did).find((x) => x.id === fr.id);
+  ok(fr2.name === "Камера — введено" && fr2.user === "admin" && fr2.pass === "secret", "введённое на месте");
+  ok(!open.has(foundId(did)), "свёрнутое осталось свёрнутым");
 });

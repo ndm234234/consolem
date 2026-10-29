@@ -2044,9 +2044,9 @@ const DEV_KEY={serverId:"srvId",archiveId:"arch",recordMode:"rec",recordDetector
   videoChannel:"vch",channel:"ch",onServer:"server",cameraId:"camera",login:"user",preRecordSec:"pre"};
 const DEV_API=Object.fromEntries(Object.entries(DEV_KEY).map(([k,v])=>[v,k]));
 // Поля, у которых в объекте нет своего свойства: карточка хранит их в n._f по подписи поля
-const DEV_FLD={rtspUrl:"RTSP",codec:"Кодек",res:"Разрешение",fps:"к/с",bitrate:"Битрейт"};
+const DEV_FLD={rtspUrl:"RTSP",codec:"Кодек",res:"Разрешение",fps:"к/с",bitrate:"Битрейт",overlayDelayMs:"Задержка, мс",overlayDurationSec:"Длительность, с"};
 const DEV_FLD_API=Object.fromEntries(Object.entries(DEV_FLD).map(([k,v])=>[v,k]));
-const DEV_NUM=new Set(["port","fps","bitrate","preRecordSec","channel","videoChannel","sensitivity","pulse","debounce","gain","vol"]);
+const DEV_NUM=new Set(["port","fps","bitrate","preRecordSec","channel","videoChannel","sensitivity","pulse","debounce","gain","vol","overlayDelayMs","overlayDurationSec"]);
 const DEV_SKIP=new Set(["id","type","parentId","domainId","version","hasPassword"]);
 const NORM_RU={open:"Разомкнуто",closed:"Замкнуто"};
 const NORM_CODE={"Разомкнуто":"open","Замкнуто":"closed"};
@@ -2134,8 +2134,40 @@ async function hwLoad(){
   const lists=await Promise.all(HW_LISTS.map(p=>API.get("/"+p).then(r=>r.items)));
   const L=Object.fromEntries(HW_LISTS.map((p,i)=>[p,lists[i]]));
   const disc=can("getDiscovery")?await Promise.all(L.domains.map(d=>API.get(`/domains/${d.id}/discovery`))):[];
+  const keep=cardKeepBefore();
   hwFill(L);
   seedFound(disc);
+  cardKeepAfter(keep);
+}
+// Кэш перечитан целиком, а у открытой карточки есть черновик: «до» — свежая
+// запись сервера, правки пользователя — поверх, как при hwFresh одной записи
+function cardKeepBefore(){
+  const n=cardBase&&find(cardBase.id)?.n;
+  return n?{id:cardBase.id,live:cardClone(n),folders:cardFolders(cardBase.id)}:null;
+}
+function cardKeepNode(n,snap,live){
+  const base=cardClone(n);
+  new Set([...Object.keys(live),...Object.keys(snap)]).forEach(k=>{
+    if(k==="devices"||CARD_SKIP.has(k)||k.startsWith("_"))return;
+    if(JSON.stringify(live[k])===JSON.stringify(snap[k]))return;
+    if(live[k]===undefined)delete n[k];else n[k]=cardClone({v:live[k]}).v;
+  });
+  const sd=new Map((snap.devices||[]).map(d=>[d.id,d]));
+  (live.devices||[]).forEach(d=>{
+    if(!sd.has(d.id)){(n.devices||(n.devices=[])).push(cardClone(d));return}
+    const nd=(n.devices||[]).find(x=>x.id===d.id);if(nd)cardKeepNode(nd,sd.get(d.id),d);
+  });
+  return base;
+}
+function cardKeepAfter(k){
+  if(!k||!cardBase||cardBase.id!==k.id)return;
+  const n=find(k.id)?.n;
+  if(!n){cardDraft=null;cardBase=null;dirty=false;return}
+  const snap=cardBase.snap,base=cardKeepNode(n,snap,k.live);
+  Object.keys(snap).forEach(x=>delete snap[x]);Object.assign(snap,base);
+  const was=cardBase.folders||[],srvF=cardFolders(k.id);
+  if(JSON.stringify(k.folders)!==JSON.stringify(was))cardSetFolders(k.id,k.folders);
+  was.length=0;was.push(...srvF);
 }
 // Запись пришла с сервера (ответ или событие потока): объект кэша меняется на
 // месте — на него ссылаются дерево, папки и выборка. Если у объекта открыта
@@ -2285,6 +2317,8 @@ function hwReloadSoon(m){
 // Поток событий: изменения (свои и чужие), ход операций. Запись перечитывается
 // по id; если поток потерян — весь кэш заново.
 function apiOnEvent(m){
+  // Стенд сброшен — черновики и введённое в «Найденных» тоже; поток потерян — остаются
+  if(m.type==="test.reset"){cardDraft=null;cardBase=null;dirty=false;ruleDraft=null;AUTO_PEND.clear();Object.keys(found).forEach(k=>delete found[k]);foundSeeded=false}
   if(m.type==="stream.reset"||m.type==="test.reset"){apiReload();return}
   if(m.kind==="operation"){opOnEvent(m);return}
   if(m.kind==="discovery"){discOnEvent(m);return}
@@ -3013,9 +3047,14 @@ function schNode(s){
     valid:{...s.valid},cycle:{len:s.cycle.length,start:s.cycle.start,days:s.cycle.days.map(ivCopy)},dates:s.dates.map(d=>({d:d.date,iv:ivCopy(d.intervals)})),
     astro:{win:s.astro.window,off1:s.astro.offsetStartMin,off2:s.astro.offsetEndMin,lat:s.astro.lat,lon:s.astro.lon,tz:s.astro.utcOffsetHours}};
   if(s.builtin)n.builtin=true;
-  if(s.owner)n.own={k:"maint",id:s.owner.id};
+  if(s.owner)n.own={k:s.owner.kind==="rule"?"rule":"maint",id:s.owner.id};
+  else if(SCH_OWN_PEND.has(s.id))n.own={k:"rule",id:SCH_OWN_PEND.get(s.id)};
   return n;
 }
+// Расписание «только здесь» у правила, которого ещё нет на сервере: создаётся без владельца,
+// владелец проставляется, когда правило сохранено (ruleApply). Расписание → id черновика правила
+const SCH_OWN_PEND=new Map();
+const schOwnerBody=o=>!o?null:o.k==="rule"?(autoVer.has(o.id)?{kind:"rule",id:o.id}:null):{kind:"maintenanceWindow",id:o.id};
 function schBody(n){
   const a=n.astro||{},c=n.cycle||{};
   return{name:(n.name||"").trim(),kind:n.kind,week:(n.week||[[],[],[],[],[],[],[]]).map(ivCopy),
@@ -3023,24 +3062,27 @@ function schBody(n){
     valid:{from:(n.valid||{}).from||"",to:(n.valid||{}).to||""},cycle:{length:+c.len||1,start:c.start||schIso(new Date()),days:(c.days||[]).map(ivCopy)},
     dates:(n.dates||[]).map(d=>({date:d.d,intervals:ivCopy(d.iv)})),
     astro:{window:a.win||"night",offsetStartMin:+a.off1||0,offsetEndMin:+a.off2||0,lat:+a.lat||0,lon:+a.lon||0,utcOffsetHours:+a.tz||0},
-    owner:n.own?{kind:"maintenanceWindow",id:n.own.id}:null};
+    owner:schOwnerBody(n.own)};
 }
+// Что ждёт удаления (идёт отсчёт): отметка не в записи, а по id — перечитывание её не снимает
+const AUTO_PEND=new Set();
+const pendKeep=n=>{if(AUTO_PEND.has(n.id))n._pend=true;return n};
 function schSet(x,oldId){
-  const n=schNode(x),i=SCHEDS.findIndex(s=>s.id===(oldId||x.id));
+  const n=pendKeep(schNode(x)),i=SCHEDS.findIndex(s=>s.id===(oldId||x.id));
   if(i>=0)SCHEDS[i]=n;else SCHEDS.push(n);
   autoVer.set(x.id,x.version);
   return n;
 }
 function grpNode(g){return{id:g.id,name:g.name,rules:g.rules.map(({type,...x})=>({t:type,...x}))}}
 function grpBody(g){return{name:(g.name||"").trim(),rules:g.rules.map(({t,_gone,...x})=>({type:t,...x}))}}
-function grpSet(x){const n=grpNode(x),i=DAY_GROUPS.findIndex(g=>g.id===x.id);if(i>=0)DAY_GROUPS[i]=n;else DAY_GROUPS.push(n);autoVer.set(x.id,x.version);return n}
+function grpSet(x){const n=pendKeep(grpNode(x)),i=DAY_GROUPS.findIndex(g=>g.id===x.id);if(i>=0)DAY_GROUPS[i]=n;else DAY_GROUPS.push(n);autoVer.set(x.id,x.version);return n}
 // Режимы объекта: code — системный режим
 const modeCodes=new Map();
 const modeCode=id=>modeCodes.get(id)||"";
 const modeByCode=c=>(OBJ_MODES.find(m=>modeCode(m.id)===c)||{}).id||"";
 function modesApply(M){
   modesVer=M.version;modeCodes.clear();
-  OBJ_MODES.splice(0,OBJ_MODES.length,...M.items.map(m=>{modeCodes.set(m.id,m.system);return Object.assign({id:m.id,name:m.name,sched:m.scheduleId},m.system?{sys:true}:{},m.color?{color:m.color}:{})}));
+  OBJ_MODES.splice(0,OBJ_MODES.length,...M.items.map(m=>{modeCodes.set(m.id,m.system);return Object.assign({id:m.id,name:m.name,sched:m.scheduleId},m.system?{sys:true}:{},m.color?{color:m.color}:{})}).map(pendKeep));
   objModeElse=M.otherwise;
 }
 const modeBody=m=>({id:m.id,name:(m.name||"").trim(),scheduleId:m.sched||null,system:modeCode(m.id),color:m.color||null});
@@ -3049,7 +3091,7 @@ let modeCurRaw=null;
 async function modeCurLoad(){const c=await API.get("/modes/current");const was=objMode;modeCurApply(c);if(was!==objMode&&app==="rules")paint()}
 function winNode(w){return{id:w.id,name:w.name,sched:w.scheduleId,scope:w.ruleIds==null?"all":w.ruleIds.slice(),on:w.enabled}}
 function winBody(w){return{name:(w.name||"").trim(),scheduleId:w.sched,ruleIds:w.scope==="all"?null:(w.scope||[]).slice(),enabled:!!w.on}}
-function winSet(x){const n=winNode(x),i=MAINT_WINDOWS.findIndex(w=>w.id===x.id);if(i>=0)MAINT_WINDOWS[i]=Object.assign(n,MAINT_WINDOWS[i]._pend?{_pend:true}:{});else MAINT_WINDOWS.push(n);autoVer.set(x.id,x.version);return n}
+function winSet(x){const n=pendKeep(winNode(x)),i=MAINT_WINDOWS.findIndex(w=>w.id===x.id);if(i>=0)MAINT_WINDOWS[i]=Object.assign(n,MAINT_WINDOWS[i]._pend?{_pend:true}:{});else MAINT_WINDOWS.push(n);autoVer.set(x.id,x.version);return n}
 // Всё «Автоматизации» заново: при старте и когда поток потерян
 async function autoLoad(){
   const [rl,sc,dg,M,cur,mw]=await Promise.all(["/rules","/schedules","/day-groups","/modes","/modes/current","/maintenance-windows"].map(p=>API.get(p)));
@@ -3057,7 +3099,20 @@ async function autoLoad(){
   SCHEDS.length=0;sc.items.forEach(x=>schSet(x));
   DAY_GROUPS.length=0;dg.items.forEach(grpSet);
   MAINT_WINDOWS.length=0;mw.items.forEach(winSet);
+  // Черновик правила переживает перечитывание: «до» — запись сервера, правки — поверх
+  const dr=ruleDraft&&rules.find(r=>r.id===ruleDraft.id),drLive=dr?ruleClone(dr):null;
   rules.length=0;rl.items.forEach(x=>ruleSet(x));
+  if(drLive&&ruleDraft){
+    const r=rules.find(x=>x.id===drLive.id);
+    if(!r){if(drLive._new)rules.push(drLive);else ruleDraft=null}
+    else if(ruleDraft.snap){
+      const was=ruleDraft.snap;ruleDraft.snap=ruleClone(r);
+      new Set([...Object.keys(drLive),...Object.keys(was)]).forEach(k=>{
+        if(JSON.stringify(drLive[k])===JSON.stringify(was[k]))return;
+        if(drLive[k]===undefined)delete r[k];else r[k]=ruleClone({v:drLive[k]}).v;
+      });
+    }
+  }
   if(!schLast||!SCHEDS.some(s=>s.id===schLast))schLast=(SCHEDS.find(s=>!s.builtin)||{}).id||null;
   Object.keys(ruleFires).forEach(k=>delete ruleFires[k]);Object.keys(ruleHist).forEach(k=>delete ruleHist[k]);
   ruleFireSeq=0;
@@ -3469,7 +3524,8 @@ const CARD_PROP={enabled:"Включено",rec:"Режим записи",arch:"
   codec:"Кодек",res:"Разрешение",fps:"к/с",bitrate:"Битрейт",stream:"Поток",lat:"Широта",lon:"Долгота",azimuth:"Азимут",user:"Имя пользователя",pass:"Пароль"};
 // Поле карточки → свойство объекта, куда его запишет «Применить».
 const CARD_FLD_PROP={"Имя":"name","Короткое имя":"short","IP":"ip","Порт":"port","Производитель":"vendor","Модель":"model",
-  "Широта":"lat","Долгота":"lon","Азимут":"azimuth","Номер канала":"ch","Роль":"role"};
+  "Широта":"lat","Долгота":"lon","Азимут":"azimuth","Номер канала":"ch","Роль":"role",
+  "Канал":"ch","Папка":"path","Формат":"format","Режим":"mode","SMTP сервер":"smtp","От кого":"from","Получатели":"to","Шлюз / API":"gateway"};
 function cardFmt(k,v){
   if(k==="enabled")return v===false?i18n("выкл"):i18n("вкл");
   if(v===undefined||v===null||v==="")return"—";
@@ -3562,7 +3618,7 @@ function cardApply(){
   if(items){
     cardRestore();
     const label=r=>r.add?r.label:`${r.label}: ${r.toT}`;
-    const ops=d.map(r=>({...mkOp(r.node||n,label(r),r.folders?"folder":"param"),state:"wait",msg:"",done:false}));
+    const ops=d.map(r=>({...mkOp(r.node||n,label(r),r.folders?"folder":"param"),state:"wait",msg:"",done:false,tempId:r.add?.id}));
     const targets=[...new Set(items.map(x=>x.targetId))];
     apiQueue([{label:`«${locName(n)}»: ${d.length} ${plural(d.length,"изменение|изменения|изменений")}`,ops}],`«${locName(n)}»`,{undo:true},
       ()=>API.post("/operations",{idempotencyKey:opKey(),items,expectedVersions:Object.fromEntries(targets.map(x=>[x,hwVer.get(x)]))}));
@@ -4615,8 +4671,9 @@ function treeRenameKey(e,id){
   else if(e.key==="Escape"){e.preventDefault();cancelTreeRename()}
 }
 let treeRenamePending=false;
-const RENAME_API={device:"/devices",domain:"/domains",server:"/servers",folder:"/folders"};
-const RENAME_APPLY={device:r=>hwApplyDevice(r),domain:r=>hwApplyDomain(r),server:r=>hwApplyServer(r),folder:r=>hwApplyFolder(r)};
+const RENAME_API={device:"/devices",domain:"/domains",server:"/servers",folder:"/folders",archive:"/archives",vol:"/volumes"};
+const RENAME_APPLY={device:r=>hwApplyDevice(r),domain:r=>hwApplyDomain(r),server:r=>hwApplyServer(r),folder:r=>hwApplyFolder(r),
+  archive:r=>hwApplyArchive(r),vol:r=>hwApplyVolume(r)};
 function commitTreeRename(id,val){
   if(treeRenameId!==id)return;
   const f=find(id);
@@ -6144,16 +6201,22 @@ function foundAll(did){return found[did]||[]}
 function foundPending(did){return foundAll(did).filter(r=>!r.added)}
 function foundRowById(did,rid){return foundAll(did).find(r=>r.id===rid)||null}
 // Итог последнего поиска в сети по доменам — с сервера (GET /domains/{id}/discovery)
+// Что человек ввёл в строке «Найденных» (имя, логин, пароль…), при перечитывании остаётся
+const FOUND_KEEP=["added","addedId","user","pass","name","short","identifier","arch","group","record","lat","lon","azimuth"];
+let foundSeeded=false;
 function seedFound(disc){
   disc.filter(d=>d.candidates.length).forEach(d=>{
+    const was=new Map((found[d.domainId]||[]).map(x=>[x.id,x]));
     found[d.domainId]=d.candidates.map(c=>({id:c.id,name:c.name,ip:c.ip,port:c.port,mac:c.mac,vendor:c.vendor,model:c.model,
-      status:c.support,user:c.login||"",pass:c.password||"",type:c.type})).map(x=>({
+      status:c.support,user:c.login||"",pass:c.password||"",type:c.type})).map(x=>Object.assign({
       ...x,added:false,addedId:null,user:"",pass:"",name:"",short:"",identifier:"",
-      arch:arch.find(a=>archDomainId(a)===d.domainId)?.id||"",group:"",record:"motion",lat:"0",lon:"0",azimuth:"0",discoveredName:x.name}));
+      arch:arch.find(a=>archDomainId(a)===d.domainId)?.id||"",group:"",record:"motion",lat:"0",lon:"0",azimuth:"0",discoveredName:x.name},
+      was.has(x.id)?Object.fromEntries(FOUND_KEEP.map(k=>[k,was.get(x.id)[k]])):{}));
   });
   // Найденное раскрыто сразу: это то, с чего начинают в пустой системе, и
-  // прятать его за лишний клик незачем.
-  domains.forEach(d=>open.add(foundId(d.id)));
+  // прятать его за лишний клик незачем. При перечитывании — как оставил человек.
+  if(!foundSeeded)domains.forEach(d=>open.add(foundId(d.id)));
+  foundSeeded=true;
 }
 // Кандидат поиска (API) → строка, как её показывают мастер и вкладка «Сеть»
 function candRow(c){return{id:c.id,name:c.name,ip:c.ip,port:c.port,mac:c.mac,vendor:c.vendor,model:c.model,status:c.support,user:c.login||"",pass:c.password||"",type:c.type}}
@@ -7748,12 +7811,19 @@ function deleteDetector(camId,detId){
   const d=camDetectors(f.n).find(x=>x.id===detId);if(!d)return;
   if(pendingDelHas(detId)){toast("Детектор уже ждёт удаления — отменить можно в тосте");return}
   askConfirm("Удалить детектор?",`${i18n("Будет удалён")} «${escHtml(locName(d))}».`,i18n("После подтверждения будет отсчёт с кнопкой «Отменить»."),i18n("Удалить"),()=>scheduleDelete([detId],{label:`${i18n("Детектор")} «${locName(d)}»`,commit:()=>{
+    if(!hwVer.has(detId)){deleteDetectorDraft(f,detId);return}
     API.del(`/devices/${detId}`,hwVer.get(detId)).then(()=>{
     hwRemoveDevice(detId);
     if(detSel===detId)detSel=null;
     setD(true);toast(i18n("Детектор удалён"));applyFiltersFromState();
     }).catch(e=>toast(problemText(e)));
   }}),{typeCount:1});
+}
+// Детектор, ещё не применённый карточкой, есть только в черновике: удаляется там же
+function deleteDetectorDraft(f,detId){
+  f.n.devices=f.n.devices.filter(x=>x.id!==detId);
+  if(detSel===detId)detSel=null;
+  setD(true);toast(i18n("Детектор удалён"));applyFiltersFromState();
 }
 // Зона детектора рисуется прямо на карточке, без отдельной вкладки
 function detZoneShapeSvg(kind){
@@ -8231,7 +8301,7 @@ const CTL_KINDS=[
    }},
   // «Спросить оператора»: вопрос роли, ответ в клиенте. Нет ответа за sec — действует def («как подтвердил / как отклонил»).
   {ctl:"ask",label:"Спросить оператора",grp:"Ход выполнения",br:[["yes","если подтвердил"],["no","если отклонил"]],
-   make:()=>({ctl:"ask",text:"Подтвердить: {камера}?",to:"",sec:60,def:"no",yes:[],no:[]}),
+   make:()=>({ctl:"ask",text:"Подтвердить: {камера}?",to:ruleRoleDef("Охрана"),sec:60,def:"no",yes:[],no:[]}),
    text:(c,v)=>`${i18n("Спросить оператора")} «${v?ruleTplFill(c.text||"",v):c.text||""}» · ${ruleRoleName(c.to)} · ${i18n("ответ до")} ${c.sec||0} ${i18n("с")}`,
    check:c=>{
      const t=`«${i18n("Спросить оператора")}»`;
@@ -8247,7 +8317,7 @@ const CTL_KINDS=[
   // «Эскалация»: уведомить роль, ждать квитирования, потом следующий уровень. Останавливают квитирование тревоги
   // или конец события (reset, только для событий с окончанием). Последнему уровню ждать нечего: wait у него не используется.
   {ctl:"escalate",label:"Эскалация",grp:"Ход выполнения",br:[],
-   make:()=>({ctl:"escalate",levels:[{to:"",via:"client",wait:5},{to:"",via:"tg",wait:10}],stop:"ack"}),
+   make:()=>({ctl:"escalate",levels:[{to:ruleRoleDef("Охрана"),via:"client",wait:5},{to:ruleRoleDef("Старший охраны"),via:"tg",wait:10}],stop:"ack"}),
    text:c=>`${i18n("Эскалация")}: ${(c.levels||[]).map(l=>ruleRoleName(l.to)).join(" → ")||"—"}`,
    check:(c,r)=>{
      const t=`«${i18n("Эскалация")}»`,l=c.levels||[];
@@ -8275,6 +8345,8 @@ function ruleRoleName(id){const r=id&&accRoles().find(x=>x.id===id);return r?r.n
 function ctlOuts(it){if(!it||!it.ctl)return[];const k=ctlKind(it);return k.outs?k.outs(it):k.br}
 // Уровни эскалации.
 function escSet(ps,j,f,v){ruleEdit(r=>{const c=ruleThenAt(r,ps),l=c&&c.levels&&c.levels[j];if(l)l[f]=f==="wait"?(parseInt(v,10)||0):v})}
+// Роль новых шагов «Спросить оператора» и «Эскалация» — как в макете: охрана и старший охраны (id ролей — с сервера)
+function ruleRoleDef(name){try{return accRoles().find(r=>r.n===name)?.id||""}catch(e){return""}}
 function escAdd(ps){ruleEdit(r=>{const c=ruleThenAt(r,ps);if(c)(c.levels=c.levels||[]).push({to:"",via:"client",wait:5})})}
 function escDel(ps,j){ruleEdit(r=>{const c=ruleThenAt(r,ps);if(c&&c.levels)c.levels.splice(j,1)})}
 function ctlKind(c){return CTL_KINDS.find(k=>k.ctl===c.ctl)||CTL_KINDS[0]}
@@ -8928,7 +9000,9 @@ function ruleApply(){
   ruleSaving=true;
   (wasNew?API.post("/rules",body):API.put(`/rules/${r.id}`,body,autoVer.get(r.id))).then(async x=>{
     ruleDraft=null;
+    const tmpId=r.id;
     ruleSet(x,r.id);
+    if(wasNew)await schOwnerBind(tmpId,x.id);
     await ruleHistLoad(x.id);
     paint();
     const hv=((ruleHist[x.id]||[]).slice(-1)[0]||{}).v;
@@ -10288,16 +10362,16 @@ function maintDelAsk(id){
 }
 function maintDelSchedule(id){
   const w=MAINT_WINDOWS.find(x=>x.id===id);if(!w)return;
-  w._pend=true;ruleIdxDrop();paint();
+  w._pend=true;AUTO_PEND.add(id);ruleIdxDrop();paint();
   const key="mdel:"+id,timer=setTimeout(()=>{removeToastAction(key);
     const x=MAINT_WINDOWS.find(y=>y.id===id);if(!x||!x._pend)return;
     // После отсчёта — DELETE: своё расписание окна сервер удаляет вместе с ним, если оно больше нигде не нужно
     API.del(`/maintenance-windows/${id}`,autoVer.get(id)).then(async()=>{
       const i=MAINT_WINDOWS.findIndex(y=>y.id===id);if(i>=0)MAINT_WINDOWS.splice(i,1);
       autoDirty.add("schedule");await autoFlush();toast("Окно обслуживания удалено");
-    }).catch(e=>{const y=MAINT_WINDOWS.find(z=>z.id===id);if(y)delete y._pend;toast(problemText(e));paint()});
+    }).catch(e=>{const y=MAINT_WINDOWS.find(z=>z.id===id);AUTO_PEND.delete(id);if(y)delete y._pend;toast(problemText(e));paint()});
   },10000);
-  toastAction(key,`«${w.name}» — ${i18n("удаление через")}`,i18n("Отменить"),()=>{clearTimeout(timer);const x=MAINT_WINDOWS.find(y=>y.id===id);if(x)delete x._pend;ruleIdxDrop();paint();toast("Удаление отменено")},10000);
+  toastAction(key,`«${w.name}» — ${i18n("удаление через")}`,i18n("Отменить"),()=>{clearTimeout(timer);const x=MAINT_WINDOWS.find(y=>y.id===id);AUTO_PEND.delete(id);if(x)delete x._pend;ruleIdxDrop();paint();toast("Удаление отменено")},10000);
 }
 function maintCardHtml(w){
   const chip=(on,click,lab)=>`<button type="button" class="stchip ${on?"on":""}" aria-pressed="${on}" onclick="${click}"><span class="stchip-lab">${i18n(lab)}</span></button>`;
@@ -11005,12 +11079,32 @@ function schDup(id){
     },10000);
   }).catch(e=>toast(problemText(e)));
 }
+// Новое правило сохранено: его расписания «только здесь» получают владельца на сервере
+function schOwnerBind(tmpId,ruleId){
+  const ids=[...SCH_OWN_PEND].filter(([,r])=>r===tmpId).map(([sid])=>sid);
+  ids.forEach(sid=>SCH_OWN_PEND.delete(sid));
+  return Promise.all(ids.map(sid=>{const s=schById(sid);if(!s)return null;s.own={k:"rule",id:ruleId};
+    return API.put(`/schedules/${sid}`,schBody(s),autoVer.get(sid)).then(schSet).catch(e=>toast(problemText(e)))}));
+}
+// Владелец расписания — на сервере: «Сделать общим» и «Отменить» — PUT с владельцем
+function schOwnerPut(id,own){
+  const s=schById(id);if(!s)return Promise.resolve();
+  const b=ruleClone(s);if(own)b.own=own;else delete b.own;
+  return API.put(`/schedules/${id}`,schBody(b),autoVer.get(id)).then(x=>{
+    SCH_OWN_PEND.delete(id);schSet(x);
+    if(schEd&&schEd.id===id){const o=schById(id).own;if(o)schEd.d.own=o;else delete schEd.d.own;
+      if(schEd.base){const bb=JSON.parse(schEd.base);if(o)bb.own=o;else delete bb.own;schEd.base=JSON.stringify(bb)}}
+  });
+}
 function schShare(id){
   const s=schById(id);if(!s||!s.own)return;
-  const was=s.own;delete s.own;
-  if(schEd&&schEd.id===id){delete schEd.d.own;if(schEd.base){const b=JSON.parse(schEd.base);delete b.own;schEd.base=JSON.stringify(b)}}
-  paint();
-  toastAction("sshare:"+id+":"+(++ruleUndoSeq),`«${s.name}» ${i18n("теперь общее: его можно выбрать в любом месте")}`,i18n("Отменить"),()=>{const x=schById(id);if(x){x.own=was;if(schEd&&schEd.id===id)schEd=null}paint();toast("Изменение отменено")},10000);
+  const was=s.own;
+  schOwnerPut(id,null).then(()=>{
+    paint();
+    toastAction("sshare:"+id+":"+(++ruleUndoSeq),`«${s.name}» ${i18n("теперь общее: его можно выбрать в любом месте")}`,i18n("Отменить"),()=>{
+      schOwnerPut(id,was).then(()=>{if(schEd&&schEd.id===id)schEd=null;paint();toast("Изменение отменено")}).catch(e=>toast(problemText(e)));
+    },10000);
+  }).catch(e=>toast(problemText(e)));
 }
 function schSave(k){
   const e=schE(k);if(!e||schRO(e))return;
@@ -11019,6 +11113,7 @@ function schSave(k){
   data.name=data.name.trim();
   // Сохранение — на сервер: новое — POST (id даёт сервер), прежнее — PUT с версией
   (prev?API.put(`/schedules/${id}`,schBody(data),autoVer.get(id)):API.post("/schedules",schBody(data))).then(x=>{
+    if(!x.owner&&data.own?.k==="rule"&&!autoVer.has(data.own.id))SCH_OWN_PEND.set(x.id,data.own.id);
     schSet(x);
     if(k==="d")schDlgHide();else{e.id=x.id;e.d.id=x.id;e.base=JSON.stringify(e.d);e.isNew=false}
     if(rule==="sch:"+id)rule="sch:"+x.id;
@@ -11044,9 +11139,9 @@ function schDelAsk(id){
 }
 function schDelRun(id){
   const s=schById(id);if(!s)return;
-  s._pend=true;if(schEd&&schEd.id===id)schEd=null;paint();
+  s._pend=true;AUTO_PEND.add(id);if(schEd&&schEd.id===id)schEd=null;paint();
   const key="sdel:"+id,timer=setTimeout(()=>{removeToastAction(key);schDelFinish(id)},10000);
-  toastAction(key,`«${s.name}» — ${i18n("удаление через")}`,i18n("Отменить"),()=>{clearTimeout(timer);const x=schById(id);if(x)delete x._pend;paint();toast("Удаление отменено")},10000);
+  toastAction(key,`«${s.name}» — ${i18n("удаление через")}`,i18n("Отменить"),()=>{clearTimeout(timer);const x=schById(id);AUTO_PEND.delete(id);if(x)delete x._pend;paint();toast("Удаление отменено")},10000);
 }
 function schDelFinish(id){
   const i=SCHEDS.findIndex(s=>s.id===id);if(i<0||!SCHEDS[i]._pend)return;
@@ -11057,7 +11152,7 @@ function schDelFinish(id){
     if(schLast===id)schLast=(SCHEDS.find(s=>!s.builtin)||{}).id||null;
     autoDirty.add("rule");autoDirty.add("modes");autoDirty.add("maintenanceWindow");await autoFlush();
     toast("Расписание удалено");
-  }).catch(e=>{const s=schById(id);if(s)delete s._pend;toast(problemText(e));paint()});
+  }).catch(e=>{const s=schById(id);AUTO_PEND.delete(id);if(s)delete s._pend;toast(problemText(e));paint()});
 }
 function schGoDays(k){
   const go=()=>ruleOpen("schdays",true);
@@ -11135,7 +11230,7 @@ function grpDelAsk(id){
 }
 function grpDelRun(id){
   const g=grpById(id);if(!g)return;
-  g._pend=true;paint();
+  g._pend=true;AUTO_PEND.add(id);paint();
   const key="gdel:"+id,timer=setTimeout(()=>{removeToastAction(key);
     const i=DAY_GROUPS.findIndex(x=>x.id===id);if(i<0||!DAY_GROUPS[i]._pend)return;
     // После отсчёта — DELETE: из расписаний особые дни этой группы убирает сервер
@@ -11143,8 +11238,8 @@ function grpDelRun(id){
       const j=DAY_GROUPS.findIndex(x=>x.id===id);if(j>=0)DAY_GROUPS.splice(j,1);
       [schEd,schDlg].forEach(e=>{if(e){e.d.ovr=e.d.ovr.filter(o=>o.g!==id);const b=e.base&&JSON.parse(e.base);if(b){b.ovr=b.ovr.filter(o=>o.g!==id);e.base=JSON.stringify(b)}}});
       autoDirty.add("schedule");await autoFlush();modeCurLoad().catch(()=>{});toast("Группа удалена");
-    }).catch(e=>{const x=grpById(id);if(x)delete x._pend;toast(problemText(e));paint()})},10000);
-  toastAction(key,`«${g.name}» — ${i18n("удаление через")}`,i18n("Отменить"),()=>{clearTimeout(timer);const x=grpById(id);if(x)delete x._pend;paint();toast("Удаление отменено")},10000);
+    }).catch(e=>{const x=grpById(id);AUTO_PEND.delete(id);if(x)delete x._pend;toast(problemText(e));paint()})},10000);
+  toastAction(key,`«${g.name}» — ${i18n("удаление через")}`,i18n("Отменить"),()=>{clearTimeout(timer);const x=grpById(id);AUTO_PEND.delete(id);if(x)delete x._pend;paint();toast("Удаление отменено")},10000);
 }
 function grpRuleHtml(g,r,i,dis){
   const del=dis?"":`<button type="button" class="btn s btn-icon" title="${i18n("Убрать")}" aria-label="${i18n("Убрать правило")} ${i+1}" onclick="grpRuleDel('${g.id}',${i})">${lu("x")}</button>`;
@@ -11225,15 +11320,15 @@ function modeDelAsk(id){
 }
 function modeDelRun(id){
   const m=OBJ_MODES.find(x=>x.id===id);if(!m)return;
-  m._pend=true;objModeRefresh();paint();
+  m._pend=true;AUTO_PEND.add(id);objModeRefresh();paint();
   const key="mdl:"+id,timer=setTimeout(()=>{removeToastAction(key);
     const i=OBJ_MODES.findIndex(x=>x.id===id);if(i<0||!OBJ_MODES[i]._pend)return;
     // После отсчёта — список без режима: из условий правил и из «включён вручную» его убирает сервер
     const rest=OBJ_MODES.filter(x=>x.id!==id),other=objModeElse===id?(rest.find(x=>modeCode(x.id)!=="service")||rest[0]).id:objModeElse;
     API.put("/modes",{items:rest.map(modeBody),otherwise:other},modesVer).then(async M=>{
       modesApply(M);await modeCurLoad();autoDirty.add("rule");await autoFlush();toast("Режим удалён");
-    }).catch(e=>{const x=OBJ_MODES.find(y=>y.id===id);if(x)delete x._pend;toast(problemText(e));paint()})},10000);
-  toastAction(key,`«${m.name}» — ${i18n("удаление через")}`,i18n("Отменить"),()=>{clearTimeout(timer);const x=OBJ_MODES.find(y=>y.id===id);if(x)delete x._pend;objModeRefresh();paint();toast("Удаление отменено")},10000);
+    }).catch(e=>{const x=OBJ_MODES.find(y=>y.id===id);AUTO_PEND.delete(id);if(x)delete x._pend;toast(problemText(e));paint()})},10000);
+  toastAction(key,`«${m.name}» — ${i18n("удаление через")}`,i18n("Отменить"),()=>{clearTimeout(timer);const x=OBJ_MODES.find(y=>y.id===id);AUTO_PEND.delete(id);if(x)delete x._pend;objModeRefresh();paint();toast("Удаление отменено")},10000);
 }
 function modeSegTip(s){return`${schHM(s.from)}–${s.to>=1440?"24:00":schHM(s.to)} · ${i18n(ruleModeName(s.mode))}`}
 function modeStripHtml(d,now){
@@ -18058,7 +18153,7 @@ function opsToItems(ops){
   const items=[];
   try{
     for(const o of ops){
-      const n=o.n;if(!isApiDevice(n))return null;
+      const n=o.n;if(!isApiTarget(n))return null;
       if(o.api){items.push({targetId:n.id,...o.api});continue}
       if(!snaps.has(n.id))snaps.set(n.id,[n,cardClone(n)]);
       const before=cardClone(n),fBefore=cardFolders(n.id);
@@ -18066,7 +18161,7 @@ function opsToItems(ops){
       const set={};
       for(const k of new Set([...Object.keys(n),...Object.keys(before)])){
         if(k==="devices"||k.startsWith("_")||CARD_SKIP.has(k)||JSON.stringify(n[k])===JSON.stringify(before[k]))continue;
-        const one=keyToApi(n,k,n[k]);if(!one)return null;
+        const one=isApiDevice(n)?keyToApi(n,k,n[k]):hwKeyToApi(n,k,n[k]);if(!one)return null;
         Object.assign(set,one);
       }
       const was=new Set((before.devices||[]).map(x=>x.id)),made=(n.devices||[]).filter(x=>!was.has(x.id));
@@ -18110,6 +18205,9 @@ const SERVER_PATCH=new Set(Object.keys(window.CONSOLEM_OPENAPI.components.schema
 const DOMAIN_PATCH=new Set(Object.keys(window.CONSOLEM_OPENAPI.components.schemas.DomainPatch.properties));
 const ARCHIVE_PATCH=new Set(Object.keys(window.CONSOLEM_OPENAPI.components.schemas.ArchivePatch.properties));
 const VOLUME_PATCH=new Set(Object.keys(window.CONSOLEM_OPENAPI.components.schemas.VolumePatch.properties));
+// Групповая правка сервера, домена, хранилища, тома — только имя (шаблон имён)
+const HW_PATCH={server:SERVER_PATCH,domain:DOMAIN_PATCH,archive:ARCHIVE_PATCH,vol:VOLUME_PATCH};
+function hwKeyToApi(n,k,v){return k==="name"&&HW_PATCH[n.type]?.has(k)?{name:String(v??"").trim()}:null}
 // Поле хранилища и тома в кэше → в API
 const ARCH_API={days:"retentionDays",enc:"encrypted"};
 const VOL_API={size:"sizeBytes",user:"login",pass:"password"};
@@ -18168,7 +18266,23 @@ function apiVal(k,v){
 function fldToApi(label,prop,v){
   const k=prop?(DEV_API[prop]||prop):DEV_FLD_API[label]||(label==="Предзапись, с"?"preRecordSec":null);
   if(!k||!DEVICE_PATCH.has(k))return null;
+  if(k==="mode")return{mode:EMAIL_MODE_CODE[v]||v||null};
   return{[k]:apiVal(k,typeof v==="string"&&!DEV_NUM.has(k)&&k!=="lat"&&k!=="lon"&&k!=="azimuth"?v.trim():v)};
+}
+// Поля детектора в карточке: у детектора — его собственные, у камеры (вкладка
+// «Детекторы») — выбранного в списке детектора
+const DET_FLD={"Тип":"kind","Чувствительность":"sens"};
+function cardFldTarget(n,r){
+  if(!DET_FLD[r.fld])return null;
+  if(n.type==="det")return n;
+  if(n.type!=="camera")return null;
+  const ds=camDetectors(n);return ds.find(d=>d.id===detSel)||ds[0]||null;
+}
+// «Камера» титров — по имени из списка карточки
+function overlayCamToApi(n,v){
+  if(v==="— не выбрана —")return{cameraId:null};
+  const c=devicePool.find(x=>x.type==="camera"&&locName(x)===v&&nodeDomainId(x)===nodeDomainId(n));
+  return c&&isApiDevice(c)?{cameraId:c.id}:null;
 }
 function keyToApi(node,key,v){
   if(key==="enabled")return{enabled:v!==false};
@@ -18199,6 +18313,9 @@ function cardApiItems(n,d){
     const target=r.node||n;if(!isApiDevice(target))return null;
     if(r.add){items.push({targetId:target.id,create:nodeCreate(r.add)});continue}
     if(r.folders){items.push({targetId:n.id,folderIds:r.folders});continue}
+    const det=r.fld?cardFldTarget(target,r):null;
+    if(det){if(!isApiDevice(det))return null;items.push({targetId:det.id,set:keyToApi(det,DET_FLD[r.fld],r.to)});continue}
+    if(r.fld==="Камера"&&target.type==="eventsrc"){const set=overlayCamToApi(target,r.to);if(!set)return null;items.push({targetId:target.id,set});continue}
     const set=r.fld?fldToApi(r.fld,r.prop,r.to):keyToApi(target,r.key,r.to);
     if(!set)return null;
     items.push({targetId:target.id,set});
@@ -18233,7 +18350,8 @@ function opOnEvent(m){
   if(m.type==="operation.progress"){
     const it=m.payload.item,o=ops[it.index];if(!o||o.done)return;
     // Шаг create создал устройство — в кэш, как только сервер его отдаст
-    if(it.createdId)API.get(`/devices/${it.createdId}`).then(r=>{hwAddDevices([r]);renderTree()}).catch(()=>{});
+    // Выбранный в карточке новый детектор остаётся выбранным и под id сервера
+    if(it.createdId)API.get(`/devices/${it.createdId}`).then(r=>{hwAddDevices([r]);if(o.tempId&&detSel===o.tempId){detSel=r.id;if(app==="hw")gear()}renderTree()}).catch(()=>{});
     if(it.state==="ok"){o.state="ok";o.msg="";bq.ok++}else{o.state="fail";o.msg=problemText(it.code,o.n);bq.fail++}
     o.done=true;bq.done++;
     const nx=ops.find(x=>!x.done);if(nx&&!bq.paused)nx.state="run";
