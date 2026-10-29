@@ -123,14 +123,20 @@
     function problem(status, code, message, extra) {
       return { status, body: Object.assign({ code, message }, extra || {}) };
     }
+    // Версия записи — непрозрачная строка (контракт): клиенты сравнивают её только на равенство. Встроенный
+    // сервер берёт её из общего счётчика: у одной записи она растёт скачками и никогда не повторяется — так
+    // никто не опирается на «+1», а старая версия не совпадёт с новой
+    let versionSeq = 0;
+    const newVersion = () => `v${(++versionSeq).toString(36)}`;
+    const bump = (rec) => (rec.version = newVersion());
     const etag = (rec) => `"${rec.version}"`;
     const one = (rec, status) => ({ status: status || 200, body: rec, headers: { ETag: etag(rec) } });
     const items = (list) => ({ status: 200, body: { items: list } });
-    const parseMatch = (h) => (h == null ? null : Number(String(h).replace(/^W\//, "").replace(/"/g, "")));
+    const parseMatch = (h) => (h == null ? null : String(h).replace(/^W\//, "").replace(/"/g, "").trim());
     // Версия из If-Match: нет заголовка — 428, не совпала — 412 с актуальной записью
     function precondition(rec, headers) {
       const v = parseMatch(headers["if-match"]);
-      if (v == null || Number.isNaN(v)) return problem(428, "PRECONDITION_REQUIRED", "Нужен заголовок If-Match с версией записи");
+      if (v == null || v === "") return problem(428, "PRECONDITION_REQUIRED", "Нужен заголовок If-Match с версией записи");
       if (v !== rec.version) return problem(412, "VERSION_MISMATCH", "Запись изменилась с момента чтения", { current: clone(rec) });
       return null;
     }
@@ -211,7 +217,7 @@
         else if (k === "secret") secrets.set(v.id + ":secret", x);
         else if (!(k in v)) v[k] = clone(x);
       });
-      v.version = 1;
+      v.version = newVersion();
       db.volumes.push(v);
       return v;
     }
@@ -249,7 +255,7 @@
         if (v === null) delete rec[k];
         else rec[k] = clone(v);
       });
-      rec.version += 1;
+      bump(rec);
       return before;
     }
 
@@ -302,7 +308,7 @@
         if (!parent && NUMBERED.has(s.type) && (d.identifier == null || d.identifier === "")) d.identifier = nextIdentifier();
         if (!("enabled" in d)) d.enabled = true;
         d.online = true;
-        d.version = 1;
+        d.version = newVersion();
         db.devices.push(d);
         devices.push(d);
         send("entity.created", { kind: "device", entityId: d.id, version: d.version });
@@ -313,7 +319,7 @@
       if (folderId) {
         const f = byId("folders", folderId);
         f.deviceIds = f.deviceIds.concat(devices[0].id);
-        f.version += 1;
+        bump(f);
         changed("folder", f);
         folders.push(f);
       }
@@ -335,13 +341,13 @@
       db.folders.forEach((f) => {
         if (!f.deviceIds.some((x) => gone.has(x))) return;
         f.deviceIds = f.deviceIds.filter((x) => !gone.has(x));
-        f.version += 1;
+        bump(f);
         changed("folder", f);
       });
       db.devices.forEach((d) => {
         if (!(d.recordDetectorIds || []).some((x) => gone.has(x))) return;
         d.recordDetectorIds = d.recordDetectorIds.filter((x) => !gone.has(x));
-        d.version += 1;
+        bump(d);
         changed("device", d);
       });
       gone.forEach((x) => {
@@ -379,7 +385,7 @@
           if (next) Object.assign(d, { archiveId: next.archiveId, recordMode: next.recordMode, stream: next.stream });
           else Object.assign(d, { archiveId: null, recordMode: "none" });
         }
-        d.version += 1;
+        bump(d);
         changed("device", d);
       });
       db.volumes.filter((v) => v.archiveId === a.id).forEach(removeVolume);
@@ -509,7 +515,7 @@
         const want = folderIds.includes(f.id);
         if (has === want) return;
         f.deviceIds = want ? f.deviceIds.concat(deviceId) : f.deviceIds.filter((x) => x !== deviceId);
-        f.version += 1;
+        bump(f);
         changed("folder", f);
       });
       return before;
@@ -608,7 +614,7 @@
         const at = iso(now());
         if (!s.groupId) Object.assign(c, { status: "ok", lastSyncAt: at, durationSec: 7, message: "" });
         db.access.groups.filter((g) => g.source && g.source.catalogId === cid && (!s.groupId || g.id === s.groupId)).forEach((g) => Object.assign(g.source, { status: "ok", at, message: "" }));
-        db.access.version += 1;
+        bump(db.access);
         send("entity.changed", { kind: "access", version: db.access.version });
         fired.push({ kind: "catalog", id: cid });
       });
@@ -619,7 +625,7 @@
         const v = byId("volumes", id);
         if (!v) return;
         Object.assign(v, { state: "ready", usedPercent: 0 });
-        v.version += 1;
+        bump(v);
         changed("volume", v);
         fired.push({ kind: "volume", id });
       });
@@ -700,7 +706,7 @@
         (p, q, body) => {
           const bad = domainNameProblem(body.name);
           if (bad) return bad;
-          const d = { id: uuid("domain"), name: body.name.trim(), license: "", online: true, version: 1 };
+          const d = { id: uuid("domain"), name: body.name.trim(), license: "", online: true, version: newVersion() };
           db.domains.push(d);
           send("entity.created", { kind: "domain", entityId: d.id, version: d.version });
           return one(clone(d), 201);
@@ -738,7 +744,7 @@
           const move = (table, kind, extra) =>
             db[table].filter(inside).forEach((r) => {
               Object.assign(r, { domainId: to.id }, extra || {});
-              r.version += 1;
+              bump(r);
               changed(kind, r);
             });
           if (to) {
@@ -783,7 +789,7 @@
             telemetry: { cpu: 5, ram: 18, net: 2, disk: 0 },
             gpu: null,
             disks: [["C:", 256 * GB, true], ["D:", 4 * TB], ["E:", 6 * TB], ["F:", 8 * TB], ["G:", 12 * TB]].map(([disk, sizeBytes, system]) => ({ disk, sizeBytes, system: !!system })),
-            version: 1,
+            version: newVersion(),
           };
           db.servers.push(s);
           send("entity.created", { kind: "server", entityId: s.id, version: s.version });
@@ -832,7 +838,7 @@
             if (s.version !== x.version) return failed.push({ serverId: x.serverId, code: "VERSION_MISMATCH" });
             if (s.domainId !== x.domainId || s.allocated !== x.allocated) {
               Object.assign(s, { domainId: x.domainId, allocated: x.allocated });
-              s.version += 1;
+              bump(s);
               // Добавленный встаёт в конец списка — там, где его и ждут увидеть
               db.servers = db.servers.filter((r) => r !== s).concat(s);
               changed("server", s);
@@ -855,7 +861,7 @@
             if (!parent) return notFound("Папка");
             if (parent.domainId !== body.domainId) return problem(422, "VALIDATION_FAILED", "Родительская папка — в другом домене", { field: "parentId" });
           }
-          const f = { id: uuid("folder"), name: body.name.trim(), domainId: body.domainId, parentId: body.parentId, deviceIds: [], version: 1 };
+          const f = { id: uuid("folder"), name: body.name.trim(), domainId: body.domainId, parentId: body.parentId, deviceIds: [], version: newVersion() };
           db.folders.push(f);
           send("entity.created", { kind: "folder", entityId: f.id, version: f.version });
           return one(clone(f), 201);
@@ -915,7 +921,7 @@
             provider: body.kind === "cloud" ? body.provider : null,
             serverId: body.serverId,
             domainId: body.domainId,
-            version: 1,
+            version: newVersion(),
           };
           const bad = volumeProblem(a, body.firstVolume);
           if (bad) return bad;
@@ -1007,7 +1013,7 @@
           if (!v) return notFound("Том");
           if (v.state === "format") return problem(409, "BUSY", "Том уже форматируется");
           v.state = "format";
-          v.version += 1;
+          bump(v);
           formatting.set(v.id, now() + FORMAT_MS);
           changed("volume", v);
           return one(volume(v), 202);
@@ -1130,7 +1136,7 @@
           if (bad) return bad;
           if (!String(body.name).trim()) return problem(422, "NAME_REQUIRED", "Укажите название правила", { field: "name" });
           Object.assign(r, clone(body));
-          r.version += 1;
+          bump(r);
           changed("rule", r);
           return one(clone(r));
         },
@@ -1143,7 +1149,7 @@
           const bad = precondition(s, headers);
           if (bad) return bad;
           Object.assign(s.values, clone(body.values));
-          s.version += 1;
+          bump(s);
           send("entity.changed", { kind: "settings", version: s.version });
           return one(clone(s));
         },
@@ -1175,7 +1181,7 @@
             history: body.history.map((h) => stamp("history", h)).concat(a.history),
             cellHistory: body.cellHistory.map((h) => stamp("history", h)).concat(a.cellHistory || []),
           });
-          a.version += 1;
+          bump(a);
           send("entity.changed", { kind: "access", version: a.version });
           return { status: 200, body: { applied: true, access: clone(a) }, headers: { ETag: etag(a) } };
         },
@@ -1192,7 +1198,7 @@
           if (!body.groupId) c.status = "run";
           db.access.groups.filter(mine).forEach((g) => (g.source.status = "run"));
           syncing.set(c.id, { at: now() + SYNC_MS, groupId: body.groupId });
-          db.access.version += 1;
+          bump(db.access);
           send("entity.changed", { kind: "access", version: db.access.version });
           return { status: 202, body: clone(c) };
         },

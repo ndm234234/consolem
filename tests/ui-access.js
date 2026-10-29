@@ -19,7 +19,8 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   const v0 = accVer;
   accPlan();
   await confirmWith(null);
-  ok(await until(() => accVer === v0 + 1), "применено, версия " + accVer);
+  ok(await until(() => accVer !== v0), "применено, версия " + accVer);
+  const v1 = accVer;
   const a = await API.get("/access");
   ok(a.users.find((x) => x.id === u.id).email === "olga@new.local", "на сервере — новый e-mail");
   ok(a.users.some((x) => x.id === nu.id && x.login === "tester" && x.roleIds[0] === op.id), "новый пользователь с UUID и ролью");
@@ -31,7 +32,7 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   accPlan();
   await confirmWith(null);
   ok(await until(() => /без администратора|лишит вас входа/.test(toastText())), "сервер отказал: «" + toastText() + "»");
-  ok(accVer === v0 + 1 && accSrv().roles.some((r) => r.own.unr), "на сервере не изменилось");
+  ok(accVer === v1 && accSrv().roles.some((r) => r.own.unr), "на сервере не изменилось");
   ACC.ed = accClone(ACC.srv);
   accResolveAll();
   // Удаление пользователя: число, отсчёт, затем — в черновик
@@ -49,7 +50,7 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   ok(await until(() => !accRole(ext.id), 30000), "роль удалена из черновика");
   accPlan();
   await confirmWith(null);
-  ok(await until(() => accVer === v0 + 2), "применено");
+  ok(await until(() => accVer !== v1), "применено");
   const b = await API.get("/access");
   ok(!b.users.some((x) => x.id === del.id) && !b.roles.some((x) => x.id === ext.id), "на сервере — ни пользователя, ни роли");
   // Синхронизация каталога
@@ -62,5 +63,5 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   accSetUser(u.id, "email", "olga@after.sync");
   accPlan();
   await confirmWith(null);
-  ok(await until(() => accVer === vs + 1), "после синхронизации «Применить» проходит: версия " + vs + " → " + accVer);
+  ok(await until(() => accVer !== vs), "после синхронизации «Применить» проходит: версия " + vs + " → " + accVer);
 });

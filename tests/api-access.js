@@ -20,13 +20,14 @@
     const res = await apply(env, d, { body: { history: [{ text: "Создан пользователь new.user", userId: NEW_ID, roleId: role.id }], cellHistory: [{ roleId: role.id, key: FX.domains[0].id, field: "cam", from: null, to: "FULL" }] } });
     assert.status(res, 200);
     const a = res.body.access;
-    assert.eq([res.body.applied, a.version, res.headers.etag], [true, A.version + 1, `"${A.version + 1}"`], "применено");
+    assert.eq([res.body.applied, res.headers.etag], [true, `"${a.version}"`], "применено, новая версия в ETag");
+    assert.ok(a.version !== A.version, "версия изменилась");
     assert.eq(a.roles.find((r) => r.id === role.id).name, role.name, "роль");
     assert.ok(a.users.some((u) => u.id === NEW_ID && u.roleIds[0] === role.id), "пользователь с ролью");
     const login = A.users.find((u) => u.id === meId).login;
     assert.eq([a.history[0].text, a.history[0].actor, a.history.length], ["Создан пользователь new.user", login, A.history.length + 1], "история: сверху, с автором");
     assert.eq([a.cellHistory.length, a.cellHistory[0].to], [1, "FULL"], "история ячеек");
-    assert.eq((await env.ok("GET", "/access")).version, A.version + 1, "перечитано");
+    assert.eq((await env.ok("GET", "/access")).version, a.version, "перечитано");
   });
 
   test("Права: dryRun — проверка без записи", async () => {
@@ -71,7 +72,7 @@
   test("Права: без версии — 428, старая — 412; состояние синхронизации от клиента не берётся", async () => {
     const env = await makeEnv();
     assert.status(await env.call("POST", "/access/apply", { access: draft(), history: [], cellHistory: [] }), 428, "PRECONDITION_REQUIRED");
-    assert.status(await apply(env, draft(), { version: A.version + 3 }), 412, "VERSION_MISMATCH");
+    assert.status(await apply(env, draft(), { version: "stale" }), 412, "VERSION_MISMATCH");
     const d = draft();
     d.catalogs[0].status = "err";
     d.catalogs[0].message = "подделка";

@@ -63,7 +63,7 @@
     const res = await env.ok("POST", "/devices/update", { idempotencyKey: key(), items: [
       { deviceId: cams[0].id, version: cams[0].version, set: { extraArchives: [{ archiveId: a.id, recordMode: "always", stream: "main" }] } },
       { deviceId: cams[1].id, version: cams[1].version, set: { recordMode: "motion" } },
-      { deviceId: cams[2].id, version: cams[2].version + 9, set: { recordMode: "none" } },
+      { deviceId: cams[2].id, version: "stale", set: { recordMode: "none" } },
     ] });
     assert.eq([res.done.length, res.failed.map((f) => f.code)], [2, ["VERSION_MISMATCH"]], "частичный успех");
     assert.eq((await env.ok("GET", `/devices/${cams[1].id}`)).recordMode, "motion", "изменено");

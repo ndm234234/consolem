@@ -14,8 +14,8 @@
       { id: nvrKid.id, version: nvrKid.version },
       { id: folder.id, version: folder.version },
       { id: vol.id, version: vol.version },
-      { id: cam.id, version: cam.version + 4 },
-      { id: "30009999-0000-4000-8000-000000000000", version: 1 },
+      { id: cam.id, version: "stale" },
+      { id: "30009999-0000-4000-8000-000000000000", version: "1" },
     ] });
     assert.eq(res.done, [nvr.id, nvrKid.id, folder.id, vol.id], "удалено");
     assert.eq(res.failed.map((f) => f.code), ["VERSION_MISMATCH", "NOT_FOUND"], "отказы");

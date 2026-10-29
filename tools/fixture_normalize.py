@@ -498,6 +498,20 @@ def normalize(raw, captured_at):
     out["reference"] = reference(raw["refs"])
     # Старый id → UUID: по нему tools/compare_screens.py сопоставляет экраны прототипов 09 и 10
     normalize.ids = {old: uid for (kind, old), uid in ids.map.items()}
+    # Версия записи в API — непрозрачная строка; у самого набора version — номер формата, он остаётся числом
+    def opaque(o):
+        if isinstance(o, dict):
+            for k, v in o.items():
+                if k == "version" and isinstance(v, int):
+                    o[k] = str(v)
+                else:
+                    opaque(v)
+        elif isinstance(o, list):
+            for x in o:
+                opaque(x)
+    for k, v in out.items():
+        if k != "version":
+            opaque(v)
     return out
 
 

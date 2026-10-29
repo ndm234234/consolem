@@ -21,8 +21,9 @@
     await ApiTest.settle();
     const res = await env.call("PATCH", `/devices/${cam.id}`, { name: "Главный вход — новый" }, { "If-Match": await env.etag(`/devices/${cam.id}`) });
     assert.status(res, 200);
-    assert.eq([res.body.name, res.body.version], ["Главный вход — новый", cam.version + 1], "имя и версия");
-    assert.eq(res.headers.etag, `"${cam.version + 1}"`, "ETag");
+    assert.eq(res.body.name, "Главный вход — новый", "имя");
+    assert.ok(res.body.version !== cam.version, "версия изменилась");
+    assert.eq(res.headers.etag, `"${res.body.version}"`, "ETag — новая версия");
     assert.eq((await env.ok("GET", `/devices/${cam.id}`)).name, "Главный вход — новый", "сохранено");
     await ApiTest.settle();
     stop();
@@ -36,7 +37,8 @@
     await env.ok("PATCH", `/devices/${cam.id}`, { short: "1a" }, { "If-Match": stale });
     const res = await env.call("PATCH", `/devices/${cam.id}`, { name: "x" }, { "If-Match": stale });
     assert.status(res, 412, "VERSION_MISMATCH");
-    assert.eq([res.body.current.short, res.body.current.version], ["1a", cam.version + 1], "актуальная запись в теле");
+    assert.eq(res.body.current.short, "1a", "актуальная запись в теле");
+    assert.ok(res.body.current.version !== cam.version, "у неё новая версия");
     assert.eq((await env.ok("GET", `/devices/${cam.id}`)).name, cam.name, "ничего не изменилось");
   });
 
@@ -82,7 +84,8 @@
     const done = await env.ok("GET", `/operations/${res.body.id}`);
     assert.eq([done.state, done.ok, done.failed, done.items.map((x) => x.state)], ["done", 3, 0, ["ok", "ok", "ok"]], "итог");
     const d = await env.ok("GET", `/devices/${cam.id}`);
-    assert.eq([d.name, d.recordMode, d.preRecordSec, d.version], ["Вход — главный", "motion", 7, cam.version + 2], "устройство");
+    assert.eq([d.name, d.recordMode, d.preRecordSec], ["Вход — главный", "motion", 7], "устройство");
+    assert.eq(d.version, done.items[2].version, "версия — та, что дал последний шаг");
     assert.eq((await env.ok("GET", `/folders/${otherFolder.id}`)).deviceIds.slice(-1), [cam.id], "добавлено в папку");
     await ApiTest.settle();
     stop();
@@ -91,7 +94,7 @@
 
   test("Операция: версия объекта не та, что в плане — 412, ничего не выполняется; версии нет — 428", async () => {
     const env = await makeEnv();
-    const res = await env.call("POST", "/operations", plan([{ targetId: cam.id, set: { name: "x" } }], { [cam.id]: cam.version + 5 }));
+    const res = await env.call("POST", "/operations", plan([{ targetId: cam.id, set: { name: "x" } }], { [cam.id]: "stale" }));
     assert.status(res, 412, "VERSION_MISMATCH");
     assert.eq(res.body.current.id, cam.id, "актуальная запись в теле");
     assert.status(await env.call("POST", "/operations", plan([{ targetId: cam.id, set: { name: "x" } }], {})), 428, "PRECONDITION_REQUIRED");
@@ -105,7 +108,7 @@
     assert.status(await env.call("POST", "/operations", plan([{ targetId: cam.id }], v)), 422, "VALIDATION_FAILED", "ни одного");
     const alien = FX.folders.find((f) => f.domainId !== cam.domainId);
     assert.status(await env.call("POST", "/operations", plan([{ targetId: cam.id, folderIds: [alien.id] }], v)), 422, "VALIDATION_FAILED", "чужой домен");
-    assert.status(await env.call("POST", "/operations", plan([{ targetId: UNKNOWN, set: { name: "x" } }], { [UNKNOWN]: 1 })), 404, "NOT_FOUND");
+    assert.status(await env.call("POST", "/operations", plan([{ targetId: UNKNOWN, set: { name: "x" } }], { [UNKNOWN]: "1" })), 404, "NOT_FOUND");
     assert.status(await env.call("POST", "/operations", { idempotencyKey: key(), items: [], expectedVersions: {} }), 422, "VALIDATION_FAILED", "пустой план");
   });
 
@@ -117,7 +120,8 @@
     assert.status(b, 202);
     assert.eq(b.body.id, a.body.id, "та же операция");
     await env.advance(2);
-    assert.eq((await env.ok("GET", `/devices/${cam.id}`)).version, cam.version + 1, "изменение одно");
+    const op = await env.ok("GET", `/operations/${a.body.id}`);
+    assert.eq((await env.ok("GET", `/devices/${cam.id}`)).version, op.items[0].version, "изменение одно: версия — та, что дал единственный шаг");
   });
 
   test("Операция: над объектом уже идёт другая — 409 BUSY", async () => {
@@ -128,12 +132,12 @@
 
   test("Операция: частичный успех — сервер без связи и превышенная лицензия дают fail с кодом, остальное выполняется", async () => {
     const env = await makeEnv();
-    await env.ok("PATCH", `/devices/${camLicense.id}`, { enabled: false }, { "If-Match": `"${camLicense.version}"` });
+    const lic = await env.ok("PATCH", `/devices/${camLicense.id}`, { enabled: false }, { "If-Match": `"${camLicense.version}"` });
     const op = await env.runOperation(plan([
       { targetId: cam.id, set: { short: "1e" } },
       { targetId: camOffline.id, set: { short: "9z" } },
       { targetId: camLicense.id, set: { enabled: true } },
-    ], { [cam.id]: cam.version, [camOffline.id]: camOffline.version, [camLicense.id]: camLicense.version + 1 }));
+    ], { [cam.id]: cam.version, [camOffline.id]: camOffline.version, [camLicense.id]: lic.version }));
     assert.eq(op.items.map((x) => [x.state, x.code]), [["ok", null], ["fail", "SERVER_OFFLINE"], ["fail", "LICENSE_EXCEEDED"]], "по шагам");
     assert.eq([op.ok, op.failed], [1, 2], "счётчики");
     assert.eq((await env.ok("GET", `/devices/${camOffline.id}`)).short, camOffline.short, "без связи — не изменилось");
@@ -171,7 +175,7 @@
     assert.eq([res.body.retryOf, res.body.items.map((x) => x.targetId)], [op.id, [camOffline.id]], "что повторяется");
     await env.advance(2);
     assert.eq((await env.ok("GET", `/operations/${res.body.id}`)).items[0].code, "SERVER_OFFLINE", "сервер всё ещё без связи");
-    const clean = await env.runOperation(plan([{ targetId: cam.id, set: { short: "1g" } }], { [cam.id]: cam.version + 1 }));
+    const clean = await env.runOperation(plan([{ targetId: cam.id, set: { short: "1g" } }], { [cam.id]: (await env.ok("GET", `/devices/${cam.id}`)).version }));
     assert.status(await env.call("POST", `/operations/${clean.id}/retry-failed`), 409, "BUSY", "неудачных нет");
   });
 
@@ -198,7 +202,7 @@
   test("Операция: «Отменить» после чужой правки — шаг отката fail VERSION_MISMATCH, чужое не затирается", async () => {
     const env = await makeEnv();
     const op = await env.runOperation(plan([{ targetId: cam.id, set: { name: "Моё имя" } }], { [cam.id]: cam.version }));
-    await env.ok("PATCH", `/devices/${cam.id}`, { short: "чужое" }, { "If-Match": `"${cam.version + 1}"` });
+    await env.ok("PATCH", `/devices/${cam.id}`, { short: "чужое" }, { "If-Match": `"${op.items[0].version}"` });
     const res = await env.ok("POST", `/operations/${op.id}/revert`);
     await env.advance(2);
     const done = await env.ok("GET", `/operations/${res.id}`);

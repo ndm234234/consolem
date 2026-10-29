@@ -59,7 +59,8 @@
     const env = await makeEnv();
     const a = FX.archives.find((x) => x.kind === "remote");
     const res = await env.ok("PATCH", `/archives/${a.id}`, { name: "NAS — главный", retentionDays: 90 }, v(a));
-    assert.eq([res.name, res.retentionDays, res.version], ["NAS — главный", 90, a.version + 1], "хранилище");
+    assert.eq([res.name, res.retentionDays], ["NAS — главный", 90], "хранилище");
+    assert.ok(res.version !== a.version, "версия изменилась");
     assert.status(await env.call("PATCH", `/archives/${a.id}`, { kind: "cloud" }, { "If-Match": `"${res.version}"` }), 422, "VALIDATION_FAILED", "вид не меняют");
     const vol = FX.volumes.find((x) => x.archiveId === a.id);
     const pv = await env.ok("PATCH", `/volumes/${vol.id}`, { login: "VMS\\svc2", password: "p@ss", sizeBytes: 2048 * GB }, v(vol));

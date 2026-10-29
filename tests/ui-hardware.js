@@ -15,7 +15,7 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   ok(await until(()=>bq&&bq.finished),"операция завершилась: ok "+bq?.ok+", не ок "+bq?.fail);
   ok(await until(()=>cam.name==="Вход — пилот"&&cam.rec==="motion"),"кэш обновлён из потока: "+cam.name+", "+cam.rec);
   const srvRec=await API.get("/devices/"+cam.id);
-  ok(srvRec.name==="Вход — пилот"&&srvRec.recordMode==="motion"&&srvRec.version===v0+2,"на сервере: "+srvRec.name+", "+srvRec.recordMode+", версия "+srvRec.version);
+  ok(srvRec.name==="Вход — пилот"&&srvRec.recordMode==="motion"&&srvRec.version!==v0,"на сервере: "+srvRec.name+", "+srvRec.recordMode+", версия "+srvRec.version);
   ok(document.querySelector(".tree, #tree, aside")?.textContent.includes("Вход — пилот"),"дерево показывает новое имя");
   const undo=document.querySelector("#ttu-undo .ttu-act");
   ok(!!undo,"в тосте есть «Отменить»");
