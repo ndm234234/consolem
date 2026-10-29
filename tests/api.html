@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Тесты API конфигуратора</title>
+    <script>
+      // Ошибки загрузки скриптов страницы — провал прогона, а не молча пропавшие тесты
+      window.API_LOAD_ERRORS = [];
+      window.addEventListener(
+        "error",
+        (e) => {
+          const src = e.target && e.target.src;
+          window.API_LOAD_ERRORS.push(src ? `${src.split("/").pop()} не загрузился` : `${(e.filename || "").split("/").pop()}:${e.lineno} ${e.message}`);
+        },
+        true
+      );
+    </script>
+    <style>
+      body { margin: 24px; font: 14px/1.5 system-ui, sans-serif; background: #fff; color: #111; }
+      pre { white-space: pre-wrap; font: 12px/1.5 ui-monospace, monospace; }
+      @media (prefers-color-scheme: dark) { body { background: #1b1c20; color: #eee; } }
+    </style>
+  </head>
+  <body>
+    <h1>Тесты API конфигуратора</h1>
+    <p>
+      Сценарии «запрос → ответ и новое состояние → ошибки» по разделам: те же запросы, что у интерфейса. Каждый ответ
+      сверяется со схемой <code>api/openapi.json</code>, в конце — покрытие операций контракта. Двойной клик — проверяется
+      встроенный сервер прототипа. Тестовый стенд бэкенда — <code>api.html?api=https://адрес</code>: нужны служебные
+      операции <code>/test/reset</code>, <code>/test/clock</code>, <code>/test/events</code> и CORS (<code>api/BACKEND.md</code>).
+      Петля — <code>api.html?api=loopback</code>: тот же встроенный сервер по HTTP, за Service Worker; запуск —
+      <code>python3 tools/check_loopback.py</code>. Один тест — <code>?only=&lt;имя&gt;</code>.
+    </p>
+    <strong id="apitest-summary">Идёт прогон…</strong>
+    <pre id="apitest-log"></pre>
+    <script src="../api/openapi.js"></script>
+    <script src="../api/fixture.js"></script>
+    <script src="../api/contract.js"></script>
+    <script src="../api/server.js"></script>
+    <script src="../api/client.js"></script>
+    <script src="harness.js"></script>
+    <script src="api-read.js"></script>
+    <script src="api-hardware.js"></script>
+    <script>
+      ApiTest.run();
+    </script>
+  </body>
+</html>

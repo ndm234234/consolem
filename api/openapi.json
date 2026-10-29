@@ -43,6 +43,10 @@
       "description": "Хранилища и тома"
     },
     {
+      "name": "operations",
+      "description": "Групповые операции: план карточки и выборки, ход, пауза, отмена, повтор, откат"
+    },
+    {
       "name": "discovery",
       "description": "Поиск устройств в сети"
     },
@@ -379,6 +383,79 @@
             }
           }
         ]
+      },
+      "patch": {
+        "operationId": "patchDevice",
+        "tags": [
+          "hardware"
+        ],
+        "summary": "Изменить устройство",
+        "description": "Сразу, без очереди: переименование в дереве. План карточки уходит операцией (POST /operations)",
+        "parameters": [
+          {
+            "name": "deviceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "Версия записи из ETag: \"3\". Нет — 428, не совпала — 412",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DevicePatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Готово",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Device"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
       }
     },
     "/folders": {
@@ -634,6 +711,323 @@
             }
           }
         ]
+      }
+    },
+    "/operations": {
+      "post": {
+        "operationId": "createOperation",
+        "tags": [
+          "operations"
+        ],
+        "summary": "Запустить групповую операцию",
+        "description": "Шаги выполняются по одному; ход приходит в поток (operation.progress, operation.finished). Объект, над которым идёт другая операция, — 409 BUSY",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Принята",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/operations/{operationId}": {
+      "get": {
+        "operationId": "getOperation",
+        "tags": [
+          "operations"
+        ],
+        "summary": "Операция: ход и итог по шагам",
+        "parameters": [
+          {
+            "name": "operationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Готово",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/operations/{operationId}/pause": {
+      "post": {
+        "operationId": "pauseOperation",
+        "tags": [
+          "operations"
+        ],
+        "summary": "Приостановить",
+        "parameters": [
+          {
+            "name": "operationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Готово",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "description": "Текущий шаг доигрывает, следующие ждут"
+      }
+    },
+    "/operations/{operationId}/resume": {
+      "post": {
+        "operationId": "resumeOperation",
+        "tags": [
+          "operations"
+        ],
+        "summary": "Продолжить",
+        "parameters": [
+          {
+            "name": "operationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Готово",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/operations/{operationId}/cancel": {
+      "post": {
+        "operationId": "cancelOperation",
+        "tags": [
+          "operations"
+        ],
+        "summary": "Отменить оставшееся",
+        "parameters": [
+          {
+            "name": "operationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Готово",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "description": "Выполненное остаётся, невыполненные шаги — cancel"
+      }
+    },
+    "/operations/{operationId}/retry-failed": {
+      "post": {
+        "operationId": "retryFailedOperation",
+        "tags": [
+          "operations"
+        ],
+        "summary": "Повторить неудачные шаги новой операцией",
+        "parameters": [
+          {
+            "name": "operationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Принята",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/operations/{operationId}/revert": {
+      "post": {
+        "operationId": "revertOperation",
+        "tags": [
+          "operations"
+        ],
+        "summary": "Отменить выполненное: вернуть объекты к состоянию «до» новой операцией",
+        "description": "Сервер помнит, какими объекты были до каждого выполненного шага. Если объект с тех пор изменился, его шаг отката — fail VERSION_MISMATCH",
+        "parameters": [
+          {
+            "name": "operationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Принята",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
       }
     },
     "/domains/{domainId}/discovery": {
@@ -1173,56 +1567,7 @@
         "type": "object",
         "properties": {
           "code": {
-            "type": "string",
-            "description": "Машинный код ошибки: интерфейс показывает свой текст по коду",
-            "enum": [
-              "UNAUTHORIZED",
-              "NOT_FOUND",
-              "NO_ROUTE",
-              "PERMISSION_DENIED",
-              "PRECONDITION_REQUIRED",
-              "VERSION_MISMATCH",
-              "VALIDATION_FAILED",
-              "NAME_REQUIRED",
-              "NAME_TAKEN",
-              "IDENTIFIER_TAKEN",
-              "INVALID_IP",
-              "IP_RANGE_TOO_LARGE",
-              "LAST_DOMAIN",
-              "NO_FREE_DISK",
-              "SERVER_OFFLINE",
-              "DEVICE_OFFLINE",
-              "LICENSE_EXCEEDED",
-              "BUSY",
-              "LOGIN_TAKEN",
-              "PASSWORD_POLICY",
-              "SELF_LOCKOUT",
-              "TEST_SUPPORT_OFF"
-            ],
-            "x-enum-descriptions": {
-              "UNAUTHORIZED": "Нет сессии администратора (401)",
-              "NOT_FOUND": "Записи нет или она не видна текущему администратору (404)",
-              "NO_ROUTE": "Такой операции нет в контракте (404)",
-              "PERMISSION_DENIED": "Нет права на операцию (403)",
-              "PRECONDITION_REQUIRED": "Изменение без заголовка If-Match (428)",
-              "VERSION_MISMATCH": "Запись изменилась с момента чтения: в теле — актуальная (412)",
-              "VALIDATION_FAILED": "Поле не прошло проверку: какое — в field (422)",
-              "NAME_REQUIRED": "Не указано имя (422)",
-              "NAME_TAKEN": "Имя уже занято в своей области (409)",
-              "IDENTIFIER_TAKEN": "Номер устройства уже используется (409)",
-              "INVALID_IP": "Неверный адрес или диапазон (422)",
-              "IP_RANGE_TOO_LARGE": "Диапазон больше лимита поиска (422)",
-              "LAST_DOMAIN": "Последний домен удалить нельзя (409)",
-              "NO_FREE_DISK": "На сервере нет свободного диска для тома (409)",
-              "SERVER_OFFLINE": "Сервер без связи: изменение не применено (409, или по объекту в групповой операции)",
-              "DEVICE_OFFLINE": "Устройство без связи (по объекту в групповой операции)",
-              "LICENSE_EXCEEDED": "Лицензия превышена (по объекту в групповой операции)",
-              "BUSY": "Над объектом выполняется другая операция (409)",
-              "LOGIN_TAKEN": "Логин уже занят (409)",
-              "PASSWORD_POLICY": "Пароль не соответствует политике (422)",
-              "SELF_LOCKOUT": "Изменение оставит систему без администратора или лишит вас входа (409)",
-              "TEST_SUPPORT_OFF": "Служебные операции тестового стенда выключены (404)"
-            }
+            "$ref": "#/components/schemas/ProblemCode"
           },
           "message": {
             "type": "string",
@@ -1820,6 +2165,10 @@
             "type": "integer",
             "description": "Версия записи: растёт на 1 с каждым изменением; уходит в ETag",
             "minimum": 1
+          },
+          "rtspUrl": {
+            "type": "string",
+            "description": "Адрес видеопотока, если он задан вручную"
           }
         },
         "additionalProperties": false,
@@ -3575,14 +3924,18 @@
               "entity.created",
               "entity.changed",
               "entity.deleted",
-              "test.reset"
+              "test.reset",
+              "operation.progress",
+              "operation.finished"
             ],
             "x-enum-descriptions": {
               "stream.reset": "Пропущенное не дослать (Last-Event-ID слишком старый): клиент перечитывает всё",
               "entity.created": "Создана запись: kind, id, version",
               "entity.changed": "Изменена запись: kind, id, version",
               "entity.deleted": "Удалена запись: kind, id",
-              "test.reset": "Стенд загрузил эталонный набор заново: клиент перечитывает всё"
+              "test.reset": "Стенд загрузил эталонный набор заново: клиент перечитывает всё",
+              "operation.progress": "Шаг операции завершён: kind=operation, entityId — операция, payload — шаг (OperationItem) и счётчики",
+              "operation.finished": "Операция завершена: payload — итог (state, ok, failed, cancelled)"
             }
           },
           "at": {
@@ -3601,7 +3954,8 @@
               "volume",
               "rule",
               "access",
-              "settings"
+              "settings",
+              "operation"
             ]
           },
           "entityId": {
@@ -3771,6 +4125,822 @@
         "required": [
           "applied"
         ]
+      },
+      "DevicePatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "acodec": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "archiveId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Основное хранилище записи",
+            "format": "uuid"
+          },
+          "azimuth": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "bitrate": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "buffering": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "builtin": {
+            "anyOf": [
+              {
+                "type": "boolean",
+                "description": "Детектор работает на камере"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cameraId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "channel": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "description": "Номер входа, выхода, канала"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "codec": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "configMode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "current",
+                  "default",
+                  "template"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "debounce": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "detectorKind": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "motion",
+                  "linecross",
+                  "abandoned",
+                  "disappeared",
+                  "crowd"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "extraArchives": {
+            "anyOf": [
+              {
+                "type": "array",
+                "description": "Дополнительные хранилища записи",
+                "items": {
+                  "$ref": "#/components/schemas/ExtraArchive"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "firmware": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "format": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fps": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "gain": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "gateway": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "identifier": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "Номер устройства в системе («16», «3/1» у канала регистратора)"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lat": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "login": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lon": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "mac": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "Режим email-оповещателя",
+                "enum": [
+                  "axxonnet",
+                  "smtp"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "norm": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "open",
+                  "closed"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "onServer": {
+            "anyOf": [
+              {
+                "type": "boolean",
+                "description": "Динамик сервера — служба сервера, а не устройство"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "password": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "Новый пароль; в ответах его нет"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "port": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "preRecordSec": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pulse": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recordDetectorIds": {
+            "anyOf": [
+              {
+                "type": "array",
+                "description": "Детекторы, по которым пишется (recordMode=motion)",
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recordMode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecordMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "res": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rtspUrl": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "Адрес видеопотока, если он задан вручную"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sensitivity": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "serverId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "Сервер: к которому подключены камера и регистратор (выводится из хранилища записи), сервер расчёта детектора, сервер службы",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "short": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "Номер для показа в дереве («3.3.1»)"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "smtp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ssl": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stream": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "streamProfile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "subtype": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "Подтип IP-сервера (ipsrv)",
+                "enum": [
+                  "nvr",
+                  "io",
+                  "sip",
+                  "mic"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "templateId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "vendor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "videoChannel": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "description": "Видеоканал камеры регистратора"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "vol": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "words": {
+            "anyOf": [
+              {
+                "type": "array",
+                "description": "Слова источника событий (POS) и их цвета",
+                "items": {
+                  "$ref": "#/components/schemas/EventWord"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "description": "Изменение устройства (JSON Merge Patch, RFC 7396): переданные поля заменяются, null убирает поле"
+      },
+      "OperationItemRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "targetId"
+        ],
+        "description": "Шаг операции над одним объектом: set — изменить поля устройства, folderIds — задать, в каких папках оно лежит. Ровно одно из двух",
+        "properties": {
+          "targetId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "set": {
+            "$ref": "#/components/schemas/DevicePatch"
+          },
+          "folderIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Папки устройства целиком, по порядку"
+          }
+        }
+      },
+      "OperationRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "idempotencyKey",
+          "items",
+          "expectedVersions"
+        ],
+        "properties": {
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 8,
+            "description": "Ключ повтора: запрос с тем же ключом в течение 10 минут вернёт ту же операцию и ничего не выполнит снова"
+          },
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/OperationItemRequest"
+            }
+          },
+          "expectedVersions": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Версии объектов, по которым построен план: id → version. Не совпала хоть одна — 412, ничего не выполняется"
+          }
+        },
+        "description": "Групповое изменение: план карточки или выборки. Выполняется по шагам; итог по каждому шагу — в items"
+      },
+      "OperationItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "index",
+          "targetId",
+          "state",
+          "code"
+        ],
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "targetId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "wait",
+              "run",
+              "ok",
+              "fail",
+              "cancel"
+            ]
+          },
+          "code": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProblemCode"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Почему шаг не выполнен"
+          },
+          "version": {
+            "type": "integer",
+            "description": "Версия объекта после шага"
+          }
+        }
+      },
+      "Operation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "state",
+          "createdAt",
+          "finishedAt",
+          "revertOf",
+          "retryOf",
+          "total",
+          "done",
+          "ok",
+          "failed",
+          "cancelled",
+          "items"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "running",
+              "paused",
+              "done"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "finishedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "revertOf": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Эта операция отменяет операцию …"
+          },
+          "retryOf": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Эта операция повторяет неудачные шаги операции …"
+          },
+          "total": {
+            "type": "integer"
+          },
+          "done": {
+            "type": "integer"
+          },
+          "ok": {
+            "type": "integer"
+          },
+          "failed": {
+            "type": "integer"
+          },
+          "cancelled": {
+            "type": "integer"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperationItem"
+            }
+          }
+        },
+        "description": "Групповая операция и её ход. Частичный успех — норма: каждый шаг завершается сам по себе"
+      },
+      "ProblemCode": {
+        "type": "string",
+        "enum": [
+          "UNAUTHORIZED",
+          "NOT_FOUND",
+          "NO_ROUTE",
+          "PERMISSION_DENIED",
+          "PRECONDITION_REQUIRED",
+          "VERSION_MISMATCH",
+          "VALIDATION_FAILED",
+          "NAME_REQUIRED",
+          "NAME_TAKEN",
+          "IDENTIFIER_TAKEN",
+          "INVALID_IP",
+          "IP_RANGE_TOO_LARGE",
+          "LAST_DOMAIN",
+          "NO_FREE_DISK",
+          "SERVER_OFFLINE",
+          "DEVICE_OFFLINE",
+          "LICENSE_EXCEEDED",
+          "BUSY",
+          "LOGIN_TAKEN",
+          "PASSWORD_POLICY",
+          "SELF_LOCKOUT",
+          "TEST_SUPPORT_OFF"
+        ],
+        "description": "Машинный код ошибки: интерфейс показывает свой текст по коду",
+        "x-enum-descriptions": {
+          "UNAUTHORIZED": "Нет сессии администратора (401)",
+          "NOT_FOUND": "Записи нет или она не видна текущему администратору (404)",
+          "NO_ROUTE": "Такой операции нет в контракте (404)",
+          "PERMISSION_DENIED": "Нет права на операцию (403)",
+          "PRECONDITION_REQUIRED": "Изменение без заголовка If-Match (428)",
+          "VERSION_MISMATCH": "Запись изменилась с момента чтения: в теле — актуальная (412)",
+          "VALIDATION_FAILED": "Поле не прошло проверку: какое — в field (422)",
+          "NAME_REQUIRED": "Не указано имя (422)",
+          "NAME_TAKEN": "Имя уже занято в своей области (409)",
+          "IDENTIFIER_TAKEN": "Номер устройства уже используется (409)",
+          "INVALID_IP": "Неверный адрес или диапазон (422)",
+          "IP_RANGE_TOO_LARGE": "Диапазон больше лимита поиска (422)",
+          "LAST_DOMAIN": "Последний домен удалить нельзя (409)",
+          "NO_FREE_DISK": "На сервере нет свободного диска для тома (409)",
+          "SERVER_OFFLINE": "Сервер без связи: изменение не применено (409, или по объекту в групповой операции)",
+          "DEVICE_OFFLINE": "Устройство без связи (по объекту в групповой операции)",
+          "LICENSE_EXCEEDED": "Лицензия превышена (по объекту в групповой операции)",
+          "BUSY": "Над объектом выполняется другая операция (409)",
+          "LOGIN_TAKEN": "Логин уже занят (409)",
+          "PASSWORD_POLICY": "Пароль не соответствует политике (422)",
+          "SELF_LOCKOUT": "Изменение оставит систему без администратора или лишит вас входа (409)",
+          "TEST_SUPPORT_OFF": "Служебные операции тестового стенда выключены (404)"
+        }
       }
     }
   }

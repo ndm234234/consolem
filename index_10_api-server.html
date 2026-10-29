@@ -1355,6 +1355,12 @@ html[data-theme="light"] .cp-step{background:var(--one-control-hover);color:var(
 <!-- ONE PSIM: мост по ONE.PSIM.PrototypeKit, подключён после стилей прототипа -->
 <link rel="stylesheet" href="assets/one-psim/bridge_09.css">
 <script src="assets/i18n-en.js"></script>
+<!-- API: контракт, эталонный набор, встроенный сервер и клиент (api/README.md) -->
+<script src="api/openapi.js"></script>
+<script src="api/fixture.js"></script>
+<script src="api/contract.js"></script>
+<script src="api/server.js"></script>
+<script src="api/client.js"></script>
 </head>
 <body>
 <div class="app">
@@ -1677,7 +1683,8 @@ const tblOpen=new Set();
 const propsIpsOpen=new Set();
 const TYPE_PREVIEW=6;
 const typeFilts=new Set(),searchFields=new Set(),treeTags=new Set(["ip"]);
-const open=new Set(["d1","d3","unalloc:d1","s1","a1"]);
+// Что раскрыто при первом показе, задаёт старт (appReady): данные приходят с сервера
+const open=new Set();
 const treeMatchCache=new Map(),searchMatchCache=new Map();
 const sysOptsRU=[{id:"ntp",n:"Время",i:"clock"},{id:"sec",n:"Безопасность",i:"lock"},{id:"mail",n:"Уведомления",i:"mail"},{id:"lic",n:"Лицензии",i:"clipboard-list"}];
 const sysOptsEN=[{id:"ntp",n:"Time",i:"clock"},{id:"sec",n:"Security",i:"lock"},{id:"mail",n:"Notifications",i:"mail"},{id:"lic",n:"Licenses",i:"clipboard-list"}];
@@ -1712,176 +1719,162 @@ function setUiLang(v){
   setD(dirty);
 }
 
-function bulkCams(sid,names,netOctet,hostStart,arch,shortStart){
-  const models=[["Hikvision","DS-2CD2143G2"],["Dahua","IPC-HFW5831"],["Axis","P3245-LV"],["Uniview","IPC322LR3"]];
-  return names.map((name,i)=>{
-    const [vendor,model]=models[i%4];
-    return{id:`${sid}c${i+1}`,type:"camera",name,short:String(shortStart+i),ip:`192.168.${netOctet}.${hostStart+i}`,
-      vendor,model,online:i%5!==4,arch,rec:["always","motion","sched"][i%3],devices:[]};
-  });
-}
-
-const servers=[{
-  id:"s1",type:"server",name:"Сервер — Офис",ip:"10.20.1.10",online:true,role:"Основной",disk:68,cpu:24,ram:41,net:12,devices:[
-    {id:"c1",type:"camera",name:"Главный вход",short:"1",identifier:"1",ip:"192.168.1.21",port:80,mac:"00:11:22:33:44:55",vendor:"Hikvision",model:"DS-2CD2143G2",lat:"55.751244",lon:"37.618423",azimuth:"180",online:true,arch:"a1",rec:"always",devices:[
-      {id:"m1",type:"mic",name:"Микрофон",short:"1.1",ch:1,online:true,enabled:false},{id:"e1",type:"sensor",name:"Датчик двери",short:"1.2",ch:1,online:false},
-      {id:"t1",type:"det",name:"Детектор движения",kind:"Движение",sens:"12",online:true},
-      {id:"t2",type:"det",name:"Проход через порог",kind:"Пересечение линии",sens:"18",online:true,builtin:true}]},
-    {id:"c2",type:"camera",name:"Парковка",short:"2",identifier:"2",ip:"192.168.1.22",port:80,vendor:"Axis",model:"P3245-LV",lat:"55.750912",lon:"37.619102",azimuth:"45",online:false,arch:"a1",rec:"motion",devices:[
-      {id:"t3",type:"det",name:"Оставленный предмет",kind:"Оставленный предмет",sens:"9",online:true}]},
-    {id:"c2r",type:"camera",name:"Запасной вход",short:"2a",identifier:"21",ip:"192.168.1.26",port:80,vendor:"Hikvision",model:"DS-2CD2143G2",lat:"55.751010",lon:"37.618880",azimuth:"90",online:true,enabled:false,ruleOff:true,arch:"a1",rec:"motion",devices:[
-      {id:"c2rsd",type:"storage",name:"Встроенное хранилище",short:"2a.1",size:"128 ГБ",online:true,devices:[]}]},
-    {id:"c2lic",type:"camera",name:"Переговорная",short:"2c",identifier:"22",ip:"192.168.1.28",port:80,vendor:"Hikvision",model:"DS-2CD2143G2",lat:"55.751120",lon:"37.618650",azimuth:"270",online:true,licenseExceeded:true,arch:"a1",rec:"always",devices:[]},
-    {id:"c16",type:"camera",name:"Склад офиса",short:"16",identifier:"16",ip:"192.168.1.29",port:80,vendor:"Axis",model:"P3245-LV",lat:"55.750780",lon:"37.619450",azimuth:"135",online:true,enabled:false,arch:"a1",rec:"replica",devices:[
-      {id:"c16sd",type:"storage",name:"Встроенное хранилище",short:"16.1",size:"256 ГБ",online:true,devices:[]}]},
-    {id:"ips1",type:"ipsrv",subtype:"nvr",name:"Dahua NVR",short:"3",identifier:"3",ip:"192.168.1.100",port:80,vendor:"Dahua",model:"NVR5216",lat:"55.751800",lon:"37.618200",azimuth:"0",online:true,devices:[
-      {id:"ips1sd",type:"storage",name:"Встроенное хранилище",short:"3.6",size:"4 ТБ",online:true,devices:[]},
-      {id:"nc1",type:"camera",name:"Коридор 1",short:"3.1",vch:1,ip:"192.168.1.101",port:80,lat:"55.752010",lon:"37.617900",azimuth:"0",online:true,arch:"a1",rec:"replica",devices:[]},
-      {id:"nc2",type:"camera",name:"Коридор 2",short:"3.2",vch:2,ip:"192.168.1.102",port:80,lat:"55.752110",lon:"37.617820",azimuth:"15",online:true,licenseExceeded:true,arch:"a1",rec:"replica",devices:[]},
-      {id:"nc3",type:"camera",name:"Коридор 3",short:"3.4",vch:4,ip:"192.168.1.103",port:80,lat:"55.752210",lon:"37.617740",azimuth:"30",online:true,licenseExceeded:true,arch:"a1",rec:"replica",devices:[]},
-      {id:"nc4",type:"camera",name:"Лифт",short:"3.5",vch:5,ip:"192.168.1.104",port:80,lat:"55.752310",lon:"37.617660",azimuth:"60",online:true,enabled:false,arch:"a1",rec:"replica",devices:[]},
-      {id:"ch1",type:"channel",name:"Канал 1",short:"3.3",ch:1,online:true,devices:[
-        {id:"s1a",type:"sensor",name:"Датчик 0",short:"3.3.1",ch:0,online:false},{id:"s1b",type:"sensor",name:"Датчик 1",short:"3.3.2",ch:1,online:true},
-        {id:"r1a",type:"relay",name:"Реле 0",short:"3.3.3",ch:0,online:true},{id:"r1b",type:"relay",name:"Реле 1",short:"3.3.4",ch:1,online:true}]}]},
-    {id:"ips2",type:"ipsrv",subtype:"io",name:"MOXA E1214",short:"4",ip:"192.168.1.50",vendor:"MOXA",model:"E1214",port:502,online:false,devices:[
-      {id:"ch2",type:"channel",name:"Канал",short:"4.1",ch:0,online:true,devices:[
-        {id:"s2a",type:"sensor",name:"Датчик 0",short:"4.1.1",ch:0,online:true},{id:"s2b",type:"sensor",name:"Датчик 1",short:"4.1.2",ch:1,online:true},
-        {id:"s2c",type:"sensor",name:"Датчик 2",short:"4.1.3",ch:2,online:true},{id:"r2a",type:"relay",name:"Реле 0",short:"4.1.4",ch:0,online:true},
-        {id:"r2b",type:"relay",name:"Реле 1",short:"4.1.5",ch:1,online:true}]}]},
-    {id:"ips3",type:"ipsrv",subtype:"sip",name:"SIP-устройство",short:"5",ip:"192.168.1.60",vendor:"SIP Device",model:"SIP Device",port:5060,online:false,devices:[
-      {id:"sm1",type:"mic",name:"Микрофон",short:"5.1",ch:0,online:true},{id:"ss1",type:"spk",name:"Динамик",short:"5.2",ch:0,online:true},
-      {id:"ch3",type:"channel",name:"Канал",short:"5.3",ch:0,online:true,devices:[]}]},
-    {id:"pos1",type:"eventsrc",name:"POS Retalix",short:"7",vendor:"PosXml",model:"PosXml Device",ip:"0.0.0.0",port:2555,online:true,
-      camera:null,words:[{msg:"ОТМЕНА",color:"#ff4444",bg:"#000"},{msg:"СКИДКА",color:"#44ff44",bg:"#000"}]},
-    {id:"acfa1",type:"acfa",name:"Эмулятор СКУД",short:"8",vendor:"ACFA",model:"Emulator",ip:"192.168.1.80",online:true,devices:[
-      {id:"as0",type:"acfa_sensor",name:"Датчик 0",short:"8.1",online:true},{id:"as1",type:"acfa_sensor",name:"Датчик 1",short:"8.2",online:true},
-      {id:"as2",type:"acfa_sensor",name:"Датчик 2",short:"8.3",online:true},
-      {id:"lk0",type:"acfa_lock",name:"Замок 0",short:"8.4",online:true,devices:[{id:"lk0r",type:"relay",name:"Реле замка",short:"8.4.1",online:true}]},
-      {id:"lk1",type:"acfa_lock",name:"Замок 1",short:"8.5",online:true,devices:[]},
-      {id:"fn0",type:"acfa_fence",name:"Шлейф 0",short:"8.6",online:true},{id:"fn1",type:"acfa_fence",name:"Шлейф 1",short:"8.7",online:true},
-      {id:"fn2",type:"acfa_fence",name:"Шлейф 2",short:"8.8",online:true}]},
-    {id:"exp1",type:"export",name:"Агент экспорта",short:"9",path:"D:\\Export",format:"MP4",online:true},
-    {id:"em1",type:"email",name:"Email-оповещатель",short:"10",mode:"AxxonNet",smtp:"",port:587,ssl:true,online:true},
-    {id:"sms1",type:"sms",name:"SMS-оповещатель",short:"11",gateway:"",online:true,enabled:false},
-    {id:"dsp1",type:"spk",name:"Динамик сервера",short:"12",server:true,online:true}]},
-  {id:"s2",type:"server",name:"Сервер — Склад",ip:"10.20.2.10",online:true,role:"Узел",disk:42,cpu:67,ram:54,net:45,devices:[
-    {id:"c4",type:"camera",name:"Ворота №1",short:"21",ip:"192.168.2.21",vendor:"Hikvision",model:"DS-2CD",online:true,arch:"a2",rec:"always",devices:[]},
-    {id:"c5",type:"camera",name:"Погрузка",short:"22",ip:"192.168.2.22",vendor:"Dahua",model:"IPC-HFW",online:true,arch:"a2",rec:"sched",devices:[]},
-    ...bulkCams("s2",["Зона хранения 1","Стеллажи A","Стеллажи B","Погрузочная","Рампа","Офис склада","Ворота №2","Периметр север","Периметр юг","Таможенная зона","Контроль весов","Пожарный выход"],2,30,"a2",23)]},
-  {id:"s3",type:"server",name:"Сервер — Филиал",ip:"10.20.3.10",online:false,role:"Узел",disk:81,cpu:0,ram:0,net:0,devices:
-    bulkCams("s3",["Вход филиала","Холл","Касса","Склад филиала","Погрузка","Парковка","Задний двор","Коридор 1","Коридор 2","Архив"],3,10,"a2",1)},
-  {id:"s4",type:"server",name:"Сервер — Цех",ip:"10.20.1.11",online:true,role:"Узел",disk:35,cpu:31,ram:48,net:18,devices:[
-    {id:"c6",type:"camera",name:"Цех — проход",short:"41",ip:"192.168.1.41",vendor:"Hikvision",model:"DS-2CD",online:true,arch:"a1",rec:"always",devices:[]},
-    ...bulkCams("s4",["Линия 1","Линия 2","Сборка","Контроль качества","Упаковка","Склад готовой","Проход 2","Дежурная","Инструментальная","Компрессорная","Тамбур"],1,50,"a1",42)]},
-  {id:"s5",type:"server",name:"Сервер — КПП",ip:"10.20.1.12",online:false,role:"Узел",disk:22,cpu:0,ram:0,net:0,devices:
-    bulkCams("s5",["КПП — въезд","КПП — выезд","Будка охраны","Шлагбаум","Весовая","Парковка служебная","Периметр восток","Периметр запад","Смотровая","Склад КПП","Проходная"],1,70,"a1",1)},
-  {id:"s6",type:"server",name:"Сервер — Ангар",ip:"10.20.1.13",online:true,role:"Узел",disk:18,cpu:89,ram:76,net:72,devices:
-    bulkCams("s6",["Ангар — ворота","Площадка","Стойка 1","Стойка 2","Техобслуживание","Склад ЗИП","Пожарный пост","Периметр","Вид на полосу","Диспетчерская","Топливная","Ремонтная","Офис ангара","Стоянка","Вахта"],1,90,"a1",1)},
-  {id:"s7",type:"server",name:"Сервер — Парковка",ip:"10.20.1.14",online:true,role:"Узел",disk:40,cpu:55,ram:62,net:38,devices:
-    bulkCams("s7",["Парковка — въезд","Выезд","Зона A","Зона B","Зона C","Этаж 1","Этаж 2","Лифтовая","Касса парковки","Пешеходный переход","Велопарковка","Периметр","Освещение"],1,110,"a1",1)},
-  {id:"s8",type:"server",name:"Сервер — ТЦ «Север»",ip:"10.20.2.20",online:true,role:"Узел",disk:55,cpu:38,ram:47,net:29,devices:[
-    {id:"d2c1",type:"camera",name:"Главный вход ТЦ",short:"1",ip:"192.168.4.11",vendor:"Hikvision",model:"DS-2CD2143G2",online:true,arch:"a2",rec:"always",devices:[]},
-    {id:"d2c2",type:"camera",name:"Фудкорт",short:"2",ip:"192.168.4.12",vendor:"Dahua",model:"IPC-HFW5241",online:true,arch:"a2",rec:"motion",devices:[]},
-    {id:"d2c3",type:"camera",name:"Паркинг B1",short:"3",ip:"192.168.4.13",vendor:"Axis",model:"P3245-LV",online:false,arch:"a2",rec:"replica",devices:[
-      {id:"d2c3sd",type:"storage",name:"Встроенное хранилище",short:"3.1",size:"512 ГБ",online:true,devices:[]}]},
-    {id:"d2c4",type:"camera",name:"Служебный вход",short:"4",ip:"192.168.4.14",vendor:"Hikvision",model:"DS-2CD2347G2",online:true,enabled:false,arch:"a2",rec:"motion",devices:[]},
-    {id:"d2c5",type:"camera",name:"Эскалатор 1",short:"5",ip:"192.168.4.15",vendor:"Uniview",model:"IPC322LR3",online:true,licenseExceeded:true,arch:"a2",rec:"always",devices:[]},
-    ...bulkCams("s8",["Галерея 1","Галерея 2","Кинотеатр","Детская зона","Кассы","Периметр восток","Периметр запад"],4,20,"a2",6)]},
-  {id:"s9",type:"server",name:"Сервер — Логистика",ip:"10.20.2.21",online:true,role:"Узел",disk:61,cpu:44,ram:52,net:36,devices:[
-    {id:"d2c10",type:"camera",name:"Рампа 1",short:"10",ip:"192.168.5.10",vendor:"Dahua",model:"IPC-HFW5831",online:true,arch:"a2",rec:"always",devices:[]},
-    {id:"d2c11",type:"camera",name:"Рампа 2",short:"11",ip:"192.168.5.11",vendor:"Hikvision",model:"DS-2CD",online:true,enabled:false,ruleOff:true,arch:"a2",rec:"motion",devices:[]},
-    {id:"d2c12",type:"camera",name:"Сортировка",short:"12",ip:"192.168.5.12",vendor:"Axis",model:"P3245-LV",online:true,arch:"a2",rec:"sched",devices:[]},
-    ...bulkCams("s9",["Зона приёмки","Стеллажи 1","Стеллажи 2","Отгрузка","КПП логистики","Офис склада"],5,20,"a2",13)]},
-  {id:"s10",type:"server",name:"Сервер — Охрана",ip:"10.20.2.22",online:false,role:"Узел",disk:12,cpu:0,ram:0,net:0,devices:
-    bulkCams("s10",["Пульт охраны","Коридор А","Коридор Б","Оружейная","Архив видео"],5,40,"a2",1)},
-  {id:"s11",type:"server",name:"Сервер — Удалённый офис",ip:"10.20.4.10",online:true,role:"Узел",disk:33,cpu:28,ram:41,net:17,devices:[]},
-  {id:"s12",type:"server",name:"Сервер — Резервный узел",ip:"10.20.5.10",online:true,role:"Узел",disk:15,cpu:18,ram:27,net:9,devices:
-    bulkCams("s12",["Вход","Коридор","Склад"],5,50,"a1",1)},
-  {id:"su1",type:"server",name:"Сервер — Котельная",ip:"10.30.0.12",online:true,role:"Узел",disk:0,cpu:15,ram:22,net:5,devices:[]},
-  {id:"su2",type:"server",name:"Сервер — Резервный шлюз",ip:"10.30.0.13",online:true,role:"Узел",disk:0,cpu:42,ram:37,net:28,devices:[]},
-  {id:"su3",type:"server",name:"Сервер — Насосная",ip:"10.30.0.14",online:true,role:"Узел",disk:0,cpu:22,ram:31,net:11,devices:[]},
-  {id:"su4",type:"server",name:"Сервер — Трансформаторная",ip:"10.30.0.15",online:true,role:"Узел",disk:0,cpu:18,ram:24,net:7,devices:[]},
-  {id:"su5",type:"server",name:"Сервер — Гараж",ip:"10.30.0.16",online:false,role:"Узел",disk:0,cpu:0,ram:0,net:0,devices:[]},
-  {id:"su6",type:"server",name:"Сервер — Столовая",ip:"10.30.0.17",online:true,role:"Узел",disk:0,cpu:31,ram:44,net:19,devices:[]},
-  {id:"su7",type:"server",name:"Сервер — Архив",ip:"10.30.0.18",online:true,role:"Узел",disk:0,cpu:47,ram:51,net:33,devices:[]},
-  {id:"su8",type:"server",name:"Сервер — Лаборатория",ip:"10.30.0.19",online:true,role:"Узел",disk:0,cpu:26,ram:33,net:14,devices:[]},
-  {id:"su9",type:"server",name:"Сервер — Дизель-генератор",ip:"10.30.0.20",online:true,role:"Узел",disk:0,cpu:12,ram:19,net:4,devices:[]},
-  {id:"su10",type:"server",name:"Сервер — Водонапорная",ip:"10.30.0.21",online:true,role:"Узел",disk:0,cpu:9,ram:14,net:3,devices:[]},
-  {id:"su11",type:"server",name:"Сервер — Компрессорная",ip:"10.30.0.22",online:true,role:"Узел",disk:0,cpu:21,ram:29,net:8,devices:[]},
-  {id:"su12",type:"server",name:"Сервер — Проходная-2",ip:"10.30.0.23",online:false,role:"Узел",disk:0,cpu:0,ram:0,net:0,devices:[]}
-];
-// ── Объём демонстрационных данных ──────────────────────────────────────────
-// Прототип смотрят на данных: на списке из трёх строк не видно ни страниц, ни
-// поиска — инструменты выглядят так, будто их нет. Поэтому демонстрационные
-// списки добиты до объёма, на котором они начинают работать. Здесь только
-// данные, никакой логики интерфейса.
-const DEMO_MIN=12;
-function demoPad(list,make){
-  for(let i=list.length;i<DEMO_MIN;i++)list.push(make(i));
-  return list;
-}
-function demoNode(root,id){let o=null;walk(n=>{if(n.id===id)o=n},root.devices,root);return o}
-(()=>{
-  const s1=servers.find(s=>s.id==="s1");
-  // Службы: на нагруженном узле их держат по нескольку штук каждого вида.
-  [{type:"email",name:"Email — дежурная смена",mode:"SMTP сервер",smtp:"smtp.local",port:25,ssl:false},
-   {type:"sms",name:"SMS — охрана",gateway:"gw.sms.local"},
-   {type:"export",name:"Экспорт по заявкам",path:"E:\\Export\\requests",format:"MP4"},
-   {type:"spk",name:"Динамик — проходная",server:true},
-   {type:"email",name:"Email — руководство",mode:"Облачный AxxonNet",smtp:"",port:587,ssl:true},
-   {type:"sms",name:"SMS — дежурный инженер",gateway:"gw2.sms.local"},
-   {type:"export",name:"Экспорт в архив ОБ",path:"E:\\Export\\security",format:"AVI"},
-   {type:"spk",name:"Динамик — склад",server:true}
-  ].forEach((svc,i)=>s1.devices.push({id:"svc"+i,short:String(13+i),online:i%4!==2,...svc}));
-  // Детекторы: на входной камере их обычно столько же, сколько сценариев.
-  const DET_MORE=["Скопление людей","Исчезновение предмета","Пересечение линии","Движение","Оставленный предмет"];
-  const c1=demoNode(s1,"c1");
-  for(let i=0;i<10;i++)
-    c1.devices.push({id:"t1d"+i,type:"det",name:"Детектор "+(i+3),kind:DET_MORE[i%5],sens:String(8+i),online:i%5!==3,builtin:i%4===0});
-  // Камера на входе работает как домофонная панель: к ней подвешены звук,
-  // двери и кнопки, и все они — её дочерние объекты.
-  [["spk","Динамик вызова"],["storage","Встроенное хранилище"],["sensor","Датчик вскрытия"],
-   ["relay","Реле замка"],["relay","Реле подсветки"],["sensor","Кнопка выхода"],
-   ["mic","Микрофон панели"],["sensor","Датчик прохода"],["relay","Реле турникета"],
-   ["sensor","Геркон калитки"]
-  ].forEach(([type,name],i)=>c1.devices.push({id:"c1k"+i,type,name,short:"1."+(i+3),ch:i,
-    ...(type==="storage"?{size:"64 ГБ"}:{}),online:i%6!==5,devices:[]}));
-  // Регистратор: шестнадцатиканальный NVR редко занят наполовину.
-  const ips1=demoNode(s1,"ips1");
-  demoPad(ips1.devices,i=>({id:"nc"+i,type:"camera",name:"Камера NVR "+(i-1),short:"3."+(i+2),vch:i+2,
-    ip:"192.168.1."+(100+i),port:80,online:i%6!==5,arch:"a1",rec:"replica",devices:[]}));
-  // Канал модуля ввода-вывода: восемь входов и восемь выходов — обычный расклад.
-  const ch1=demoNode(s1,"ch1");
-  demoPad(ch1.devices,i=>i%2
-    ?{id:"s1d"+i,type:"sensor",name:"Датчик "+(i-2),short:"3.3."+(i+1),ch:i-2,online:i%5!==4}
-    :{id:"r1d"+i,type:"relay",name:"Реле "+(i-2),short:"3.3."+(i+1),ch:i-2,online:true});
-  // СКУД: подобъектов у контроллера столько, сколько дверей на этаже.
-  const acfa1=demoNode(s1,"acfa1");
-  [["acfa_sensor","Датчик",3],["acfa_lock","Замок",2],["acfa_fence","Шлейф",3]].forEach(([type,label,have])=>{
-    for(let i=have;i<DEMO_MIN;i++)
-      acfa1.devices.push({id:type+i,type,name:label+" "+i,short:"8."+type.length+i,online:i%7!==6,devices:[]});
-  });
-  // Серверы домена: филиальная сеть на дюжину узлов — не редкость, и площадки
-  // этих узлов намеренно не разложены по папкам: так видно «Устройства без папки».
-  const MORE=[["s13","Сервер — Бизнес-центр","10.20.1.15",["Ресепшн","Лифтовой холл","Паркинг"]],
-    ["s14","Сервер — Столовая","10.20.1.16",["Раздача","Зал","Кухня","Загрузка"]],
-    ["s15","Сервер — Склад запчастей","10.20.1.17",["Стеллаж A","Стеллаж B","Выдача"]],
-    ["s16","Сервер — Котельная","10.20.1.18",["Котёл 1","Котёл 2","Щитовая"]],
-    ["s17","Сервер — Медпункт","10.20.1.19",["Вход медпункта","Коридор","Процедурная"]],
-    ["s18","Сервер — Учебный центр","10.20.1.20",["Аудитория 1","Аудитория 2","Холл","Серверная"]],
-    ["s19","Сервер — Тестовый стенд","10.20.1.21",["Стенд 1","Стенд 2"]]];
-  MORE.forEach(([id,name,ip,cams],k)=>{
-    servers.push({id,type:"server",name,ip,online:k%5!==3,role:"Узел",disk:20+k*7,cpu:11+k*6,ram:18+k*5,net:6+k*3,
-      devices:bulkCams(id,cams,6,10+k*20,"a1",1)});
-  });
+// ── Данные с сервера ───────────────────────────────────────────────────────
+// Своих данных у интерфейса нет: при старте он читает их через API
+// (api/client.js) и раскладывает в структуры, по которым рисует, — это кэш
+// прочитанного. Кэш меняется только ответом сервера или событием потока,
+// никогда до ответа. С ?api=https://… тот же интерфейс работает с настоящим
+// бэкендом, с ?latency=300 — с задержкой, как по медленной сети.
+const API=(()=>{
+  const q=new URLSearchParams(location.search),base=q.get("api"),latency=+q.get("latency")||0;
+  if(base)return ConsolemApi.create({baseUrl:base,latency});
+  return ConsolemApi.create({server:ConsolemServer.create({fixture:window.CONSOLEM_FIXTURE,openapi:window.CONSOLEM_OPENAPI}),latency});
 })();
-const DEMO_D1=["s1","s4","s5","s6","s7","s13","s14","s15","s16","s17","s18","s19"];
-const domains=[
-  {id:"d1",type:"domain",name:"Домен 1",license:"",online:true,servers:servers.filter(s=>DEMO_D1.includes(s.id)),unallocServers:servers.filter(s=>s.id.startsWith("su"))},
-  {id:"d2",type:"domain",name:"Домен 2",license:"",online:true,servers:servers.filter(s=>["s2","s3","s8","s9","s10"].includes(s.id)),unallocServers:[]},
-  {id:"d3",type:"domain",name:"Домен 3",license:"",online:true,servers:servers.filter(s=>s.id==="s11"),unallocServers:[]},
-  {id:"d4",type:"domain",name:"Домен 4",license:"",online:false,servers:servers.filter(s=>s.id==="s12"),unallocServers:[]}
-];
+const servers=[],domains=[];
+// Версия записи — для If-Match и плана операции. В объекты кэша не кладётся:
+// иначе она попала бы в «было → станет» карточки.
+const hwVer=new Map();
+const SERVER_DISKS={};
+// Сервер отдаёт коды и числа, интерфейс показывает их так же, как показывал
+// свои данные: «4 ТБ», «Движение», «55.751244».
+const GB=1024**3,TB=1024**4;
+function bytesText(b){return b%TB===0?`${b/TB} ТБ`:`${Math.round(b/GB)} ГБ`}
+const DET_KIND_RU={motion:"Движение",linecross:"Пересечение линии",abandoned:"Оставленный предмет",disappeared:"Исчезновение предмета",crowd:"Скопление людей"};
+const DET_KIND_CODE=Object.fromEntries(Object.entries(DET_KIND_RU).map(([k,v])=>[v,k]));
+const EMAIL_MODE_RU={axxonnet:"Облачный AxxonNet",smtp:"SMTP сервер"};
+const EMAIL_MODE_CODE={"AxxonNet":"axxonnet","Облачный AxxonNet":"axxonnet","SMTP сервер":"smtp"};
+// Поле API → свойство объекта кэша
+const DEV_KEY={serverId:"srvId",archiveId:"arch",recordMode:"rec",recordDetectorIds:"recDets",fault:"err",disabledByRule:"ruleOff",
+  videoChannel:"vch",channel:"ch",onServer:"server",cameraId:"camera",login:"user",preRecordSec:"pre"};
+const DEV_API=Object.fromEntries(Object.entries(DEV_KEY).map(([k,v])=>[v,k]));
+// Поля, у которых в объекте нет своего свойства: карточка хранит их в n._f по подписи поля
+const DEV_FLD={rtspUrl:"RTSP",codec:"Кодек",res:"Разрешение",fps:"к/с",bitrate:"Битрейт"};
+const DEV_FLD_API=Object.fromEntries(Object.entries(DEV_FLD).map(([k,v])=>[v,k]));
+const DEV_NUM=new Set(["port","fps","bitrate","preRecordSec","channel","videoChannel","sensitivity","pulse","debounce","gain","vol"]);
+const DEV_SKIP=new Set(["id","type","parentId","domainId","version","hasPassword"]);
+const SVC_TYPES=new Set(["export","email","sms"]);
+// У этих видов список дочерних есть всегда, даже пустой
+const DEV_WITH_KIDS=new Set(["camera","ipsrv","channel","acfa","acfa_lock","storage"]);
+function devNode(r){
+  const n={id:r.id,type:r.type};
+  Object.entries(r).forEach(([k,v])=>{
+    if(DEV_SKIP.has(k))return;
+    if(k in DEV_FLD){(n._f||(n._f={}))[DEV_FLD[k]]=String(v);return}
+    // Служба лежит в списке своего сервера, а не ссылается на него
+    if(k==="serverId"&&(SVC_TYPES.has(r.type)||r.onServer))return;
+    if(k==="enabled"){if(v===false)n.enabled=false;return}
+    if(k==="detectorKind")n.kind=DET_KIND_RU[v]||v;
+    else if(k==="sensitivity")n.sens=String(v);
+    else if(k==="sizeBytes")n.size=bytesText(v);
+    else if(k==="lat"||k==="lon")n[k]=v==null?"":v.toFixed(6);
+    else if(k==="azimuth")n[k]=v==null?"":String(v);
+    else if(k==="extraArchives")n.archx=v.map(x=>({arch:x.archiveId,rec:x.recordMode,stream:x.stream}));
+    else if(k==="mode"&&r.type==="email")n.mode=EMAIL_MODE_RU[v]||v;
+    else n[DEV_KEY[k]||k]=v;
+  });
+  if(DEV_WITH_KIDS.has(r.type))n.devices=[];
+  return n;
+}
+function srvNode(r){
+  const s={id:r.id,type:"server",name:r.name,ip:r.ip};
+  if(r.port!==20111)s.port=r.port;
+  s.online=r.online;s.role=r.role==="primary"?"Основной":"Узел";
+  Object.assign(s,r.telemetry);s.devices=[];
+  if(r.gpu)SERVER_GPU[r.id]={model:r.gpu.model,mem:bytesText(r.gpu.memoryBytes),load:r.gpu.load};else delete SERVER_GPU[r.id];
+  SERVER_DISKS[r.id]=r.disks.map(d=>({disk:d.disk,size:bytesText(d.sizeBytes),sys:d.system}));
+  return s;
+}
+function folderNode(r){return{id:r.id,type:"folder",name:r.name,domain:r.parentId?null:r.domainId,items:r.deviceIds.slice(),folders:[]}}
+function archNode(r){
+  const a={id:r.id,type:"archive",name:r.name};
+  if(r.serverId)a.server=r.serverId;else a.domain=r.domainId;
+  Object.assign(a,{days:r.retentionDays,enc:r.encrypted,vols:[],kind:r.kind,storage:r.storage});
+  if(r.provider)a.provider=r.provider;
+  return a;
+}
+const VOL_COPY=["mode","dir","file","bucket","region","path","keyId","host","port","proto","endpoint","style","account"];
+function volNode(r){
+  const v={id:r.id,type:"vol",name:r.name,disk:r.disk,size:bytesText(r.sizeBytes),used:r.usedPercent+"%",archId:r.archiveId,online:r.online};
+  VOL_COPY.forEach(k=>{if(k in r)v[k]=r[k]});
+  if(r.state!=="ready")v.state=r.state;
+  if("login" in r)v.user=r.login;
+  return v;
+}
+// Весь кэш «Оборудования» заново: при старте и когда поток потерян (stream.reset)
+function hwFill(L){
+  [servers,domains,devicePool,folders,arch].forEach(x=>x.length=0);
+  [SERVER_DOMAIN,DEVICE_DOMAIN,SERVER_GPU,SERVER_DISKS].forEach(x=>Object.keys(x).forEach(k=>delete x[k]));
+  hwVer.clear();
+  const ver=r=>hwVer.set(r.id,r.version);
+  const byId=new Map();
+  L.servers.forEach(r=>{ver(r);const s=srvNode(r);byId.set(r.id,s);servers.push(s);SERVER_DOMAIN[r.id]=r.domainId});
+  L.domains.forEach(r=>{ver(r);domains.push({id:r.id,type:"domain",name:r.name,license:r.license,online:r.online,
+    servers:L.servers.filter(s=>s.domainId===r.id&&s.allocated).map(s=>byId.get(s.id)),
+    unallocServers:L.servers.filter(s=>s.domainId===r.id&&!s.allocated).map(s=>byId.get(s.id))})});
+  L.devices.forEach(r=>{
+    ver(r);const n=devNode(r);byId.set(r.id,n);
+    if(r.parentId){const p=byId.get(r.parentId);(p.devices||(p.devices=[])).push(n)}
+    else if(SVC_TYPES.has(r.type)||r.onServer)byId.get(r.serverId).devices.push(n);
+    else{devicePool.push(n);DEVICE_DOMAIN[r.id]=r.domainId}
+  });
+  L.folders.forEach(r=>{ver(r);const f=folderNode(r);byId.set(r.id,f);(r.parentId?byId.get(r.parentId).folders:folders).push(f)});
+  L.archives.forEach(r=>{ver(r);const a=archNode(r);byId.set(r.id,a);arch.push(a)});
+  L.volumes.forEach(r=>{ver(r);byId.get(r.archiveId).vols.push(volNode(r))});
+  remakeAcfa();
+  treeMatchCache.clear();searchMatchCache.clear();
+}
+const HW_LISTS=["domains","servers","devices","folders","archives","volumes"];
+async function hwLoad(){
+  const lists=await Promise.all(HW_LISTS.map(p=>API.get("/"+p).then(r=>r.items)));
+  const L=Object.fromEntries(HW_LISTS.map((p,i)=>[p,lists[i]]));
+  const disc=await Promise.all(L.domains.map(d=>API.get(`/domains/${d.id}/discovery`)));
+  hwFill(L);
+  seedFound(disc);
+}
+// Одна запись пришла заново (ответ сервера или событие потока): объект кэша
+// меняется на месте — на него ссылаются дерево, папки и выборка.
+function hwApplyDevice(r){
+  const n=find(r.id)?.n;if(!n)return;
+  const fresh=devNode(r);
+  Object.keys(n).forEach(k=>{if(k!=="devices"&&k!=="_f"&&!(k in fresh))delete n[k]});
+  Object.entries(fresh).forEach(([k,v])=>{if(k!=="devices"&&k!=="_f")n[k]=v});
+  Object.values(DEV_FLD).forEach(l=>{if(fresh._f&&l in fresh._f)(n._f||(n._f={}))[l]=fresh._f[l];else if(n._f)delete n._f[l]});
+  hwVer.set(r.id,r.version);
+}
+function hwApplyFolder(r){
+  const f=folderById(r.id);if(!f)return;
+  f.name=r.name;f.items=r.deviceIds.slice();
+  hwVer.set(r.id,r.version);
+}
+const HW_EVENT={device:["/devices",hwApplyDevice],folder:["/folders",hwApplyFolder]};
+// Поток событий: изменения (свои и чужие), ход операций. Запись перечитывается
+// по id; если поток потерян — весь кэш заново.
+function apiOnEvent(m){
+  if(m.type==="stream.reset"||m.type==="test.reset"){apiReload();return}
+  if(m.kind==="operation"){opOnEvent(m);return}
+  const h=HW_EVENT[m.kind];
+  if(m.type!=="entity.changed"||!h)return;
+  if(hwVer.get(m.entityId)===m.version&&!m.payload?.status)return;
+  API.get(`${h[0]}/${m.entityId}`).then(r=>{
+    h[1](r);treeMatchCache.clear();searchMatchCache.clear();
+    renderTree();if(sel===m.entityId&&!cardDraft&&!(bq&&!bq.finished))paint();
+  }).catch(()=>{});
+}
+function apiReload(){hwLoad().then(()=>{if(!find(sel))sel=domains[0]?.id||null;paint()})}
+// Код ошибки сервера → текст для показа: интерфейс говорит своими словами
+function problemText(e,n){
+  const code=e?.problem?.code||e?.code||e;
+  const s=n?srv(n.id):null;
+  return{
+    SERVER_OFFLINE:s?`${i18n("сервер")} «${locName(s)}» ${i18n("не отвечает")}`:i18n("сервер не отвечает"),
+    LICENSE_EXCEEDED:i18n("лицензия превышена — камера останется выключенной"),
+    DEVICE_OFFLINE:i18n("устройство не отвечает — проверьте сеть и учётные данные"),
+    VERSION_MISMATCH:i18n("объект изменился — откройте его заново"),
+    BUSY:i18n("над объектом уже выполняется операция"),
+    NAME_REQUIRED:i18n("Укажите имя"),
+    NOT_FOUND:i18n("объект не найден"),
+  }[code]||(e?.status===0||!code?i18n("сервер не ответил"):`${i18n("ошибка")}: ${code}`);
+}
 // ── Модель w2c ─────────────────────────────────────────────────────────────
 // Устройства не принадлежат серверу: они лежат в общем пуле и раскладываются
 // по папкам физического расположения (раздел «Устройства»). Один объект может
@@ -1889,25 +1882,10 @@ const domains=[
 // только через архив, на котором ведётся запись, и у служб сервера
 // (Email/SMS/агент экспорта/динамик) — они остаются в разделе «Сервера».
 const devicePool=[];
-const srvDevices={};
-servers.forEach(s=>{
-  const own=s.devices||[];
-  srvDevices[s.id]=own.filter(d=>!isSvc(d));
-  s.devices=own.filter(d=>isSvc(d));
-  devicePool.push(...srvDevices[s.id]);
-});
 // Домен (кластер) — административная граница: устройство, папка и лицензия
 // всегда принадлежат одному домену.
 const SERVER_DOMAIN={};
-domains.forEach(d=>{
-  (d.servers||[]).forEach(s=>SERVER_DOMAIN[s.id]=d.id);
-  (d.unallocServers||[]).forEach(s=>SERVER_DOMAIN[s.id]=d.id);
-});
 const DEVICE_DOMAIN={};
-Object.entries(srvDevices).forEach(([sid,list])=>{
-  const did=SERVER_DOMAIN[sid]||domains[0].id;
-  list.forEach(d=>DEVICE_DOMAIN[d.id]=did);
-});
 function deviceDomain(id){
   const root=path(id)[0];
   return DEVICE_DOMAIN[root?.id||id]||null;
@@ -1929,67 +1907,7 @@ function matchesDomain(n){return!domainFilter||nodeDomainId(n)===domainFilter}
 function scopedDomains(){return domains.filter(matchesDomain)}
 let _fseq=0;
 function mkFolder(name,items,kids,domain){return{id:"f"+(++_fseq),type:"folder",name,domain:domain||null,items:items||[],folders:kids||[]}}
-function _ids(list){return(list||[]).map(d=>d.id)}
-function _srv(sids){return sids.flatMap(sid=>srvDevices[sid]||[])}
-function _pick(sid,re){return _ids((srvDevices[sid]||[]).filter(d=>re.test(d.name)))}
-function _rest(sid,re){return _ids((srvDevices[sid]||[]).filter(d=>!re.test(d.name)))}
-function _cross(sids,re){return _ids(_srv(sids).filter(d=>re.test(d.name)))}
-const _ENTRY=/вход|ворота|въезд|выезд|проходн|шлагбаум|кпп|вахта/i;
-const _PERIM=/периметр|парковк|площадк|двор|стоянк|улиц/i;
-const _ENG=/nvr|moxa|sip|pos|скуд|эмулятор/i;
-const D1=["s1","s4","s5","s6","s7"],D2=["s2","s3","s8","s9","s10"];
-const folders=[
-  // ── Домен 1 ──────────────────────────────────────────────────────────────
-  mkFolder("Офис на Тверской",[],[
-    mkFolder("Главное здание",[],[
-      mkFolder("Входная группа",_pick("s1",_ENTRY)),
-      mkFolder("Помещения",_rest("s1",new RegExp(_ENTRY.source+"|"+_ENG.source,"i"))),
-      mkFolder("Инженерные системы",_pick("s1",_ENG))
-    ]),
-    mkFolder("Цех",_rest("s4",/^$/)),
-    mkFolder("КПП",_rest("s5",/^$/)),
-    // Корпуса площадки: на большом объекте их и бывает с десяток.
-    ...["Корпус Б","Корпус В","Столовая","Медпункт","Учебный центр","Гостевая парковка",
-        "Склад хозчасти","Котельная","Трансформаторная"].map(name=>mkFolder(name,[]))
-  ],"d1"),
-  mkFolder("Прочие площадки",[],[
-    mkFolder("Ангар",_rest("s6",/^$/)),
-    mkFolder("Парковка",_rest("s7",/^$/))
-  ],"d1"),
-  // Сквозные папки домена: те же объекты, что и выше, — показывают мультивхождение
-  mkFolder("Периметр — все площадки",_cross(D1,_PERIM),[],"d1"),
-  mkFolder("Входные группы",_cross(D1,_ENTRY),[],"d1"),
-  // Рабочие подборки: человеку удобнее «ночной обход», чем дерево площадок.
-  // Одно устройство попадает сразу в несколько таких папок — из-за этого
-  // «Расположение» в его карточке и оказывается списком, а не одной строкой.
-  ...["Ночной обход","Под наблюдением ЧОП","Видеоаналитика","Приоритетные","Пожарные выходы",
-      "Эвакуационные пути","Кассовые зоны","Проверка подрядчика","Инвентаризация","Экспорт по запросу"]
-    .map((name,i)=>{
-      const items=_srv(D1).filter(d=>d.type==="camera").filter((_,k)=>(k+i)%4===0).slice(0,14).map(d=>d.id);
-      if(!items.includes("c1"))items.unshift("c1");
-      return mkFolder(name,items,[],"d1");
-    }),
-  // ── Домен 2 ──────────────────────────────────────────────────────────────
-  mkFolder("Складской комплекс",[],[
-    mkFolder("Основной склад",[],[
-      mkFolder("Ворота и рампы",_pick("s2",_ENTRY)),
-      mkFolder("Зоны хранения",_rest("s2",_ENTRY))
-    ]),
-    mkFolder("Филиал",_rest("s3",/^$/)),
-    mkFolder("Логистика",_rest("s9",/^$/)),
-    mkFolder("Пост охраны",_rest("s10",/^$/))
-  ],"d2"),
-  mkFolder("ТЦ «Север»",[],[
-    mkFolder("Торговая галерея",_rest("s8",new RegExp(_ENTRY.source+"|"+_PERIM.source,"i"))),
-    mkFolder("Входы и паркинг",_ids((srvDevices.s8||[]).filter(d=>_ENTRY.test(d.name)||_PERIM.test(d.name))))
-  ],"d2"),
-  mkFolder("Периметр — все площадки",_cross(D2,_PERIM),[],"d2"),
-  mkFolder("Входные группы",_cross(D2,_ENTRY),[],"d2"),
-  // ── Домен 4 ──────────────────────────────────────────────────────────────
-  mkFolder("Резервный узел",_rest("s12",/^$/),[],"d4")
-];
-[folders[0],folders[0]?.folders?.[0]].forEach(f=>{if(f)open.add(f.id)});
-domains.forEach(d=>open.add(d.id));
+const folders=[];
 function walkFolders(fn,list,parent){(list||folders).forEach(f=>{fn(f,parent||null);walkFolders(fn,f.folders,f)})}
 function folderById(id){let o=null;walkFolders(f=>{if(f.id===id)o=f});return o}
 function folderParent(id){let o=null;walkFolders((f,p)=>{if(f.id===id)o=p});return o}
@@ -2032,35 +1950,12 @@ function unfolderedDevices(did){
 // охраны свои хранилища, а не офисное и складское.
 // Хранилище — объект: владелец (сервер или домен), срок хранения, шифрование
 // и тома. Камера привязывается к хранилищу, а не к тому; том — путь, объём, занято.
-const arch=[
-  {id:"a1",type:"archive",name:"Хранилище — Офис",server:"s1",days:30,enc:true,vols:[["D:","4 ТБ","68%"]]},
-  {id:"a2",type:"archive",name:"Хранилище — Склад",server:"s2",days:14,enc:false,vols:[["E:","8 ТБ","42%"],["F:","8 ТБ","23%"]]},
-  {id:"a3",type:"archive",name:"Хранилище — Филиал",server:"s3",days:14,enc:false,vols:[["D:","2 ТБ","55%"]]},
-  {id:"a4",type:"archive",name:"Хранилище — Цех",server:"s4",days:21,enc:true,vols:[["E:","6 ТБ","31%"]]},
-  {id:"a5",type:"archive",name:"Хранилище — ТЦ «Север»",server:"s8",days:30,enc:false,vols:[["D:","12 ТБ","47%"],["E:","12 ТБ","19%"]]},
-  {id:"a6",type:"archive",name:"Хранилище — Логистика",server:"s9",days:14,enc:false,vols:[["E:","8 ТБ","61%"]]},
-  {id:"a9",type:"archive",name:"Хранилище — КПП",server:"s5",days:30,enc:false,vols:[["D:","4 ТБ","52%"]]},
-  {id:"a10",type:"archive",name:"Хранилище — Охрана",server:"s10",days:30,enc:true,vols:[["D:","2 ТБ","38%"]]},
-  // Сетевые хранилища принадлежат домену, а не конкретному серверу
-  {id:"a7",type:"archive",name:"Сетевое хранилище — NAS",domain:"d1",days:60,enc:true,vols:[["\\\\nas01\\vms","48 ТБ","37%"],["\\\\nas01\\vms2","48 ТБ","8%"]]},
-  {id:"a8",type:"archive",name:"Сетевое хранилище — Склад",domain:"d2",days:45,enc:false,vols:[["\\\\nas02\\wh","24 ТБ","12%"]]}
-];
-// Тома у крупного узла считают десятками, а сетевых хранилищ в домене столько
-// же, сколько площадок: и то, и другое — списки, которые листают.
-(()=>{
-  const VOL=["E:","F:","G:","H:","I:","J:","K:","L:","M:","N:","O:"];
-  VOL.forEach((disk,i)=>arch[0].vols.push([disk,[2,4,6,8,12][i%5]+" ТБ",(17+i*6)+"%"]));
-  ["Резерв","Долгосрочный","Тревоги","Проходная","Парковка","Цех","КПП","Ангар","Склад ЗИП","Экспорт","Отчётность"]
-    .forEach((name,i)=>arch.push({id:"a7n"+i,type:"archive",name:"Сетевое хранилище — "+name,domain:"d1",
-      days:[14,30,45,60,90][i%5],enc:i%2===0,
-      vols:[["\\\\nas0"+(1+i%3)+"\\"+["vms","arc","alarm","gate","park","shop","kpp","hangar","zip","exp","rep"][i],[8,12,24,36,48][i%5]+" ТБ",(9+i*7)+"%"]]}));
-})();
+const arch=[];
 let _vseq=0;
 function addVol(a,disk,size,used){
   const v={id:a.id+":v"+(++_vseq),type:"vol",name:disk,disk,size,used:used||"0%",archId:a.id,online:true};
   (a.vols||(a.vols=[])).push(v);return v;
 }
-arch.forEach(a=>{const src=a.vols||[];a.vols=[];src.forEach(([d,sz,u])=>addVol(a,d,sz,u))});
 // ── Типы хранилищ — как в Axxon One ────────────────────────────────────────
 // Локальное — диски сервера. Том занимает раздел целиком (диск форматируется
 // в SolidStore, заполняется до конца) или файл заданного размера на диске с
@@ -2093,12 +1988,7 @@ function archKindTag(a){
 }
 function archCanEncrypt(a){return archKind(a)==="cloud"||a.storage==="object"}
 // Диски сервера: системный C: и диски под запись.
-function serverDisks(sid){
-  const k=[...String(sid)].reduce((t,c)=>t+c.charCodeAt(0),0);
-  return[["C:","256 ГБ",true],["D:",[4,8,12][k%3]+" ТБ"],["E:",[6,8,16][k%3]+" ТБ"],["F:","8 ТБ"],["G:","12 ТБ"],
-    ...(sid==="s1"?"HIJKLMNOP".split("").map((c,i)=>[c+":",[2,4,6,8,12][i%5]+" ТБ"]):[])]
-    .map(([disk,size,sys])=>({disk,size,sys:!!sys}));
-}
+function serverDisks(sid){return(SERVER_DISKS[sid]||[]).map(d=>({...d}))}
 // Чем занят диск: раздел хранилища занимает его целиком, папки и файлы — нет.
 function diskUse(sid,disk){
   const vols=[];
@@ -2123,67 +2013,14 @@ function volDesc(v){
   return v.mode==="file"?`${i18n("файл")} ${v.size}`:v.mode==="dir"?`${i18n("папка на")} ${v.disk} · ${v.size}`:`${i18n("раздел")} ${v.disk} ${i18n("целиком")} · ${v.size}`;
 }
 function volStateText(v){return v.state&&v.state!=="ready"?i18n(VOL_STATES[v.state]||v.state):`${i18n("Готов")} (${v.used})`}
-(()=>{
-  arch.forEach(a=>{
-    a.kind=archKind(a);a.storage=a.enc?"object":"block";
-    archVols(a).forEach((v,i)=>{
-      if(a.kind==="local"&&a.storage==="object"){v.mode="dir";v.dir=v.disk+"\\AxxonArchive\\"+a.name.replace(/^Хранилище — /,"")}
-      else if(a.kind==="local"){v.mode=i%2?"file":"part";if(v.mode==="file"){v.dir=v.disk+"\\Axxon";v.file=a.name.replace(/^Хранилище — /,"")+".afs"}}
-      else v.user="VMS\\svc_archive";
-    });
-  });
-  // Облачные: S3 домена и MinIO на сервере склада — для примера в дереве.
-  const s3={id:"a11",type:"archive",name:"Облачное хранилище — Amazon S3",domain:"d1",kind:"cloud",provider:"s3",storage:"object",days:90,enc:true,vols:[]};
-  [["axxon-d1-archive","eu-central-1","vms/main","20 ТБ","14%"],["axxon-d1-archive","eu-central-1","vms/reserve","20 ТБ","3%"]]
-    .forEach(([bucket,region,path,size,used])=>Object.assign(addVol(s3,"s3",size,used),{bucket,region,path,keyId:"AKIA4XQ7Z2EXAMPLE"}));
-  const mn={id:"a12",type:"archive",name:"Хранилище — MinIO склада",server:"s2",kind:"cloud",provider:"minio",storage:"object",days:30,enc:false,vols:[]};
-  Object.assign(addVol(mn,"minio","16 ТБ","27%"),{host:"10.20.2.40",port:9000,proto:"https",bucket:"wh-video",region:"us-east-1",path:"cams",keyId:"vms-writer"});
-  arch.push(s3,mn);
-  [s3,mn].forEach(a=>archVols(a).forEach(v=>v.name=volLabel(v)));
-  // Камера регистратора — его видеоканал: своего IP у неё нет, VMS ходит к
-  // ней через IP регистратора. Встроенное хранилище у регистратора одно —
-  // его диск, строкой рядом с камерами; у части отдельных камер — карта памяти.
-  devicePool.filter(d=>d.type==="ipsrv"&&d.subtype==="nvr").forEach(nvr=>ipsrvCameras(nvr).forEach(c=>{
-    delete c.ip;delete c.port;delete c.mac;
-  }));
-  let m=0;
-  devicePool.filter(d=>d.type==="camera").forEach(c=>{
-    if(edgeStorage(c)||m++%4)return;
-    (c.devices||(c.devices=[])).push({id:c.id+"sd",type:"storage",name:"Встроенное хранилище",short:c.short+".1",size:["64 ГБ","128 ГБ","256 ГБ"][m%3],online:c.online!==false,devices:[]});
-  });
-  arch.find(a=>a.id==="a7n2").vols[0].state="maint";
-  arch.find(a=>a.id==="a6").vols[0].state="error";
-  // Почему устройство без сигнала. Вход и драйвер бывают только у IP-устройств
-  // со своим драйвером — камеры, регистратора (NVR, IP-сервера) и контроллера
-  // ОПС/СКУД; у начинки, подобъектов и служб сервера причина одна — связь.
-  let k=0;
-  walkAll(n=>{
-    if(n.online!==false||n.err||["domain","server","unalloc","det"].includes(n.type))return;
-    n.err=devIsIp(n)?["auth","conn","drv","conn"][k++%4]:"conn";
-  });
-})();
 function archVols(a){return a?.vols||[]}
-function volById(id){if(typeof id!=="string"||!id.includes(":v"))return null;for(const a of arch){const v=(a.vols||[]).find(x=>x.id===id);if(v)return v}return null}
+function volById(id){if(typeof id!=="string")return null;for(const a of arch){const v=(a.vols||[]).find(x=>x.id===id);if(v)return v}return null}
 function sizeTb(str){const m=/([\d.,]+)\s*(ТБ|ГБ|TB|GB)/.exec(str||"");if(!m)return 0;const n=parseFloat(m[1].replace(",","."));return/Г|G/.test(m[2])?n/1024:n}
 function fmtTb(n){return n>=1?String(Math.round(n*10)/10).replace(".",",")+" "+i18n("ТБ"):Math.round(n*1024)+" "+i18n("ГБ")}
 function archSizeTb(a){return archVols(a).reduce((t,v)=>t+sizeTb(v.size),0)}
 function archSize(a){return fmtTb(archSizeTb(a))}
 function archUsed(a){const t=archSizeTb(a);if(!t)return"0%";const u=archVols(a).reduce((x,v)=>x+sizeTb(v.size)*(parseFloat(v.used)||0)/100,0);return Math.round(u/t*100)+"%"}
 function archDiskLabel(a){const v=archVols(a);return v.length===1?v[0].disk:`${v.length} ${i18n(plural(v.length,"том|тома|томов"))}`}
-// Камеры площадок без архива (Ангар, Парковка, Резервный узел) не пишутся вовсе
-const RECORDS_TO={s1:"a1",s5:"a9",s2:"a2",s10:"a10",s3:"a3",s4:"a4",s8:"a5",s9:"a6",s7:"a7"};
-// Камера и регистратор подключены к своему серверу независимо от записи:
-// хранилище — только куда пишется видео. Без хранилища камера остаётся под
-// сервером (и в «Без записи»), а не пропадает из дерева.
-Object.entries(srvDevices).forEach(([sid,list])=>{
-  const aid=RECORDS_TO[sid]||null;
-  walk(n=>{
-    if(n.type==="camera"||n.type==="ipsrv")n.srvId=sid;
-    if(n.type!=="camera")return;
-    if(aid){n.arch=aid;if(!n.rec||n.rec==="none")n.rec="always"}// режим, заданный в данных, сохраняется
-    else{n.arch=null;n.rec="none"}
-  },list,null);
-});
 function archById(id){return arch.find(a=>a.id===id)||null}
 // Камера без сервера (добавлена без него) подключается к серверу первого
 // своего хранилища — дальше сервер остаётся с ней и без записи.
@@ -2214,12 +2051,7 @@ function serverCameras(sid){
   return out;
 }
 // GPU — один на сервер; на нём считаются детекторы назначенных камер
-const SERVER_GPU={
-  s1:{model:"NVIDIA RTX A2000",mem:"12 ГБ",load:38},
-  s2:{model:"NVIDIA T1000",mem:"8 ГБ",load:22},
-  s4:{model:"NVIDIA RTX A4000",mem:"16 ГБ",load:61},
-  s8:{model:"Intel Arc A380",mem:"6 ГБ",load:14}
-};
+const SERVER_GPU={};
 function serverGpu(s){return s?SERVER_GPU[s.id]||null:null}
 function gpuId(sid){return"gpu:"+sid}
 function gpuNode(s){const g=serverGpu(s);return{id:gpuId(s.id),type:"gpu",name:g?g.model:"GPU",serverId:s.id,gpu:g,online:s.online!==false}}
@@ -2342,7 +2174,6 @@ function walkAll(fn){
 const ACFA_NODE_IDS=new Set();
 function markAcfa(list,inside=false){(list||[]).forEach(n=>{const under=inside||n.type==="acfa";if(under)ACFA_NODE_IDS.add(n.id);markAcfa(n.devices,under)})}
 function remakeAcfa(){ACFA_NODE_IDS.clear();markAcfa(devicePool);servers.forEach(s=>markAcfa(s.devices))}
-remakeAcfa();
 function find(id){
   let o;walkAll((n,p)=>{if(n.id===id)o={n,p}});
   if(!o){const f=folderById(id);if(f)o={n:f,p:folderParent(id)}}
@@ -2783,6 +2614,17 @@ function cardPlan(){
 function cardApply(){
   const d=cardDiff();if(!d.length)return;
   const n=find(cardDraft.id).n;
+  const items=cardApiItems(n,d);
+  if(items){
+    cardRestore();
+    const label=r=>r.add?r.label:`${r.label}: ${r.toT}`;
+    const ops=d.map(r=>({...mkOp(r.node||n,label(r),r.folders?"folder":"param"),state:"wait",msg:"",done:false}));
+    const targets=[...new Set(items.map(x=>x.targetId))];
+    apiQueue([{label:`«${locName(n)}»: ${d.length} ${plural(d.length,"изменение|изменения|изменений")}`,ops}],`«${locName(n)}»`,{undo:true},
+      ()=>API.post("/operations",{idempotencyKey:opKey(),items,expectedVersions:Object.fromEntries(targets.map(x=>[x,hwVer.get(x)]))}));
+    paint();
+    return;
+  }
   // Модель возвращается к «до», а «станет» записывает очередь — так сбой
   // сервера оставляет объект как был, а не наполовину изменённым.
   cardRestore();
@@ -3811,9 +3653,28 @@ function treeRenameKey(e,id){
   if(e.key==="Enter"){e.preventDefault();e.target.blur()}
   else if(e.key==="Escape"){e.preventDefault();cancelTreeRename()}
 }
+let treeRenamePending=false;
 function commitTreeRename(id,val){
   if(treeRenameId!==id)return;
   const f=find(id);
+  // Устройство переименовывается на сервере: поле держится до ответа, иначе
+  // на миг показалось бы старое имя
+  if(isApiDevice(f?.n)){
+    if(treeRenamePending)return;
+    const field=treeRenameField==="short"?"short":"name",v=String(val||"").trim();
+    if(field==="name"&&!v){toast(i18n("Укажите имя"));requestAnimationFrame(()=>{const el=document.querySelector(".nm-inp");if(el){el.focus();el.select&&el.select()}});return}
+    treeRenamePending=true;
+    API.patch(`/devices/${id}`,{[field]:v},hwVer.get(id)).then(r=>{
+      treeRenamePending=false;hwApplyDevice(r);
+      if(treeRenameId===id){treeRenameId=null;treeRenameField="name"}
+      treeMatchCache.clear();searchMatchCache.clear();renderTree();
+      if(sel===id)gear();
+    }).catch(e=>{
+      treeRenamePending=false;toast(problemText(e,f.n));
+      requestAnimationFrame(()=>{const el=document.querySelector(".nm-inp");if(el){el.focus();el.select&&el.select()}});
+    });
+    return;
+  }
   if(treeRenameField==="short"){
     if(f)f.n.short=String(val||"").trim();
     treeRenameId=null;treeRenameField="name";renderTree();
@@ -5306,17 +5167,23 @@ function foundNode(did){return{id:foundId(did),type:"found",name:"Найденн
 function foundAll(did){return found[did]||[]}
 function foundPending(did){return foundAll(did).filter(r=>!r.added)}
 function foundRowById(did,rid){return foundAll(did).find(r=>r.id===rid)||null}
-// Какие устройства «видно» из сети каждого домена — демонстрационная раскладка.
-const FOUND_PLAN={d1:[0,1,2,3,4],d2:[5,6,7],d4:[8]};
-function seedFound(){
-  Object.entries(FOUND_PLAN).forEach(([did,idx])=>{
-    found[did]=idx.map(i=>DEVICE_DISCOVERY_SEED[i]).filter(Boolean).map(x=>({
+// Итог последнего поиска в сети по доменам — с сервера (GET /domains/{id}/discovery)
+function seedFound(disc){
+  disc.filter(d=>d.candidates.length).forEach(d=>{
+    found[d.domainId]=d.candidates.map(c=>({id:c.id,name:c.name,ip:c.ip,port:c.port,mac:c.mac,vendor:c.vendor,model:c.model,
+      status:c.support,user:c.login||"",pass:c.password||"",type:c.type})).map(x=>({
       ...x,added:false,addedId:null,user:"",pass:"",name:"",short:"",identifier:"",
-      arch:arch.find(a=>archDomainId(a)===did)?.id||"",group:"",record:"motion",lat:"0",lon:"0",azimuth:"0",discoveredName:x.name}));
+      arch:arch.find(a=>archDomainId(a)===d.domainId)?.id||"",group:"",record:"motion",lat:"0",lon:"0",azimuth:"0",discoveredName:x.name}));
   });
   // Найденное раскрыто сразу: это то, с чего начинают в пустой системе, и
   // прятать его за лишний клик незачем.
   domains.forEach(d=>open.add(foundId(d.id)));
+}
+// Что «видно» из сети домена при новом поиске — то же, что нашёл последний.
+// Поиск пока идёт в браузере (этап «Мастер добавления» переведёт его на сервер).
+function foundPlan(did){
+  const rows=did&&found[did];if(!rows)return null;
+  return rows.map(r=>DEVICE_DISCOVERY_SEED.findIndex(s=>s.mac===r.mac)).filter(i=>i>=0);
 }
 function foundDeviceMatches(r,q){
   return matchesText(q,r.discoveredName,r.name,r.ip,r.vendor,r.model,r.mac);
@@ -6138,7 +6005,7 @@ function lanSearch(){
   const n=find(lan.owner)?.n;if(!n)return;
   lanStopSearch();
   const did=lanDomainOf(n);
-  const plan=did&&FOUND_PLAN[did]?FOUND_PLAN[did]:null;
+  const plan=foundPlan(did);
   const seed=plan?plan.map(k=>DEVICE_DISCOVERY_SEED[k]).filter(Boolean):[...DEVICE_DISCOVERY_SEED];
   let i=0;const owner=lan.owner;
   lan.net=[];lan.state="searching";lan.progress=0;
@@ -7539,7 +7406,7 @@ let accFoc={r:0,c:0,scope:""},accMxRows=[],accUserFilt="all",accCmp=["op","gd"],
 let accUserSel=new Set(),accMemSel=new Set(),accSelMe=false,accUserRoleFilt="",accUserSrcFilt="",accUserGrpFilt="",accUserO=null,accMemO=null,accBk=null,accAd=null;
 const accSetting={};
 // Пользователей много — их ветка начинается свёрнутой; корни папок раскрыты.
-open.add("acc-x:users");domains.forEach(d=>open.add("accg:"+d.id));
+open.add("acc-x:users");
 function accClone(x){return JSON.parse(JSON.stringify(x))}
 function accNoRights(){const o={unr:false,feat:[],ur:"NO",map:"FORBID",alert:"FORBID",bm:"NO",depth:0,restr:{}};ACC_DEFS.forEach(([k,,kind])=>o[k]=ACC_LV[kind][0][0]);return o}
 function accTplOwn(t){return{...accNoRights(),...accClone(ACC_TPL[t][1])}}
@@ -10978,7 +10845,7 @@ function refreshDeviceSearch(){
   stopDeviceSearch();
   // Ищем в сети ТОГО домена, чей это список: иначе обновление в одном домене
   // приносило бы устройства, увиденные в другом.
-  const plan=wizd.foundDomain?FOUND_PLAN[wizd.foundDomain]:null;
+  const plan=foundPlan(wizd.foundDomain);
   const seed=plan?plan.map(k=>DEVICE_DISCOVERY_SEED[k]).filter(Boolean):[...DEVICE_DISCOVERY_SEED];
   let i=0;
   wizd.devState="searching";wizd.devSearchProgress=0;wizd.devResults=[];wizd.devSelected.clear();wizd.devSelectedOnly=false;wizd.bulkEditOpen=false;
@@ -13694,10 +13561,90 @@ function bulkRun(ch,opts,nodesIn){
   const steps=ch.map(c=>({label:c.label,ops:c.ops.map(o=>({...o,state:o.skip?"skip":excluded.has(o.n.id)?"excl":"wait",msg:o.skip||(excluded.has(o.n.id)?i18n("сервер без связи"):""),done:!!o.skip||excluded.has(o.n.id)}))}));
   startQueue(steps,`${nodes.length} ${i18n(plural(nodes.length,"объект|объекта|объектов"))}`,opts);
 }
+// ── Очередь на сервере ─────────────────────────────────────────────────────
+// План карточки устройства уходит на сервер одной операцией (POST /operations):
+// шаги выполняет сервер, ход приходит в поток событий, «Пауза», «Отменить
+// оставшееся», «Повторить неудачные» и «Отменить» — запросы к операции. Очередь
+// в шапке и окно хода те же, что у очереди в браузере; правка выборки пока идёт
+// очередью в браузере (этап «Групповые операции»).
+const DEVICE_PATCH=new Set(Object.keys(window.CONSOLEM_OPENAPI.components.schemas.DevicePatch.properties));
+const HW_NOT_DEVICE=new Set(["domain","server","unalloc","folder","archive","vol","gpu","found","fdev","nofolder","norec"]);
+function isApiDevice(n){return!!n&&!HW_NOT_DEVICE.has(n.type)&&hwVer.has(n.id)}
+function apiVal(k,v){
+  if(v===undefined||v===null)return null;
+  if(k==="lat"||k==="lon"||k==="azimuth"||DEV_NUM.has(k)){const s=String(v).trim();if(s==="")return null;const x=Number(s);return Number.isNaN(x)?s:x}
+  return v;
+}
+// Строка плана карточки → изменение устройства; null — строку не выразить через API
+function fldToApi(label,prop,v){
+  const k=prop?(DEV_API[prop]||prop):DEV_FLD_API[label]||(label==="Предзапись, с"?"preRecordSec":null);
+  if(!k||!DEVICE_PATCH.has(k))return null;
+  return{[k]:apiVal(k,typeof v==="string"&&!DEV_NUM.has(k)&&k!=="lat"&&k!=="lon"&&k!=="azimuth"?v.trim():v)};
+}
+function keyToApi(node,key,v){
+  if(key==="enabled")return{enabled:v!==false};
+  if(key==="kind"&&node.type==="det")return{detectorKind:v===undefined?null:DET_KIND_CODE[v]||v};
+  if(key==="sens")return{sensitivity:apiVal("sensitivity",v)};
+  if(key==="archx")return{extraArchives:v===undefined?null:v.map(x=>({archiveId:x.arch,recordMode:x.rec??null,stream:x.stream??null}))};
+  if(key==="mode"&&node.type==="email")return{mode:v===undefined?null:EMAIL_MODE_CODE[v]||v};
+  if(key==="pass")return{password:v===undefined?null:v};
+  const k=DEV_API[key]||key;
+  if(!DEVICE_PATCH.has(k))return null;
+  return{[k]:apiVal(k,v)};
+}
+function cardApiItems(n,d){
+  if(!isApiDevice(n))return null;
+  const items=[];
+  for(const r of d){
+    if(r.add||r.edit)return null;
+    const target=r.node||n;if(!isApiDevice(target))return null;
+    if(r.folders){items.push({targetId:n.id,folderIds:r.folders});continue}
+    const set=r.fld?fldToApi(r.fld,r.prop,r.to):keyToApi(target,r.key,r.to);
+    if(!set)return null;
+    items.push({targetId:target.id,set});
+  }
+  return items;
+}
+let opKeySeq=0;
+const opKey=()=>`ui-${Date.now().toString(36)}-${++opKeySeq}`;
+// События операции, которая ещё не вернулась из POST: по сети они могут обогнать ответ
+let opEarly=[];
+// Кто ждёт конца операции, которую очередь не показывает (откат по «Отменить»)
+const opWait=new Map();
+function apiQueue(steps,title,opts,call){
+  startQueue(steps,title,Object.assign({},opts,{api:"pending"}));
+  const q=bq;if(!q||q.api!=="pending")return;
+  opEarly=[];
+  call().then(op=>{q.api=op.id;const early=opEarly;opEarly=[];early.forEach(opOnEvent)}).catch(e=>{
+    // Сервер не принял операцию целиком (план устарел, объект занят, ошибка в поле): ни один шаг не выполнен
+    const msg=problemText(e);
+    q.steps.forEach(s=>s.ops.forEach(o=>{if(!o.done){o.state="fail";o.msg=msg;o.done=true;q.fail++;q.done++}}));
+    if(bq===q)queueFinish();
+  });
+}
+function opOnEvent(m){
+  const w=opWait.get(m.entityId);
+  if(w&&m.type==="operation.finished"){opWait.delete(m.entityId);w(m.payload);return}
+  if(!bq)return;
+  if(bq.api==="pending"){opEarly.push(m);return}
+  if(bq.api!==m.entityId)return;
+  const ops=bq.steps.flatMap(s=>s.ops);
+  if(m.type==="operation.progress"){
+    const it=m.payload.item,o=ops[it.index];if(!o||o.done)return;
+    if(it.state==="ok"){o.state="ok";o.msg="";bq.ok++}else{o.state="fail";o.msg=problemText(it.code,o.n);bq.fail++}
+    o.done=true;bq.done++;
+    const nx=ops.find(x=>!x.done);if(nx&&!bq.paused)nx.state="run";
+    bq.cur=bq.steps.find(s=>s.ops.some(x=>!x.done))?.label||"";
+    treeMatchCache.clear();searchMatchCache.clear();
+    renderTree();renderRailStatus();syncQueueModal();
+  }else if(m.type==="operation.finished")queueFinish();
+}
+function apiQueueOp(path){return API.post(`/operations/${bq.api}/${path}`)}
 function startQueue(steps,title,opts){
   if(bq&&!bq.finished){toast("Очередь уже выполняется");return}
   const total=steps.reduce((s,x)=>s+x.ops.filter(o=>!o.done).length,0);
-  bq={steps,title,total,done:0,ok:0,fail:0,skipped:steps.reduce((s,x)=>s+x.ops.filter(o=>o.done).length,0),paused:false,cancelled:false,finished:false,cur:"",started:Date.now(),undo:!!opts?.undo,quiet:!!opts?.undo};
+  bq={steps,title,total,done:0,ok:0,fail:0,skipped:steps.reduce((s,x)=>s+x.ops.filter(o=>o.done).length,0),paused:false,cancelled:false,finished:false,cur:"",started:Date.now(),undo:!!opts?.undo,quiet:!!opts?.undo,api:opts?.api||null};
+  if(bq.api){const o=queueNext();if(o){o.o.state="run";bq.cur=o.s.label}renderRailStatus();renderTree();return}
   renderRailStatus();renderTree();
   queueTick();
 }
@@ -13725,8 +13672,14 @@ function queueTick(){
     queueTick();
   },90+Math.random()*140);
 }
-function queuePause(){if(!bq||bq.finished)return;bq.paused=!bq.paused;if(!bq.paused)queueTick();renderRailStatus();syncQueueModal()}
-function queueCancel(){if(!bq||bq.finished)return;bq.cancelled=true;bq.paused=false;queueTick()}
+function queuePause(){
+  if(!bq||bq.finished)return;
+  if(bq.api){if(bq.api==="pending")return;const q=bq;apiQueueOp(q.paused?"resume":"pause").then(()=>{q.paused=!q.paused;renderRailStatus();syncQueueModal()}).catch(e=>toast(problemText(e)));return}
+  bq.paused=!bq.paused;if(!bq.paused)queueTick();renderRailStatus();syncQueueModal()}
+function queueCancel(){
+  if(!bq||bq.finished)return;
+  if(bq.api){if(bq.api==="pending")return;bq.cancelled=true;apiQueueOp("cancel").catch(e=>toast(problemText(e)));return}
+  bq.cancelled=true;bq.paused=false;queueTick()}
 function queueFinish(){
   if(!bq)return;
   bq.finished=true;bq.cur="";
@@ -13739,6 +13692,15 @@ function queueFinish(){
   if(bq.undo&&bq.ok){
     const q=bq;
     toastAction("undo",`${i18n("Применено")}: ${label} · ${q.ok}`,i18n("Отменить"),()=>{
+      // Откат на сервере — обратная операция: объекты возвращаются к «до»
+      if(q.api){
+        API.post(`/operations/${q.api}/revert`).then(op=>opWait.set(op.id,p=>{
+          if(bq===q)bq=null;
+          treeMatchCache.clear();searchMatchCache.clear();renderRailStatus();paint();
+          toast(`${i18n("Возвращено")}: ${p.ok}`);
+        })).catch(e=>toast(problemText(e)));
+        return;
+      }
       let k=0;q.steps.forEach(s=>s.ops.forEach(o=>{if(o.state==="ok"&&o.undo){try{o.undo();k++}catch(e){}}}));
       treeMatchCache.clear();searchMatchCache.clear();
       if(bq===q)bq=null;
@@ -13825,7 +13787,9 @@ function retryFailed(){
   if(!bq)return;
   const steps=bq.steps.map(s=>({label:s.label,ops:s.ops.filter(o=>o.state==="fail").map(o=>({...o,state:"wait",done:false,msg:"",retry:true}))})).filter(s=>s.ops.length);
   closeBulkModal();
-  const title=bq.title;bq=null;
+  const title=bq.title;
+  if(bq.api){const id=bq.api;bq=null;apiQueue(steps,title+` · ${i18n("повтор")}`,{},()=>API.post(`/operations/${id}/retry-failed`));openQueueModal();return}
+  bq=null;
   startQueue(steps,title+` · ${i18n("повтор")}`);
   openQueueModal();
 }
@@ -14254,9 +14218,20 @@ function cpApplyGeneric(){
   bulkRun(ch,null,nodes);
 }
 
-seedFound();   // выдача поиска по доменам: сеть у каждого своя
-syncLocalePack();applyStaticUi();
-if(!applyDeepLink()){resetTreeSel(sel);paint();}
+// Старт: данные с сервера, затем первая отрисовка. Раскрыто то же, что в
+// макете на константах: первый и третий домен, нераспределённые первого,
+// первый сервер, первое хранилище, первая папка с подпапкой.
+window.appReady=hwLoad().then(()=>{
+  sel=domains[0]?.id||null;appSel.srvs=sel;
+  [domains[0]?.id,domains[2]?.id,domains[0]&&unallocId(domains[0].id),servers[0]?.id,arch[0]?.id].forEach(x=>{if(x)open.add(x)});
+  [folders[0],folders[0]?.folders?.[0]].forEach(f=>{if(f)open.add(f.id)});
+  domains.forEach(d=>{open.add(d.id);open.add("accg:"+d.id)});
+  API.subscribe(apiOnEvent,apiReload);
+  syncLocalePack();applyStaticUi();
+  if(!applyDeepLink()){resetTreeSel(sel);paint();}
+}).catch(e=>{
+  document.body.insertAdjacentHTML("afterbegin",`<div class="nt bk-warn" style="margin:16px">${i18n("Сервер не ответил")}: ${escHtml(e?.problem?.message||e?.message||String(e))}</div>`);
+});
 </script>
 </body>
 </html>

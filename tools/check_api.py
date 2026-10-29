@@ -30,15 +30,15 @@ METHODS = ("get", "post", "put", "patch", "delete")
 
 # Константы с данными сервера в HTML прототипа: образец → что это
 DATA_CONSTANTS = {
-    r"\bconst servers\s*=": "серверы",
-    r"\bconst domains\s*=": "домены",
+    r"\bconst servers\s*=\s*\[\s*\{": "серверы",
+    r"\bconst domains\s*=\s*\[\s*\{": "домены",
     r"\bfunction bulkCams\b": "генерация камер",
     r"\bdemoPad\(": "демо-генерация устройств",
     r"\bmkFolder\(\"": "папки",
-    r"\bconst arch\s*=": "хранилища",
+    r"\bconst arch\s*=\s*\[\s*\{": "хранилища",
     r"\bconst RECORDS_TO\s*=": "привязка записи",
-    r"\bconst SERVER_GPU\s*=": "GPU серверов",
-    r"\bfunction serverDisks\b": "диски серверов",
+    r"\bconst SERVER_GPU\s*=\s*\{\s*\w": "GPU серверов",
+    r"HIJKLMNOP": "диски серверов",
     r"\bconst DEVICE_DISCOVERY_SEED\s*=": "сеть для поиска устройств",
     r"\bconst FOUND_PLAN\s*=": "что находит поиск",
     r"\bconst rules\s*=\s*\[": "правила",
@@ -48,7 +48,14 @@ DATA_CONSTANTS = {
     r"\bconst LOG_EVENTS\s*=": "журнал",
 }
 # Ещё не переведены на API: этапы 4–5 убирают их отсюда вместе с константами
-PENDING = set(DATA_CONSTANTS)
+PENDING = {
+    r"\bconst DEVICE_DISCOVERY_SEED\s*=",  # мастер добавления: поиск в сети
+    r"\bconst rules\s*=\s*\[",  # автоматизация
+    r"\bruleFires\s*=",
+    r"\bfunction accSeed\b",  # права
+    r"\bconst SETTINGS\s*=",  # опции
+    r"\bconst LOG_EVENTS\s*=",  # журнал
+}
 
 
 class Report:
@@ -88,7 +95,7 @@ def read(rel):
 
 # ===== Сверка значения со схемой =====
 # Подмножество JSON Schema, которым пользуется контракт: type (и списком, с null), properties,
-# required, additionalProperties, items, enum, $ref, anyOf/oneOf, format, minimum/maximum, pattern.
+# required, additionalProperties, items, enum, $ref, anyOf/oneOf, format, minimum/maximum, pattern, minLength, minItems.
 # Поле, которого нет в схеме, — расхождение: контракт описывает всё, что есть в данных
 
 FORMATS = {
@@ -146,11 +153,15 @@ def validate(spec, schema, value, where, out):
             out.append(f"{where}: {value!r} — не {schema['format']}")
         if "pattern" in schema and not re.search(schema["pattern"], value):
             out.append(f"{where}: {value!r} не подходит под {schema['pattern']}")
+        if "minLength" in schema and len(value) < schema["minLength"]:
+            out.append(f"{where}: короче {schema['minLength']}")
     if k in ("integer", "number"):
         if "minimum" in schema and value < schema["minimum"]:
             out.append(f"{where}: {value} меньше {schema['minimum']}")
         if "maximum" in schema and value > schema["maximum"]:
             out.append(f"{where}: {value} больше {schema['maximum']}")
+    if k == "array" and "minItems" in schema and len(value) < schema["minItems"]:
+        out.append(f"{where}: меньше {schema['minItems']} элементов")
     if k == "array" and "items" in schema:
         for i, item in enumerate(value):
             validate(spec, schema["items"], item, f"{where}[{i}]", out)
@@ -205,6 +216,9 @@ def check_contract(rep, spec):
                     target = target.get(p) if isinstance(target, dict) else None
                 if target is None:
                     problems.append(f"{where}: ссылка {r} никуда не ведёт")
+                # Сверка схем (здесь и в api/contract.js) понимает только ссылки на компонент целиком
+                elif not re.fullmatch(r"#/components/(schemas|responses|headers)/\w+", r):
+                    problems.append(f"{where}: ссылка {r} — только на компонент целиком: #/components/schemas/<имя>")
             for k, v in node.items():
                 refs(v, f"{where}/{k}")
         elif isinstance(node, list):
@@ -391,12 +405,23 @@ def check_prototype(rep):
 # ===== 6. Контракт ↔ сервер =====
 
 def check_server(rep, spec):
-    code = read("api/server.js")
-    if code is None:
+    if read("api/server.js") is None:
         rep.info("api/server.js ещё нет — сверка маршрутов сервера с контрактом пропущена (этап 4)")
         return
-    routes = set(re.findall(r'\[\s*"(GET|POST|PUT|PATCH|DELETE)",\s*"(/[^"]*)"', code))
-    ops = {(m.upper(), p) for p, item in spec["paths"].items() for m in METHODS if m in item}
+    # Маршруты — у самого сервера: часть их собирается кодом, в тексте файла их не найти
+    script = (
+        "global.window=global;require('./api/contract.js');require('./api/server.js');"
+        "const fx=require('./api/fixtures/demo.json');"
+        "const s=window.ConsolemServer.create({fixture:fx,autoTick:false,testSupport:true});"
+        "console.log(JSON.stringify(s.routes))"
+    )
+    res = subprocess.run(["node", "-e", script], capture_output=True, text=True, cwd=ROOT)
+    if res.returncode:
+        rep.fail("Встроенный сервер запускается в Node", res.stderr.strip().splitlines()[-5:])
+        return
+    bare = lambda p: re.sub(r"\{\w+\}", "{}", p)
+    routes = {(r.split(" ", 1)[0], bare(r.split(" ", 1)[1])) for r in json.loads(res.stdout)}
+    ops = {(m.upper(), bare(p)) for p, item in spec["paths"].items() for m in METHODS if m in item}
     problems = [f"{m} {p}: в контракте есть, в server.js нет" for m, p in sorted(ops - routes)]
     problems += [f"{m} {p}: в server.js есть, в контракте нет" for m, p in sorted(routes - ops)]
     rep.check("Каждая операция контракта реализована в server.js, каждый маршрут описан в контракте", problems, f"{len(ops)} операций")

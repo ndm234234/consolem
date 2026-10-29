@@ -480,6 +480,8 @@ def normalize(raw, captured_at):
     ]
 
     out["reference"] = reference(raw["refs"])
+    # Старый id → UUID: по нему tools/compare_screens.py сопоставляет экраны прототипов 09 и 10
+    normalize.ids = {old: uid for (kind, old), uid in ids.map.items()}
     return out
 
 
