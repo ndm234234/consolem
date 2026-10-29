@@ -15,6 +15,8 @@ index_09_one-psim.html в headless Chrome с остановленными час
 Запуск из корня репозитория:
   python3 tools/extract_fixture.py --raw /tmp/raw.json   только снимок памяти
   python3 tools/extract_fixture.py --force               перезаписать набор
+  python3 tools/extract_fixture.py --source index.html --raw /tmp/raw.json
+                                                         снимок другого макета
 """
 import argparse
 import html
@@ -54,14 +56,19 @@ const out={
   discoverySeed:DEVICE_DISCOVERY_SEED,foundPlan:FOUND_PLAN,found,
   refs
 };
+// Данные, которых в прототипе 09 нет: «Автоматизация» основного макета
+const extra={};
+if(typeof SCHEDS!=="undefined")Object.assign(extra,{scheds:SCHEDS,dayGroups:DAY_GROUPS,objModes:OBJ_MODES,
+  objModeElse,maintWindows:MAINT_WINDOWS,ruleHist,ruleLayouts:RULE_LAYOUTS,ruleMonitors:RULE_MONS});
+if(Object.keys(extra).length)out.extra=extra;
 const el=document.createElement("script");el.type="text/plain";el.id="__dump";
 el.textContent=JSON.stringify(out).replace(/</g,"\\u003c");
 document.body.appendChild(el);
 })();</script>"""
 
 
-def snapshot():
-    with open(SOURCE, encoding="utf-8") as f:
+def snapshot(source=SOURCE):
+    with open(source, encoding="utf-8") as f:
         page = f.read()
     base = '<base href="file://%s/">' % ROOT
     page = page.replace("<head>", "<head>" + base + FREEZE, 1)
@@ -88,8 +95,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--raw", help="записать снимок памяти как есть и выйти")
     ap.add_argument("--force", action="store_true", help="перезаписать существующий набор")
+    ap.add_argument("--source", default=os.path.relpath(SOURCE, ROOT),
+                    help="макет, из которого снимать данные (по умолчанию %(default)s)")
     args = ap.parse_args()
-    raw = snapshot()
+    raw = snapshot(os.path.join(ROOT, args.source))
     if args.raw:
         with open(args.raw, "w", encoding="utf-8") as f:
             json.dump(raw, f, ensure_ascii=False, indent=1)
