@@ -47,17 +47,36 @@
 /* ---- Switch (MuiSwitch): a checkbox with role="switch", or the kit's .switch ----------------------- */
 :where(input[type="checkbox"][role="switch"], .switch) {
   appearance: none; flex: none; position: relative; box-sizing: border-box; margin: 0; cursor: pointer;
-  width: 2.375rem; height: 1.25rem; border: 1px solid var(--one-switch-off-border); border-radius: var(--one-radius-pill);
-  background-color: var(--one-switch-off-track); transition: background-color 120ms, border-color 120ms;
+  width: 2.375rem; height: 1.25rem; border: 1px solid var(--one-editor-border); border-radius: var(--one-radius-pill);
+  background-color: var(--one-surface-muted); transition: background-color 120ms, border-color 120ms;
   --switch-thumb: 1rem; --switch-travel: 1.125rem; vertical-align: middle;
 }
-:where(input[type="checkbox"][role="switch"], .switch)::before { content: ""; position: absolute; top: 1px; left: 1px; width: var(--switch-thumb); height: var(--switch-thumb); border-radius: var(--one-radius-pill); background: var(--one-switch-off-thumb); transition: transform 120ms, background-color 120ms; }
-:where(input[type="checkbox"][role="switch"], .switch):hover:not(:disabled) { background-color: var(--one-switch-off-track-hover); }
-:where(input[type="checkbox"][role="switch"], .switch):active:not(:disabled) { background-color: var(--one-switch-off-track-pressed); }
-:where(input[type="checkbox"][role="switch"], .switch):checked { background-color: var(--one-accent); border-color: var(--one-accent); }
-:where(input[type="checkbox"][role="switch"], .switch):checked::before { background: var(--one-accent-on); transform: translateX(var(--switch-travel)); }
-:where(input[type="checkbox"][role="switch"], .switch):checked:hover:not(:disabled) { background-color: var(--one-primary-hover); border-color: var(--one-primary-hover); }
-:where(input[type="checkbox"][role="switch"], .switch):checked:active:not(:disabled) { background-color: var(--one-primary-pressed); border-color: var(--one-primary-pressed); }
+/* Выключенный тумблер поднят по видимости (D-080, заказчик: «кажется задисейбленным»): бегунок
+   берёт `fg-muted` — приглушённый цвет ТЕКСТА (прежний `switch-off-thumb` того же значения выглядел
+   выключенным только из-за светлой дорожки; на приглушённой поверхности он читается, а чисто белый
+   `fg` оказался слишком ярким — правка владельца). Рамка — та же `editor-border`, что у группы
+   переключателей рядом (правка владельца: `border-strong` вокруг тумблера «слишком активна», и он прав —
+   рамка контрола не обязана быть сильнее соседней). Дорожка — `surface-muted`, та же заливка, что под
+   невыбранной ячейкой сегмента: `switch-off-track` светлее поверхности попапа и на ней растворялся
+   («выключенный переключатель теряется на фоне диалога» — владелец), а приглушённая поверхность
+   читается углублением на любой из наших подложек, включая белую в светлой теме, где прежняя дорожка
+   была просто белой. Под курсором и нажатием — `control-hover` / `control-pressed`, лестница той же
+   приглушённой поверхности.
+   Разница с `:disabled` теперь в бегунке: у него `fg-disabled`, и перепутать их больше нельзя.
+   Рамка у включённого НЕ красится: она общая для обоих состояний, как у группы переключателей, а
+   «включено» несёт бегунок и подложка (правка владельца 27.10.2026). */
+:where(input[type="checkbox"][role="switch"], .switch)::before { content: ""; position: absolute; top: 1px; left: 1px; width: var(--switch-thumb); height: var(--switch-thumb); border-radius: var(--one-radius-pill); background: var(--one-fg-muted); transition: transform 120ms, background-color 120ms; }
+:where(input[type="checkbox"][role="switch"], .switch):hover:not(:disabled) { background-color: var(--one-control-hover); }
+:where(input[type="checkbox"][role="switch"], .switch):active:not(:disabled) { background-color: var(--one-control-pressed); }
+/* Включённый тумблер заливается ПЛАШКОЙ ВЫБРАННОГО, а не сплошным акцентом (D-080, заказчик:
+   «во включённом режиме синий слишком активный»): дорожка `accent-soft` — та же, что у выбранной
+   строки, пункта и сегмента, — рамка и бегунок в ярком синем, под курсором и нажатием
+   `nav-selected-hover`. Сигнал «включено» несёт теперь не площадь заливки, а цвет бегунка и рамки;
+   сплошной акцент остался у `primary`, то есть у главного действия экрана. */
+:where(input[type="checkbox"][role="switch"], .switch):checked { background-color: var(--one-accent-soft); }
+:where(input[type="checkbox"][role="switch"], .switch):checked::before { background: var(--one-link-hover); transform: translateX(var(--switch-travel)); }
+:where(input[type="checkbox"][role="switch"], .switch):checked:hover:not(:disabled) { background-color: var(--one-nav-selected-hover); }
+:where(input[type="checkbox"][role="switch"], .switch):checked:active:not(:disabled) { background-color: var(--one-nav-selected-hover); }
 :where(input[type="checkbox"][role="switch"], .switch):disabled { cursor: not-allowed; background-color: var(--one-control-disabled); border-color: var(--one-selection-outline-disabled); }
 :where(input[type="checkbox"][role="switch"], .switch):disabled::before { background: var(--one-fg-disabled); }
 

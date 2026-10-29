@@ -1,5 +1,6 @@
 /* Основной макет (index.html) — в визуальном семействе ONE PSIM.
- * Мост по ONE.PSIM.PrototypeKit (режим «переделать», docs/RESTYLE-RULES.md §0–§4), кит @ 6505778.
+ * Мост по ONE.PSIM.PrototypeKit (режим «переделать», docs/RESTYLE-RULES.md §0–§4), кит @ ac61f2b
+ * (словарь — DS cd7c7e1; решения по D-081 включительно).
  * Взят из прототипа 09 (bridge_09.css) и дополнен разделом «Автоматизация» из прототипа 08.
  * Подключается после <style> макета; сырые hex в его <style> переложены на токены --one-*.
  * one-psim.css и native.css — копии из кита, не править: обновляются копированием заново. */
@@ -26,12 +27,19 @@
   --rd: var(--one-danger);
   --pu: var(--one-palette-purple);
   --ln: var(--x-region);
+  /* Яркая ступень синего (D-080): подпись и значок выбранного и ссылка — `link-hover`, ссылка под
+     курсором — ещё ступень (подмес 20 % fg), подчёркивание — та же гамма на 50 %. */
+  --x-sel: var(--one-link-hover);
+  --x-link: var(--one-link-hover);
+  --x-link-hover: color-mix(in srgb, var(--one-link-hover) 80%, var(--one-fg) 20%);
+  --x-link-ul: color-mix(in srgb, var(--one-link-hover) 50%, transparent);
 }
 /* Граница между регионами (D-024): в Light — surface-subtle, в Dark — border. */
 :root, html[data-theme="light"] { --x-region: var(--one-surface-subtle); --x-tint: 16%; }
-/* Ступени контролов DS (size.control*): dense 24 · compact 28 · regular 32; строка дерева = контрол + 4/4
-   воздуха (CR-013): dense 32, отступ вложенности 8, шеврон и иконка 16. */
-:root { --row-h: 32px; --ind: 8px; --tw: 16px; --ctrl-h: 32px; --ctl-dense: 24px; --ctl-compact: 28px; }
+/* Ступени контролов DS (size.control*): dense 24 · compact 28 · regular 32. Строка дерева — ступень кита
+   (D-069): 32, шеврон 16, значок 18 (на ступень выше строки); ступенька уровня — правило «значок +
+   зазор» и объявлена на самой строке (.n), а не здесь. */
+:root { --row-h: 32px; --tw: 16px; --n-ic: 18px; --ctrl-h: 32px; --ctl-dense: 24px; --ctl-compact: 28px; }
 html[data-theme="dark"] { --x-region: var(--one-border); --x-tint: 30%; }
 
 html[data-theme] {
@@ -59,7 +67,7 @@ html[data-theme] {
   .dr { background: var(--one-dialog); border-left-color: var(--one-border); box-shadow: var(--one-shadow); }
   :is(.mask, .jump, .confirm) { background: var(--one-scrim); }
   .ttu { background: var(--one-popup); border-color: var(--one-border); box-shadow: var(--one-shadow); }
-  .ttu-act:hover { color: var(--one-link-hover); }
+  .ttu-act:hover { color: var(--x-link-hover); }
 
   /* ---- Кнопки (§2.8, D-015): .btn = secondary, .pri = primary ----------------------------------- */
   .btn {
@@ -89,38 +97,51 @@ html[data-theme] {
   .ch-act:active:not(:disabled) { background: var(--one-control-pressed); }
   .hd-nav button:disabled { opacity: 1; color: var(--one-fg-disabled); }
 
-  /* ---- Переключатели и сегменты = ToggleButton (§2.4, D-018): включённое — лестница primary ------ */
+  /* ---- Переключатели, сегменты и чипы = ToggleButton (§2.4, §2.20, D-078): выбранный — это выбранная
+         строка дерева. Плашка accent-soft, подпись и глиф nav-selected, hover и pressed nav-selected-hover;
+         рамка у одиночного уходит в прозрачную (не снимается — чип не дёргается). Невыбранный — subtle с
+         приглушённой подписью fg-muted, под курсором подпись поднимается до fg. Сплошной accent (прежнее
+         D-018) остался только у primary. ------------------------------------------------------------- */
   :is(.ph-choice, .acc-seg button, .acc-subtabs button, .acc-pill, .acc-filt, .dev-mode-opt, .dev-tpl-opt,
-      .dev-view-act, .stchip, .fchip, .hchip, .pg-b, .pf-chip, .chc, .full-btn) {
+      .dev-view-act, .fchip, .hchip, .pg-b, .chc, .full-btn) {
     border-radius: var(--one-radius-control);
   }
-  :is(.ph-choice, .acc-seg button, .acc-subtabs button, .acc-pill, .acc-filt, .dev-mode-opt, .dev-tpl-opt,
+  :is(.ph-choice, .acc-seg button, .acc-subtabs button, .rl-seg button, .acc-pill, .acc-filt, .fchip, .hchip, .pg-b, .stchip, .pf-chip):not(.on) { color: var(--one-fg-muted); }
+  :is(.ph-choice, .acc-seg button, .acc-subtabs button, .rl-seg button, .acc-pill, .acc-filt, .dev-mode-opt, .dev-tpl-opt,
       .stchip, .fchip, .hchip, .pg-b, .pf-chip, .chc):not(.on):hover:not(:disabled) {
     background: var(--one-control-hover); color: var(--one-fg);
   }
-  :is(.ph-choice, .acc-seg button, .acc-subtabs button, .acc-pill, .acc-filt, .dev-mode-opt, .dev-tpl-opt,
+  :is(.ph-choice, .acc-seg button, .acc-subtabs button, .rl-seg button, .acc-pill, .acc-filt, .dev-mode-opt, .dev-tpl-opt,
       .dev-fields-wrap > .dev-view-act, .stchip, .fchip, .hchip, .pg-b, .pf-chip, .chc, .full-btn, .ch-act).on {
-    background: var(--one-accent); border-color: var(--one-accent); color: var(--one-accent-on); box-shadow: none;
+    background: var(--one-accent-soft); border-color: transparent; color: var(--x-sel); box-shadow: none;
   }
-  :is(.ph-choice, .acc-seg button, .acc-subtabs button, .acc-pill, .acc-filt, .dev-mode-opt, .dev-tpl-opt,
-      .dev-fields-wrap > .dev-view-act, .stchip, .fchip, .hchip, .pg-b, .pf-chip, .chc, .full-btn, .ch-act).on:hover:not(:disabled) {
-    background: var(--one-primary-hover); border-color: var(--one-primary-hover); color: var(--one-accent-on);
+  :is(.ph-choice, .acc-seg button, .acc-subtabs button, .rl-seg button, .acc-pill, .acc-filt, .dev-mode-opt, .dev-tpl-opt,
+      .dev-fields-wrap > .dev-view-act, .stchip, .fchip, .hchip, .pg-b, .pf-chip, .chc, .full-btn, .ch-act).on:is(:hover, :active):not(:disabled) {
+    background: var(--one-nav-selected-hover); border-color: transparent; color: var(--x-sel);
   }
-  :is(.ph-choice, .acc-seg button, .acc-subtabs button, .acc-pill, .acc-filt, .dev-mode-opt, .dev-tpl-opt,
-      .stchip, .fchip, .hchip, .pg-b, .pf-chip, .chc, .full-btn, .ch-act).on:active:not(:disabled) {
-    background: var(--one-primary-pressed); border-color: var(--one-primary-pressed);
-  }
+  :is(.dev-mode-opt, .dev-tpl-opt, .chc, .full-btn, .ch-act).on :is(.ic-svg, .ici, small, b) { color: inherit; }
+  /* Группа переключателей — одна обводка editor-border с делением внутри (D-078, MuiToggleButtonGroup):
+     рамка у группы, линия между ячейками — граница соседа, скруглены только внешние углы; выбранная
+     ячейка — плашка внутри обводки, а не вместо неё. Дорожка — surface-muted. */
+  :is(.acc-seg, .acc-subtabs, .rl-seg) { border: 1px solid var(--one-editor-border); border-radius: var(--one-radius-control); background: var(--one-surface-muted); overflow: hidden; gap: 0; }
+  :is(.acc-seg, .acc-subtabs, .rl-seg) > button { border: 0; border-radius: 0; background: transparent; }
+  :is(.acc-seg, .acc-subtabs, .rl-seg) > button + button { border-left: 1px solid var(--one-editor-border); }
+  .rl-seg > button { border-right: 0; }
+  .rl-seg > button:disabled, .rl-seg > button.on:disabled { background: transparent; color: var(--one-fg-disabled); }
   /* Кнопки, открывающие меню (статус, домен), — не переключатели: открытое меню или выбранный фильтр —
-     лестница selected у Button (нейтральная заливка + индикатор), не primary. */
+     лестница selected у Button (нейтральная заливка + индикатор), не плашка выбора. */
+  .ph-choice[aria-haspopup] { color: var(--one-fg); }
   .ph-choice[aria-haspopup].on, .ph-choice[aria-haspopup][aria-expanded="true"] {
     background: var(--one-selected-neutral); border-color: var(--one-selected-indicator); color: var(--one-fg);
   }
   .ph-choice[aria-haspopup].on:hover:not(:disabled) { background: var(--one-selected-neutral-hover); border-color: var(--one-selected-indicator); color: var(--one-fg); }
   .ph-choice[aria-haspopup].on:active:not(:disabled) { background: var(--one-selected-neutral-pressed); }
 
-  /* Счётчик внутри включённого сегмента — на заливке accent. */
-  :is(.ph-choice, .stchip).on :is(.ph-cnt, .stchip-cnt) { background: color-mix(in srgb, var(--one-accent-on) 22%, transparent); color: var(--one-accent-on); }
-  .ph-cnt, .stchip-cnt { background: var(--one-surface-subtle); color: var(--one-fg-muted); }
+  /* Счётчик в чипе и сегменте (D-062) — caption без плашки: fg-muted, у выбранного — nav-selected. */
+  :is(.ph-cnt, .stchip-cnt) { min-width: 0; padding: 0; background: transparent; color: var(--one-fg-muted); font: var(--one-type-caption); letter-spacing: var(--one-type-caption-tracking); font-variant-numeric: tabular-nums; }
+  :is(.ph-choice, .stchip).on :is(.ph-cnt, .stchip-cnt) { background: transparent; color: var(--x-sel); }
+  .ph-choice[aria-haspopup].on .ph-cnt { color: var(--one-fg); }
+
   .hchip:not(.on):hover { border-color: var(--one-border); }
 
   /* ---- Рельс разделов = боковая навигация (D-031, D-051) ---------------------------------------- */
@@ -128,8 +149,8 @@ html[data-theme] {
   .asw { color: var(--one-fg); border-radius: var(--one-radius-control); font-weight: 500; }
   .asw .ici { color: var(--one-fg-muted); opacity: 1; }
   .asw:hover:not(.on) { background: var(--one-nav-hover); color: var(--one-fg); }
-  .asw.on { background: var(--one-accent-soft); color: var(--one-nav-selected-text); font-weight: 600; }
-  .asw.on .ici { color: var(--one-nav-selected-text); }
+  .asw.on { background: var(--one-accent-soft); color: var(--x-sel); font-weight: 600; }
+  .asw.on .ici { color: var(--x-sel); }
   .asw.on:hover { background: var(--one-nav-selected-hover); }
   .ubtn { background: var(--one-control-bg); border-color: var(--one-border); }
   .ubtn:hover, .ubtn.on { background: var(--one-control-hover); border-color: var(--one-border); }
@@ -140,23 +161,25 @@ html[data-theme] {
   /* ---- Вкладки (MuiTab, D-031): выбранная — nav-selected, индикатор 2px ------------------------- */
   .tab { color: var(--one-fg); font-weight: 500; }
   .tab:hover:not(.on) { color: var(--one-fg); }
-  .tab.on { color: var(--one-nav-selected-text); border-bottom-color: var(--one-nav-selected-text); }
+  .tab.on { color: var(--x-sel); border-bottom-color: var(--x-sel); }
 
   /* ---- Дерево (D-049, D-050, D-051): выбранная строка — accent-soft, подпись и иконки nav-selected;
          без разделителя, подложка скруглена; иконка в покое — fg-muted ---------------------------- */
   .n { color: var(--one-fg); border-left-color: transparent; border-radius: var(--one-radius-control); }
   .n .ici { color: var(--one-fg-muted); }
   .n:hover { background: var(--one-nav-hover); }
-  .n.on, .n.mark, .n.on.mark { background: var(--one-accent-soft); border-left-color: transparent; color: var(--one-nav-selected-text); }
-  .n:is(.on, .mark) :is(.ici, .nm, .tw) { color: var(--one-nav-selected-text); }
+  .n.on, .n.mark, .n.on.mark { background: var(--one-accent-soft); border-left-color: transparent; color: var(--x-sel); }
+  .n:is(.on, .mark) :is(.ici, .nm, .tw) { color: var(--x-sel); }
   .n:is(.on, .mark):hover { background: var(--one-nav-selected-hover); }
   .n.off .nm, .n.off .nm-inp { color: var(--one-fg-subtle); }
   .tree { scrollbar-color: var(--one-border) transparent; }
 
-  /* ---- Пункты меню = MenuItem (§2.9a): выбранный — accent-soft + полоса 3px, подпись fg ----------- */
+  /* ---- Пункты меню = MenuItem (§2.9a): выбранный — одна плашка accent-soft без полосы-индикатора
+         (D-079), подпись и значок nav-selected — как у строки дерева (D-081) ------------------------- */
   :is(.filt-pop, .tctx, .acc-menu, .nav-menu, .status-pop) .mi { color: var(--one-fg); }
   :is(.filt-pop, .acc-menu, .nav-menu, .status-pop) .mi:hover:not(:disabled), .tctx button:hover { background: var(--one-control-hover); }
-  :is(.filt-pop, .acc-menu, .nav-menu, .status-pop) .mi:is(.on, .cur) { background: var(--one-accent-soft); box-shadow: inset 3px 0 0 0 var(--one-selected-indicator); color: var(--one-fg); }
+  :is(.filt-pop, .acc-menu, .nav-menu, .status-pop) .mi:is(.on, .cur) { background: var(--one-accent-soft); box-shadow: none; color: var(--x-sel); }
+  :is(.filt-pop, .acc-menu, .nav-menu, .status-pop) .mi:is(.on, .cur) :is(.ic-svg, .ici, small, .sub) { color: var(--x-sel); }
   :is(.filt-pop, .acc-menu, .nav-menu, .status-pop) .mi:is(.on, .cur):hover { background: var(--one-accent-soft-hover); }
   .acc-menu .mi.danger { color: var(--one-danger); }
   .filt-pop .mi input { transform: none; }
@@ -195,13 +218,17 @@ html[data-theme] {
   label { color: var(--one-fg-muted); font: var(--one-type-label); letter-spacing: var(--one-type-label-tracking); }
   .fld-err { color: var(--one-danger); }
 
-  /* ---- Переключатель .sw = Switch (§2.13) ----------------------------------------------------- */
-  .sw { width: 38px; height: 20px; box-sizing: border-box; background: var(--one-switch-off-track); border: 1px solid var(--one-switch-off-border); }
-  .sw:after { width: 16px; height: 16px; left: 1px; top: 1px; background: var(--one-switch-off-thumb); }
-  .sw:hover { background: var(--one-switch-off-track-hover); }
-  .sw.on { background: var(--one-accent); border-color: var(--one-accent); }
-  .sw.on:hover { background: var(--one-primary-hover); border-color: var(--one-primary-hover); }
-  .sw.on:after { left: 19px; background: var(--one-accent-on); }
+  /* ---- Переключатель .sw = Switch (§2.13, §2.19b, D-080) --------------------------------------------
+         Выключенный — дорожка surface-muted, бегунок fg-muted (не белый), рамка editor-border; включённый —
+         плашка accent-soft с бегунком в ярком синем, рамка та же и не красится. Hover — control-hover /
+         nav-selected-hover. От запрещённого выключенный отличается бегунком: у :disabled он fg-disabled. */
+  .sw { width: 38px; height: 20px; box-sizing: border-box; background: var(--one-surface-muted); border: 1px solid var(--one-editor-border); transition: background-color 120ms; }
+  .sw:after { width: 16px; height: 16px; left: 1px; top: 1px; background: var(--one-fg-muted); transition: left 120ms, background-color 120ms; }
+  .sw:hover { background: var(--one-control-hover); }
+  .sw:active { background: var(--one-control-pressed); }
+  .sw.on { background: var(--one-accent-soft); border-color: var(--one-editor-border); }
+  .sw.on:is(:hover, :active) { background: var(--one-nav-selected-hover); border-color: var(--one-editor-border); }
+  .sw.on:after { left: 19px; background: var(--one-link-hover); }
 
   /* ---- Таблицы (D-052): заголовок — кегль ячейки, +100 веса, приглушённый ---------------------- */
   th { color: var(--one-fg-muted); font-weight: 500; }
@@ -209,10 +236,10 @@ html[data-theme] {
   table.gtbl-cams thead th { background: var(--one-surface-muted); }
 
   /* ---- Ссылки (§2.14): inline — подчёркнута всегда; действия и путь — без подчёркивания --------- */
-  .cr .cr-link { color: var(--one-link); font-weight: 500; }
-  .cr .cr-link:hover { color: var(--one-link-hover); text-decoration: underline; text-underline-offset: 2px; }
-  .lk { color: var(--one-link); text-decoration: underline; text-decoration-color: var(--one-link-underline); text-underline-offset: 2px; text-decoration-thickness: 1px; }
-  .lk:hover { color: var(--one-link-hover); text-decoration-color: currentColor; }
+  .cr .cr-link { color: var(--x-link); font-weight: 500; }
+  .cr .cr-link:hover { color: var(--x-link-hover); text-decoration: underline; text-underline-offset: 2px; }
+  .lk { color: var(--x-link); text-decoration: underline; text-decoration-color: var(--x-link-ul); text-underline-offset: 2px; text-decoration-thickness: 1px; }
+  .lk:hover { color: var(--x-link-hover); text-decoration-color: currentColor; }
 
   /* ---- Бейджи статусов — тройки MessageBar ------------------------------------------------------ */
   .bd { background: var(--one-success-bg); color: var(--one-success-text); }
@@ -221,13 +248,12 @@ html[data-theme] {
   /* ==== Вторая проверка: что не было применено (замерено наведением и по вычисленным стилям) ==== */
 
   /* §2.8: невыбранный сегмент = subtle — подпись fg в покое, на hover меняется только фон. */
-  .ph-choice:not(.on) { color: var(--one-fg); }
   .ph-choice:not(.on):hover:not(:disabled) { border-color: transparent; color: var(--one-fg); }
   /* Чипы статусов и пейджер — outline: рамка border во всех состояниях, подпись не меняется. */
-  :is(.stchip, .pg-b):not(.on) { background: transparent; border-color: var(--one-border); color: var(--one-fg); }
+  :is(.stchip, .pg-b):not(.on) { background: transparent; border-color: var(--one-border); color: var(--one-fg-muted); }
   :is(.stchip, .pg-b):not(.on):hover:not(:disabled) { background: var(--one-control-hover); border-color: var(--one-border); color: var(--one-fg); }
   :is(.stchip, .pg-b):not(.on):active:not(:disabled) { background: var(--one-control-pressed); }
-  .stchip:not(.on) .stchip-cnt { background: var(--one-surface-subtle); color: var(--one-fg-muted); }
+  .stchip:not(.on) .stchip-cnt { background: transparent; color: var(--one-fg-muted); }
   /* KPI-плитки (кнопки) — hover фоном, рамка не синеет. */
   .mc:hover { border-color: var(--x-region); background: var(--one-control-hover); }
   .mc:active { background: var(--one-control-pressed); }
@@ -252,7 +278,7 @@ html[data-theme] {
   :is(.tctx button, .ch-act, .dev-tpl-btn, .dev-pass-toggle, .acc-menu .mi, .acc-filt):disabled, .chc.disabled { opacity: 1; color: var(--one-fg-disabled); }
   .pg-b:disabled, .stchip:disabled, .stchip.dis { opacity: 1; color: var(--one-fg-disabled); background: transparent; border-color: var(--one-border); }
   .dev-inline-input:disabled, .dev-inline-select:disabled { opacity: 1; color: var(--one-fg-disabled); background: var(--one-editor-disabled); border-color: var(--one-border); }
-  .sw.dis, .sw.on.dis { opacity: 1; background: var(--one-control-disabled); border-color: var(--one-selection-outline-disabled); }
+  .sw.dis, .sw.on.dis, .sw.dis:hover { opacity: 1; background: var(--one-control-disabled); border-color: var(--one-selection-outline-disabled); }
   .sw.dis:after { background: var(--one-fg-disabled); }
 
   /* Чекбокс дерева .n-chk — самодельный, поэтому лестница §2.13 явно: рамка selection-outline,
@@ -285,12 +311,29 @@ html[data-theme] {
   /* Моноширинный — шрифт словаря. */
   :is(.ip-bulk-ta, .acc-imp-ta) { font-family: var(--one-font-mono); }
 
-  /* Статусы — тройки MessageBar без своей рамки (§1): плашки и статусные чипы. */
-  .nt { background: var(--one-info-bg); color: var(--one-info-text); border-color: transparent; }
-  .nt.err, .archive-warning { background: var(--one-danger-bg); color: var(--one-danger-text); border-color: transparent; }
-  .nt.ok { background: var(--one-success-bg); color: var(--one-success-text); border-color: transparent; }
-  .bk-warn { background: var(--one-warning-bg); color: var(--one-warning-text); border-color: transparent; }
-  .dev-profile-note { background: var(--one-info-bg); color: var(--one-info-text); border-color: transparent; }
+  /* Сообщения = MessageBar (§2.15, D-055, D-071): подпись не красится уровнем (fg), уровень несёт значок
+     в своём тоне, подложка — подмес 22 % цвета уровня в поверхность, рамки нет, радиус control, роль
+     message 12/16. Статусные чипы ниже — бейджи, у них свои тройки. */
+  :is(.nt, .archive-warning, .bk-warn, .dev-profile-note, .ts-banner) { border-color: transparent; border-radius: var(--one-radius-control); color: var(--one-fg); font: var(--one-type-message); letter-spacing: var(--one-type-message-tracking); }
+  :is(.nt, .dev-profile-note, .ts-banner) { background: color-mix(in srgb, var(--one-info) 22%, var(--one-surface)); }
+  :is(.nt, .dev-profile-note, .ts-banner) .ic-svg { color: var(--one-info-icon); }
+  :is(.nt.err, .archive-warning) { background: color-mix(in srgb, var(--one-danger) 22%, var(--one-surface)); color: var(--one-fg); }
+  :is(.nt.err, .archive-warning) .ic-svg { color: var(--one-danger); }
+  .nt.ok { background: color-mix(in srgb, var(--one-success) 22%, var(--one-surface)); color: var(--one-fg); }
+  .nt.ok .ic-svg { color: var(--one-success-icon); }
+  .bk-warn { background: color-mix(in srgb, var(--one-warning) 22%, var(--one-surface)); color: var(--one-fg); }
+  .bk-warn .ic-svg { color: var(--one-warning-icon); }
+  /* Значок уровня у сообщения, в разметке которого его нет (уровень несёт не текст, §2.15). */
+  :is(.nt, .bk-warn, .archive-warning, .dev-profile-note):not(:has(> .ic-svg, > svg))::before { content: ""; display: inline-block; width: 16px; height: 16px; margin-right: 8px; vertical-align: -3px; background: var(--one-info-icon); -webkit-mask: var(--x-msg-ic) center / contain no-repeat; mask: var(--x-msg-ic) center / contain no-repeat; }
+  :is(.nt, .dev-profile-note) { --x-msg-ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 16v-4'/%3E%3Cpath d='M12 8h.01'/%3E%3C/svg%3E"); }
+  :is(.nt.err, .archive-warning) { --x-msg-ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3'/%3E%3Cpath d='M12 9v4'/%3E%3Cpath d='M12 17h.01'/%3E%3C/svg%3E"); }
+  :is(.nt.err, .archive-warning)::before { background: var(--one-danger); }
+  .nt.ok { --x-msg-ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='m16 9-5.5 5.5L8 12'/%3E%3C/svg%3E"); }
+  .nt.ok::before { background: var(--one-success-icon); }
+  .bk-warn { --x-msg-ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3'/%3E%3Cpath d='M12 9v4'/%3E%3Cpath d='M12 17h.01'/%3E%3C/svg%3E"); }
+  .bk-warn::before { background: var(--one-warning-icon); }
+  /* Действие в сообщении — ссылка (§2.15). */
+  :is(.nt, .bk-warn, .archive-warning) .lk { color: var(--x-link); }
   :is(.lan-bind-here, .acc-chip.imp-new) { background: var(--one-success-bg); color: var(--one-success-text); border-color: transparent; }
   :is(.lan-bind-free, .acc-chip.warn, .cp-det-tag.bi) { background: var(--one-warning-bg); color: var(--one-warning-text); border-color: transparent; }
   :is(.acc-chip.gone, .acc-chip.exp, .acc-chip.imp-err) { background: var(--one-danger-bg); color: var(--one-danger-text); border-color: transparent; }
@@ -312,7 +355,6 @@ html[data-theme] {
   .ftag button:hover { color: var(--one-fg); }
   .cp-step { background: var(--one-surface-subtle); color: var(--one-fg); }
   :is(.dev-bulk-badge, .dev-bulk-side b, .ca-main) { color: var(--one-fg); }
-  .ts-banner { background: var(--one-info-bg); color: var(--one-info-text); }
   .lan-bind-none { background: var(--one-info-bg); color: var(--one-info-text); border-color: transparent; }
   /* Подсветка найденного: везде как в дереве прототипа, а не жёлтый браузера. */
   mark { background: var(--one-success-bg); color: var(--one-success-text); border-radius: 2px; }
@@ -320,12 +362,12 @@ html[data-theme] {
   :is(.tctx-plus, .tctx-search, .bk-hd-ic svg) { color: var(--one-fg-muted); }
   .status-tick { color: var(--one-fg); }
   /* Строки-действия дерева и «+ добавить» — ссылки-действия: цвет ссылки, не accent. */
-  :is(.n-add, .lk-add, .n-connect .nm, .n-connect .ici) { color: var(--one-link); }
+  :is(.n-add, .lk-add, .n-connect .nm, .n-connect .ici) { color: var(--x-link); }
   /* Заголовок шторки = заголовок диалога: heading-md (D-021). */
   .dh > b:first-child { font: var(--one-type-heading-md); letter-spacing: var(--one-type-heading-md-tracking); }
   /* Иконки типов — один тон везде, не только в дереве (D-051; цвета типов совпадали со статусами, D-039). */
   .ici:not(.ici-search) { color: var(--one-fg-muted); }
-  :is(.asw.on, .n.on, .n.mark) .ici { color: var(--one-nav-selected-text); }
+  :is(.asw.on, .n.on, .n.mark) .ici { color: var(--x-sel); }
 
   /* Ссылки (§2.14): .lk — inline (в тексте и ячейках, подчёркнута всегда); .lk-act — отдельно стоящее
      действие = .link-action: medium, без подчёркивания в покое, на hover — link-hover и подчёркивание. */
@@ -333,7 +375,7 @@ html[data-theme] {
   td .lk.lk-act { white-space: normal; }
   /* Заголовок экрана не переносится по словам: при нехватке места переносится ряд действий. */
   .hd-act > h1 { flex: 0 1 auto !important; white-space: nowrap; min-width: 0; }
-  :is(.lk.lk-act, .lk-add, .filt-more):hover { color: var(--one-link-hover); text-decoration: underline; text-decoration-color: currentColor; text-underline-offset: 2px; }
+  :is(.lk.lk-act, .lk-add, .filt-more):hover { color: var(--x-link-hover); text-decoration: underline; text-decoration-color: currentColor; text-underline-offset: 2px; }
 
   /* Иконка в покое — один тон (D-051), и у лупы в поле поиска тоже. */
   .ici-search { color: var(--one-fg-muted); }
@@ -360,7 +402,10 @@ html[data-theme] {
 
   /* Иконки Lucide: обводка, а не заливка; размер задаёт место (дерево 16, кнопка 1rem, рельс 20). */
   .ic-svg { opacity: 1; }
-  .n .ici .ic-svg, .tctx-ic .ic-svg { width: 16px; height: 16px; }
+  .tctx-ic .ic-svg { width: 16px; height: 16px; }
+  /* Значок строки дерева — на ступень выше строки (D-069): 18 при строке 32. */
+  .n > .ici { width: var(--n-ic); }
+  .n .ici .ic-svg { width: var(--n-ic); height: var(--n-ic); }
   .btn .ic-svg, .ch-act .ic-svg, .pg-b .ic-svg { width: 1rem; height: 1rem; flex: none; }
   .btn.s .ic-svg { width: 14px; height: 14px; }
   .btn:has(> .ic-svg) { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
@@ -370,17 +415,17 @@ html[data-theme] {
   .uav .ic-svg { width: 16px; height: 16px; }
   .fav-star .ic-svg, .n-fav .ic-svg { width: 14px; height: 14px; }
   .gojump-clear .ic-svg { width: 14px; height: 14px; }
-  .status-tick { width: 16px; color: var(--one-fg); }
+  .status-tick { width: 16px; color: inherit; }
   .status-tick .ic-svg { width: 16px; height: 16px; }
   .nt .ic-svg, .cp-foot-note .ic-svg, .bk-ok .ic-svg, .bk-bad .ic-svg { display: inline-block; width: 14px; height: 14px; vertical-align: -2px; }
   .gtbl-th-txt .ic-svg { display: inline-block; width: 12px; height: 12px; vertical-align: -1px; margin-left: 4px; }
 
-  /* Шеврон дерева — ChevronIcon «strong» DS (CR-017): слот 16 (ступень dense), fg-muted, свёрнутый
-     повёрнут на −90°; у выбранной строки — nav-selected (D-049). */
+  /* Шеврон дерева — обычный глиф 45 % (D-069; «сильный» 60 % из CR-017 кит больше не берёт): слот 16,
+     fg-muted, свёрнутый повёрнут на −90°; у выбранной строки — nav-selected (D-049). */
   .n .tw, .gtbl .nm-cell .tw { width: 16px; height: 16px; }
   .tw-chev { display: block; width: 16px; height: 16px; color: var(--one-fg-muted); transition: transform 150ms cubic-bezier(.2, 0, 0, 1); }
   .tw-chev.shut { transform: rotate(-90deg); }
-  .n:is(.on, .mark) .tw-chev { color: var(--one-nav-selected-text); }
+  .n:is(.on, .mark) .tw-chev { color: var(--x-sel); }
   /* Шеврон кнопок с меню и выпадающих — 45 % (ComboBox/Menu), вниз; «вверх» — для меню, что открывается над кнопкой. */
   .btn-chev { display: inline-block; flex: none; width: 16px; height: 16px; vertical-align: middle; margin-left: 2px; }
   .ph-chevron, .dev-tpl-chev { display: inline-flex; font-size: 0; opacity: 1; color: var(--one-fg-muted); }
@@ -394,16 +439,18 @@ html[data-theme] {
 
   /* Button: regular 32 (padding 12, gap 6, 500 14/20); .s — compact 28 (padding 10, 500 12/16).
      :where — чтобы плотные места прототипа (.ctx .btn { height: 24px }) сохраняли свою ступень. */
+  /* Межстрочный — из роли, а не 1 (D-076); подпись поднята в оптическую середину коробки полем снизу
+     1.5px (D-080) — у кнопки-значка поправки нет, глиф центрирован сам. */
   :where(.btn) { display: inline-flex; align-items: center; justify-content: center; gap: 6px; box-sizing: border-box;
-    height: var(--ctrl-h); padding: 0 12px; font: var(--one-type-body-md-medium); letter-spacing: 0; line-height: 1; }
-  :where(.btn.s) { height: var(--ctl-compact); padding: 0 10px; font-size: var(--one-type-body-sm-size); }
+    height: var(--ctrl-h); padding: 0 12px 1.5px; font: var(--one-type-body-md-medium); letter-spacing: 0; }
+  :where(.btn.s) { height: var(--ctl-compact); padding: 0 10px 1.5px; font: var(--one-type-label); letter-spacing: var(--one-type-label-tracking); }
   :where(.btn.w) { width: 100%; }
   :where(.btn.btn-icon) { padding: 0; width: var(--ctrl-h); }
   :where(.btn.s.btn-icon) { width: var(--ctl-compact); }
   label.btn { display: inline-flex; }
   /* Действия в шапке карточки — ступень dense 24 (padding 8, зазор 4), чтобы ряд действий помещался
      рядом с заголовком, как и в исходном макете. */
-  .hd-act :where(.btn.s) { height: var(--ctl-dense); padding: 0 8px; gap: 4px; }
+  .hd-act :where(.btn.s) { height: var(--ctl-dense); padding: 0 8px 1.5px; gap: 4px; }
   .hd-act :where(.btn.s.btn-icon), .hd-act :where(.fav-btn, .full-btn) { width: var(--ctl-dense); padding: 0; }
   .hd-act { gap: 6px; }
 
@@ -424,10 +471,12 @@ html[data-theme] {
   /* Дерево — Tree dense (CR-013, D-050): строка 32, зазор 8, начало 8 + 8 × глубина, конец 8, без
      разделителя и без левой полосы; подпись body-sm, корень label-strong; бейдж — padding 4, radius
      control, selected-neutral, label, цифры моноширинные. */
-  .n { height: var(--row-h); gap: 8px; padding: 0 8px 0 calc(8px + var(--l, 0) * var(--ind)); border-left: 0; font: var(--one-type-body-sm); letter-spacing: var(--one-type-body-sm-tracking); }
+  .n { --ind: calc(var(--n-ic) + 8px); height: var(--row-h); gap: 8px; padding: 0 8px 0 calc(8px + var(--l, 0) * var(--ind)); border-left: 0; font: var(--one-type-body-sm); letter-spacing: var(--one-type-body-sm-tracking); }
   .n[style^="--l:0"] > .nm { font: var(--one-type-label-strong); }
   .n .tag { padding: 0 4px; border-radius: var(--one-radius-control); background: var(--one-selected-neutral); color: var(--one-fg-muted); font: var(--one-type-label); font-variant-numeric: tabular-nums; max-width: 120px; }
   .n .cnt { font: var(--one-type-label); color: var(--one-fg-muted); font-variant-numeric: tabular-nums; }
+  /* Счётчик в строке (D-062): caption fg-muted без плашки, у выбранной строки — вслед за подписью. */
+  .n:is(.on, .mark) :is(.n-cnt, .cnt) { color: var(--x-sel); }
 
   /* Пункты меню — 32 / 16 / 12 и подпись body-md (§2.9a); строки результатов перехода — 32. */
   :is(.tctx button, .acc-menu .mi, .nav-menu .mi, .status-pop .mi, .filt-pop .mi) { font: var(--one-type-body-md); }
@@ -465,6 +514,9 @@ html[data-theme] {
      heading-sm без капса (D-021). */
   .n.rl-grp { font: var(--one-type-overline); letter-spacing: var(--one-type-overline-tracking); text-transform: uppercase; color: var(--one-fg-muted); }
   .n.rl-grp .nm { font: inherit; }
+  /* Класс .hd у заголовка группы в окне выбора совпал с шапкой экрана (.hd) и брал её фон. */
+  .rl-ti.hd { background: transparent; }
+  .rl-ti.hd:hover { background: var(--one-control-hover); }
   :is(.rl-pk-g, .rl-ti.hd) { font: var(--one-type-overline); letter-spacing: var(--one-type-overline-tracking); text-transform: uppercase; color: var(--one-fg-muted); }
   :is(.rl-th, .rl-brh) { font: var(--one-type-heading-sm); letter-spacing: var(--one-type-heading-sm-tracking); text-transform: none; color: var(--one-fg); }
   /* Состояние правила в дереве — значок; ошибка — статусный цвет и у выбранной строки. */
@@ -476,14 +528,117 @@ html[data-theme] {
   .sch-cd .n:hover { background: none; }
   /* Шеврон в окне выбора областей — тот же, что в дереве. */
   .rl-tw .tw-chev { width: 16px; height: 16px; }
-  /* Иконка в ссылке «открыть» рядом с полем. */
-  .rl-go .ic-svg { width: 14px; height: 14px; }
   .lk .ic-svg { vertical-align: -2px; }
-  /* Поле «Где / Что» — кнопка с длинной подписью: блок, чтобы обрезка шла с конца многоточием. */
-  .btn.rl-pick { display: block; line-height: calc(var(--ctl-compact) - 2px); }
-  /* Битая ссылка в поле «Где / Что» — красная и поверх лестницы .btn. */
+
+  /* ==== Четвёртый проход: кит @ ac61f2b (D-054…D-081) и сверка основного макета ==================== */
+
+  /* Подсказка .tip (D-054): popup + border, радиус control, shadow-one, роль caption, поля 4/8, до 260,
+     слой 60 — выше диалога. Поведение — в макете рядом с lu(). */
+  .tip { position: fixed; z-index: 60; max-width: 260px; padding: 4px 8px; border: 1px solid var(--one-border); border-radius: var(--one-radius-control); background: var(--one-popup); color: var(--one-fg); font: var(--one-type-caption); letter-spacing: var(--one-type-caption-tracking); box-shadow: var(--one-shadow); pointer-events: none; opacity: 0; transition: opacity 150ms cubic-bezier(.2, 0, 0, 1); white-space: pre-line; }
+  .tip[data-open] { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) { .tip { transition: none; } }
+
+  /* Чип отбора (§2.18, D-061, D-077): ступень compact 28, пилюля, рамка border, подпись 400 12/16 fg-muted;
+     выбранный — плашка (D-078, выше). */
+  :is(.stchip, .pf-chip) { min-height: var(--ctl-compact); border-radius: var(--one-radius-pill); font: var(--one-type-body-sm); letter-spacing: var(--one-type-body-sm-tracking); }
+  .stchip .stchip-lab { font: inherit; padding: 0 12px; }
+  .stchip.has-ic .stchip-lab { padding-left: 4px; }
+  .stchip:has(> .stchip-cnt) .stchip-lab { padding-right: 0; }
+  .stchip > .stchip-cnt { margin-left: 4px; margin-right: 12px; }
+  .stchip:has(> .stchip-eye) > .stchip-cnt { margin-right: 4px; }
+  .stchip-ic { padding-left: 12px; }
+  .stchip-ic .ic-svg, .stchip-ic .ici .ic-svg { width: 16px; height: 16px; }
+  .pf-chip { padding: 0 12px; }
+  .pf-chip b { font-weight: 400; }
+  :is(.stchip, .pg-b):disabled, .stchip.dis { opacity: 1; }
+  .stchip-eye { opacity: 1; color: var(--one-fg-muted); }
+  .stchip-eye:hover, .stchip-eye.on { color: var(--one-fg); background: var(--one-control-hover); }
+
+  /* Всплывающие, которых не было в списке поверхностей: тот же popup, рамка border, shadow-one. */
+  :is(.gopop, .dev-filt-pop, .dev-mode-tip, .dev-tpl-pop, .rl-vmenu) { background: var(--one-popup); border: 1px solid var(--one-border); border-radius: var(--one-radius-container); box-shadow: var(--one-shadow); }
+  .acc-bulk { box-shadow: var(--one-shadow); }
+  .gores { border-left: 0; border-radius: var(--one-radius-control); }
+  .gores:is(:hover, .on) { background: var(--one-control-hover); }
+
+  /* Кегли только с лестницы DS (11 / 12 / 14 / 16 / 20 / 28): 13 у вторичного текста — body-sm 12/16,
+     у основного текста диалога — body-md 14/20; 9–10 — caption 11/16. */
+  .sub { font: var(--one-type-body-sm); letter-spacing: var(--one-type-body-sm-tracking); }
+  .cr { font: var(--one-type-body-sm); letter-spacing: var(--one-type-body-sm-tracking); }
+  .cr .cr-cur { font: var(--one-type-label-strong); }
+  .cr .cr-sep { opacity: 1; color: var(--one-fg-subtle); }
+  .cbody { font: var(--one-type-body-md); }
+  .cbody :is(.rl-h, p > b) { font-size: inherit; }
+  .uname { font: var(--one-type-label-strong); }
+  .uav { font: var(--one-type-label); }
+  :is(.acc-pill-n, .gojump-hint, .fav-sub, .gores .gokind, .gonote, .acc-own-t, .pending-chip, .filt-hint, .filt-status-cnt, .n-err.n-err-t, .sch-tn, .sch-rl, .sch-cd .h, .rl-last, .rl-mute, .sch-lab small) { font: var(--one-type-caption); letter-spacing: var(--one-type-caption-tracking); }
+  :is(.gojump-hint, .fav-sub, .gores .gokind, .acc-own-t) { border-color: var(--one-border); border-radius: var(--one-radius-control); }
+  .gores .gott { font: var(--one-type-body-md); }
+  /* Оснастка (рельс и панель дерева, data-chrome) — один размер 12/16 и caption 11/16 (D-067):
+     счётчик строки — caption с межстрочным роли, подпись пункта рельса — caption. */
+  .n-cnt { font: var(--one-type-caption); letter-spacing: var(--one-type-caption-tracking); }
+  .asw-lb { font: var(--one-type-caption); letter-spacing: var(--one-type-caption-tracking); }
+  .asw.on .asw-lb { font-weight: 600; }
+  .n:not(:hover):not(.on) .n-err-t { opacity: 1; }
+  .n .tag, .tag { font: var(--one-type-label); }
+  .sch-lab, .sch-why, .acc-bulk .cnt, .dev-bulk-side b, .dev-back .lk, label.acc-chk, .acc-issue, .acc-plan, .acc-impact, .dom-del-list, .bk-prog-l { font-size: var(--one-type-body-md-size); }
+  .sq > input, .gojump input { font: var(--one-type-body-md); }
+
+  /* Кнопка «⋮» строки дерева — значок Lucide 16 в коробке 24 (dense), лестница subtle/icon-only. */
+  .n-menu { width: var(--ctl-dense); height: var(--ctl-dense); border-radius: var(--one-radius-control); font-size: 0; }
+  .n-menu:hover { background: var(--one-control-hover); color: var(--one-fg); }
+  .n-menu .ic-svg { width: 16px; height: 16px; }
+  .n-fav { width: var(--ctl-dense); height: var(--ctl-dense); border-radius: var(--one-radius-control); display: inline-flex; align-items: center; justify-content: center; }
+  .n-fav:hover { background: var(--one-control-hover); }
+
+  /* «Изменено в черновике» — точка состояния (D-062), а не глиф «●». */
+  .acc-mod { display: inline-block; width: 8px; height: 8px; border-radius: var(--one-radius-pill); background: currentColor; font-size: 0; vertical-align: middle; }
+
+  /* Знак битой ссылки — значок Lucide вместо «⚠» (iconizeWarn в макете). */
+  .ic-warn-w { display: inline-flex; vertical-align: -2px; margin-right: 4px; color: var(--one-warning-icon); }
+  .ic-warn-w .ic-svg { width: 14px; height: 14px; }
+  :is(.rl-pick.bad, .rl-chip2.bad, .rl-bad) .ic-warn-w { color: inherit; }
+
+  .dev-net-ip :is(.dev-ro, .dev-web) { font-size: var(--one-type-body-md-size); }
+  .cp-h { font: var(--one-type-heading-sm); letter-spacing: var(--one-type-heading-sm-tracking); }
+  .bk-hint-inline { font: var(--one-type-caption); }
+  /* Пустой для среза родитель отступает тоном, а не прозрачностью; под курсором и выбранный — как обычно. */
+  .n-slice-empty > * { opacity: 1; }
+  .n-slice-empty:not(:hover):not(.on):not(:focus-within) :is(.nm, .ici, .tw-chev, .n-cnt, .n-meta) { color: var(--one-fg-disabled); }
+
+  /* ---- Автоматизация: сверка ---------------------------------------------------------------------- */
+  /* Рамки 1px (§2.5): ветка трассы, порядок действий и раскрытая строка запуска — линия 1px. */
+  :is(.rl-br, .rl-ord) { border-left-width: 1px; border-left-color: var(--one-border); }
+  .rl-tr { border-left-width: 1px; }
+  /* Карточка выбора и выбранный день — одна плашка accent-soft (D-078/D-079); рамка не снимается, а
+     становится прозрачной. Выбранный пункт списка выбора — подпись nav-selected. */
+  :is(.rl-opt, .chc).on { border-color: transparent; }
+  :is(.rl-pk, .rl-ti).on { color: var(--x-sel); }
+  :is(.rl-pk, .rl-ti).on small { color: var(--x-sel); }
+  /* День вне месяца и его образец в легенде — приглушённый тон, а не прозрачность. */
+  .sch-cd.out { opacity: 1; color: var(--one-fg-disabled); }
+  .sch-cd.out .h { color: var(--one-fg-disabled); }
+  .sch-lg i.out { opacity: 1; border-color: var(--one-border); background: var(--one-control-disabled); }
+  /* Вставка переменной в поле шаблона — кнопка-значок dense 24 внутри поля. */
+  .rl-vb { height: var(--ctl-dense); min-width: var(--ctl-dense); display: inline-flex; align-items: center; justify-content: center; padding: 0 4px; border-radius: var(--one-radius-control); font: var(--one-type-label); color: var(--one-fg-muted); }
+  /* Строка правила — одна полоса: кнопки в ней равны соседним полям, regular 32 (D-077: контрол в
+     полосе ступень не понижает). «Где / Что» показывает значение и открывает выбор — это поле с
+     выбором (ComboBox), а не кнопка: заливка и рамка editor, подпись 14/20, без оптической поправки. */
+  .rl-row :where(.btn.s) { height: var(--ctrl-h); }
+  .rl-row :where(.btn.s.btn-icon) { width: var(--ctrl-h); }
+  .rl-row .btn.s .ic-svg { width: 1rem; height: 1rem; }
+  .btn.rl-pick { height: var(--ctrl-h); padding: 0 8px; font: var(--one-type-body-md); line-height: calc(var(--ctrl-h) - 2px); display: block; background: var(--one-editor-bg); border-color: var(--one-editor-border); color: var(--one-fg); text-align: left; }
+  .btn.rl-pick:hover:not(:disabled) { background: var(--one-editor-hover); border-color: var(--one-editor-border-hover); }
+  .btn.rl-pick:active:not(:disabled) { background: var(--one-editor-pressed); }
   .btn.rl-pick.bad, .btn.rl-pick.bad:hover:not(:disabled) { color: var(--one-danger); border-color: var(--one-danger); }
+  /* «Открыть в Оборудовании» у поля — действие-значок: коробка 32, значок 16, hover фоном. */
+  .lk.rl-go { width: var(--ctrl-h); height: var(--ctrl-h); align-items: center; justify-content: center; border-radius: var(--one-radius-control); }
+  .lk.rl-go:hover { background: var(--one-control-hover); }
+  .lk.rl-go .ic-svg { width: 16px; height: 16px; }
 
   /* ---- Полосы прокрутки --------------------------------------------------------------------- */
   * { scrollbar-color: var(--one-border) transparent; }
 }
+
+/* Вторичная строка <small> — body-sm 12/16, а не «smaller» браузера (у подписи 12 это давало 10, вне
+   лестницы). :where — нулевая специфичность: места, где макет сам назначил caption 11, сохраняют его. */
+:where(small) { font-size: var(--one-type-body-sm-size); line-height: var(--one-type-body-sm-line-height); }
