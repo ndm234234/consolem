@@ -1596,17 +1596,6 @@ const DEVICE_MODELS={
   Virtual:["Virtual IP server","TestDevice","generic"],
   Zet:["HR-FD2030C"]
 };
-const DEVICE_DISCOVERY_SEED=[
-  {id:"fd1",name:"Камера — Главный вход",ip:"192.168.1.21",port:80,mac:"00:11:22:33:44:55",vendor:"Hikvision",model:"DS-2CD2143G2",status:"ok",user:"admin",pass:"admin",type:"camera"},
-  {id:"fd9",name:"Камера — Главный вход (другой MAC)",ip:"192.168.1.21",port:80,mac:"AA:11:22:33:44:66",vendor:"Hikvision",model:"DS-2CD2143G2",status:"ok",user:"admin",pass:"admin",type:"camera"},
-  {id:"fd2",name:"Камера — Северный въезд",ip:"172.19.24.130",port:80,mac:"00:0F:0D:25:12:74",vendor:"Zet",model:"HR-FD2030C",status:"manual",user:"",pass:"",type:"camera"},
-  {id:"fd3",name:"Камера — Парковка 2",ip:"172.19.24.131",port:80,mac:"AB:55:6A:01:51:5A",vendor:"Hikvision",model:"DS-2CD2143G2",status:"manual",user:"admin",pass:"",type:"camera"},
-  {id:"fd4",name:"Камера — Склад",ip:"169.254.117.196",port:80,mac:"00:1E:06:92:7B:49",vendor:"IDIS",model:"DC-S3538HRX",status:"ok",user:"",pass:"",type:"camera"},
-  {id:"fd5",name:"Камера — Ресепшен",ip:"10.44.2.23",port:80,mac:"AA:BB:CC:DD:EE:01",vendor:"Hikvision",model:"DS-2CD2143G2",status:"manual",user:"admin",pass:"admin",type:"camera"},
-  {id:"fd6",name:"Камера — Двор",ip:"10.44.2.18",port:8080,mac:"00:40:8C:AA:10:02",vendor:"Axis",model:"P3245-LV",status:"ok",user:"",pass:"",type:"camera"},
-  {id:"fd7",name:"Камера — ONVIF",ip:"10.44.2.19",port:80,mac:"A0:B1:C2:D3:E4:F5",vendor:"ONVIF generic",model:"generic",status:"ok",user:"",pass:"",type:"camera"},
-  {id:"fd8",name:"Неизвестное устройство",ip:"10.44.2.20",port:80,mac:"B1:C2:D3:E4:F5:A6",vendor:"",model:"",status:"bad",user:"",pass:"",type:"camera"}
-];
 const DEVICE_STATUS_LABELS={ok:"Полностью поддерживается",manual:"Требует ручной настройки",bad:"Работа не гарантируется"};
 const DEV_VIEW_MODES=[
   ["compact","Компактный вид","Производитель, Модель, Логин, Пароль"],
@@ -1877,6 +1866,71 @@ function hwApplyDomain(r){
   d.name=r.name;d.license=r.license;d.online=r.online;
   hwVer.set(r.id,r.version);
 }
+// Созданные устройства (ответ сервера): родитель первым, дочерние — за ним
+function hwAddDevices(list,flds){
+  list.forEach(r=>{
+    if(find(r.id))return;
+    hwVer.set(r.id,r.version);
+    const n=devNode(r);
+    if(r.parentId){const p=find(r.parentId)?.n;if(p)(p.devices||(p.devices=[])).push(n)}
+    else if(SVC_TYPES.has(r.type)||r.onServer)servers.find(s=>s.id===r.serverId)?.devices.push(n);
+    else{devicePool.push(n);DEVICE_DOMAIN[r.id]=r.domainId}
+  });
+  (flds||[]).forEach(hwApplyFolder);
+  remakeAcfa();treeMatchCache.clear();searchMatchCache.clear();
+}
+// Удалённое устройство (ответ сервера): из дерева, папок и записи по детекторам
+function hwRemoveDevice(id){
+  const f=find(id);if(!f)return;
+  const gone=new Set();walk(n=>gone.add(n.id),[f.n],null);gone.add(id);
+  const list=f.p?f.p.devices:devicePool.includes(f.n)?devicePool:servers.find(s=>s.devices.includes(f.n))?.devices;
+  if(list){const i=list.indexOf(f.n);if(i>=0)list.splice(i,1)}
+  walkFolders(x=>{x.items=(x.items||[]).filter(y=>!gone.has(y))});
+  walkAll(n=>{if(n.recDets)n.recDets=n.recDets.filter(y=>!gone.has(y))});
+  gone.forEach(x=>{hwVer.delete(x);delete DEVICE_DOMAIN[x]});
+  remakeAcfa();treeMatchCache.clear();searchMatchCache.clear();
+}
+// Объект кэша → новое устройство для POST /devices: поля — по именам контракта,
+// дочерние — в children; id выдаст сервер
+function nodeCreate(n){
+  const out={type:n.type};
+  Object.entries(n).forEach(([k,v])=>{
+    if(["id","type","devices","online","_f","err","ruleOff","licenseExceeded"].includes(k)||v===undefined||v==="")return;
+    const one=keyToApi(n,k,v);if(one)Object.entries(one).forEach(([x,y])=>{if(y!==null&&y!=="")out[x]=y});
+  });
+  Object.entries(n._f||{}).forEach(([l,v])=>{const k=DEV_FLD_API[l];if(k&&v!=="")out[k]=apiVal(k,v)});
+  if(n.enabled!==false)delete out.enabled;
+  const kids=(n.devices||[]).map(nodeCreate);if(kids.length)out.children=kids;
+  return out;
+}
+// Добавить устройства одним запросом: строки — { node, domainId, parentId, folderId, candidateId }
+function devicesCreate(rows){
+  return API.post("/devices",{idempotencyKey:opKey(),items:rows.map(x=>Object.assign({device:nodeCreate(x.node),domainId:x.domainId,parentId:x.parentId||null,folderId:x.folderId||null},x.candidateId?{candidateId:x.candidateId}:{}))})
+    .then(res=>{res.done.forEach(d=>hwAddDevices(d.devices,d.folders));return res});
+}
+// Изменить устройства сразу (POST /devices/update) так, как их меняет mutate():
+// он работает на объектах кэша, разница уходит на сервер, объекты возвращаются
+// к «до» и берут ответ сервера
+function devicesMutate(nodes,mutate){
+  const snaps=nodes.filter(Boolean).map(n=>[n,cardClone(n)]);
+  mutate();
+  const items=[];
+  snaps.forEach(([n,s])=>{
+    const set={};
+    new Set([...Object.keys(n),...Object.keys(s)]).forEach(k=>{
+      if(k==="devices"||k.startsWith("_")||CARD_SKIP.has(k)||JSON.stringify(n[k])===JSON.stringify(s[k]))return;
+      const one=keyToApi(n,k,n[k]);if(one)Object.assign(set,one);
+    });
+    cardRestoreNode(n,s);
+    if(Object.keys(set).length)items.push({deviceId:n.id,version:hwVer.get(n.id),set});
+  });
+  if(!items.length)return Promise.resolve({done:[],failed:[]});
+  return API.post("/devices/update",{idempotencyKey:opKey(),items}).then(res=>{res.done.forEach(hwApplyDevice);treeMatchCache.clear();searchMatchCache.clear();return res});
+}
+// Состав папки — PATCH папки, кэш — по ответу
+function folderSetItems(fid,ids){
+  return API.patch(`/folders/${fid}`,{deviceIds:ids},hwVer.get(fid)).then(r=>{hwApplyFolder(r);treeMatchCache.clear();searchMatchCache.clear();return r});
+}
 function hwApplyArchive(r){
   const a=archById(r.id);if(!a)return;
   hwFresh(a,archNode(r),KEEP_ARCH);
@@ -1911,8 +1965,15 @@ function hwReloadSoon(){clearTimeout(hwReloadT);hwReloadT=setTimeout(apiReload,1
 function apiOnEvent(m){
   if(m.type==="stream.reset"||m.type==="test.reset"){apiReload();return}
   if(m.kind==="operation"){opOnEvent(m);return}
+  if(m.kind==="discovery"){discOnEvent(m);return}
   const h=HW_EVENT[m.kind];
   if(!h)return;
+  if(m.type==="entity.created"&&m.kind==="device"&&!hwVer.has(m.entityId)){
+    // Чужое новое устройство — одной записью, если его родитель уже в кэше
+    API.get(`/devices/${m.entityId}`).then(r=>{if(r.parentId&&!find(r.parentId))return hwReloadSoon();hwAddDevices([r]);renderTree()}).catch(()=>{});
+    return;
+  }
+  if(m.type==="entity.deleted"&&m.kind==="device"&&hwVer.has(m.entityId)){hwRemoveDevice(m.entityId);renderTree();if(sel===m.entityId)paint();return}
   if(m.type==="entity.created"||m.type==="entity.deleted"){if((m.type==="entity.created")!==hwVer.has(m.entityId))hwReloadSoon();return}
   if(m.type!=="entity.changed")return;
   if(hwVer.get(m.entityId)===m.version&&!m.payload?.status)return;
@@ -1939,6 +2000,8 @@ function problemText(e,n){
     DOMAIN_NOT_EMPTY:i18n("Укажите, куда перенести содержимое домена"),
     INVALID_IP:i18n("Неверный адрес"),
     DISK_TAKEN:i18n("Диск уже занят"),
+    IDENTIFIER_TAKEN:i18n("ID уже используется"),
+    PARENT_MISMATCH:i18n("Родительский объект — в другом домене"),
     CONNECTION_FAILED:i18n("Не удалось подключиться"),
     IP_RANGE_TOO_LARGE:i18n("Слишком много адресов за раз"),
     NOT_FOUND:i18n("объект не найден"),
@@ -5254,11 +5317,32 @@ function seedFound(disc){
   // прятать его за лишний клик незачем.
   domains.forEach(d=>open.add(foundId(d.id)));
 }
-// Что «видно» из сети домена при новом поиске — то же, что нашёл последний.
-// Поиск пока идёт в браузере (этап «Мастер добавления» переведёт его на сервер).
-function foundPlan(did){
-  const rows=did&&found[did];if(!rows)return null;
-  return rows.map(r=>DEVICE_DISCOVERY_SEED.findIndex(s=>s.mac===r.mac)).filter(i=>i>=0);
+// Кандидат поиска (API) → строка, как её показывают мастер и вкладка «Сеть»
+function candRow(c){return{id:c.id,name:c.name,ip:c.ip,port:c.port,mac:c.mac,vendor:c.vendor,model:c.model,status:c.support,user:c.login||"",pass:c.password||"",type:c.type}}
+// Поиск в сети домена идёт на сервере (POST /domains/{id}/discovery), находки
+// приходят событиями: их слушают мастер и вкладка «Сеть» своего домена
+function discStart(did){
+  return API.post(`/domains/${did}/discovery`).catch(e=>{
+    // Уже идёт (запустил другой администратор или вкладка) — подхватываем его
+    if(e?.problem?.code==="BUSY")return API.get(`/domains/${did}/discovery`);
+    throw e;
+  });
+}
+function discOnEvent(m){
+  const did=m.entityId,c=m.payload.candidate,fin=m.type==="discovery.finished";
+  if(wizd&&wizd.devState==="searching"&&wizd.searchDomain===did){
+    if(c&&!wizd.devResults.some(r=>r.id===c.id))wizd.devResults.push(wizFoundRow(c));
+    wizd.devSearchProgress=m.payload.progress;
+    if(fin)wizd.devState="done";
+    renderDeviceWizard();
+  }
+  const owner=find(lan.owner)?.n;
+  if(owner&&lan.state==="searching"&&(lanDomainOf(owner)||domains[0]?.id)===did){
+    if(c&&!lan.net.some(r=>r.id===c.id))lan.net.push(candRow(c));
+    lan.progress=m.payload.progress;
+    if(fin)lan.state="done";
+    if(app==="hw"&&sel===lan.owner&&lanTabOpen(owner))lanRepaint();
+  }
 }
 function foundDeviceMatches(r,q){
   return matchesText(q,r.discoveredName,r.name,r.ip,r.vendor,r.model,r.mac);
@@ -6036,7 +6120,6 @@ function camsCardHeadActions(){
 const LAN_COLS=[["name","Название"],["ip","IP-адрес"],["mac","MAC"],["vendor","Производитель"],["model","Модель"],["bind","Привязка"]];
 const LAN_CHIPS=[["all","Все"],["here","Здесь"],["free","Свободные"],["other","В другом месте"],["none","Нет в системе"]];
 const lan={owner:null,q:"",sort:"name",dir:1,chip:"all",sel:new Set(),arch:null,rec:"always",state:"idle",progress:0,net:[]};
-let lanTimer=null;
 function lanIsFolder(n){return!!n&&n.type==="folder"}
 function lanIsArch(n){return!!n&&n.type==="archive"}
 function lanIsDomain(n){return!!n&&n.type==="domain"}
@@ -6073,33 +6156,21 @@ function lanEnsure(n){
   lan.rec="always";
   lanSearch();
 }
-function lanStopSearch(){if(lanTimer){clearInterval(lanTimer);lanTimer=null}}
+// Ушли с вкладки — её поиск больше не слушаем; на сервере он доработает сам
+function lanStopSearch(){if(lan.state==="searching")lan.state="idle"}
 // Поиск по сети — имитация: строки появляются по мере находок, как и было бы
 // с настоящим опросом. Заменить нужно только источник строк.
 function lanSearch(){
   const n=find(lan.owner)?.n;if(!n)return;
-  lanStopSearch();
-  const did=lanDomainOf(n);
-  const plan=foundPlan(did);
-  const seed=plan?plan.map(k=>DEVICE_DISCOVERY_SEED[k]).filter(Boolean):[...DEVICE_DISCOVERY_SEED];
-  let i=0;const owner=lan.owner;
+  const did=lanDomainOf(n)||domains[0]?.id;
   lan.net=[];lan.state="searching";lan.progress=0;
-  const tick=()=>{
-    if(lan.owner!==owner){lanStopSearch();return}
-    if(i<seed.length){
-      lan.net.push({...seed[i]});i++;
-      lan.progress=Math.round(i/seed.length*100);
-    }
-    if(i>=seed.length){lanStopSearch();lan.state="done";lan.progress=100}
-    // Перерисовываем, пока список открыт: закладка называется по-разному у
-    // папки, архива, сервера и домена, и сравнение с одним «lan» оставляло
-    // таблицу пустой до первой посторонней перерисовки. Раздел проверяем тоже:
-    // поиск идёт секунды, и уход в «Автоматизацию» посреди него иначе получал
-    // поверх своей страницы найденное в сети.
-    if(app==="hw"&&sel===owner&&lanTabOpen(find(owner)?.n))lanRepaint();
-  };
-  tick();
-  if(lan.state==="searching")lanTimer=setInterval(tick,140);
+  discStart(did).then(d=>{
+    // Подхваченный поиск уже что-то нашёл — показываем сразу
+    d.candidates.forEach(c=>{if(!lan.net.some(r=>r.id===c.id))lan.net.push(candRow(c))});
+    lan.progress=Math.max(lan.progress,d.progress);
+    if(d.state!=="searching"){lan.state="done";lan.progress=100}
+    if(app==="hw"&&sel===lan.owner&&lanTabOpen(find(lan.owner)?.n))lanRepaint();
+  }).catch(e=>{lan.state="done";toast(problemText(e))});
 }
 // Пока идёт опрос, меняется одна карточка: перерисовывать из-за неё всю панель
 // значит каждые 140 мс сбрасывать прокрутку и курсор в поле.
@@ -6285,17 +6356,19 @@ function lanAction(n,r){
 function lanRowByKey(n,key){return lanRows(n).find(r=>r.key===key)||null}
 function lanMaterialize(n,r,opts={}){
   // Строка из сети становится объектом там же, где её привязывают, и теми же
-  // полями, что заполняют в «Подключении устройств».
-  if(r.kind!=="net")return r.id;
-  const src=lan.net.find(x=>"n:"+x.id===r.key);if(!src)return null;
-  const node=deviceNodeFromData(src,{id:n.id,type:"folder",devices:devicePool},
-    {configMode:"current",disabled:!!opts.disabled});
-  devicePool.push(node);
-  DEVICE_DOMAIN[node.id]=lanDomainOf(n)||domains[0].id;
-  if(src.group)folderAddDevice(src.group,node.id);
-  lan.net=lan.net.filter(x=>x.id!==src.id);
-  remakeAcfa();treeMatchCache.clear();searchMatchCache.clear();
-  return node.id;
+  // полями, что заполняют в «Подключении устройств». Создаёт сервер.
+  if(r.kind!=="net")return Promise.resolve(r.id);
+  const src=lan.net.find(x=>"n:"+x.id===r.key);if(!src)return Promise.resolve(null);
+  const node=deviceNodeFromData(src,{id:n.id,type:"folder",devices:devicePool},{configMode:"current",disabled:!!opts.disabled});
+  if(!lanIsFolder(n)&&!lanIsDomain(n)&&!node.arch)node.arch=lan.arch;
+  if(n.type==="server"&&!node.srvId)node.srvId=n.id;
+  bindArchServer(node);
+  const fid=lanIsFolder(n)?n.id:src.group||null;
+  return devicesCreate([{node,domainId:lanDomainOf(n)||domains[0].id,folderId:fid,candidateId:src.id}]).then(res=>{
+    if(!res.done.length){toast(problemText(res.failed[0]?.code));return null}
+    lan.net=lan.net.filter(x=>x.id!==src.id);
+    return res.done[0].devices[0].id;
+  });
 }
 // Устройства, которых ещё нет в системе, показываем развёрнутыми — той же
 // карточкой, что и «Найденные устройства». Лишний шаг раскрытия тут нечем
@@ -6337,49 +6410,45 @@ function lanAddNew(key,opts={}){
     askAddWithoutCredentials(()=>lanAddNew(key,{allowNoCredentials:true,disabled:true}));
     return;
   }
-  const id=lanBind(key,{disabled:!!opts.disabled});
-  if(id)toast(`«${locName(find(id).n)}» — ${i18n("добавлено")}`);
+  lanBind(key,{disabled:!!opts.disabled}).then(id=>{if(id)toast(`«${locName(find(id).n)}» — ${i18n("добавлено")}`)}).catch(e=>toast(problemText(e)));
 }
 function lanBind(key,opts={}){
-  const n=find(lan.owner)?.n;if(!n)return null;
-  const r=lanRowByKey(n,key);if(!r)return null;
-  const a=lanAction(n,r);if(a.off)return null;
-  const id=lanMaterialize(n,r,opts);if(!id)return null;
-  if(lanIsDomain(n)){/* домен уже проставлен в lanMaterialize */}
-  else if(lanIsFolder(n))folderAddDevice(n.id,id);
-  else{
-    const node=find(id)?.n;if(!node)return null;
-    // У найденного архив и режим заданы в самой строке — не переспрашиваем.
-    if(r.kind==="net"){if(!node.arch)node.arch=lan.arch}
-    // Уже пишет в другое хранилище — это хранилище добавляется к нему.
-    else(node.type==="ipsrv"?ipsrvCameras(node):[node]).forEach(c=>camAddArch(c,lan.arch,lan.rec||"always"));
+  const n=find(lan.owner)?.n;if(!n)return Promise.resolve(null);
+  const r=lanRowByKey(n,key);if(!r)return Promise.resolve(null);
+  const a=lanAction(n,r);if(a.off)return Promise.resolve(null);
+  const done=id=>{lan.sel.delete(key);treeMatchCache.clear();searchMatchCache.clear();paint();return id};
+  // Новое из сети — создаётся сразу привязанным (хранилище, сервер, папка — в запросе)
+  if(r.kind==="net")return lanMaterialize(n,r,opts).then(id=>id&&done(id));
+  if(lanIsDomain(n))return Promise.resolve(done(r.id));
+  if(lanIsFolder(n)){const f=folderById(n.id);return folderSetItems(n.id,[...(f.items||[]),r.id]).then(()=>done(r.id))}
+  const node=find(r.id)?.n;if(!node)return Promise.resolve(null);
+  // Уже пишет в другое хранилище — это хранилище добавляется к нему.
+  const cams=node.type==="ipsrv"?ipsrvCameras(node):[node];
+  return devicesMutate([node,...cams.filter(c=>c!==node)],()=>{
+    cams.forEach(c=>camAddArch(c,lan.arch,lan.rec||"always"));
     if(n.type==="server"&&!node.srvId)setDevServer(node,n.id);
     bindArchServer(node);
-  }
-  lan.sel.delete(key);
-  treeMatchCache.clear();searchMatchCache.clear();paint();
-  return id;
+  }).then(res=>{if(res.failed.length)toast(problemText(res.failed[0].code,node));return done(r.id)});
 }
 function lanUnbind(key){
-  const n=find(lan.owner)?.n;if(!n)return;
-  const r=lanRowByKey(n,key);if(!r||r.kind!=="sys")return;
-  if(lanIsFolder(n)){const f=folderById(n.id);if(f)f.items=f.items.filter(x=>x!==r.id)}
-  else{
-    const node=find(r.id)?.n,t=new Set(lanTargets(n).map(a=>a.id));
-    const cams=node?.type==="ipsrv"?ipsrvCameras(node):[node];
-    cams.forEach(c=>camArchs(c).filter(x=>t.has(x.arch)).forEach(x=>camDropArch(c,x.arch)));
-  }
-  lan.sel.delete(key);
-  treeMatchCache.clear();searchMatchCache.clear();paint();
+  const n=find(lan.owner)?.n;if(!n)return Promise.resolve();
+  const r=lanRowByKey(n,key);if(!r||r.kind!=="sys")return Promise.resolve();
+  const done=()=>{lan.sel.delete(key);treeMatchCache.clear();searchMatchCache.clear();paint()};
+  if(lanIsFolder(n)){const f=folderById(n.id);return f?folderSetItems(n.id,f.items.filter(x=>x!==r.id)).then(done):Promise.resolve()}
+  const node=find(r.id)?.n,tg=new Set(lanTargets(n).map(a=>a.id));
+  const cams=node?.type==="ipsrv"?ipsrvCameras(node):[node];
+  return devicesMutate(cams,()=>cams.forEach(c=>camArchs(c).filter(x=>tg.has(x.arch)).forEach(x=>camDropArch(c,x.arch)))).then(done);
 }
 function lanPickable(n,r){const a=lanAction(n,r);return!a.off&&(a.pri||a.unbind)}
 function lanHasUnbind(n){return!lanIsDomain(n)}
 // Что было у камер до правки — для «Отменить» в тосте.
 function lanSnap(ids){
+  // «Отменить» привязки — обратный запрос: камеры получают прежние хранилища и сервер
   const cams=[];
   ids.forEach(id=>{const d=find(id)?.n;if(!d)return;(d.type==="ipsrv"?[d,...ipsrvCameras(d)]:[d]).forEach(c=>cams.push(c))});
   const was=cams.map(c=>({c,arch:c.arch,rec:c.rec,stream:c.stream,srvId:c.srvId,archx:(c.archx||[]).map(x=>({...x}))}));
-  return()=>{was.forEach(w=>{Object.assign(w.c,{arch:w.arch,rec:w.rec,stream:w.stream,srvId:w.srvId,archx:w.archx})});treeMatchCache.clear();searchMatchCache.clear();paint()};
+  return()=>devicesMutate(was.map(w=>find(w.c.id)?.n).filter(Boolean),()=>{was.forEach(w=>{const c=find(w.c.id)?.n;if(c)Object.assign(c,{arch:w.arch,rec:w.rec,stream:w.stream,srvId:w.srvId,archx:w.archx})})})
+    .then(()=>paint()).catch(e=>toast(problemText(e)));
 }
 function lanBulk(){lanBindKeys(lanCheckedKeys())}
 // Привязка ничего не теряет — сразу, с «Отменить» в тосте.
@@ -6390,12 +6459,14 @@ function lanBindKeys(keys){
   const undo=lanSnap(rows.filter(r=>r.kind==="sys").map(r=>r.id));
   const fresh=rows.filter(r=>r.kind==="net");
   if(fresh.length&&rows.length===1){lanAddNew(rows[0].key);return}
-  rows.forEach(r=>lanBind(r.key));
   keys.forEach(k=>lan.sel.delete(k));
   const what=lanIsFolder(n)?i18n("Добавлено в папку"):`${i18n("Привязано к")} «${locName(lanIsArch(n)?n:archById(lan.arch)||n)}»`;
-  if(fresh.length)toast(`${what}: ${rows.length}`);
-  else toastAction("lanbind",`${what}: ${rows.length}`,i18n("Отменить"),()=>{undo();toast(i18n("Привязка отменена"))},8000);
-  paint();
+  // По одной: у папки каждая привязка меняет её состав, и следующей нужна свежая версия
+  rows.reduce((p,r)=>p.then(()=>lanBind(r.key)),Promise.resolve()).then(()=>{
+    if(fresh.length)toast(`${what}: ${rows.length}`);
+    else toastAction("lanbind",`${what}: ${rows.length}`,i18n("Отменить"),()=>{undo();toast(i18n("Привязка отменена"))},8000);
+    paint();
+  }).catch(e=>toast(problemText(e)));
 }
 // Отвязка останавливает запись — сначала спрашиваем, потом даём «Отменить».
 function lanUnbindKeys(keys){
@@ -6409,10 +6480,14 @@ function lanUnbindKeys(keys){
     folder?i18n("Сами устройства останутся в системе."):`${i18n("Запись в это хранилище прекратится; уже записанное хранится до конца глубины.")}${stop?` ${stop} ${i18n(plural(stop,"камера перестанет|камеры перестанут|камер перестанут"))} ${i18n("писаться совсем — других хранилищ у них нет.")}`:""}`,
     folder?"Убрать":"Отвязать",()=>{
       const undo=lanSnap(rows.map(r=>r.id)),fold=folder?folderById(n.id):null,prev=fold?[...fold.items]:null;
-      rows.forEach(r=>lanUnbind(r.key));
       keys.forEach(k=>lan.sel.delete(k));
-      toastAction("lanunbind",`${i18n(folder?"Убрано":"Отвязано")}: ${rows.length}`,i18n("Отменить"),()=>{if(fold){fold.items=prev;paint()}else undo();toast(i18n("Возвращено"))},10000);
-      paint();
+      rows.reduce((p,r)=>p.then(()=>lanUnbind(r.key)),Promise.resolve()).then(()=>{
+        toastAction("lanunbind",`${i18n(folder?"Убрано":"Отвязано")}: ${rows.length}`,i18n("Отменить"),()=>{
+          if(fold)folderSetItems(fold.id,prev).then(()=>{paint();toast(i18n("Возвращено"))}).catch(e=>toast(problemText(e)));
+          else{undo();toast(i18n("Возвращено"))}
+        },10000);
+        paint();
+      }).catch(e=>toast(problemText(e)));
     },{rawMsg:true});
 }
 function lanPick(key,on){
@@ -6842,9 +6917,11 @@ function deleteDetector(camId,detId){
   const d=camDetectors(f.n).find(x=>x.id===detId);if(!d)return;
   if(pendingDelHas(detId)){toast("Детектор уже ждёт удаления — отменить можно в тосте");return}
   askConfirm("Удалить детектор?",`${i18n("Будет удалён")} «${escHtml(locName(d))}».`,i18n("После подтверждения будет отсчёт с кнопкой «Отменить»."),i18n("Удалить"),()=>scheduleDelete([detId],{label:`${i18n("Детектор")} «${locName(d)}»`,commit:()=>{
-    f.n.devices=f.n.devices.filter(x=>x.id!==detId);
+    API.del(`/devices/${detId}`,hwVer.get(detId)).then(()=>{
+    hwRemoveDevice(detId);
     if(detSel===detId)detSel=null;
     setD(true);toast(i18n("Детектор удалён"));applyFiltersFromState();
+    }).catch(e=>toast(problemText(e)));
   }}),{typeCount:1});
 }
 // Зона детектора рисуется прямо на карточке, без отдельной вкладки
@@ -10692,6 +10769,7 @@ function abortDeviceSearch(){
   if(wizd.devState!=="searching")return;
   stopDeviceSearch();
   wizd.devState="done";
+  if(wizd.searchDomain)API.del(`/domains/${wizd.searchDomain}/discovery`).catch(()=>{});
   renderDeviceWizard();
 }
 function deviceArchiveWarning(){
@@ -10923,29 +11001,24 @@ function refreshDeviceSearch(){
   stopDeviceSearch();
   // Ищем в сети ТОГО домена, чей это список: иначе обновление в одном домене
   // приносило бы устройства, увиденные в другом.
-  const plan=foundPlan(wizd.foundDomain);
-  const seed=plan?plan.map(k=>DEVICE_DISCOVERY_SEED[k]).filter(Boolean):[...DEVICE_DISCOVERY_SEED];
-  let i=0;
+  const did=wizd.foundDomain||folderDomain(wizd.folder)||domains[0]?.id;
   wizd.devState="searching";wizd.devSearchProgress=0;wizd.devResults=[];wizd.devSelected.clear();wizd.devSelectedOnly=false;wizd.bulkEditOpen=false;
+  wizd.searchDomain=did;
   if(wizd.foundDomain)found[wizd.foundDomain]=wizd.devResults; // список домена и есть результат поиска
   const owner=wizd;
-  const tick=()=>{
-    if(wizd!==owner){stopDeviceSearch();return}   // мастера сменили — выдача больше не его
-    if(i>=seed.length)return;
-    owner.devResults.push({...seed[i],added:false,addedId:null,user:"",pass:"",name:"",short:"",identifier:"",arch:wizd.defaultArch||wizArchList()[0]?.id||"",group:"",record:"motion",lat:"0",lon:"0",azimuth:"0",discoveredName:seed[i].name});
-    i++;
-    owner.devSearchProgress=Math.round((i/seed.length)*100);
-    renderDeviceWizard();
-    if(i>=seed.length){
-      stopDeviceSearch();
-      owner.devState="done";
-      owner.devSearchProgress=100;
-      renderDeviceWizard();
-    }
-  };
   renderDeviceWizard();
-  tick();
-  deviceSearchInterval=setInterval(tick,140);
+  discStart(did).then(d=>{
+    if(wizd!==owner)return;
+    d.candidates.forEach(c=>{if(!owner.devResults.some(r=>r.id===c.id))owner.devResults.push(wizFoundRow(c))});
+    owner.devSearchProgress=Math.max(owner.devSearchProgress,d.progress);
+    if(d.state!=="searching"){owner.devState="done";owner.devSearchProgress=100}
+    renderDeviceWizard();
+  }).catch(e=>{owner.devState="done";toast(problemText(e));renderDeviceWizard()});
+}
+// Найденное устройство → строка мастера с полями формы добавления
+function wizFoundRow(c){
+  const x=candRow(c);
+  return{...x,added:false,addedId:null,user:"",pass:"",name:"",short:"",identifier:"",arch:wizd.defaultArch||wizArchList()[0]?.id||"",group:"",record:"motion",lat:"0",lon:"0",azimuth:"0",discoveredName:x.name};
 }
 function applyFoundAuth(r){
   if(!r.user&&wizd.bulkUser)r.user=wizd.bulkUser;
@@ -11580,7 +11653,7 @@ function deviceIpsrvNodeFromCsvRow(r,server){
   const kind=inferCsvDeviceKind(r);
   const id="obj"+Date.now()+Math.floor(Math.random()*1000);
   const autoName=isDefaultDeviceName(r.name)?(r.model||"IP-сервер"):r.name;
-  const identifier=isAutoIdentifier(r.identifier)?nextDeviceIdentifier(s):String(r.identifier).trim();
+  const identifier=isAutoIdentifier(r.identifier)?"":String(r.identifier).trim();
   const node={id,type:"ipsrv",subtype:kind.subtype||"nvr",name:autoName,identifier,short:r.short??"",ip:r.ip,port:+r.port||80,vendor:r.vendor||"",model:r.model||"",online:true,user:r.user&&r.user!=="Авто"?r.user:"",pass:r.pass||"",devices:[],configMode:"current"};
   if(r.lat!=""&&r.lat!=null)node.lat=r.lat;
   if(r.lon!=""&&r.lon!=null)node.lon=r.lon;
@@ -11647,7 +11720,8 @@ function deviceNodeFromData(r,server,opts={}){
   const configMode=opts.configMode??wizd.devMode??"current";
   const template=configMode==="template"?deviceTemplates().find(x=>x.id===wizd.templateId):null;
   const autoName=isDefaultDeviceName(r.name)?foundDeviceTypeLabel(r):r.name;
-  const identifier=isAutoIdentifier(r.identifier)?nextDeviceIdentifier(s):String(r.identifier).trim();
+  // Номер «Авто» выдаёт сервер (следующий свободный), введённый — проверяет
+  const identifier=isAutoIdentifier(r.identifier)?"":String(r.identifier).trim();
   const node={id,type:r.type||"camera",name:autoName,identifier,short:r.short??"",ip:r.ip,port:+r.port||80,mac:r.mac||"",vendor:r.vendor||"",model:r.model||"",online:true,user:r.user&&r.user!=="Авто"?r.user:"",pass:r.pass||"",devices:[],configMode};
   if(node.configMode==="template"&&template){
     node.templateId=template.id;node.firmware=template.firmware||"как у шаблона";node.streamProfile=template.streamProfile||"как у шаблона";node.buffering=template.buffering||"как у шаблона";
@@ -11674,10 +11748,21 @@ function addFoundDevice(id,bulk=false,opts={}){
     if(!bulk)askAddWithoutCredentials(()=>addFoundDevice(id,false,{allowNoCredentials:true,disabled:true}));
     return false;
   }
-  const node=deviceNodeFromData(r,s,{configMode:"current",disabled:!!opts.disabled||(opts.allowNoCredentials&&noCred)});s.devices.push(node);assignDeviceFolder(node.id,r.group);r.added=true;r.addedId=node.id;r.identifier=node.identifier;wizd.devSelected.delete(id);
-  open.add(s.id);treeMatchCache.clear();searchMatchCache.clear();
-  if(!bulk){paint();renderDeviceWizard()}
+  const node=deviceNodeFromData(r,s,{configMode:"current",disabled:!!opts.disabled||(opts.allowNoCredentials&&noCred)});
+  const row={node,r,domainId:folderDomain(r.group||wizd.folder)||folderDomain(s.id),folderId:r.group||wizd.folder||null,candidateId:r.id};
+  if(bulk)return row;
+  wizAddRows([row]).then(()=>{paint();renderDeviceWizard()});
   return true;
+}
+// Найденные устройства → POST /devices; строка мастера помечается «добавлено»
+// по ответу сервера: номер устройства выдаёт он
+function wizAddRows(rows){
+  return devicesCreate(rows).then(res=>{
+    res.done.forEach(d=>{const x=rows[d.index],dev=d.devices[0];x.r.added=true;x.r.addedId=dev.id;x.r.identifier=dev.identifier||x.r.identifier;wizd.devSelected.delete(x.r.id)});
+    if(res.failed.length)toast(`${i18n("Не добавлено")}: ${res.failed.length} — ${problemText(res.failed[0].code)}`);
+    open.add(deviceTarget()?.id);treeMatchCache.clear();searchMatchCache.clear();
+    return res.done.length;
+  }).catch(e=>{toast(problemText(e));return 0});
 }
 function goAddedDevice(id){closeWizard();openNode(id,{app:"hw",view:"cam",tab:"gen"})}
 function selectableDeviceResults(){
@@ -11820,9 +11905,11 @@ function addSelectedFoundDevices(){
   finishBulkDevices(list,false);
 }
 function finishBulkDevices(list,disableWithoutCreds=false){
-  let count=0;list.forEach(r=>{if(addFoundDevice(r.id,true,{allowNoCredentials:disableWithoutCreds,disabled:disableWithoutCreds&&missingDeviceCredentials(r)}))count++});
-  wizd.devSelected.clear();wizd.deviceStep=1;
-  paint();renderDeviceWizard();toast(`Добавлено устройств: ${count}`);
+  const rows=list.map(r=>addFoundDevice(r.id,true,{allowNoCredentials:disableWithoutCreds,disabled:disableWithoutCreds&&missingDeviceCredentials(r)})).filter(Boolean);
+  wizAddRows(rows).then(count=>{
+    wizd.devSelected.clear();wizd.deviceStep=1;
+    paint();renderDeviceWizard();toast(`Добавлено устройств: ${count}`);
+  });
 }
 function devCardFieldHtml(r,lock,type){
   const id=lock?`<div class="dev-ro">${escHtml(deviceIdentifierPreview(r)||"—")}</div>`:`<input class="dev-inline-input" value="${escHtml(r.identifier||"")}" placeholder="Авто" onclick="event.stopPropagation()" oninput="updateFoundDevice('${r.id}','identifier',this.value)">`;
@@ -11978,9 +12065,12 @@ function changeManualVendor(vendor){
 function detectManualModel(){
   const m=wizd.manual;
   if(!m.ip||!m.port||!m.vendor){toast("Укажите IP, порт и производителя");return}
-  const list=manualModels(m.vendor);if(!list.length){toast("Подходящая модель не найдена");return}
-  m.model=list[Math.abs(m.ip.split(".").reduce((a,x)=>a+(+x||0),0))%list.length];
-  renderDeviceWizard();toast("Модель устройства определена");
+  // Модель сообщает само устройство: спрашиваем через сервер (POST /devices/probe)
+  API.post("/devices/probe",{ip:m.ip,port:+m.port||80,vendor:m.vendor}).then(r=>{
+    if(!r.model){toast("Подходящая модель не найдена");return}
+    m.model=r.model;
+    renderDeviceWizard();toast("Модель устройства определена");
+  }).catch(e=>toast(problemText(e)));
 }
 function addManualDevice(){
   const m=wizd.manual,s=deviceTarget();
@@ -11993,7 +12083,7 @@ function addManualDevice(){
 function commitManualDevice(disabled){
   const m=wizd.manual,s=deviceTarget();
   if(!s)return;
-  const identifier=isAutoIdentifier(m.identifier)?nextDeviceIdentifier(s):String(m.identifier).trim();
+  const identifier=isAutoIdentifier(m.identifier)?"":String(m.identifier).trim();
   if(!isAutoIdentifier(m.identifier)&&identifierTaken(s,identifier)){toast("ID уже используется");return}
   const autoName=isDefaultDeviceName(m.name.trim())?(LB[m.type]||"Камера"):m.name.trim();
   const configMode=wizd.devMode||"current";
@@ -12010,9 +12100,12 @@ function commitManualDevice(disabled){
   else node={...common,type:"camera",arch:m.arch||null,rec:m.record==="always"?"always":m.record==="motion"?"motion":"none",lat:m.lat,lon:m.lon,azimuth:m.azimuth};
   if(node.type==="camera"&&m.record==="motion")node.devices.push({id:node.id+"det",type:"det",name:"Детектор движения",online:true,builtin:["Hikvision","Dahua","Axis"].includes(m.vendor)});
   if(s.type==="server")setDevServer(node,s.id);else bindArchServer(node);
-  s.devices.push(node);if(node.type==="camera")assignDeviceFolder(node.id,m.group);if(node.type==="acfa")remakeAcfa();
-  open.add(s.id);treeMatchCache.clear();searchMatchCache.clear();wizd.manualAddedId=node.id;
-  paint();renderDeviceWizard();
+  const fid=node.type==="camera"?(m.group||wizd.folder||null):null;
+  devicesCreate([{node,domainId:folderDomain(m.group||wizd.folder)||folderDomain(s.id),folderId:fid}]).then(res=>{
+    if(!res.done.length){toast(problemText(res.failed[0]?.code));return}
+    open.add(s.id);treeMatchCache.clear();searchMatchCache.clear();wizd.manualAddedId=res.done[0].devices[0].id;
+    paint();renderDeviceWizard();
+  }).catch(e=>toast(problemText(e)));
 }
 function deviceManualHtml(){
   const m=wizd.manual,models=manualModels(m.vendor),camera=m.type==="camera";
@@ -12142,19 +12235,23 @@ function downloadCsvExample(){
 }
 function importCsvDevices(){
   const valid=csvImportableRows(wizd.csvRows),s=deviceTarget();if(!s||!valid.length){toast("Нет корректных строк для импорта");return}
-  valid.forEach(r=>{
+  // Номера «Авто» — по порядку строк, как раньше: от номера регистратора считаются короткие имена его каналов
+  let next=+nextDeviceIdentifier(s)||1;
+  const rows=valid.map(r0=>{
+    const r=isAutoIdentifier(r0.identifier)?{...r0,identifier:String(next++)}:r0;
     const kind=inferCsvDeviceKind(r);
     let n;
     if(kind.type==="ipsrv"){
       n=deviceIpsrvNodeFromCsvRow(r,s);
       autopopulateIpsrvChildren(n);
     }else n=deviceNodeFromData({...r,type:"camera"},s);
-    s.devices.push(n);
-    assignDeviceFolder(n.id,r.group);
-    r.added=true;
-    r.addedId=n.id;
+    return{node:n,r:r0,domainId:folderDomain(r.group||wizd.folder)||folderDomain(s.id),folderId:r.group||wizd.folder||null};
   });
-  open.add(s.id);treeMatchCache.clear();searchMatchCache.clear();paint();renderDeviceWizard();toast(`Импортировано устройств: ${valid.length}`);
+  devicesCreate(rows).then(res=>{
+    res.done.forEach(d=>{const x=rows[d.index];x.r.added=true;x.r.addedId=d.devices[0].id});
+    open.add(s.id);treeMatchCache.clear();searchMatchCache.clear();paint();renderDeviceWizard();
+    toast(res.failed.length?`${i18n("Импортировано устройств")}: ${res.done.length} · ${i18n("не импортировано")}: ${res.failed.length}`:`Импортировано устройств: ${res.done.length}`);
+  }).catch(e=>toast(problemText(e)));
 }
 function deviceCsvHtml(){
   const rows=wizd.csvRows,valid=csvImportableRows(rows).length,skipped=rows.filter(r=>r.skipImport).length;
@@ -12520,11 +12617,15 @@ function wnx(){
   if(rawType==="email")node.smtp=(document.getElementById("wizSmtp")||{}).value||"";
   if(rawType==="spk")node.server=true;
   const parent=wizd.parentId?find(wizd.parentId)?.n:s;
-  (parent.devices||(parent.devices=[])).push(node);
-  if(!svcFlow&&!wizd.parentId)assignDeviceFolder(id,wizd.folder);
-  if(rawType==="acfa"||ACFA_NODE_IDS.has(parent.id))ACFA_NODE_IDS.add(id);
-  open.add(parent.id);sel=id;tab="gen";treeMatchCache.clear();searchMatchCache.clear();
-  document.getElementById("wiz").classList.remove("open");toast(name+" добавлен");paint();
+  // Служба — сервера, объект — под родителем или в папке; домен — их
+  if(svcFlow&&!wizd.parentId)node.srvId=s.id;
+  const domainId=wizd.parentId?nodeDomainId(parent):svcFlow?SERVER_DOMAIN[s.id]:folderDomain(wizd.folder);
+  devicesCreate([{node,domainId,parentId:wizd.parentId||null,folderId:!svcFlow&&!wizd.parentId?wizd.folder:null}]).then(res=>{
+    if(!res.done.length){toast(problemText(res.failed[0]?.code));return}
+    const nid=res.done[0].devices[0].id;
+    open.add(parent.id);sel=nid;tab="gen";treeMatchCache.clear();searchMatchCache.clear();
+    document.getElementById("wiz").classList.remove("open");toast(name+" добавлен");paint();
+  }).catch(e=>toast(problemText(e)));
 }
 function paint(){renderRail();syncGoInput();if(_lastApp!==app){aside();_lastApp=app}else renderTree();syncDomainChrome();renderFavs();
   const ui={hw:gear,dev:gear,srvs:gear,rules:rulesUI,acc:accUI,sys:sysUI,log:logUI};
@@ -13796,8 +13897,9 @@ function cardApiItems(n,d){
     return items;
   }
   for(const r of d){
-    if(r.add||r.edit)return null;
+    if(r.edit)return null;
     const target=r.node||n;if(!isApiDevice(target))return null;
+    if(r.add){items.push({targetId:target.id,create:nodeCreate(r.add)});continue}
     if(r.folders){items.push({targetId:n.id,folderIds:r.folders});continue}
     const set=r.fld?fldToApi(r.fld,r.prop,r.to):keyToApi(target,r.key,r.to);
     if(!set)return null;
@@ -13831,6 +13933,8 @@ function opOnEvent(m){
   const ops=bq.steps.flatMap(s=>s.ops);
   if(m.type==="operation.progress"){
     const it=m.payload.item,o=ops[it.index];if(!o||o.done)return;
+    // Шаг create создал устройство — в кэш, как только сервер его отдаст
+    if(it.createdId)API.get(`/devices/${it.createdId}`).then(r=>{hwAddDevices([r]);renderTree()}).catch(()=>{});
     if(it.state==="ok"){o.state="ok";o.msg="";bq.ok++}else{o.state="fail";o.msg=problemText(it.code,o.n);bq.fail++}
     o.done=true;bq.done++;
     const nx=ops.find(x=>!x.done);if(nx&&!bq.paused)nx.state="run";

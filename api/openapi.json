@@ -736,6 +736,125 @@
             "$ref": "#/components/responses/Problem"
           }
         }
+      },
+      "post": {
+        "operationId": "createDevices",
+        "tags": [
+          "hardware"
+        ],
+        "summary": "Добавить устройства",
+        "description": "Каждая строка — устройство с дочерними; частичный успех, повтор с тем же idempotencyKey ничего не создаёт снова",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DevicesCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Готово",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DevicesCreateResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/devices/update": {
+      "post": {
+        "operationId": "updateDevices",
+        "tags": [
+          "hardware"
+        ],
+        "summary": "Изменить несколько устройств сразу",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DevicesUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Готово",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DevicesUpdateResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/devices/probe": {
+      "post": {
+        "operationId": "probeDevice",
+        "tags": [
+          "hardware"
+        ],
+        "summary": "Определить модель устройства по адресу",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceProbeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Готово",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceProbeResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
       }
     },
     "/devices/{deviceId}": {
@@ -843,6 +962,54 @@
             "$ref": "#/components/responses/Problem"
           },
           "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteDevice",
+        "tags": [
+          "hardware"
+        ],
+        "summary": "Удалить устройство вместе с дочерними",
+        "description": "Убирает его из папок и из записи по детекторам у камер",
+        "parameters": [
+          {
+            "name": "deviceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "Версия записи из ETag: \"3\". Нет — 428, не совпала — 412",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Удалено"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
             "$ref": "#/components/responses/Problem"
           },
           "428": {
@@ -2071,6 +2238,89 @@
             }
           }
         ]
+      },
+      "post": {
+        "operationId": "startDiscovery",
+        "tags": [
+          "discovery"
+        ],
+        "summary": "Запустить поиск устройств в сети домена",
+        "description": "Найденное приходит в поток по одному (discovery.progress), конец — discovery.finished. Новый поиск заменяет итог прежнего. Уже идёт — 409 BUSY",
+        "parameters": [
+          {
+            "name": "domainId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Начат",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Discovery"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "stopDiscovery",
+        "tags": [
+          "discovery"
+        ],
+        "summary": "Остановить поиск",
+        "description": "Найденное до остановки остаётся",
+        "parameters": [
+          {
+            "name": "domainId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Готово",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Discovery"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
       }
     },
     "/rules": {
@@ -4942,7 +5192,9 @@
               "entity.deleted",
               "test.reset",
               "operation.progress",
-              "operation.finished"
+              "operation.finished",
+              "discovery.progress",
+              "discovery.finished"
             ],
             "x-enum-descriptions": {
               "stream.reset": "Пропущенное не дослать (Last-Event-ID слишком старый): клиент перечитывает всё",
@@ -4951,7 +5203,9 @@
               "entity.deleted": "Удалена запись: kind, id",
               "test.reset": "Стенд загрузил эталонный набор заново: клиент перечитывает всё",
               "operation.progress": "Шаг операции завершён: kind=operation, entityId — операция, payload — шаг (OperationItem) и счётчики",
-              "operation.finished": "Операция завершена: payload — итог (state, ok, failed, cancelled)"
+              "operation.finished": "Операция завершена: payload — итог (state, ok, failed, cancelled)",
+              "discovery.progress": "Поиск в сети нашёл устройство: kind=discovery, entityId — домен, payload — progress и candidate",
+              "discovery.finished": "Поиск в сети закончился или остановлен: payload — state"
             }
           },
           "at": {
@@ -4971,7 +5225,8 @@
               "rule",
               "access",
               "settings",
-              "operation"
+              "operation",
+              "discovery"
             ]
           },
           "entityId": {
@@ -5730,7 +5985,7 @@
         "required": [
           "targetId"
         ],
-        "description": "Шаг операции над одним объектом: set — изменить поля устройства, сервера или домена, folderIds — задать, в каких папках лежит устройство. Ровно одно из двух",
+        "description": "Шаг операции над одним объектом: set — изменить поля, folderIds — задать папки устройства, create — создать дочернее устройство. Ровно одно из трёх",
         "properties": {
           "targetId": {
             "type": "string",
@@ -5763,6 +6018,9 @@
               "format": "uuid"
             },
             "description": "Папки устройства целиком, по порядку"
+          },
+          "create": {
+            "$ref": "#/components/schemas/DeviceCreate"
           }
         }
       },
@@ -5840,6 +6098,11 @@
           "version": {
             "type": "integer",
             "description": "Версия объекта после шага"
+          },
+          "createdId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Созданное шагом create устройство"
           }
         }
       },
@@ -5952,7 +6215,8 @@
           "ADDRESS_TAKEN",
           "DOMAIN_NOT_EMPTY",
           "DISK_TAKEN",
-          "CONNECTION_FAILED"
+          "CONNECTION_FAILED",
+          "PARENT_MISMATCH"
         ],
         "description": "Машинный код ошибки: интерфейс показывает свой текст по коду",
         "x-enum-descriptions": {
@@ -5981,7 +6245,8 @@
           "ADDRESS_TAKEN": "Сервер с таким адресом и портом уже есть (409)",
           "DOMAIN_NOT_EMPTY": "В домене есть серверы, папки или устройства, а куда их перенести, не указано (422)",
           "DISK_TAKEN": "Диск уже занят: раздел другого хранилища или том этого хранилища (409)",
-          "CONNECTION_FAILED": "Не удалось подключиться к NAS или бакету: адрес, учётная запись, бакет"
+          "CONNECTION_FAILED": "Не удалось подключиться к NAS или бакету: адрес, учётная запись, бакет",
+          "PARENT_MISMATCH": "Родитель — в другом домене или такого вида дочерних у него не бывает (422)"
         }
       },
       "ServerPatch": {
@@ -6732,6 +6997,522 @@
               }
             ],
             "description": "Почему не подключились"
+          }
+        }
+      },
+      "DeviceCreate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "name"
+        ],
+        "properties": {
+          "acodec": {
+            "type": "string"
+          },
+          "archiveId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Основное хранилище записи",
+            "format": "uuid"
+          },
+          "azimuth": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "bitrate": {
+            "type": "integer"
+          },
+          "buffering": {
+            "type": "string"
+          },
+          "builtin": {
+            "type": "boolean",
+            "description": "Детектор работает на камере"
+          },
+          "cameraId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "channel": {
+            "type": "integer",
+            "description": "Номер входа, выхода, канала"
+          },
+          "children": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeviceCreate"
+            },
+            "description": "Дочерние: каналы регистратора, периферия, встроенные детектор и хранилище"
+          },
+          "codec": {
+            "type": "string"
+          },
+          "configMode": {
+            "type": "string",
+            "enum": [
+              "current",
+              "default",
+              "template"
+            ]
+          },
+          "debounce": {
+            "type": "integer"
+          },
+          "detectorKind": {
+            "type": "string",
+            "enum": [
+              "motion",
+              "linecross",
+              "abandoned",
+              "disappeared",
+              "crowd"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "extraArchives": {
+            "type": "array",
+            "description": "Дополнительные хранилища записи",
+            "items": {
+              "$ref": "#/components/schemas/ExtraArchive"
+            }
+          },
+          "firmware": {
+            "type": "string"
+          },
+          "format": {
+            "type": "string"
+          },
+          "fps": {
+            "type": "integer"
+          },
+          "from": {
+            "type": "string"
+          },
+          "gain": {
+            "type": "integer"
+          },
+          "gateway": {
+            "type": "string"
+          },
+          "identifier": {
+            "type": "string",
+            "description": "Номер устройства; не задан — сервер выдаёт следующий свободный. Занятый — 409 IDENTIFIER_TAKEN"
+          },
+          "ip": {
+            "type": "string"
+          },
+          "lat": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "login": {
+            "type": "string"
+          },
+          "lon": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "mac": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string",
+            "description": "Режим email-оповещателя",
+            "enum": [
+              "axxonnet",
+              "smtp"
+            ]
+          },
+          "model": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "norm": {
+            "type": "string",
+            "enum": [
+              "open",
+              "closed"
+            ]
+          },
+          "onServer": {
+            "type": "boolean",
+            "description": "Динамик сервера — служба сервера, а не устройство"
+          },
+          "password": {
+            "type": "string",
+            "description": "Пароль устройства; в ответах его нет"
+          },
+          "path": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer"
+          },
+          "preRecordSec": {
+            "type": "integer"
+          },
+          "pulse": {
+            "type": "integer"
+          },
+          "recordDetectorIds": {
+            "type": "array",
+            "description": "Детекторы, по которым пишется (recordMode=motion)",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "recordMode": {
+            "$ref": "#/components/schemas/RecordMode"
+          },
+          "res": {
+            "type": "string"
+          },
+          "rtspUrl": {
+            "type": "string",
+            "description": "Адрес видеопотока, если он задан вручную"
+          },
+          "sensitivity": {
+            "type": "integer"
+          },
+          "serverId": {
+            "type": "string",
+            "description": "Сервер: к которому подключены камера и регистратор (выводится из хранилища записи), сервер расчёта детектора, сервер службы",
+            "format": "uuid"
+          },
+          "short": {
+            "type": "string",
+            "description": "Номер для показа в дереве («3.3.1»)"
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "description": "Объём встроенного хранилища"
+          },
+          "smtp": {
+            "type": "string"
+          },
+          "ssl": {
+            "type": "boolean"
+          },
+          "stream": {
+            "type": "string"
+          },
+          "streamProfile": {
+            "type": "string"
+          },
+          "subtype": {
+            "type": "string",
+            "description": "Подтип IP-сервера (ipsrv)",
+            "enum": [
+              "nvr",
+              "io",
+              "sip",
+              "mic"
+            ]
+          },
+          "templateId": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "camera",
+              "ipsrv",
+              "channel",
+              "mic",
+              "spk",
+              "sensor",
+              "relay",
+              "storage",
+              "det",
+              "eventsrc",
+              "acfa",
+              "acfa_sensor",
+              "acfa_lock",
+              "acfa_fence",
+              "export",
+              "email",
+              "sms"
+            ]
+          },
+          "vendor": {
+            "type": "string"
+          },
+          "videoChannel": {
+            "type": "integer",
+            "description": "Видеоканал камеры регистратора"
+          },
+          "vol": {
+            "type": "integer"
+          },
+          "words": {
+            "type": "array",
+            "description": "Слова источника событий (POS) и их цвета",
+            "items": {
+              "$ref": "#/components/schemas/EventWord"
+            }
+          }
+        },
+        "description": "Новое устройство вместе с дочерними. Домен и родителя задаёт запрос (DevicesCreateRequest), id выдаёт сервер"
+      },
+      "DevicesCreateRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "idempotencyKey",
+          "items"
+        ],
+        "description": "Добавить устройства — одним запросом: из найденных в сети, вручную, из CSV, дочерний объект или службу сервера",
+        "properties": {
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 8
+          },
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "device",
+                "domainId",
+                "parentId",
+                "folderId"
+              ],
+              "properties": {
+                "device": {
+                  "$ref": "#/components/schemas/DeviceCreate"
+                },
+                "domainId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "parentId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "uuid",
+                  "description": "Родитель; null — устройство верхнего уровня"
+                },
+                "folderId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "uuid",
+                  "description": "Папка расположения"
+                },
+                "candidateId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "description": "Из найденных поиском: строка больше не «новая»"
+                }
+              }
+            }
+          }
+        }
+      },
+      "DevicesCreateResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "done",
+          "failed"
+        ],
+        "description": "Частичный успех: по каждой строке запроса — что создано или почему нет",
+        "properties": {
+          "done": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "index",
+                "devices",
+                "folders"
+              ],
+              "properties": {
+                "index": {
+                  "type": "integer"
+                },
+                "devices": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Device"
+                  },
+                  "description": "Устройство и все дочерние, родитель первым"
+                },
+                "folders": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Folder"
+                  },
+                  "description": "Папки, куда оно легло"
+                }
+              }
+            }
+          },
+          "failed": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "index",
+                "code"
+              ],
+              "properties": {
+                "index": {
+                  "type": "integer"
+                },
+                "code": {
+                  "$ref": "#/components/schemas/ProblemCode"
+                },
+                "field": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "DevicesUpdateRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "idempotencyKey",
+          "items"
+        ],
+        "description": "Изменить несколько устройств сразу, без очереди: привязка к хранилищу на вкладке «Сеть», запись регистратора. «Отменить» — обратный запрос",
+        "properties": {
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 8
+          },
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "deviceId",
+                "version",
+                "set"
+              ],
+              "properties": {
+                "deviceId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "version": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "set": {
+                  "$ref": "#/components/schemas/DevicePatch"
+                }
+              }
+            }
+          }
+        }
+      },
+      "DevicesUpdateResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "done",
+          "failed"
+        ],
+        "properties": {
+          "done": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Device"
+            }
+          },
+          "failed": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "deviceId",
+                "code"
+              ],
+              "properties": {
+                "deviceId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "code": {
+                  "$ref": "#/components/schemas/ProblemCode"
+                },
+                "field": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "DeviceProbeRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ip",
+          "port",
+          "vendor"
+        ],
+        "properties": {
+          "ip": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "vendor": {
+            "type": "string"
+          }
+        }
+      },
+      "DeviceProbeResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "model"
+        ],
+        "properties": {
+          "model": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Модель, которую сообщило устройство; null — не определилась"
           }
         }
       }

@@ -49,7 +49,6 @@ DATA_CONSTANTS = {
 }
 # Ещё не переведены на API: этапы 4–5 убирают их отсюда вместе с константами
 PENDING = {
-    r"\bconst DEVICE_DISCOVERY_SEED\s*=",  # мастер добавления: поиск в сети
     r"\bconst rules\s*=\s*\[",  # автоматизация
     r"\bruleFires\s*=",
     r"\bfunction accSeed\b",  # права
@@ -226,6 +225,22 @@ def check_contract(rep, spec):
                 refs(v, f"{where}/{i}")
 
     refs(spec, "#")
+    # Ключевые слова схем, которых не понимают сверки (здесь и в api/contract.js): они пропустили бы их молча
+    unsupported = {"allOf", "not", "if", "then", "else", "const", "patternProperties", "prefixItems", "maxLength", "maxItems",
+                   "exclusiveMinimum", "exclusiveMaximum", "multipleOf", "uniqueItems", "dependentRequired"}
+
+    def keywords(node, where):
+        if isinstance(node, dict):
+            bad = unsupported & set(node) if ("type" in node or "$ref" in node or "properties" in node or "allOf" in node) else set()
+            problems.extend(f"{where}: {k} — сверка схем его не понимает" for k in sorted(bad))
+            for k, v in node.items():
+                if k not in ("description", "x-enum-descriptions", "example", "examples"):
+                    keywords(v, f"{where}/{k}")
+        elif isinstance(node, list):
+            for i, v in enumerate(node):
+                keywords(v, f"{where}/{i}")
+
+    keywords(spec["components"]["schemas"], "#/components/schemas")
     rep.check("Контракт: OpenAPI 3.1, operationId, теги, ссылки $ref", problems, f"{len(seen)} операций, {len(schemas)} схем")
     return seen
 

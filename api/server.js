@@ -77,6 +77,7 @@
       secrets = new Map();
       ops = new Map();
       formatting = new Map();
+      searches = new Map();
       answered.clear();
       // Номера новых id — после самых больших в наборе
       Object.keys(seq).forEach((k) => delete seq[k]);
@@ -251,6 +252,147 @@
       return before;
     }
 
+    /* ===== Устройства: создание и удаление ===== */
+
+    // Номер устройства (ID в системе) — у камер, регистраторов, источников событий и СКУД; без своего
+    // номера считается короткое имя, если оно числом
+    const NUMBERED = new Set(["camera", "ipsrv", "eventsrc", "acfa"]);
+    const numberOf = (d) => (d.identifier != null && d.identifier !== "" ? String(d.identifier) : /^\d+$/.test(String(d.short || "")) ? String(d.short) : "");
+    function nextIdentifier() {
+      return String(Math.max(0, ...db.devices.filter((d) => NUMBERED.has(d.type)).map((d) => Number(numberOf(d)) || 0)) + 1);
+    }
+    function createProblem(spec, domainId, parentId, folderId) {
+      if (!byId("domains", domainId)) return { code: "NOT_FOUND", field: "domainId" };
+      if (parentId) {
+        const p = byId("devices", parentId);
+        if (!p) return { code: "NOT_FOUND", field: "parentId" };
+        if (p.domainId !== domainId) return { code: "PARENT_MISMATCH", field: "parentId" };
+      }
+      if (folderId) {
+        const f = byId("folders", folderId);
+        if (!f || f.domainId !== domainId) return { code: "VALIDATION_FAILED", field: "folderId" };
+      }
+      const bad = patchProblem(spec);
+      if (bad) return { code: bad.body.code, field: bad.body.field };
+      if (NUMBERED.has(spec.type) && spec.identifier != null && spec.identifier !== "") {
+        if (db.devices.some((d) => NUMBERED.has(d.type) && numberOf(d) === String(spec.identifier))) return { code: "IDENTIFIER_TAKEN", field: "identifier" };
+      }
+      for (const c of spec.children || []) {
+        const e = patchProblem(c);
+        if (e) return { code: e.body.code, field: "children" };
+      }
+      return null;
+    }
+    // Устройство с дочерними — родитель первым, как в списке устройств
+    function createDevice(spec, domainId, parentId, folderId) {
+      const bad = createProblem(spec, domainId, parentId, folderId);
+      if (bad) return bad;
+      const devices = [];
+      const make = (s, parent) => {
+        const d = { id: uuid("device"), type: s.type, parentId: parent, domainId };
+        Object.entries(s).forEach(([k, v]) => {
+          if (k === "children" || k === "type") return;
+          if (k === "password") {
+            if (v) secrets.set(d.id, v);
+            return;
+          }
+          d[k] = clone(v);
+        });
+        if (!parent && NUMBERED.has(s.type) && (d.identifier == null || d.identifier === "")) d.identifier = nextIdentifier();
+        if (!("enabled" in d)) d.enabled = true;
+        d.online = true;
+        d.version = 1;
+        db.devices.push(d);
+        devices.push(d);
+        send("entity.created", { kind: "device", entityId: d.id, version: d.version });
+        (s.children || []).forEach((c) => make(c, d.id));
+      };
+      make(spec, parentId || null);
+      const folders = [];
+      if (folderId) {
+        const f = byId("folders", folderId);
+        f.deviceIds = f.deviceIds.concat(devices[0].id);
+        f.version += 1;
+        changed("folder", f);
+        folders.push(f);
+      }
+      return { devices, folders };
+    }
+    // Вместе с дочерними; ссылки на него убираются из папок и из записи по детекторам
+    function removeDevice(id) {
+      const gone = new Set([id]);
+      for (let grew = true; grew; ) {
+        grew = false;
+        db.devices.forEach((d) => {
+          if (d.parentId && gone.has(d.parentId) && !gone.has(d.id)) {
+            gone.add(d.id);
+            grew = true;
+          }
+        });
+      }
+      db.devices = db.devices.filter((d) => !gone.has(d.id));
+      db.folders.forEach((f) => {
+        if (!f.deviceIds.some((x) => gone.has(x))) return;
+        f.deviceIds = f.deviceIds.filter((x) => !gone.has(x));
+        f.version += 1;
+        changed("folder", f);
+      });
+      db.devices.forEach((d) => {
+        if (!(d.recordDetectorIds || []).some((x) => gone.has(x))) return;
+        d.recordDetectorIds = d.recordDetectorIds.filter((x) => !gone.has(x));
+        d.version += 1;
+        changed("device", d);
+      });
+      gone.forEach((x) => {
+        secrets.delete(x);
+        send("entity.deleted", { kind: "device", entityId: x });
+      });
+    }
+
+    /* ===== Поиск устройств в сети ===== */
+
+    // Находка — раз в 140 мс по часам сервера: столько, сколько в макете
+    const DISCOVERY_STEP_MS = 140;
+    let searches = new Map();
+    function discoveryOf(domainId) {
+      let d = db.discovery.find((x) => x.domainId === domainId);
+      if (!d) db.discovery.push((d = { domainId, state: "idle", progress: 0, startedAt: null, finishedAt: null, candidateIds: [] }));
+      return d;
+    }
+    function candidate(id) {
+      const c = clone(db.network.find((x) => x.id === id));
+      delete c.domainIds;
+      return c;
+    }
+    function discoveryView(domainId) {
+      const d = db.discovery.find((x) => x.domainId === domainId);
+      if (!d) return { domainId, state: "idle", progress: 0, startedAt: null, finishedAt: null, candidates: [] };
+      return { domainId, state: d.state, progress: d.progress, startedAt: d.startedAt || null, finishedAt: d.finishedAt || null, candidates: d.candidateIds.map(candidate) };
+    }
+    function finishDiscovery(domainId, state) {
+      searches.delete(domainId);
+      const d = discoveryOf(domainId);
+      Object.assign(d, { state, finishedAt: iso(now()) });
+      if (state === "done") d.progress = 100;
+      send("discovery.finished", { kind: "discovery", entityId: domainId, payload: { state, progress: d.progress } });
+    }
+    function tickDiscovery(fired) {
+      searches.forEach((s, domainId) => {
+        while (searches.has(domainId) && s.nextAt <= now()) {
+          const id = s.queue.shift();
+          const d = discoveryOf(domainId);
+          d.candidateIds.push(id);
+          d.progress = Math.round(((s.total - s.queue.length) / s.total) * 100);
+          send("discovery.progress", { kind: "discovery", entityId: domainId, payload: { progress: d.progress, candidate: candidate(id) } });
+          s.nextAt += DISCOVERY_STEP_MS;
+          if (!s.queue.length) {
+            finishDiscovery(domainId, "done");
+            fired.push({ kind: "discovery", id: domainId });
+          }
+        }
+      });
+    }
+
     /* ===== Папки устройства ===== */
 
     const foldersOf = (deviceId) => db.folders.filter((f) => f.deviceIds.includes(deviceId)).map((f) => f.id);
@@ -287,6 +429,7 @@
       items: op.items.map((x) => {
         const out = { index: x.index, targetId: x.targetId, state: x.state, code: x.code };
         if (x.version !== undefined) out.version = x.version;
+        if (x.createdId) out.createdId = x.createdId;
         return out;
       }),
     });
@@ -326,6 +469,14 @@
         if (t.kind === "device" && item.req.set.enabled === true && rec.licenseExceeded) return Object.assign(item, { state: "fail", code: "LICENSE_EXCEEDED" });
         item.before = { set: applyPatch(rec, item.req.set) };
         changed(t.kind, rec);
+      } else if (item.req.create) {
+        const res = createDevice(item.req.create, rec.domainId, rec.id, null);
+        if (res.code) return Object.assign(item, { state: "fail", code: res.code });
+        item.createdId = res.devices[0].id;
+        item.before = { remove: item.createdId };
+      } else if (item.req.remove) {
+        if (byId("devices", item.req.remove)) removeDevice(item.req.remove);
+        item.before = {};
       } else {
         item.before = { folderIds: setFolders(rec.id, item.req.folderIds) };
       }
@@ -343,6 +494,7 @@
     // Всё, что к этому моменту должно было выполниться
     function tick() {
       const fired = [];
+      tickDiscovery(fired);
       formatting.forEach((at, id) => {
         if (at > now()) return;
         formatting.delete(id);
@@ -774,24 +926,97 @@
           return one(volume(v), 202);
         },
       ],
+      /* ----- Устройства: добавить, изменить сразу, удалить, определить модель ----- */
       [
-        "GET",
+        "POST",
+        "/devices",
+        (p, q, body) => {
+          const done = [];
+          const failed = [];
+          body.items.forEach((x, index) => {
+            const res = createDevice(x.device, x.domainId, x.parentId, x.folderId);
+            if (res.code) return failed.push(Object.assign({ index, code: res.code }, res.field ? { field: res.field } : {}));
+            if (x.candidateId) {
+              const d = db.discovery.find((y) => y.domainId === x.domainId);
+              if (d) d.candidateIds = d.candidateIds.filter((c) => c !== x.candidateId);
+            }
+            done.push({ index, devices: res.devices.map(device), folders: res.folders.map(clone) });
+          });
+          return { status: 200, body: { done, failed } };
+        },
+      ],
+      [
+        "POST",
+        "/devices/update",
+        (p, q, body) => {
+          const done = [];
+          const failed = [];
+          body.items.forEach((x) => {
+            const t = targetOf(x.deviceId);
+            if (!t || t.kind !== "device") return failed.push({ deviceId: x.deviceId, code: "NOT_FOUND" });
+            if (t.rec.version !== x.version) return failed.push({ deviceId: x.deviceId, code: "VERSION_MISMATCH" });
+            const bad = setProblem(t, x.set);
+            if (bad) return failed.push(Object.assign({ deviceId: x.deviceId, code: bad.body.code }, bad.body.field ? { field: bad.body.field } : {}));
+            applyPatch(t.rec, x.set);
+            changed("device", t.rec);
+            done.push(device(t.rec));
+          });
+          return { status: 200, body: { done, failed } };
+        },
+      ],
+      [
+        "POST",
+        "/devices/probe",
+        (p, q, body) => {
+          // Модель «сообщает» устройство; у встроенного сервера — по сумме чисел адреса, как в макете
+          const models = (db.reference.deviceModels.find((m) => m.vendor === body.vendor) || {}).models || [];
+          if (!models.length) return { status: 200, body: { model: null } };
+          const sum = body.ip.split(".").reduce((s, x) => s + (Number(x) || 0), 0);
+          return { status: 200, body: { model: models[Math.abs(sum) % models.length] } };
+        },
+      ],
+      [
+        "DELETE",
+        "/devices/{id}",
+        (p, q, body, headers) => {
+          const d = byId("devices", p.id);
+          if (!d) return notFound("Устройство");
+          const bad = precondition(d, headers);
+          if (bad) return bad;
+          removeDevice(d.id);
+          return { status: 204, body: null };
+        },
+      ],
+      [
+        "POST",
         "/domains/{id}/discovery",
         (p) => {
           if (!byId("domains", p.id)) return notFound("Домен");
-          const d = db.discovery.find((x) => x.domainId === p.id);
-          const candidates = ((d && d.candidateIds) || []).map((cid) => {
-            const c = clone(db.network.find((x) => x.id === cid));
-            delete c.domainIds;
-            return c;
-          });
-          return {
-            status: 200,
-            body: d
-              ? { domainId: p.id, state: d.state, progress: d.progress, startedAt: d.startedAt || null, finishedAt: d.finishedAt || null, candidates }
-              : { domainId: p.id, state: "idle", progress: 0, startedAt: null, finishedAt: null, candidates: [] },
-          };
+          const job = discoveryOf(p.id);
+          if (job.state === "searching") return problem(409, "BUSY", "Поиск в сети домена уже идёт");
+          // Новый поиск заменяет итог прежнего: найденное появляется по одному, как при настоящем опросе
+          Object.assign(job, { state: "searching", progress: 0, startedAt: iso(now()), finishedAt: null, candidateIds: [] });
+          // Первая находка — сразу, следующие — раз в 140 мс
+          searches.set(p.id, { queue: db.network.filter((c) => c.domainIds.includes(p.id)).map((c) => c.id), total: 0, nextAt: now() });
+          searches.get(p.id).total = searches.get(p.id).queue.length;
+          if (!searches.get(p.id).total) finishDiscovery(p.id, "done");
+          else tickDiscovery([]);
+          return { status: 202, body: discoveryView(p.id) };
         },
+      ],
+      [
+        "DELETE",
+        "/domains/{id}/discovery",
+        (p) => {
+          if (!byId("domains", p.id)) return notFound("Домен");
+          if (searches.has(p.id)) finishDiscovery(p.id, "stopped");
+          return { status: 200, body: discoveryView(p.id) };
+        },
+      ],
+      [
+        "GET",
+        "/domains/{id}/discovery",
+        (p) => (byId("domains", p.id) ? { status: 200, body: discoveryView(p.id) } : notFound("Домен")),
       ],
       [
         "GET",
@@ -810,12 +1035,17 @@
         "/operations",
         (p, q, body) => {
           for (const [i, r] of body.items.entries()) {
-            if (!!r.set === !!r.folderIds) return problem(422, "VALIDATION_FAILED", "У шага ровно одно из set и folderIds", { field: `items[${i}]` });
+            if ([r.set, r.folderIds, r.create].filter(Boolean).length !== 1) return problem(422, "VALIDATION_FAILED", "У шага ровно одно из set, folderIds и create", { field: `items[${i}]` });
             const t = targetOf(r.targetId);
             if (!t) return problem(404, "NOT_FOUND", `Объект ${r.targetId} не найден`, { params: { targetId: r.targetId } });
             if (r.set) {
               const bad = setProblem(t, r.set);
               if (bad) return bad;
+            }
+            if (r.create) {
+              if (t.kind !== "device") return problem(422, "VALIDATION_FAILED", "Дочерние — только у устройства", { field: `items[${i}].create` });
+              const e = createProblem(r.create, t.rec.domainId, t.rec.id, null);
+              if (e) return problem(422, e.code === "IDENTIFIER_TAKEN" ? "VALIDATION_FAILED" : e.code, "Шаг create не пройдёт", { field: `items[${i}].create` });
             }
             if (r.folderIds) {
               if (t.kind !== "device") return problem(422, "VALIDATION_FAILED", "В папках лежат только устройства", { field: `items[${i}].folderIds` });
@@ -885,7 +1115,7 @@
           if (!op) return notFound("Операция");
           const failed = op.items.filter((x) => x.state === "fail");
           if (op.state !== "done" || !failed.length) return problem(409, "BUSY", "Повторять нечего: операция не завершена или неудачных шагов нет");
-          return { status: 202, body: opView(startOperation(failed.map((x) => ({ targetId: x.req.targetId, set: x.req.set, folderIds: x.req.folderIds })).map(stripUndefined), { retryOf: op.id })) };
+          return { status: 202, body: opView(startOperation(failed.map((x) => ({ targetId: x.req.targetId, set: x.req.set, folderIds: x.req.folderIds, create: x.req.create })).map(stripUndefined), { retryOf: op.id })) };
         },
       ],
       [
@@ -909,6 +1139,7 @@
               targetId: x.targetId,
               set: x.before.set,
               folderIds: x.before.folderIds,
+              remove: x.before.remove,
               expect: i === later.findIndex((y) => y.targetId === x.targetId) ? expectAfter(x) : undefined,
             })
           );
@@ -950,7 +1181,7 @@
           const fired = [];
           const target = now() + ms;
           for (let t = now(); ; ) {
-            const due = Math.min(target, ...[...ops.values()].filter((o) => o.state === "running").map((o) => o.nextAt), ...formatting.values());
+            const due = Math.min(target, ...[...ops.values()].filter((o) => o.state === "running").map((o) => o.nextAt), ...formatting.values(), ...[...searches.values()].map((s) => s.nextAt));
             if (clock.frozenAt != null) clock.frozenAt = Math.max(t, due);
             else clock.offset += Math.max(t, due) - now();
             fired.push(...tick());
