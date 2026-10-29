@@ -79,7 +79,8 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   const v3 = a2.vols[0];
   treeRenameId = a2.id; treeRenameField = "name";
   commitTreeRename(a2.id, "Хранилище — новое имя");
-  ok(await until(() => treeRenameId === null && a2.name === "Хранилище — новое имя"), "хранилище переименовано");
+  // По id, а не a2: против стенда событие потока может перечитать хранилища раньше ответа на PATCH
+  ok(await until(() => treeRenameId === null && archById(a2.id)?.name === "Хранилище — новое имя"), "хранилище переименовано");
   ok((await API.get("/archives/" + a2.id)).name === "Хранилище — новое имя", "на сервере — новое имя хранилища");
   treeRenameId = v3.id; treeRenameField = "name";
   commitTreeRename(v3.id, "Том — новое имя");
