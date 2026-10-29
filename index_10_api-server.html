@@ -1837,13 +1837,27 @@ async function hwLoad(){
   hwFill(L);
   seedFound(disc);
 }
-// Одна запись пришла заново (ответ сервера или событие потока): объект кэша
-// меняется на месте — на него ссылаются дерево, папки и выборка.
+// Запись пришла с сервера (ответ или событие потока): объект кэша меняется на
+// месте — на него ссылаются дерево, папки и выборка. Если у объекта открыта
+// карточка, снимок «до» тоже обновляется: то, что пользователь не трогал,
+// берёт новое значение, а его правки остаются поверх — и в «было → станет»
+// не попадает чужое изменение.
+function hwFresh(n,fresh,keep){
+  const base=cardBase&&cardBase.id===n.id?cardBase.snap:null;
+  new Set([...Object.keys(n),...Object.keys(fresh)]).forEach(k=>{
+    if(keep.has(k))return;
+    const touched=!!base&&JSON.stringify(n[k])!==JSON.stringify(base[k]);
+    const v=k in fresh?cardClone({v:fresh[k]}).v:undefined;
+    if(base){if(v===undefined)delete base[k];else base[k]=cardClone({v}).v}
+    if(touched)return;
+    if(v===undefined)delete n[k];else n[k]=v;
+  });
+}
+const KEEP_DEVICE=new Set(["devices","_f"]),KEEP_SERVER=new Set(["devices"]),KEEP_ARCH=new Set(["vols"]),KEEP_NONE=new Set();
 function hwApplyDevice(r){
   const n=find(r.id)?.n;if(!n)return;
   const fresh=devNode(r);
-  Object.keys(n).forEach(k=>{if(k!=="devices"&&k!=="_f"&&!(k in fresh))delete n[k]});
-  Object.entries(fresh).forEach(([k,v])=>{if(k!=="devices"&&k!=="_f")n[k]=v});
+  hwFresh(n,fresh,KEEP_DEVICE);
   Object.values(DEV_FLD).forEach(l=>{if(fresh._f&&l in fresh._f)(n._f||(n._f={}))[l]=fresh._f[l];else if(n._f)delete n._f[l]});
   hwVer.set(r.id,r.version);
 }
@@ -1853,10 +1867,7 @@ function hwApplyServer(r){
   const fresh=srvNode(r);
   let s=servers.find(x=>x.id===r.id);
   if(!s){s=fresh;servers.push(s)}
-  else{
-    Object.keys(s).forEach(k=>{if(k!=="devices"&&!(k in fresh))delete s[k]});
-    Object.entries(fresh).forEach(([k,v])=>{if(k!=="devices")s[k]=v});
-  }
+  else hwFresh(s,fresh,KEEP_SERVER);
   const now=r.allocated?domainOf(s.id)?.id:unallocDomainOf(s.id);
   if(now!==r.domainId){takeServer(s.id);domainById(r.domainId)?.[r.allocated?"servers":"unallocServers"].push(s)}
   SERVER_DOMAIN[r.id]=r.domainId;hwVer.set(r.id,r.version);
@@ -1866,12 +1877,31 @@ function hwApplyDomain(r){
   d.name=r.name;d.license=r.license;d.online=r.online;
   hwVer.set(r.id,r.version);
 }
+function hwApplyArchive(r){
+  const a=archById(r.id);if(!a)return;
+  hwFresh(a,archNode(r),KEEP_ARCH);
+  hwVer.set(r.id,r.version);
+}
+// Том: на месте в своём хранилище; в снимке открытой карточки хранилища — тоже
+function hwApplyVolume(r){
+  const a=archById(r.archiveId);if(!a)return;
+  const fresh=volNode(r);
+  let v=a.vols.find(x=>x.id===r.id);
+  if(!v){a.vols.push(fresh);v=fresh}else hwFresh(v,fresh,KEEP_NONE);
+  const snap=cardBase&&cardBase.id===a.id?cardBase.snap.vols:null;
+  if(snap){const i=snap.findIndex(x=>x.id===r.id);if(i>=0)snap[i]=cardClone(fresh);else snap.push(cardClone(fresh))}
+  hwVer.set(r.id,r.version);
+  if(r.state==="ready"&&volFormatting.delete(r.id))toast(i18n("Том отформатирован"));
+}
+// Тома, которые форматируются: когда сервер скажет «готов», — тост
+const volFormatting=new Set();
 function hwApplyFolder(r){
   const f=folderById(r.id);if(!f)return;
   f.name=r.name;f.items=r.deviceIds.slice();
   hwVer.set(r.id,r.version);
 }
-const HW_EVENT={device:["/devices",hwApplyDevice],folder:["/folders",hwApplyFolder],server:["/servers",hwApplyServer],domain:["/domains",hwApplyDomain]};
+const HW_EVENT={device:["/devices",hwApplyDevice],folder:["/folders",hwApplyFolder],server:["/servers",hwApplyServer],domain:["/domains",hwApplyDomain],
+  archive:["/archives",hwApplyArchive],volume:["/volumes",hwApplyVolume]};
 // Чужая запись появилась или пропала — кэш «Оборудования» перечитывается целиком
 // (своя уже в кэше: ответ сервера приходит раньше события)
 let hwReloadT=0;
@@ -1908,6 +1938,8 @@ function problemText(e,n){
     LAST_DOMAIN:i18n("Последний домен удалить нельзя"),
     DOMAIN_NOT_EMPTY:i18n("Укажите, куда перенести содержимое домена"),
     INVALID_IP:i18n("Неверный адрес"),
+    DISK_TAKEN:i18n("Диск уже занят"),
+    CONNECTION_FAILED:i18n("Не удалось подключиться"),
     IP_RANGE_TOO_LARGE:i18n("Слишком много адресов за раз"),
     NOT_FOUND:i18n("объект не найден"),
   }[code]||(e?.status===0||!code?i18n("сервер не ответил"):`${i18n("ошибка")}: ${code}`);
@@ -1986,11 +2018,6 @@ function unfolderedDevices(did){
 // Хранилище — объект: владелец (сервер или домен), срок хранения, шифрование
 // и тома. Камера привязывается к хранилищу, а не к тому; том — путь, объём, занято.
 const arch=[];
-let _vseq=0;
-function addVol(a,disk,size,used){
-  const v={id:a.id+":v"+(++_vseq),type:"vol",name:disk,disk,size,used:used||"0%",archId:a.id,online:true};
-  (a.vols||(a.vols=[])).push(v);return v;
-}
 // ── Типы хранилищ — как в Axxon One ────────────────────────────────────────
 // Локальное — диски сервера. Том занимает раздел целиком (диск форматируется
 // в SolidStore, заполняется до конца) или файл заданного размера на диске с
@@ -2030,8 +2057,9 @@ function diskUse(sid,disk){
   serverArchives(sid).filter(a=>archKind(a)==="local").forEach(a=>archVols(a).forEach(v=>{if(v.disk===disk)vols.push({a,v})}));
   return{vols,part:vols.find(x=>x.v.mode==="part")||null};
 }
-function volLabel(v){
-  const a=archById(v.archId),k=archKind(a);
+function volLabel(v){return volLabelOf(archById(v.archId),v)}
+function volLabelOf(a,v){
+  const k=archKind(a);
   if(k==="cloud"){
     if(a.provider==="azure")return`azure://${v.bucket||"контейнер"}/${v.path||""}`;
     const host=a.provider==="minio"?`${v.host||"minio"}:${v.port||9000}/`:a.provider==="s3c"?`${String(v.endpoint||"endpoint").replace(/^https?:\/\//,"").replace(/\/$/,"")}/`:"s3://";
@@ -6938,7 +6966,7 @@ function form(n){
         <div class="mc"><span>${i18n("Томов в хранилище")}</span><b>${archVols(a).length}</b></div>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
-        ${k==="local"?(n.mode==="part"?`<button type="button" class="btn s" onclick="formatVolume('${n.id}')" ${n.state==="format"?"disabled":""}>${i18n("Форматировать…")}</button>`:""):`<button type="button" class="btn s" onclick="toast(i18n('${k==="cloud"?"Подключение к бакету проверено":"Подключение к NAS проверено"}'))">${i18n(k==="cloud"?"Проверить подключение":"Подключиться")}</button>`}
+        ${k==="local"?(n.mode==="part"?`<button type="button" class="btn s" onclick="formatVolume('${n.id}')" ${n.state==="format"?"disabled":""}>${i18n("Форматировать…")}</button>`:""):`<button type="button" class="btn s" onclick="volCheck('${n.id}')">${i18n(k==="cloud"?"Проверить подключение":"Подключиться")}</button>`}
         <button type="button" class="btn s" onclick="deleteVolume('${n.id}')">${i18n("Удалить том")}</button>
       </div>
       <p class="sub" style="margin-top:10px">${i18n("Глубина и шифрование задаются на хранилище; у тома — где он лежит и какого он размера.")}</p>`);
@@ -11095,7 +11123,6 @@ function setNvrRec(id,v){
   toast(`${i18n("Режим записи задан камерам:")} ${cams.length}`);
   paint();
 }
-let _aseq=100;
 // Поля хранилища и тома пишутся в объект сразу — как и остальные карточки.
 function archFld(id,label,k,v,type,hint){
   return`<div><label>${i18n(label)}</label><input type="${type||"text"}" value="${escHtml(v??"")}" oninput="archSet('${id}','${k}',this.value,true)">${hint?`<div class="bk-hint">${i18n(hint)}</div>`:""}</div>`;
@@ -11184,8 +11211,8 @@ function formatVolume(id){
   const v=volById(id),a=v&&archById(v.archId);if(!v||!a)return;
   askConfirm("Форматировать том",`${i18n("Диск")} ${escHtml(v.disk)} ${i18n("будет отформатирован в SolidStore для хранилища")} «${escHtml(locName(a))}».`,
     i18n("Всё, что на диске есть, пропадёт, записи этого тома — тоже."),"Форматировать",()=>{
-      v.state="format";gear();
-      setTimeout(()=>{v.state="ready";v.used="0%";if(sel===id||sel===a.id)gear();toast(i18n("Том отформатирован"))},1500);
+      // Форматирует сервер: сразу «Форматируется», «Готов» приходит событием
+      API.post(`/volumes/${id}/format`).then(r=>{volFormatting.add(id);hwApplyVolume(r);gear()}).catch(e=>toast(problemText(e)));
     },{rawMsg:true});
 }
 // Новый том того же типа: у локального — следующий свободный диск сервера.
@@ -11274,34 +11301,65 @@ function renderArchNew(){
     <div class="an-vol-h">${i18n("Первый том")}<span class="sub">${i18n("остальные — «＋ Том» в карточке хранилища")}</span></div>
     ${an.kind==="local"&&an.server&&!an.vol.disk?`<div class="nt err">${i18n("Свободных дисков на сервере нет: на каждом уже есть раздел хранилища.")}</div>`:volFieldsHtml(a,an.vol,"anSet(")}
     </div>`,
-    `<button type="button" class="btn" onclick="closeBulkModal();an=null">${i18n("Отмена")}</button>${an.kind==="local"?"":`<button type="button" class="btn" onclick="toast(i18n('${an.kind==="cloud"?"Подключение к бакету проверено":"Подключение к NAS проверено"}'))">${i18n("Проверить подключение")}</button>`}<span class="tfoot-gap"></span><button type="button" class="btn pri" id="anCreate" onclick="createArchive()" ${why?"disabled":""} title="${escHtml(why)}">${i18n("Создать")}</button>`,"bbox-wide bbox-an");
+    `<button type="button" class="btn" onclick="closeBulkModal();an=null">${i18n("Отмена")}</button>${an.kind==="local"?"":`<button type="button" class="btn" onclick="anCheck()">${i18n("Проверить подключение")}</button>`}<span class="tfoot-gap"></span><button type="button" class="btn pri" id="anCreate" onclick="createArchive()" ${why?"disabled":""} title="${escHtml(why)}">${i18n("Создать")}</button>`,"bbox-wide bbox-an");
   const b=document.querySelector("#bmBody .an-body");if(b)b.scrollTop=keep;
+}
+// Том из формы → тело запроса (VolumeCreate): размер — байтами, имя — как его покажет дерево
+function volSpec(a,vol){
+  const{size,disk,used,state,...rest}=vol;
+  const v=Object.assign({disk},rest);
+  const spec={name:volLabelOf(a,v),disk,sizeBytes:Math.round(sizeTb(size||"1 ТБ")*TB)};
+  Object.entries(v).forEach(([k,x])=>{if(k==="disk"||x===undefined||x==="")return;const one=volFieldToApi(k,x);if(one)Object.assign(spec,one)});
+  return spec;
+}
+function anArchive(){
+  const name=an.name.trim()||(an.kind==="cloud"?`${i18n("Облачное хранилище")} — ${cloudLabel(an.provider)}`:i18n(an.kind==="remote"?"Новое сетевое хранилище":"Новое хранилище"));
+  const vol=Object.assign({},an.vol,{disk:an.kind==="cloud"?an.provider:an.vol.disk});
+  if(an.kind==="local"&&vol.mode==="file"&&!vol.file)vol.file=name+".afs";
+  // volLabel берёт вид хранилища по archId — у формы его нет, поэтому имя тома собирается на черновике
+  const draft={id:"",type:"archive",kind:an.kind,provider:an.provider,server:an.server,vols:[]};
+  return{name,kind:an.kind,storage:an.kind==="cloud"?"object":an.storage,encrypted:!!an.enc,retentionDays:an.days,
+    provider:an.kind==="cloud"?an.provider:null,serverId:an.server||null,domainId:null,firstVolume:volSpec(draft,vol)};
+}
+// «Проверить подключение» к NAS или бакету — запросом к серверу
+function anCheck(){
+  if(!an)return;
+  const body=anArchive();
+  API.post("/archives/check",{kind:body.kind,provider:body.provider,volume:body.firstVolume})
+    .then(r=>toast(r.ok?i18n(an.kind==="cloud"?"Подключение к бакету проверено":"Подключение к NAS проверено"):problemText(r.code)))
+    .catch(e=>toast(problemText(e)));
+}
+function volCheck(id){
+  const v=volById(id),a=v&&archById(v.archId);if(!v||!a)return;
+  API.post("/archives/check",{kind:a.kind,provider:a.provider||null,volume:volSpec(a,v)})
+    .then(r=>toast(r.ok?i18n(a.kind==="cloud"?"Подключение к бакету проверено":"Подключение к NAS проверено"):problemText(r.code)))
+    .catch(e=>toast(problemText(e)));
 }
 function createArchive(){
   if(!an||anBlock())return;
-  const a={id:"a"+(++_aseq),type:"archive",kind:an.kind,storage:an.kind==="cloud"?"object":an.storage,enc:!!an.enc&&(an.kind==="cloud"||an.storage==="object"),days:an.days,vols:[],server:an.server,
-    name:an.name.trim()||(an.kind==="cloud"?`${i18n("Облачное хранилище")} — ${cloudLabel(an.provider)}`:i18n(an.kind==="remote"?"Новое сетевое хранилище":"Новое хранилище"))};
-  if(an.kind==="cloud")a.provider=an.provider;
-  const{size,disk,...rest}=an.vol;
-  const v=Object.assign(addVol(a,an.kind==="cloud"?an.provider:disk,size||"1 ТБ","0%"),rest);
-  if(an.kind==="local"&&v.mode==="file"&&!v.file)v.file=a.name+".afs";
+  API.post("/archives",anArchive()).then(res=>{
+  hwVer.set(res.archive.id,res.archive.version);
+  const a=archNode(res.archive);
   arch.push(a);
-  v.name=volLabel(v);
+  res.volumes.forEach(r=>{hwVer.set(r.id,r.version);a.vols.push(volNode(r))});
+  const v=a.vols[0];
   an=null;closeBulkModal();
   open.add(a.server);sel=a.id;tab="arch";setD(true);
   toast(v.state==="unfmt"?i18n("Хранилище создано. Раздел не отформатирован — отформатируйте его у тома, когда будете готовы"):i18n("Хранилище создано"));
   paint();
+  }).catch(e=>toast(problemText(e)));
 }
 function addVolume(archId){
   const a=archById(archId);if(!a)return;
   const d=volDefaults(a);
   if(!d){toast("Свободных дисков нет: на одном диске у хранилища один том, а разделы других хранилищ заняты");return}
-  const{disk,size,...rest}=d;
-  const v=Object.assign(addVol(a,disk,size,"0%"),rest);
-  v.name=volLabel(v);
-  open.add(a.id);sel=v.id;tab="gen";setD(true);
-  toast(i18n("Том добавлен"));
-  paint();
+  API.post(`/archives/${a.id}/volumes`,volSpec(a,d)).then(r=>{
+    hwVer.set(r.id,r.version);
+    a.vols.push(volNode(r));
+    open.add(a.id);sel=r.id;tab="gen";setD(true);
+    toast(i18n("Том добавлен"));
+    paint();
+  }).catch(e=>toast(problemText(e)));
 }
 // Том удаляется вместе с записями на нём; камеры остаются привязаны к
 // хранилищу. Если том последний — хранилищу некуда писать, об этом и говорим.
@@ -11313,11 +11371,14 @@ function deleteVolume(id){
   askConfirm("Удалить том",`${i18n("Том")} «${escHtml(v.disk)}» ${i18n("хранилища")} «${escHtml(locName(a))}» ${i18n("будет удалён вместе с записями на нём.")}`,
     (last&&n?`${i18n("Это последний том: хранилищу будет некуда писать, камер:")} ${n}. `:"")+i18n("После подтверждения будет отсчёт с кнопкой «Отменить»."),
     "Удалить",()=>scheduleDelete([id],{label:`${i18n("Том")} «${v.disk}»`,commit:()=>{
-      a.vols.splice(a.vols.indexOf(v),1);
+      API.del(`/volumes/${id}`,hwVer.get(id)).then(()=>{
+      const i=a.vols.indexOf(v);if(i>=0)a.vols.splice(i,1);
+      hwVer.delete(id);
       if(sel===id){sel=a.id;tab="arch"}
       setD(false);
       toast(i18n("Том удалён"));
       paint();
+      }).catch(e=>toast(problemText(e)));
     }}),{rawMsg:true,typeCount:1});
 }
 // Камеры удалённого хранилища не удаляются: они остаются в системе и уходят в
@@ -11331,12 +11392,13 @@ function deleteArchive(id){
   askConfirm("Удалить хранилище",`${i18n("Хранилище")} «${locName(a)}» ${i18n("будет удалено вместе с томами.")}`,
     (n?`${i18n("Перестанут писать камер:")} ${n}. ${i18n("Сами камеры останутся в системе — в разделе «Без записи».")} `:"")+i18n("После подтверждения будет отсчёт с кнопкой «Отменить»."),
     "Удалить",()=>scheduleDelete([id],{label:`«${locName(a)}»`,commit:()=>{
-      walkAll(c=>{if(c.type==="camera"&&camArchs(c).some(x=>x.arch===id)){camDropArch(c,id)}});
-      if(arch.includes(a))arch.splice(arch.indexOf(a),1);
+      // Камеры, что писали сюда, сервер переводит на следующее хранилище или выключает им запись
+      API.del(`/archives/${id}`,hwVer.get(id)).then(()=>hwLoad()).then(()=>{
       if(sel===id){sel=a.server||a.domain||sel;tab="gen"}
       open.delete(id);setD(false);treeMatchCache.clear();searchMatchCache.clear();
       toast(i18n("Хранилище удалено"));
       paint();
+      }).catch(e=>toast(problemText(e)));
     }}),{rawMsg:true,typeCount:1});
 }
 function archOwnerLine(a){
@@ -13648,10 +13710,44 @@ const HW_NOT_DEVICE=new Set(["domain","server","unalloc","folder","archive","vol
 function isApiDevice(n){return!!n&&!HW_NOT_DEVICE.has(n.type)&&hwVer.has(n.id)}
 const SERVER_PATCH=new Set(Object.keys(window.CONSOLEM_OPENAPI.components.schemas.ServerPatch.properties));
 const DOMAIN_PATCH=new Set(Object.keys(window.CONSOLEM_OPENAPI.components.schemas.DomainPatch.properties));
+const ARCHIVE_PATCH=new Set(Object.keys(window.CONSOLEM_OPENAPI.components.schemas.ArchivePatch.properties));
+const VOLUME_PATCH=new Set(Object.keys(window.CONSOLEM_OPENAPI.components.schemas.VolumePatch.properties));
+// Поле хранилища и тома в кэше → в API
+const ARCH_API={days:"retentionDays",enc:"encrypted"};
+const VOL_API={size:"sizeBytes",user:"login",pass:"password"};
+function volFieldToApi(k,v){
+  const f=VOL_API[k]||k;
+  if(!VOLUME_PATCH.has(f))return null;
+  if(f==="sizeBytes")return{sizeBytes:Math.round(sizeTb(v)*TB)};
+  return{[f]:v===undefined?null:f==="port"?apiVal("port",v):v};
+}
+// Тома в черновике хранилища — по одному шагу на том; добавленный или убранный
+// том так не выразить
+function volsToItems(from,to){
+  const was=new Map((from||[]).map(x=>[x.id,x]));
+  if((from||[]).length!==(to||[]).length||(to||[]).some(x=>!was.has(x.id)))return null;
+  const items=[];
+  for(const x of to){
+    const o=was.get(x.id),set={};
+    for(const k of new Set([...Object.keys(x),...Object.keys(o)])){
+      if(JSON.stringify(x[k])===JSON.stringify(o[k]))continue;
+      const one=volFieldToApi(k,x[k]);if(!one)return null;
+      Object.assign(set,one);
+    }
+    if(Object.keys(set).length)items.push({targetId:x.id,set});
+  }
+  return items;
+}
 // Объект, изменения которого уходят операцией: устройство, сервер, домен
-function isApiTarget(n){return isApiDevice(n)||(!!n&&(n.type==="server"||n.type==="domain")&&hwVer.has(n.id))}
+function isApiTarget(n){return isApiDevice(n)||(!!n&&["server","domain","archive","vol"].includes(n.type)&&hwVer.has(n.id))}
 // Строка плана сервера или домена → изменение; null — не выразить через API
 function srvRowToApi(n,r){
+  if(n.type==="vol")return r.key?volFieldToApi(r.key,r.to):null;
+  if(n.type==="archive"){
+    if(!r.key)return null;
+    const k=ARCH_API[r.key]||r.key;
+    return ARCHIVE_PATCH.has(k)?{[k]:k==="retentionDays"?apiVal("port",r.to):r.to}:null;
+  }
   if(n.type==="domain"){
     if(!r.edit||!DOMAIN_PATCH.has(r.prop))return null;
     return{[r.prop]:String(r.to??"").trim()};
@@ -13693,6 +13789,7 @@ function cardApiItems(n,d){
   if(!isApiDevice(n)){
     for(const r of d){
       if(r.node&&r.node!==n)return null;
+      if(n.type==="archive"&&r.key==="vols"){const vs=volsToItems(r.from,r.to);if(!vs)return null;items.push(...vs);continue}
       const set=srvRowToApi(n,r);if(!set)return null;
       items.push({targetId:n.id,set});
     }

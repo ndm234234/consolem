@@ -76,6 +76,7 @@
       me = db.me.userId;
       secrets = new Map();
       ops = new Map();
+      formatting = new Map();
       answered.clear();
       // Номера новых id — после самых больших в наборе
       Object.keys(seq).forEach((k) => delete seq[k]);
@@ -163,6 +164,8 @@
       ["devices", "device", "DevicePatch"],
       ["servers", "server", "ServerPatch"],
       ["domains", "domain", "DomainPatch"],
+      ["archives", "archive", "ArchivePatch"],
+      ["volumes", "volume", "VolumePatch"],
     ];
     function targetOf(id) {
       for (const [table, kind, schema] of KINDS) {
@@ -171,7 +174,45 @@
       }
       return null;
     }
-    const view = (t) => (t.kind === "device" ? device(t.rec) : clone(t.rec));
+    const view = (t) => (t.kind === "device" ? device(t.rec) : t.kind === "volume" ? volume(t.rec) : clone(t.rec));
+
+    /* ===== Тома ===== */
+
+    // Форматирование идёт по часам сервера: том → когда закончится
+    const FORMAT_MS = 1500;
+    let formatting = new Map();
+    function volume(rec) {
+      const out = clone(rec);
+      if (secrets.has(rec.id)) out.hasPassword = true;
+      if (secrets.has(rec.id + ":secret")) out.hasSecret = true;
+      return out;
+    }
+    // Том годится для хранилища: у локального — диск его сервера, не занятый разделом и не повторяющийся
+    // в этом хранилище; у облачного — бакет
+    function volumeProblem(a, v) {
+      if (!String(v.disk || "").trim()) return problem(422, "VALIDATION_FAILED", "Укажите диск или путь", { field: "disk" });
+      if (a.kind === "cloud" && !String(v.bucket || "").trim()) return problem(422, "VALIDATION_FAILED", "Укажите бакет", { field: "bucket" });
+      if (a.kind !== "local") return null;
+      const s = byId("servers", a.serverId);
+      if (!s.disks.some((d) => d.disk === v.disk)) return problem(422, "VALIDATION_FAILED", `На сервере нет диска ${v.disk}`, { field: "disk" });
+      const onDisk = db.volumes.filter((x) => x.disk === v.disk && db.archives.some((y) => y.id === x.archiveId && y.kind === "local" && y.serverId === a.serverId));
+      if (onDisk.some((x) => x.archiveId === a.id || x.mode === "part") || (v.mode === "part" && onDisk.length))
+        return problem(409, "DISK_TAKEN", `Диск ${v.disk} занят`, { field: "disk" });
+      return null;
+    }
+    function newVolume(a, spec) {
+      const v = { id: uuid("volume"), archiveId: a.id, name: spec.name, disk: spec.disk, sizeBytes: spec.sizeBytes, usedPercent: 0,
+        // Раздел целиком подключают неотформатированным: форматируют отдельно, когда решат
+        state: a.kind === "local" && spec.mode === "part" ? "unfmt" : "ready", online: true };
+      Object.entries(spec).forEach(([k, x]) => {
+        if (k === "password") secrets.set(v.id, x);
+        else if (k === "secret") secrets.set(v.id + ":secret", x);
+        else if (!(k in v)) v[k] = clone(x);
+      });
+      v.version = 1;
+      db.volumes.push(v);
+      return v;
+    }
     function domainNameProblem(name, exceptId) {
       const v = String(name || "").trim();
       if (!v) return problem(422, "NAME_REQUIRED", "Укажите имя домена", { field: "name" });
@@ -195,10 +236,11 @@
     function applyPatch(rec, patch) {
       const before = {};
       Object.entries(patch).forEach(([k, v]) => {
-        if (k === "password") {
-          before.password = secrets.has(rec.id) ? secrets.get(rec.id) : null;
-          if (v === null || v === "") secrets.delete(rec.id);
-          else secrets.set(rec.id, v);
+        if (k === "password" || k === "secret") {
+          const sk = k === "password" ? rec.id : rec.id + ":secret";
+          before[k] = secrets.has(sk) ? secrets.get(sk) : null;
+          if (v === null || v === "") secrets.delete(sk);
+          else secrets.set(sk, v);
           return;
         }
         before[k] = k in rec ? clone(rec[k]) : null;
@@ -276,7 +318,9 @@
       const rec = t.rec;
       if (item.req.expect !== undefined && rec.version !== item.req.expect) return Object.assign(item, { state: "fail", code: "VERSION_MISMATCH" });
       // Изменение устройства применяет его сервер, изменение сервера — сам сервер; домен — без сервера
-      const via = t.kind === "device" ? serverOf(rec) : t.kind === "server" ? rec : null;
+      const archiveServer = (a) => (a && a.serverId ? byId("servers", a.serverId) : null);
+      const via =
+        t.kind === "device" ? serverOf(rec) : t.kind === "server" ? rec : t.kind === "archive" ? archiveServer(rec) : t.kind === "volume" ? archiveServer(byId("archives", rec.archiveId)) : null;
       if (offline(via)) return Object.assign(item, { state: "fail", code: "SERVER_OFFLINE" });
       if (item.req.set) {
         if (t.kind === "device" && item.req.set.enabled === true && rec.licenseExceeded) return Object.assign(item, { state: "fail", code: "LICENSE_EXCEEDED" });
@@ -299,6 +343,16 @@
     // Всё, что к этому моменту должно было выполниться
     function tick() {
       const fired = [];
+      formatting.forEach((at, id) => {
+        if (at > now()) return;
+        formatting.delete(id);
+        const v = byId("volumes", id);
+        if (!v) return;
+        Object.assign(v, { state: "ready", usedPercent: 0 });
+        v.version += 1;
+        changed("volume", v);
+        fired.push({ kind: "volume", id });
+      });
       ops.forEach((op) => {
         while (op.state === "running" && op.nextAt <= now()) {
           const item = op.items.find((x) => x.state === "wait");
@@ -325,14 +379,15 @@
 
     const notFound = (what) => problem(404, "NOT_FOUND", `${what} не найден(а)`);
     function getter(table, label) {
+      const show = (r) => (table === "devices" ? device(r) : table === "volumes" ? volume(r) : clone(r));
       return [
-        ["GET", `/${table}`, () => items(db[table].map((r) => (table === "devices" ? device(r) : clone(r))))],
+        ["GET", `/${table}`, () => items(db[table].map(show))],
         [
           "GET",
           `/${table}/{id}`,
           (p) => {
             const rec = byId(table, p.id);
-            return rec ? one(table === "devices" ? device(rec) : clone(rec)) : notFound(label);
+            return rec ? one(show(rec)) : notFound(label);
           },
         ],
       ];
@@ -581,6 +636,144 @@
           return { status: 204, body: null };
         },
       ],
+      /* ----- Хранилища и тома ----- */
+      [
+        "POST",
+        "/archives",
+        (p, q, body) => {
+          if (!String(body.name).trim()) return problem(422, "NAME_REQUIRED", "Укажите имя хранилища", { field: "name" });
+          if ((body.serverId == null) === (body.domainId == null)) return problem(422, "VALIDATION_FAILED", "Владелец — ровно один из serverId и domainId", { field: "serverId" });
+          if (body.serverId && !byId("servers", body.serverId)) return notFound("Сервер");
+          if (body.domainId && !byId("domains", body.domainId)) return notFound("Домен");
+          if (body.kind === "local" && !body.serverId) return problem(422, "VALIDATION_FAILED", "Локальное хранилище — на сервере", { field: "serverId" });
+          const a = {
+            id: uuid("archive"),
+            name: body.name.trim(),
+            kind: body.kind,
+            storage: body.kind === "cloud" ? "object" : body.storage,
+            // Шифрование — только у объектного и облачного
+            encrypted: !!body.encrypted && (body.kind === "cloud" || body.storage === "object"),
+            retentionDays: body.retentionDays,
+            provider: body.kind === "cloud" ? body.provider : null,
+            serverId: body.serverId,
+            domainId: body.domainId,
+            version: 1,
+          };
+          const bad = volumeProblem(a, body.firstVolume);
+          if (bad) return bad;
+          db.archives.push(a);
+          const v = newVolume(a, body.firstVolume);
+          send("entity.created", { kind: "archive", entityId: a.id, version: a.version });
+          send("entity.created", { kind: "volume", entityId: v.id, version: v.version });
+          return { status: 201, body: { archive: clone(a), volumes: [volume(v)] } };
+        },
+      ],
+      [
+        "POST",
+        "/archives/check",
+        (p, q, body) => {
+          // Встроенный сервер не ходит в сеть: подключение «удаётся», если заполнено то, без чего не подключиться
+          const v = body.volume;
+          const missing = body.kind === "remote" ? !v.disk.trim() || !String(v.login || "").trim() : body.kind === "cloud" ? !String(v.bucket || "").trim() : false;
+          return { status: 200, body: { ok: !missing, code: missing ? "CONNECTION_FAILED" : null } };
+        },
+      ],
+      [
+        "PATCH",
+        "/archives/{id}",
+        (p, q, body, headers) => {
+          const t = targetOf(p.id);
+          if (!t || t.kind !== "archive") return notFound("Хранилище");
+          const bad = precondition(t.rec, headers) || setProblem(t, body);
+          if (bad) return bad;
+          applyPatch(t.rec, body);
+          changed("archive", t.rec);
+          return one(clone(t.rec));
+        },
+      ],
+      [
+        "DELETE",
+        "/archives/{id}",
+        (p, q, body, headers) => {
+          const a = byId("archives", p.id);
+          if (!a) return notFound("Хранилище");
+          const bad = precondition(a, headers);
+          if (bad) return bad;
+          // Камеры остаются: основным становится первое дополнительное хранилище, без него запись выключается
+          db.devices.forEach((d) => {
+            const extra = (d.extraArchives || []).filter((x) => x.archiveId !== a.id);
+            const main = d.archiveId === a.id;
+            if (!main && extra.length === (d.extraArchives || []).length) return;
+            if (d.extraArchives) d.extraArchives = extra;
+            if (main) {
+              const next = extra.shift();
+              if (next) Object.assign(d, { archiveId: next.archiveId, recordMode: next.recordMode, stream: next.stream });
+              else Object.assign(d, { archiveId: null, recordMode: "none" });
+            }
+            d.version += 1;
+            changed("device", d);
+          });
+          db.volumes.filter((v) => v.archiveId === a.id).forEach((v) => send("entity.deleted", { kind: "volume", entityId: v.id }));
+          db.volumes = db.volumes.filter((v) => v.archiveId !== a.id);
+          db.archives = db.archives.filter((x) => x !== a);
+          send("entity.deleted", { kind: "archive", entityId: a.id });
+          return { status: 204, body: null };
+        },
+      ],
+      [
+        "POST",
+        "/archives/{id}/volumes",
+        (p, q, body) => {
+          const a = byId("archives", p.id);
+          if (!a) return notFound("Хранилище");
+          const bad = volumeProblem(a, body);
+          if (bad) return bad;
+          const v = newVolume(a, body);
+          send("entity.created", { kind: "volume", entityId: v.id, version: v.version });
+          return one(volume(v), 201);
+        },
+      ],
+      [
+        "PATCH",
+        "/volumes/{id}",
+        (p, q, body, headers) => {
+          const t = targetOf(p.id);
+          if (!t || t.kind !== "volume") return notFound("Том");
+          const bad = precondition(t.rec, headers) || setProblem(t, body);
+          if (bad) return bad;
+          applyPatch(t.rec, body);
+          changed("volume", t.rec);
+          return one(volume(t.rec));
+        },
+      ],
+      [
+        "DELETE",
+        "/volumes/{id}",
+        (p, q, body, headers) => {
+          const v = byId("volumes", p.id);
+          if (!v) return notFound("Том");
+          const bad = precondition(v, headers);
+          if (bad) return bad;
+          db.volumes = db.volumes.filter((x) => x !== v);
+          formatting.delete(v.id);
+          send("entity.deleted", { kind: "volume", entityId: v.id });
+          return { status: 204, body: null };
+        },
+      ],
+      [
+        "POST",
+        "/volumes/{id}/format",
+        (p) => {
+          const v = byId("volumes", p.id);
+          if (!v) return notFound("Том");
+          if (v.state === "format") return problem(409, "BUSY", "Том уже форматируется");
+          v.state = "format";
+          v.version += 1;
+          formatting.set(v.id, now() + FORMAT_MS);
+          changed("volume", v);
+          return one(volume(v), 202);
+        },
+      ],
       [
         "GET",
         "/domains/{id}/discovery",
@@ -757,7 +950,7 @@
           const fired = [];
           const target = now() + ms;
           for (let t = now(); ; ) {
-            const due = Math.min(target, ...[...ops.values()].filter((o) => o.state === "running").map((o) => o.nextAt));
+            const due = Math.min(target, ...[...ops.values()].filter((o) => o.state === "running").map((o) => o.nextAt), ...formatting.values());
             if (clock.frozenAt != null) clock.frozenAt = Math.max(t, due);
             else clock.offset += Math.max(t, due) - now();
             fired.push(...tick());

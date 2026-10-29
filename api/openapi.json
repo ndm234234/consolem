@@ -1144,6 +1144,90 @@
             "$ref": "#/components/responses/Problem"
           }
         }
+      },
+      "post": {
+        "operationId": "createArchive",
+        "tags": [
+          "storage"
+        ],
+        "summary": "Создать хранилище с первым томом",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchiveCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Создано",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchiveCreated"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/archives/check": {
+      "post": {
+        "operationId": "checkArchive",
+        "tags": [
+          "storage"
+        ],
+        "summary": "Проверить подключение к NAS или бакету",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchiveCheckRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Готово",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchiveCheckResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
       }
     },
     "/archives/{archiveId}": {
@@ -1190,6 +1274,188 @@
             }
           }
         ]
+      },
+      "patch": {
+        "operationId": "patchArchive",
+        "tags": [
+          "storage"
+        ],
+        "summary": "Изменить хранилище",
+        "parameters": [
+          {
+            "name": "archiveId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "Версия записи из ETag: \"3\". Нет — 428, не совпала — 412",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchivePatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Готово",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Archive"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteArchive",
+        "tags": [
+          "storage"
+        ],
+        "summary": "Удалить хранилище с томами",
+        "description": "Камеры не удаляются: у тех, что писали сюда основным хранилищем, основным становится первое дополнительное, а если его нет — запись выключается (recordMode none)",
+        "parameters": [
+          {
+            "name": "archiveId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "Версия записи из ETag: \"3\". Нет — 428, не совпала — 412",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Удалено"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/archives/{archiveId}/volumes": {
+      "post": {
+        "operationId": "createVolume",
+        "tags": [
+          "storage"
+        ],
+        "summary": "Добавить том",
+        "parameters": [
+          {
+            "name": "archiveId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VolumeCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Добавлен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Volume"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
       }
     },
     "/volumes": {
@@ -1275,6 +1541,178 @@
             }
           }
         ]
+      },
+      "patch": {
+        "operationId": "patchVolume",
+        "tags": [
+          "storage"
+        ],
+        "summary": "Изменить том",
+        "parameters": [
+          {
+            "name": "volumeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "Версия записи из ETag: \"3\". Нет — 428, не совпала — 412",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VolumePatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Готово",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Volume"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteVolume",
+        "tags": [
+          "storage"
+        ],
+        "summary": "Удалить том вместе с записями на нём",
+        "parameters": [
+          {
+            "name": "volumeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "Версия записи из ETag: \"3\". Нет — 428, не совпала — 412",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Удалено"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/volumes/{volumeId}/format": {
+      "post": {
+        "operationId": "formatVolume",
+        "tags": [
+          "storage"
+        ],
+        "summary": "Форматировать том",
+        "description": "Сразу — state=format; когда закончит (во встроенном сервере через 1,5 с), — ready и usedPercent 0, изменение в потоке",
+        "parameters": [
+          {
+            "name": "volumeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Начато",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Volume"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
       }
     },
     "/operations": {
@@ -4547,7 +4985,8 @@
           "payload": {
             "type": "object",
             "properties": {},
-            "additionalProperties": true
+            "additionalProperties": true,
+            "description": "Подробности события: у шага операции — шаг и счётчики, у состояния устройства — status: true"
           }
         },
         "additionalProperties": false,
@@ -5307,9 +5746,15 @@
               },
               {
                 "$ref": "#/components/schemas/DomainPatch"
+              },
+              {
+                "$ref": "#/components/schemas/ArchivePatch"
+              },
+              {
+                "$ref": "#/components/schemas/VolumePatch"
               }
             ],
-            "description": "Изменение объекта: схема — по его виду (устройство, сервер, домен)"
+            "description": "Изменение объекта: схема — по его виду (устройство, сервер, домен, хранилище, том)"
           },
           "folderIds": {
             "type": "array",
@@ -5505,7 +5950,9 @@
           "SELF_LOCKOUT",
           "TEST_SUPPORT_OFF",
           "ADDRESS_TAKEN",
-          "DOMAIN_NOT_EMPTY"
+          "DOMAIN_NOT_EMPTY",
+          "DISK_TAKEN",
+          "CONNECTION_FAILED"
         ],
         "description": "Машинный код ошибки: интерфейс показывает свой текст по коду",
         "x-enum-descriptions": {
@@ -5532,7 +5979,9 @@
           "SELF_LOCKOUT": "Изменение оставит систему без администратора или лишит вас входа (409)",
           "TEST_SUPPORT_OFF": "Служебные операции тестового стенда выключены (404)",
           "ADDRESS_TAKEN": "Сервер с таким адресом и портом уже есть (409)",
-          "DOMAIN_NOT_EMPTY": "В домене есть серверы, папки или устройства, а куда их перенести, не указано (422)"
+          "DOMAIN_NOT_EMPTY": "В домене есть серверы, папки или устройства, а куда их перенести, не указано (422)",
+          "DISK_TAKEN": "Диск уже занят: раздел другого хранилища или том этого хранилища (409)",
+          "CONNECTION_FAILED": "Не удалось подключиться к NAS или бакету: адрес, учётная запись, бакет"
         }
       },
       "ServerPatch": {
@@ -5840,6 +6289,449 @@
                 }
               }
             }
+          }
+        }
+      },
+      "VolumeCreate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "disk",
+          "sizeBytes"
+        ],
+        "description": "Новый том. У локального хранилища disk — диск его сервера; раздел целиком (mode=part) создаётся неотформатированным",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "disk": {
+            "type": "string"
+          },
+          "sizeBytes": {
+            "type": "integer"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "part",
+              "file",
+              "dir"
+            ]
+          },
+          "dir": {
+            "type": "string"
+          },
+          "file": {
+            "type": "string"
+          },
+          "login": {
+            "type": "string",
+            "description": "Учётная запись NAS"
+          },
+          "bucket": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "keyId": {
+            "type": "string"
+          },
+          "host": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer"
+          },
+          "proto": {
+            "type": "string",
+            "enum": [
+              "http",
+              "https"
+            ]
+          },
+          "endpoint": {
+            "type": "string"
+          },
+          "style": {
+            "type": "string",
+            "enum": [
+              "path",
+              "vhost"
+            ]
+          },
+          "account": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string",
+            "description": "Пароль NAS; в ответах его нет"
+          },
+          "secret": {
+            "type": "string",
+            "description": "Секретный ключ облака; в ответах его нет"
+          }
+        }
+      },
+      "VolumePatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Изменение тома (JSON Merge Patch). Состояние меняет «Форматировать»",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "disk": {
+            "type": "string"
+          },
+          "sizeBytes": {
+            "type": "integer"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "part",
+                  "file",
+                  "dir"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dir": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "file": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "login": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "Учётная запись NAS"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "bucket": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "region": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "keyId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "port": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "proto": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "http",
+                  "https"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "endpoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "style": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "path",
+                  "vhost"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "account": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "password": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "secret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ArchivePatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Изменение хранилища. Вид и владельца после создания не меняют",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "retentionDays": {
+            "type": "integer",
+            "description": "Глубина хранения; 0 — без ограничения",
+            "minimum": 0
+          },
+          "encrypted": {
+            "type": "boolean"
+          },
+          "storage": {
+            "type": "string",
+            "enum": [
+              "block",
+              "object"
+            ]
+          }
+        }
+      },
+      "ArchiveCreate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "kind",
+          "storage",
+          "encrypted",
+          "retentionDays",
+          "provider",
+          "serverId",
+          "domainId",
+          "firstVolume"
+        ],
+        "description": "Новое хранилище сразу с первым томом: без тома хранилищу некуда писать",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "local",
+              "remote",
+              "cloud"
+            ]
+          },
+          "storage": {
+            "type": "string",
+            "enum": [
+              "block",
+              "object"
+            ]
+          },
+          "encrypted": {
+            "type": "boolean"
+          },
+          "retentionDays": {
+            "type": "integer",
+            "description": "Глубина хранения; 0 — без ограничения",
+            "minimum": 0
+          },
+          "provider": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Облачный провайдер"
+          },
+          "serverId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Владелец — сервер (локальное, облачное сервера)",
+            "format": "uuid"
+          },
+          "domainId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Владелец — домен (сетевое, облачное домена)",
+            "format": "uuid"
+          },
+          "firstVolume": {
+            "$ref": "#/components/schemas/VolumeCreate"
+          }
+        }
+      },
+      "ArchiveCreated": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "archive",
+          "volumes"
+        ],
+        "properties": {
+          "archive": {
+            "$ref": "#/components/schemas/Archive"
+          },
+          "volumes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Volume"
+            }
+          }
+        }
+      },
+      "ArchiveCheckRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "provider",
+          "volume"
+        ],
+        "description": "Проверить подключение к NAS или бакету до создания хранилища или тома",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "local",
+              "remote",
+              "cloud"
+            ]
+          },
+          "provider": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Облачный провайдер"
+          },
+          "volume": {
+            "$ref": "#/components/schemas/VolumeCreate"
+          }
+        }
+      },
+      "ArchiveCheckResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ok",
+          "code"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "code": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProblemCode"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Почему не подключились"
           }
         }
       }
