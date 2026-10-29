@@ -100,6 +100,40 @@
     assert.eq((await env.ok("GET", `/rules/${r1.id}`)).version, m.version, "приглушение истекло — версия та же");
   });
 
+  test("«Отменить» — как не было: «Изменено» и «в наблюдении с» прежние, версия записи — новая", async () => {
+    const env = await makeEnv();
+    const r0 = await env.ok("GET", `/rules/${r1.id}`);
+    const a = await env.ok("PUT", `/rules/${r1.id}`, body(r0, { name: "Ночь" }), etag(r0));
+    const h = await env.list(`/rules/${r1.id}/versions`);
+    const b = await env.ok("PUT", `/rules/${r1.id}`, body(r0, { historyNote: { code: "undo", params: { number: h[h.length - 1].number } } }), etag(a));
+    assert.eq([b.changedAt, b.changedBy], [r0.changedAt, r0.changedBy], "правка отменена — «Изменено» прежнее");
+    assert.ok(b.version !== r0.version && b.version !== a.version, "версия записи — новая");
+    assert.ok((await env.list(`/rules/${r1.id}/versions`)).every((v) => !("was" in v)), "служебное поле истории наружу не выходит");
+    const wf = FX.rules.find((x) => x.enabled && x.logOnly && x.logOnlySince);
+    if (!wf) return;
+    const w = await env.ok("GET", `/rules/${wf.id}`);
+    const on = (await env.ok("POST", "/rules/update", { idempotencyKey: key(), items: [{ ruleId: w.id, version: w.version, set: { logOnly: false } }] })).done[0];
+    assert.eq(on.logOnlySince, null, "включено — даты «в наблюдении» нет");
+    const hw = await env.list(`/rules/${w.id}/versions`);
+    const back = (await env.ok("POST", "/rules/update", { idempotencyKey: key(), items: [{ ruleId: w.id, version: on.version, set: { enabled: true, logOnly: true },
+      historyNote: { code: "undo", params: { number: hw[hw.length - 1].number, state: true } } }] })).done[0];
+    assert.eq([back.logOnlySince, back.changedAt, back.changedBy], [w.logOnlySince, w.changedAt, w.changedBy], "«Отменить» — «в наблюдении» с прежней даты");
+  });
+
+  test("Расписание «только здесь» у правила: владелец — правило, удаляется вместе с ним; владельца нет — 422", async () => {
+    const env = await makeEnv();
+    const sc = (owner) => ({ name: "Только здесь", kind: "week", week: [[["09:00", "18:00"]], [], [], [], [], [], []], overrides: [], valid: { from: "", to: "" },
+      cycle: { length: 4, start: "2026-10-01", days: [] }, dates: [], astro: { window: "night", offsetStartMin: 0, offsetEndMin: 0, lat: 55.75, lon: 37.62, utcOffsetHours: 3 }, owner });
+    assert.status(await env.call("POST", "/schedules", sc({ kind: "rule", id: "70009999-0000-4000-8000-000000000000" })), 422, "VALIDATION_FAILED", "правила нет");
+    const r = (await env.call("POST", "/rules", blank())).body;
+    const s = await env.call("POST", "/schedules", sc({ kind: "rule", id: r.id }));
+    assert.status(s, 201);
+    assert.eq(s.body.owner, { kind: "rule", id: r.id }, "владелец — правило");
+    const cur = await env.ok("PUT", `/rules/${r.id}`, body(r, { conditions: [{ kind: "time", scheduleId: s.body.id }] }), etag(r));
+    await env.ok("POST", "/objects/delete", { idempotencyKey: key(), items: [{ id: r.id, version: cur.version }] });
+    assert.status(await env.call("GET", `/schedules/${s.body.id}`), 404, "NOT_FOUND", "своё расписание — вместе с правилом");
+  });
+
   test("Порядок правил: всё или ничего — 412, если хоть одна версия не та", async () => {
     const env = await makeEnv();
     const items = [{ ruleId: r1.id, version: r1.version, order: 5 }, { ruleId: r2.id, version: r2.version, order: 1 }];

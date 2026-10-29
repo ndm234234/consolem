@@ -651,7 +651,8 @@ def automation(raw, ids, captured):
             "astro": {"window": a.get("win", "night"), "offsetStartMin": a.get("off1", 0), "offsetEndMin": a.get("off2", 0),
                       "lat": a.get("lat", 55.75), "lon": a.get("lon", 37.62), "utcOffsetHours": a.get("tz", 3)},
             "builtin": bool(x.get("builtin")),
-            "owner": {"kind": "maintenanceWindow", "id": ids("window", x["own"]["id"])} if x.get("own") else None,
+            "owner": ({"kind": "rule", "id": ids("rule", x["own"]["id"])} if x["own"].get("k") == "rule"
+                      else {"kind": "maintenanceWindow", "id": ids("window", x["own"]["id"])}) if x.get("own") else None,
             "version": 1,
         })
     day_groups = [{"id": ids("dayGroup", g["id"]), "name": g["name"],

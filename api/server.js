@@ -435,11 +435,13 @@
       db.archives = db.archives.filter((x) => x !== a);
       send("entity.deleted", { kind: "archive", entityId: a.id });
     }
-    // Правило — с историей версий; журнал его запусков остаётся
+    // Правило — с историей версий и своими расписаниями, если они больше нигде не используются;
+    // журнал его запусков остаётся
     function removeRule(r) {
       db.rules = db.rules.filter((x) => x !== r);
       db.ruleVersions = db.ruleVersions.filter((v) => v.ruleId !== r.id);
       send("entity.deleted", { kind: "rule", entityId: r.id });
+      db.schedules.filter((sc) => sc.owner && sc.owner.kind === "rule" && sc.owner.id === r.id && !scheduleUsed(sc.id)).forEach(removeSchedule);
     }
     function removeVolume(v) {
       db.volumes = db.volumes.filter((x) => x !== v);
@@ -485,17 +487,22 @@
       db.ruleVersions.forEach((v) => eachTarget(v.rule, fix));
     }
     // Версия истории: что стало после изменения. undo убирает версию, которую отменяет, если она последняя
-    function pushVersion(r, note) {
+    // was — кто и когда менял правило и с какого дня оно «в наблюдении» до этой правки. «Отменить»
+    // правки возвращает их: отменённое изменение не считается изменением (версия записи — всё равно новая)
+    const ruleMeta = (r) => ({ changedAt: r.changedAt, changedBy: r.changedBy, logOnlySince: r.logOnlySince });
+    function pushVersion(r, note, was) {
       const h = db.ruleVersions.filter((v) => v.ruleId === r.id);
       if (note && note.code === "undo") {
         const last = h[h.length - 1];
         if (last && last.number === note.params.number) {
           db.ruleVersions = db.ruleVersions.filter((v) => v !== last);
+          if (last.was) Object.assign(r, last.was);
           return;
         }
       }
-      db.ruleVersions.push({ id: uuid("ruleVersion"), ruleId: r.id, number: h.length ? h[h.length - 1].number + 1 : 1, at: iso(now()), by: myLogin(), note: note || null, rule: content(r) });
+      db.ruleVersions.push({ id: uuid("ruleVersion"), ruleId: r.id, number: h.length ? h[h.length - 1].number + 1 : 1, at: iso(now()), by: myLogin(), note: note || null, rule: content(r), was: was || null });
     }
+    const versionView = (v) => { const out = clone(v); delete out.was; return out; };
     function ruleProblem(c) {
       if (!String(c.name || "").trim()) return problem(422, "NAME_REQUIRED", "Укажите название правила", { field: "name" });
       if (c.enabled) {
@@ -512,6 +519,9 @@
       send("entity.created", { kind: "ruleFire", entityId: rec.id, payload: { ruleId: rec.ruleId } });
       return rec;
     }
+    // Владелец расписания — существующее окно обслуживания или правило
+    const ownerProblem = (o) =>
+      o && !byId(o.kind === "rule" ? "rules" : "maintenanceWindows", o.id) ? problem(422, "VALIDATION_FAILED", `Владельца расписания ${o.id} нет`, { field: "owner" }) : null;
     // Где используется расписание: режимы, условия «Время», окна обслуживания
     const scheduleUsed = (id) =>
       db.modes.items.some((m) => m.scheduleId === id) || db.maintenanceWindows.some((w) => w.scheduleId === id) ||
@@ -1289,10 +1299,11 @@
           if (!r) return notFound("Правило");
           const bad = precondition(r, headers) || ruleProblem(body);
           if (bad) return bad;
+          const was = ruleMeta(r);
           RULE_CONTENT.forEach((k) => (r[k] = clone(body[k])));
           Object.assign(r, { changedAt: iso(now()), changedBy: myLogin() });
           bump(r);
-          pushVersion(r, body.historyNote);
+          pushVersion(r, body.historyNote, was);
           changed("rule", r);
           return one(ruleView(r));
         },
@@ -1393,7 +1404,7 @@
             const r = byId("rules", x.ruleId);
             if (!r) return failed.push({ ruleId: x.ruleId, code: "NOT_FOUND" });
             if (r.version !== x.version) return failed.push({ ruleId: x.ruleId, code: "VERSION_MISMATCH" });
-            const set = x.set, was = stateNote(r).params.mode;
+            const set = x.set, was = stateNote(r).params.mode, meta = ruleMeta(r);
             const next = Object.assign({}, r, "enabled" in set ? { enabled: set.enabled } : {}, "logOnly" in set ? { logOnly: set.logOnly } : {});
             if (next.enabled && !r.enabled && engine.issue(next)) return failed.push({ ruleId: x.ruleId, code: "RULE_INVALID" });
             if ("enabled" in set || "logOnly" in set) {
@@ -1404,7 +1415,7 @@
             }
             if ("mute" in set) r.mute = set.mute ? { since: iso(now()), until: set.mute.until, by: myLogin(), reason: set.mute.reason || "" } : null;
             bump(r);
-            if (stateNote(r).params.mode !== was || x.historyNote) pushVersion(r, x.historyNote || stateNote(r));
+            if (stateNote(r).params.mode !== was || x.historyNote) pushVersion(r, x.historyNote || stateNote(r), meta);
             changed("rule", r);
             done.push(ruleView(r));
           });
@@ -1462,7 +1473,7 @@
           return { status: 201, body: storeFire(engine.fire(r, { via: "manual", at: now(), now: true, i: 0 })) };
         },
       ],
-      ["GET", "/rules/{id}/versions", (p) => (byId("rules", p.id) ? items(db.ruleVersions.filter((v) => v.ruleId === p.id).map(clone)) : notFound("Правило"))],
+      ["GET", "/rules/{id}/versions", (p) => (byId("rules", p.id) ? items(db.ruleVersions.filter((v) => v.ruleId === p.id).map(versionView)) : notFound("Правило"))],
       [
         "POST",
         "/rules/{id}/fires/{fireId}/retry",
@@ -1483,6 +1494,7 @@
         "/schedules",
         (p, q, body) => {
           if (!String(body.name || "").trim()) return problem(422, "NAME_REQUIRED", "Укажите название расписания", { field: "name" });
+          if (ownerProblem(body.owner)) return ownerProblem(body.owner);
           const sc = Object.assign({ id: uuid("schedule") }, clone(body), { builtin: false, version: newVersion() });
           db.schedules.push(sc);
           send("entity.created", { kind: "schedule", entityId: sc.id, version: sc.version });
@@ -1499,6 +1511,7 @@
           if (bad) return bad;
           if (sc.builtin) return problem(409, "BUILTIN", "Встроенное расписание не правится");
           if (!String(body.name || "").trim()) return problem(422, "NAME_REQUIRED", "Укажите название расписания", { field: "name" });
+          if (ownerProblem(body.owner)) return ownerProblem(body.owner);
           Object.assign(sc, clone(body));
           bump(sc);
           changed("schedule", sc);
