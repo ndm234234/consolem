@@ -2406,6 +2406,78 @@
             }
           }
         ]
+      },
+      "put": {
+        "operationId": "putRule",
+        "tags": [
+          "automation"
+        ],
+        "summary": "Сохранить правило целиком",
+        "parameters": [
+          {
+            "name": "ruleId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "Версия записи из ETag: \"3\". Нет — 428, не совпала — 412",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuleWrite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Готово",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rule"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
       }
     },
     "/rules/{ruleId}/fires": {
@@ -2517,6 +2589,66 @@
             }
           },
           "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "patchSettings",
+        "tags": [
+          "settings"
+        ],
+        "summary": "Изменить параметры кластера",
+        "parameters": [
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "Версия записи из ETag: \"3\". Нет — 428, не совпала — 412",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Готово",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Settings"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
             "$ref": "#/components/responses/Problem"
           },
           "default": {
@@ -7626,6 +7758,89 @@
                 "code": {
                   "$ref": "#/components/schemas/ProblemCode"
                 }
+              }
+            }
+          }
+        }
+      },
+      "RuleWrite": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "enabled",
+          "ratePerMinute",
+          "windowSec",
+          "triggers",
+          "actions"
+        ],
+        "description": "Правило целиком: события и действия — списки по порядку, поэтому правило заменяется целиком. Смысловые проверки (хотя бы одно событие и действие, окно у двух событий) интерфейс показывает подсказкой: незаконченное правило сохраняется, как в макете",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "ratePerMinute": {
+            "type": "integer",
+            "description": "Не чаще N срабатываний в минуту",
+            "minimum": 1,
+            "maximum": 600
+          },
+          "windowSec": {
+            "type": "integer",
+            "description": "Окно, в которое должны прийти все события; 0 — одно событие",
+            "minimum": 0
+          },
+          "triggers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RuleTrigger"
+            }
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RuleAction"
+            }
+          }
+        }
+      },
+      "SettingsPatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "values"
+        ],
+        "description": "Изменить часть параметров: переданные значения заменяются, остальные остаются",
+        "properties": {
+          "values": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "ntp.server": {
+                "type": "string"
+              },
+              "ntp.tz": {
+                "type": "string"
+              },
+              "sec.pwdage": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "sec.2fa": {
+                "type": "string",
+                "enum": [
+                  "off",
+                  "admins"
+                ]
+              },
+              "mail.smtp": {
+                "type": "string"
+              },
+              "mail.hook": {
+                "type": "string"
               }
             }
           }

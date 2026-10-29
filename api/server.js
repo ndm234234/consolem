@@ -1046,6 +1046,34 @@
         },
       ],
       [
+        "PUT",
+        "/rules/{id}",
+        (p, q, body, headers) => {
+          const r = byId("rules", p.id);
+          if (!r) return notFound("Правило");
+          const bad = precondition(r, headers);
+          if (bad) return bad;
+          if (!String(body.name).trim()) return problem(422, "NAME_REQUIRED", "Укажите название правила", { field: "name" });
+          Object.assign(r, clone(body));
+          r.version += 1;
+          changed("rule", r);
+          return one(clone(r));
+        },
+      ],
+      [
+        "PATCH",
+        "/settings",
+        (p, q, body, headers) => {
+          const s = db.settings;
+          const bad = precondition(s, headers);
+          if (bad) return bad;
+          Object.assign(s.values, clone(body.values));
+          s.version += 1;
+          send("entity.changed", { kind: "settings", version: s.version });
+          return one(clone(s));
+        },
+      ],
+      [
         "GET",
         "/domains/{id}/discovery",
         (p) => (byId("domains", p.id) ? { status: 200, body: discoveryView(p.id) } : notFound("Домен")),

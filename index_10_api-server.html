@@ -1969,6 +1969,8 @@ function apiOnEvent(m){
   if(m.type==="stream.reset"||m.type==="test.reset"){apiReload();return}
   if(m.kind==="operation"){opOnEvent(m);return}
   if(m.kind==="discovery"){discOnEvent(m);return}
+  if(m.kind==="rule"&&m.type==="entity.changed"&&ruleVer.get(m.entityId)!==m.version){API.get(`/rules/${m.entityId}`).then(r=>{ruleApply(r);if(app==="rules")paint()}).catch(()=>{});return}
+  if(m.kind==="settings"&&m.version!==settingsVer){API.get("/settings").then(s=>{settingsApply(s);if(app==="sys")paint()}).catch(()=>{});return}
   const h=HW_EVENT[m.kind];
   if(!h)return;
   if(m.type==="entity.created"&&m.kind==="device"&&!hwVer.has(m.entityId)){
@@ -2247,41 +2249,66 @@ function unrecordedCameras(did){const out=[];walkAll(n=>{if(n.type==="camera"&&!
 // `rate` — потолок срабатываний в минуту. Он виден на экране намеренно:
 // автоматизация без потолка — это автоматизация, которая умеет звенеть, и
 // оператор должен знать, что у неё есть предел, ещё до того, как она зазвенит.
-const rules=[
-  {id:"r1",name:"Охрана входа ночью",on:true,rate:6,within:30,
-   when:[{sub:"det",kind:"motion",unit:"Главный вход"},
-         {sub:"vms",kind:"io.input",unit:"Вход · IO",match:{port:"1",value:"closed"}}],
-   then:[{sub:"rec",action:"record",cam:"Главный вход",minutes:10},
-         {sub:"vms",action:"output",unit:"Вход · IO",port:2,state:"pulse",pulse_ms:500}]},
-  {id:"r2",name:"Сирена по двери",on:true,rate:6,within:0,
-   when:[{sub:"vms",kind:"io.input",unit:"Дверь склада",match:{port:"1",value:"open"}}],
-   then:[{sub:"vms",action:"output",unit:"Сирена",port:1,state:"pulse",pulse_ms:10000}]},
-  {id:"r3",name:"Тревога на периметре",on:true,rate:3,within:15,
-   when:[{sub:"det",kind:"linecross",unit:"Периметр 2"},
-         {sub:"vms",kind:"io.input",unit:"Ограждение",match:{value:"closed"}}],
-   then:[{sub:"vms",action:"preset",unit:"Купол 1",n:4},
-         {sub:"rec",action:"record",cam:"Купол 1",minutes:5}]},
-  {id:"r4",name:"Камера пропала — писать соседнюю",on:false,rate:6,within:0,
-   when:[{sub:"vms",kind:"silent",unit:"Касса 3"}],
-   then:[{sub:"rec",action:"record",cam:"Касса 4",minutes:15}]}];
+// Правила и срабатывания — с сервера (GET /rules, /rules/{id}/fires): appLoad
+const rules=[];
 // Последние срабатывания — ответ на единственный вопрос, который задают об
 // автоматизации после того, как она заработала: «почему в 14:02 открылась
 // дверь». Событие пишет сам вычислитель, в бакет сценария.
-// Журнал срабатываний за сутки — столько, сколько его и разбирают: не две
-// строки, а список, по которому ищут нужную минуту.
-function demoFires(what,did,n,from){
-  return Array.from({length:n},(_,i)=>{
-    const m=from-i*17,h=(Math.floor(m/60)+24)%24,mi=((m%60)+60)%60;
-    return[`${String(h).padStart(2,"0")}:${String(mi).padStart(2,"0")}:${String((i*7+11)%60).padStart(2,"0")}`,what,did];
-  });
-}
-const ruleFires={
-  r1:demoFires("Движение · Главный вход + Вход · IO","2 действия",16,842),
-  r2:demoFires("Дверь склада · open","1 действие",13,1197),
-  r3:demoFires("Пересечение линии · Периметр 2 + Ограждение","2 действия",12,1310),
-  r4:[]
-};
+const ruleFires={};
 
+// ── Автоматизация, опции, журнал — с сервера ──────────────────────────────
+// Время с сервера — в UTC; показывается в часовом поясе системы (GET /me)
+let sysTz="Europe/Moscow";
+function clockText(iso,sec){
+  const p=new Intl.DateTimeFormat("ru-RU",{timeZone:sysTz,hour:"2-digit",minute:"2-digit",second:sec?"2-digit":undefined,hourCycle:"h23"}).formatToParts(new Date(iso));
+  const g=k=>p.find(x=>x.type===k)?.value;
+  return sec?`${g("hour")}:${g("minute")}:${g("second")}`:`${g("hour")}:${g("minute")}`;
+}
+// Правило: API → кэш (поля, как их читает редактор) и обратно
+const RULE_ACT_IN={camera:"cam",preset:"n",pulseMs:"pulse_ms",source:"sub"};
+const RULE_ACT_OUT=Object.fromEntries(Object.entries(RULE_ACT_IN).map(([k,v])=>[v,k]));
+const RULE_NUM=new Set(["port","preset","minutes","pulseMs"]);
+function ruleNode(r){
+  return{id:r.id,name:r.name,on:r.enabled,rate:r.ratePerMinute,within:r.windowSec,
+    when:r.triggers.map(x=>Object.assign({sub:x.source,kind:x.kind,unit:x.unit},x.match?{match:{...x.match}}:{})),
+    then:r.actions.map(x=>Object.fromEntries(Object.entries(x).map(([k,v])=>[RULE_ACT_IN[k]||k,v])))};
+}
+function ruleBody(n){
+  return{name:n.name,enabled:!!n.on,ratePerMinute:n.rate,windowSec:n.within||0,
+    triggers:n.when.map(x=>Object.assign({source:x.sub,kind:x.kind,unit:x.unit||""},x.match&&Object.keys(x.match).length?{match:{...x.match}}:{})),
+    actions:n.then.map(x=>Object.fromEntries(Object.entries(x).filter(([,v])=>v!==""&&v!=null).map(([k,v])=>{const f=RULE_ACT_OUT[k]||k;return[f,RULE_NUM.has(f)&&/^-?\d+$/.test(String(v))?Number(v):v]})))};
+}
+// Версии правил — отдельно от «Оборудования»: его кэш перечитывается целиком и свои версии сбрасывает
+const ruleVer=new Map();
+function ruleApply(r){
+  const n=ruleNode(r),i=rules.findIndex(x=>x.id===r.id);
+  if(i>=0)rules[i]=n;else rules.push(n);
+  ruleVer.set(r.id,r.version);
+}
+// Опции: значения — с сервера; подписи, страницы и варианты — в SETTINGS
+let settingsVer=null;
+const TWO_FA_RU={off:"Нет",admins:"Обязательно админам"},TWO_FA_CODE={"Нет":"off","Обязательно админам":"admins"};
+function settingsApply(s){
+  settingsVer=s.version;
+  SETTINGS.forEach(st=>{const v=s.values[st.id];if(v===undefined)return;st.value=st.id==="sec.2fa"?TWO_FA_RU[v]||v:String(v)});
+}
+function settingSet(id,v){
+  const val=id==="sec.2fa"?TWO_FA_CODE[v]||v:id==="sec.pwdage"?(/^\d+$/.test(v)?Number(v):v):v;
+  API.patch("/settings",{values:{[id]:val}},settingsVer).then(s=>{settingsApply(s);setD(false)}).catch(e=>{toast(problemText(e));sysUI()});
+}
+let licenses=[];
+const LOG_KIND_RU={audit:"Аудит",alarm:"Тревога",info:"Инфо"};
+async function appLoad(){
+  const [me,rl,st,lic,jr]=await Promise.all([API.get("/me"),API.get("/rules"),API.get("/settings"),API.get("/licenses"),API.get("/journal")]);
+  sysTz=me.timezone||sysTz;
+  rules.length=0;rl.items.forEach(ruleApply);
+  const fires=await Promise.all(rl.items.map(r=>API.get(`/rules/${r.id}/fires`)));
+  rl.items.forEach((r,i)=>{ruleFires[r.id]=fires[i].items.map(f=>[clockText(f.at,true),f.event,f.result])});
+  settingsApply(st);
+  licenses=lic.items;
+  LOG_ROWS.length=0;jr.items.forEach(e=>LOG_ROWS.push([clockText(e.at,false),LOG_KIND_RU[e.category]||e.category,e.text]));
+  Object.keys(LOG_BY_CAT).forEach(k=>{LOG_BY_CAT[k].length=0;LOG_BY_CAT[k].push(...LOG_ROWS.filter(r=>k==="all"||r[1]===LOG_KIND_RU[k]))});
+}
 function walk(fn,list,parent){(list||[]).forEach(n=>{fn(n,parent);walk(fn,n.devices,n)})}
 function unallocId(domainId){return"unalloc:"+domainId}
 function unallocNode(d){return{id:unallocId(d.id),type:"unalloc",name:"Нераспределённые серверы",online:true,domainId:d.id,servers:d.unallocServers}}
@@ -7338,26 +7365,31 @@ function ruleProblem(r){
   return"";
 }
 function curRule(){return rules.find(x=>x.id===rule)||rules[0]}
-function setRuleField(f,v){const r=curRule();r[f]=f==="rate"||f==="within"?(parseInt(v,10)||0):v;setD(true);paint()}
-function toggleRule(){const r=curRule();r.on=!r.on;setD(true);paint()}
+// Правка правила: изменение делается на копии и уходит на сервер правилом
+// целиком (PUT /rules/{id}); кэш и экран меняет ответ
+function ruleEdit(mut){
+  const r=curRule();if(!r)return;
+  const draft=cardClone(r);mut(draft);
+  API.put(`/rules/${r.id}`,ruleBody(draft),ruleVer.get(r.id)).then(x=>{ruleApply(x);setD(true);paint()}).catch(e=>{toast(problemText(e));paint()});
+}
+function setRuleField(f,v){ruleEdit(r=>{r[f]=f==="rate"||f==="within"?(parseInt(v,10)||0):v})}
+function toggleRule(){ruleEdit(r=>{r.on=!r.on})}
 function setTriggerKind(i,v){
-  const r=curRule(),k=TRIGGER_KINDS[+v];
+  const k=TRIGGER_KINDS[+v];
   // Смена вида события меняет и то, чем его уточняют: старые уточнения
   // относились к другому событию и молча перестали бы что-либо значить.
-  r.when[i]={sub:k.sub,kind:k.kind,unit:r.when[i].unit||"",match:{}};
-  setD(true);paint();
+  ruleEdit(r=>{r.when[i]={sub:k.sub,kind:k.kind,unit:r.when[i].unit||"",match:{}}});
 }
-function setTriggerField(i,f,v){const r=curRule();if(f==="unit")r.when[i].unit=v;else{r.when[i].match=r.when[i].match||{};if(v)r.when[i].match[f]=v;else delete r.when[i].match[f]}setD(true);paint()}
-function addTrigger(){const r=curRule();const k=TRIGGER_KINDS[1];r.when.push({sub:k.sub,kind:k.kind,unit:"",match:{}});if(r.when.length>1&&!r.within)r.within=30;setD(true);paint()}
-function delTrigger(i){const r=curRule();r.when.splice(i,1);if(r.when.length<2)r.within=0;setD(true);paint()}
+function setTriggerField(i,f,v){ruleEdit(r=>{if(f==="unit")r.when[i].unit=v;else{r.when[i].match=r.when[i].match||{};if(v)r.when[i].match[f]=v;else delete r.when[i].match[f]}})}
+function addTrigger(){const k=TRIGGER_KINDS[1];ruleEdit(r=>{r.when.push({sub:k.sub,kind:k.kind,unit:"",match:{}});if(r.when.length>1&&!r.within)r.within=30})}
+function delTrigger(i){ruleEdit(r=>{r.when.splice(i,1);if(r.when.length<2)r.within=0})}
 function setActionKind(i,v){
-  const r=curRule(),k=ACTION_KINDS[+v];
-  r.then[i]={sub:k.sub,action:k.action};
-  setD(true);paint();
+  const k=ACTION_KINDS[+v];
+  ruleEdit(r=>{r.then[i]={sub:k.sub,action:k.action}});
 }
-function setActionField(i,f,v){const r=curRule();r.then[i][f]=v;setD(true);paint()}
-function addAction(){const r=curRule(),k=ACTION_KINDS[0];r.then.push({sub:k.sub,action:k.action});setD(true);paint()}
-function delAction(i){const r=curRule();r.then.splice(i,1);setD(true);paint()}
+function setActionField(i,f,v){ruleEdit(r=>{r.then[i][f]=v})}
+function addAction(){const k=ACTION_KINDS[0];ruleEdit(r=>{r.then.push({sub:k.sub,action:k.action})})}
+function delAction(i){ruleEdit(r=>{r.then.splice(i,1)})}
 function selHtml(opts,cur,on){return`<select onchange="${on}">${opts.map(([v,l],i)=>`<option value="${v}" ${String(v)===String(cur)?"selected":""}>${escHtml(i18n(l))}</option>`).join("")}</select>`}
 function triggerRowHtml(t,i,n){
   const k=triggerKind(t),ki=TRIGGER_KINDS.indexOf(k);
@@ -10632,19 +10664,20 @@ ESC_LAYERS.splice(1,0,
 // Настройки описаны списком, а не разметкой: то же описание рисует страницу
 // и даёт поиску цели, поэтому найденная настройка не может разойтись с той,
 // что на экране.
+// Подписи, страницы и варианты опций — интерфейс; значения — с сервера (GET /settings)
 const SETTINGS=[
-  {id:"ntp.server",page:"ntp",card:"NTP",label:"Сервер времени",type:"text",value:"pool.ntp.org"},
+  {id:"ntp.server",page:"ntp",card:"NTP",label:"Сервер времени",type:"text"},
   {id:"ntp.tz",page:"ntp",card:"NTP",label:"Часовой пояс",type:"select",opts:["Europe/Moscow","UTC"]},
-  {id:"sec.pwdage",page:"sec",card:"Политика",label:"Срок пароля, дн",type:"text",value:"90"},
+  {id:"sec.pwdage",page:"sec",card:"Политика",label:"Срок пароля, дн",type:"text"},
   {id:"sec.2fa",page:"sec",card:"Политика",label:"Двухфакторная аутентификация",type:"select",opts:["Нет","Обязательно админам"]},
-  {id:"mail.smtp",page:"mail",card:"Каналы",label:"SMTP-сервер",type:"text",value:"smtp.local"},
-  {id:"mail.hook",page:"mail",card:"Каналы",label:"Webhook",type:"text",value:"https://…"}
+  {id:"mail.smtp",page:"mail",card:"Каналы",label:"SMTP-сервер",type:"text"},
+  {id:"mail.hook",page:"mail",card:"Каналы",label:"Webhook",type:"text"}
 ];
 let settingHighlight=null;
 function settingFieldHtml(st){
   const body=st.type==="select"
-    ?`<select onchange="setD(true)">${st.opts.map(o=>`<option>${i18n(o)}</option>`).join("")}</select>`
-    :`<input type="text" value="${escHtml(st.value??"")}" oninput="setD(true)">`;
+    ?`<select onchange="settingSet('${st.id}',this.value)">${st.opts.map(o=>`<option value="${escHtml(o)}" ${o===st.value?"selected":""}>${i18n(o)}</option>`).join("")}</select>`
+    :`<input type="text" value="${escHtml(st.value??"")}" oninput="setD(true)" onchange="settingSet('${st.id}',this.value)">`;
   return`<div data-set="${st.id}"><label>${i18n(st.label)}</label>${body}</div>`;
 }
 function sysUI(){
@@ -10654,7 +10687,8 @@ function sysUI(){
   own.forEach(st=>{(cards[st.card]=cards[st.card]||[]).push(st)});
   let body=Object.entries(cards).map(([title,list])=>card(title,`<div class="g">${list.map(settingFieldHtml).join("")}</div>`)).join("");
   if(o.id==="mail")body+=`<p class="sub">${i18n("Глобальные настройки. Оповещатели сервера — в разделе «Оборудование», срез «Службы».")}</p>`;
-  if(o.id==="lic")body=card("Лицензии",`<div class="mx"><div class="mc"><span>${i18n("Камеры")}</span><b>48/64</b></div><div class="mc"><span>ACFA</span><b>3/10</b></div></div>`);
+  const lic=k=>{const x=licenses.find(l=>l.kind===k);return x?`${x.used}/${x.total}`:"—"};
+  if(o.id==="lic")body=card("Лицензии",`<div class="mx"><div class="mc"><span>${i18n("Камеры")}</span><b>${lic("cameras")}</b></div><div class="mc"><span>ACFA</span><b>${lic("acfa")}</b></div></div>`);
   paintMain(mainHd("Опции",`<span class="hd-ic">${lu(o.i)}</span>${o.n}`,"Параметры кластера")+`<div class="sc">${body}</div>`);
   flashSetting();
 }
@@ -10670,26 +10704,9 @@ function flashSetting(){
   setTimeout(()=>el.classList.remove("set-flash"),2200);
 }
 // Смена оператора — это не три события, а лента: её листают и по ней ищут.
-const LOG_EVENTS=[
-  ["Аудит","Вход root с 10.20.1.5"],["Тревога","ACFA · Датчик 0 — вскрытие"],["Инфо","POS Retalix: ОТМЕНА чека 4417"],
-  ["Аудит","Изменено хранилище «Хранилище — Офис»"],["Тревога","Движение · Главный вход в нерабочее время"],
-  ["Инфо","Сервер — Цех: синхронизация времени"],["Аудит","Добавлен пользователь guard13"],
-  ["Тревога","Нет связи с «Сервер — КПП»"],["Инфо","Экспорт завершён: 00:04:12"],
-  ["Аудит","Изменены права роли «Оператор»"],["Тревога","Пересечение линии · Периметр 2"],
-  ["Инфо","Обновлена прошивка Dahua NVR"],["Аудит","Вход admin с 10.20.1.9"],
-  ["Тревога","Лицензия превышена: Переговорная"],["Инфо","Сетевой архив — NAS: 37% занято"],
-  ["Аудит","Удалён сценарий «Тест»"],["Тревога","Оставленный предмет · Парковка"],
-  ["Инфо","Резервное копирование конфигурации"],["Аудит","Сброс пароля ivan"],
-  ["Тревога","Дверь склада · open вне графика"],["Инфо","POS Retalix: СКИДКА 15%"],
-  ["Аудит","Изменён режим записи «Склад офиса»"],["Тревога","Скопление людей · Фудкорт"],
-  ["Инфо","Диск D: 68% — в пределах нормы"]
-];
-const LOG_ROWS=LOG_EVENTS.map(([kind,text],i)=>{
-  const m=1316-i*23,h=(Math.floor(m/60)+24)%24;
-  return[`${String(h).padStart(2,"0")}:${String(((m%60)+60)%60).padStart(2,"0")}`,kind,text];
-});
-const LOG_BY_CAT={all:LOG_ROWS,audit:LOG_ROWS.filter(r=>r[1]==="Аудит"),
-  alarm:LOG_ROWS.filter(r=>r[1]==="Тревога"),info:LOG_ROWS.filter(r=>r[1]==="Инфо")};
+// Записи — с сервера (GET /journal): appLoad
+const LOG_ROWS=[];
+const LOG_BY_CAT={all:[],audit:[],alarm:[],info:[]};
 function logUI(){const cat=logCats.find(x=>x.id===logFilt)||logCats[0];
   const rows=LOG_BY_CAT[cat.id]||LOG_ROWS;
   paintMain(mainHd("Журнал",`<span class="hd-ic">${lu("scroll-text")}</span>${cat.n}`,"Диагностика и аудит")+
@@ -14544,8 +14561,8 @@ function cpApplyGeneric(){
 // Старт: данные с сервера, затем первая отрисовка. Раскрыто то же, что в
 // макете на константах: первый и третий домен, нераспределённые первого,
 // первый сервер, первое хранилище, первая папка с подпапкой.
-window.appReady=hwLoad().then(()=>{
-  sel=domains[0]?.id||null;appSel.srvs=sel;
+window.appReady=Promise.all([hwLoad(),appLoad()]).then(()=>{
+  sel=domains[0]?.id||null;appSel.srvs=sel;rule=rules[0]?.id||null;
   [domains[0]?.id,domains[2]?.id,domains[0]&&unallocId(domains[0].id),servers[0]?.id,arch[0]?.id].forEach(x=>{if(x)open.add(x)});
   [folders[0],folders[0]?.folders?.[0]].forEach(f=>{if(f)open.add(f.id)});
   domains.forEach(d=>{open.add(d.id);open.add("accg:"+d.id)});

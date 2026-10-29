@@ -77,6 +77,22 @@ def local_to_utc(text):
     return t.replace(tzinfo=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def clock_seq_to_utc(times, captured):
+    """Ряд времён суток от нового к старому («14:02:11», «13:45:18», …): первое — последний такой момент
+    не позже снимка, каждое следующее — раньше предыдущего, через полночь — на день назад."""
+    out, prev = [], None
+    for hhmm in times:
+        t = datetime.strptime(clock_to_utc(hhmm, captured), "%Y-%m-%dT%H:%M:%SZ")
+        if prev is not None:
+            while t > prev:
+                t -= timedelta(days=1)
+            while t + timedelta(days=1) <= prev:
+                t += timedelta(days=1)
+        out.append(t.strftime("%Y-%m-%dT%H:%M:%SZ"))
+        prev = t
+    return out
+
+
 def clock_to_utc(hhmm, captured):
     """Время суток без даты («21:56», «14:02:11») — последний такой момент не позже снимка."""
     parts = [int(x) for x in hhmm.split(":")] + [0]
@@ -305,8 +321,8 @@ def normalize(raw, captured_at):
     ]
     fires = []
     for rid, rows in raw["ruleFires"].items():
-        for at, event, result in rows:
-            fires.append({"id": None, "ruleId": ids("rule", rid), "at": clock_to_utc(at, captured), "event": event, "result": result})
+        for at, (_, event, result) in zip(clock_seq_to_utc([r[0] for r in rows], captured), rows):
+            fires.append({"id": None, "ruleId": ids("rule", rid), "at": at, "event": event, "result": result})
     for i, f in enumerate(fires):
         f["id"] = f"{KIND['fire']}{i + 1:07d}-0000-4000-8000-000000000000"
     out["ruleFires"] = fires
@@ -475,8 +491,8 @@ def normalize(raw, captured_at):
     # Числа «Лицензий» в макете вписаны в разметку (sysUI): здесь они — данные
     out["licenses"] = [{"kind": "cameras", "used": 48, "total": 64}, {"kind": "acfa", "used": 3, "total": 10}]
     out["journal"] = [
-        {"id": f"{KIND['journal']}{i + 1:07d}-0000-4000-8000-000000000000", "at": clock_to_utc(t, captured), "category": JOURNAL_CATEGORY[kind], "text": text}
-        for i, (t, kind, text) in enumerate(raw["journal"])
+        {"id": f"{KIND['journal']}{i + 1:07d}-0000-4000-8000-000000000000", "at": at, "category": JOURNAL_CATEGORY[kind], "text": text}
+        for i, (at, (_, kind, text)) in enumerate(zip(clock_seq_to_utc([r[0] for r in raw["journal"]], captured), raw["journal"]))
     ]
 
     out["reference"] = reference(raw["refs"])

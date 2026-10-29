@@ -34,6 +34,10 @@ KNOWN = [
     (r'<span class="sub">идёт поиск в сети \d+%</span>',
      "поиск в сети, который карточка запускает сама: в 09 первая находка появлялась в тот же миг, в 10 — с ответом "
      "сервера, через мгновение; снимок снят до ответа"),
+    (r'^<input type="text" value="[^"]*" oninput="setD\(true\)"( onchange="settingSet\(\'[\w.]+\',this\.value\)")?>$|'
+     r'^<select onchange="(setD\(true\)|settingSet\(\'[\w.]+\',this\.value\))">$|^<option( value="[^"]*")?( selected="")?>[^<]*</option>$',
+     "опции: поле сохраняется на сервер при смене (раньше только помечало «есть изменения»), у списка отмечен вариант, "
+     "который хранит сервер; внешне то же"),
 ]
 
 BEFORE = "index_09_one-psim.html"
@@ -55,6 +59,17 @@ SCREENS = [
     ["hw", "c1", "gen", ["setTheme('light')"]],
     ["hw", "c1", "gen", ["setUiLang('en')"]],
     ["hw", "s1", "gen", ["setUiLang('en')", "setTheme('dark')"]],
+    ["rules", None, None, []],
+    ["rules", None, None, ["rule=id('r2')"]],
+    ["rules", None, None, ["rule=id('r3')"]],
+    ["sys", None, None, ["sys='ntp'"]],
+    ["sys", None, None, ["sys='sec'"]],
+    ["sys", None, None, ["sys='mail'"]],
+    ["sys", None, None, ["sys='lic'"]],
+    ["log", None, None, ["logFilt='all'"]],
+    ["log", None, None, ["logFilt='alarm'"]],
+    ["acc", None, None, []],
+    ["rules", None, None, ["setUiLang('en')"]],
 ]
 
 # Случайность в разметке (разброс шагов очереди, подсказки) — одна и та же в обоих прототипах

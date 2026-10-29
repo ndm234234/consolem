@@ -41,19 +41,15 @@ DATA_CONSTANTS = {
     r"HIJKLMNOP": "диски серверов",
     r"\bconst DEVICE_DISCOVERY_SEED\s*=": "сеть для поиска устройств",
     r"\bconst FOUND_PLAN\s*=": "что находит поиск",
-    r"\bconst rules\s*=\s*\[": "правила",
-    r"\bruleFires\s*=": "срабатывания правил",
+    r"\bconst rules\s*=\s*\[\s*\{": "правила",
+    r"\bruleFires\s*=\s*\{\s*\w": "срабатывания правил",
     r"\bfunction accSeed\b": "права",
-    r"\bconst SETTINGS\s*=": "опции",
+    r"\bconst SETTINGS\s*=[^;]*value:": "значения опций",
     r"\bconst LOG_EVENTS\s*=": "журнал",
 }
 # Ещё не переведены на API: этапы 4–5 убирают их отсюда вместе с константами
 PENDING = {
-    r"\bconst rules\s*=\s*\[",  # автоматизация
-    r"\bruleFires\s*=",
     r"\bfunction accSeed\b",  # права
-    r"\bconst SETTINGS\s*=",  # опции
-    r"\bconst LOG_EVENTS\s*=",  # журнал
 }
 
 
