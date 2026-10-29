@@ -1775,11 +1775,17 @@ function devNode(r){
   if(DEV_WITH_KIDS.has(r.type))n.devices=[];
   return n;
 }
+const ROLE_RU={primary:"Основной",node:"Узел",standby:"Резервный"};
+const ROLE_CODE=Object.fromEntries(Object.entries(ROLE_RU).map(([k,v])=>[v,k]));
+// Сеть сервера в карточке — поля без своего свойства (n._f по подписи)
+const SRV_FLD={netmask:"Маска",gateway:"Шлюз",dns:"DNS"};
+const SRV_FLD_API=Object.fromEntries(Object.entries(SRV_FLD).map(([k,v])=>[v,k]));
 function srvNode(r){
   const s={id:r.id,type:"server",name:r.name,ip:r.ip};
   if(r.port!==20111)s.port=r.port;
-  s.online=r.online;s.role=r.role==="primary"?"Основной":"Узел";
+  s.online=r.online;s.role=ROLE_RU[r.role]||r.role;
   Object.assign(s,r.telemetry);s.devices=[];
+  Object.entries(SRV_FLD).forEach(([k,l])=>{if(k in r)(s._f||(s._f={}))[l]=r[k]});
   if(r.gpu)SERVER_GPU[r.id]={model:r.gpu.model,mem:bytesText(r.gpu.memoryBytes),load:r.gpu.load};else delete SERVER_GPU[r.id];
   SERVER_DISKS[r.id]=r.disks.map(d=>({disk:d.disk,size:bytesText(d.sizeBytes),sys:d.system}));
   return s;
@@ -1841,19 +1847,44 @@ function hwApplyDevice(r){
   Object.values(DEV_FLD).forEach(l=>{if(fresh._f&&l in fresh._f)(n._f||(n._f={}))[l]=fresh._f[l];else if(n._f)delete n._f[l]});
   hwVer.set(r.id,r.version);
 }
+// Сервер по ответу: поля на месте; домен и «нераспределённый» — переезд между
+// списками домена (в конец, как в макете на константах)
+function hwApplyServer(r){
+  const fresh=srvNode(r);
+  let s=servers.find(x=>x.id===r.id);
+  if(!s){s=fresh;servers.push(s)}
+  else{
+    Object.keys(s).forEach(k=>{if(k!=="devices"&&!(k in fresh))delete s[k]});
+    Object.entries(fresh).forEach(([k,v])=>{if(k!=="devices")s[k]=v});
+  }
+  const now=r.allocated?domainOf(s.id)?.id:unallocDomainOf(s.id);
+  if(now!==r.domainId){takeServer(s.id);domainById(r.domainId)?.[r.allocated?"servers":"unallocServers"].push(s)}
+  SERVER_DOMAIN[r.id]=r.domainId;hwVer.set(r.id,r.version);
+}
+function hwApplyDomain(r){
+  const d=domainById(r.id);if(!d)return;
+  d.name=r.name;d.license=r.license;d.online=r.online;
+  hwVer.set(r.id,r.version);
+}
 function hwApplyFolder(r){
   const f=folderById(r.id);if(!f)return;
   f.name=r.name;f.items=r.deviceIds.slice();
   hwVer.set(r.id,r.version);
 }
-const HW_EVENT={device:["/devices",hwApplyDevice],folder:["/folders",hwApplyFolder]};
+const HW_EVENT={device:["/devices",hwApplyDevice],folder:["/folders",hwApplyFolder],server:["/servers",hwApplyServer],domain:["/domains",hwApplyDomain]};
+// Чужая запись появилась или пропала — кэш «Оборудования» перечитывается целиком
+// (своя уже в кэше: ответ сервера приходит раньше события)
+let hwReloadT=0;
+function hwReloadSoon(){clearTimeout(hwReloadT);hwReloadT=setTimeout(apiReload,100)}
 // Поток событий: изменения (свои и чужие), ход операций. Запись перечитывается
 // по id; если поток потерян — весь кэш заново.
 function apiOnEvent(m){
   if(m.type==="stream.reset"||m.type==="test.reset"){apiReload();return}
   if(m.kind==="operation"){opOnEvent(m);return}
   const h=HW_EVENT[m.kind];
-  if(m.type!=="entity.changed"||!h)return;
+  if(!h)return;
+  if(m.type==="entity.created"||m.type==="entity.deleted"){if((m.type==="entity.created")!==hwVer.has(m.entityId))hwReloadSoon();return}
+  if(m.type!=="entity.changed")return;
   if(hwVer.get(m.entityId)===m.version&&!m.payload?.status)return;
   API.get(`${h[0]}/${m.entityId}`).then(r=>{
     h[1](r);treeMatchCache.clear();searchMatchCache.clear();
@@ -1872,6 +1903,12 @@ function problemText(e,n){
     VERSION_MISMATCH:i18n("объект изменился — откройте его заново"),
     BUSY:i18n("над объектом уже выполняется операция"),
     NAME_REQUIRED:i18n("Укажите имя"),
+    NAME_TAKEN:n?.type==="domain"?i18n("Домен с таким именем уже есть"):i18n("Имя уже занято"),
+    ADDRESS_TAKEN:i18n("Сервер с таким адресом уже есть"),
+    LAST_DOMAIN:i18n("Последний домен удалить нельзя"),
+    DOMAIN_NOT_EMPTY:i18n("Укажите, куда перенести содержимое домена"),
+    INVALID_IP:i18n("Неверный адрес"),
+    IP_RANGE_TOO_LARGE:i18n("Слишком много адресов за раз"),
     NOT_FOUND:i18n("объект не найден"),
   }[code]||(e?.status===0||!code?i18n("сервер не ответил"):`${i18n("ошибка")}: ${code}`);
 }
@@ -1905,8 +1942,6 @@ function nodeDomainId(n){
 }
 function matchesDomain(n){return!domainFilter||nodeDomainId(n)===domainFilter}
 function scopedDomains(){return domains.filter(matchesDomain)}
-let _fseq=0;
-function mkFolder(name,items,kids,domain){return{id:"f"+(++_fseq),type:"folder",name,domain:domain||null,items:items||[],folders:kids||[]}}
 const folders=[];
 function walkFolders(fn,list,parent){(list||folders).forEach(f=>{fn(f,parent||null);walkFolders(fn,f.folders,f)})}
 function folderById(id){let o=null;walkFolders(f=>{if(f.id===id)o=f});return o}
@@ -2278,12 +2313,21 @@ function takeServer(serverId){
   return null;
 }
 function excludeFromDomain(serverId){
-  const dom=domainOf(serverId);
-  const s=takeServer(serverId);if(!s||!dom)return;
-  dom.unallocServers.push(s);
-  open.add(dom.id);open.add(unallocId(dom.id));sel=s.id;
-  resetUnallocDisplay(dom.id);
-  toast(s.name+" исключён из домена");paint();
+  const dom=domainOf(serverId),s=servers.find(x=>x.id===serverId);
+  if(!s||!dom)return;
+  serversAssign([{s,domainId:dom.id,allocated:false}]).then(res=>{
+    if(!res.done.length){toast(problemText(res.failed[0]?.code,s));return}
+    hwApplyServer(res.done[0]);
+    open.add(dom.id);open.add(unallocId(dom.id));sel=s.id;
+    resetUnallocDisplay(dom.id);
+    toast(s.name+" исключён из домена");paint();
+  }).catch(e=>toast(problemText(e,s)));
+}
+// Серверы в домен и из него — одним запросом (POST /servers/assign): ответ
+// говорит, что выполнено, а что нет и почему
+function serversAssign(list){
+  return API.post("/servers/assign",{idempotencyKey:opKey(),
+    items:list.map(x=>({serverId:x.s.id,version:hwVer.get(x.s.id),domainId:x.domainId,allocated:x.allocated}))});
 }
 const unallocDisplayCache={};
 function unallocRowFrom(s,added){
@@ -2306,39 +2350,39 @@ function unallocDisplayList(domainId){
   unallocDisplayCache[domainId]=cache.filter(r=>r.added||liveIds.has(r.id));
   return unallocDisplayCache[domainId];
 }
-function addToDomain(serverId,domainId){
+// Сервер встал в домен (ответ сервера): строка в «Нераспределённых» остаётся
+// с пометкой «Добавлен», чтобы список не прыгал под рукой
+function placeInDomain(r){
   const prevSel=sel;
-  const d=domains.find(x=>x.id===domainId)||domains[0];
+  const d=domainById(r.domainId)||domains[0];
   unallocDisplayList(d.id);
-  const s=takeServer(serverId);if(!s)return;
-  d.servers.push(s);
+  hwApplyServer(r);
+  const s=servers.find(x=>x.id===r.id);
   open.add(d.id);
-  const row=unallocDisplayCache[d.id]?.find(x=>x.id===serverId);
+  const row=unallocDisplayCache[d.id]?.find(x=>x.id===r.id);
   if(row){row.added=true;row.name=s.name;row.ip=s.ip||"";row.online=s.online!==false}
   else unallocDisplayCache[d.id].push(unallocRowFrom(s,true));
-  if(prevSel===serverId)sel=unallocId(d.id);
+  if(prevSel===r.id)sel=unallocId(d.id);
   treeMatchCache.clear();searchMatchCache.clear();
   paint();
   if(document.getElementById("wiz")?.classList.contains("open")&&wizd.mode==="server-list")wd();
+}
+function addToDomain(serverId,domainId){
+  const d=domainById(domainId)||domains[0],s=servers.find(x=>x.id===serverId);
+  if(!s)return Promise.resolve(false);
+  return serversAssign([{s,domainId:d.id,allocated:true}]).then(res=>{
+    res.done.forEach(placeInDomain);
+    if(res.failed.length)toast(problemText(res.failed[0].code,s));
+    return res.done.length>0;
+  }).catch(e=>{toast(problemText(e,s));return false});
 }
 function goAddedServer(serverId){
   document.getElementById("wiz")?.classList.remove("open");
   openNode(serverId,{app:"hw",view:"cam",tab:"gen"});
 }
-function createFakeServer(ip,port){
-  return{id:"s"+Date.now(),type:"server",name:"Сервер — "+ip,ip,port:port||20111,online:true,role:"Узел",disk:0,cpu:5,ram:18,net:2,devices:[]};
-}
-function registerFakeServer(s,domainId){
-  servers.push(s);
-  const dom=domains.find(d=>d.id===domainId)||domains[0];
-  dom.unallocServers.push(s);
-  open.add(dom.id);open.add(unallocId(dom.id));
-  return s;
-}
 // ── Домены: создание, переименование, удаление ───────────────────────────
 // Имя домена — его единственный опознавательный знак в выпадающих списках, в
 // адресах и в диалоге переноса, так что двух одинаковых быть не должно.
-let _domSeq=domains.length;
 function domainById(id){return domains.find(d=>d.id===id)||null}
 function domainNameTaken(name,exceptId){
   const v=String(name||"").trim().toLowerCase();
@@ -2355,10 +2399,10 @@ function freeDomainName(){
   do{n=i18n("Домен")+" "+i;i++}while(domainNameTaken(n));
   return n;
 }
-function createDomain(name){
-  const d={id:"d"+(++_domSeq)+"n"+Date.now().toString(36),type:"domain",
-    name:String(name||"").trim()||freeDomainName(),license:"",online:true,servers:[],unallocServers:[]};
-  domains.push(d);found[d.id]=[];
+// Домен из ответа сервера — в кэш
+function createDomain(r){
+  const d={id:r.id,type:"domain",name:r.name,license:r.license,online:r.online,servers:[],unallocServers:[]};
+  domains.push(d);found[d.id]=[];hwVer.set(r.id,r.version);
   open.add(d.id);
   treeMatchCache.clear();searchMatchCache.clear();
   return d;
@@ -2367,15 +2411,17 @@ function createDomain(name){
 // имя спрашивают там же, где оно потом и живёт — в дереве.
 function addDomain(){
   closeTreeCtx();
-  const d=createDomain(freeDomainName());
-  if(domainFilter){domainFilter=d.id;if(accSel.startsWith("grp:"))accSel="grp:"+d.id}
-  resetTreeSel(d.id);
-  sel=d.id;tab="gen";setD(false);editClear();
-  treeRenameId=d.id;treeRenameField="name";
-  if(domainFilter)aside();
-  paint();
-  requestAnimationFrame(()=>{const el=document.querySelector(".nm-inp");if(el){el.focus();el.select&&el.select()}});
-  return d;
+  return API.post("/domains",{name:freeDomainName()}).then(r=>{
+    const d=createDomain(r);
+    if(domainFilter){domainFilter=d.id;if(accSel.startsWith("grp:"))accSel="grp:"+d.id}
+    resetTreeSel(d.id);
+    sel=d.id;tab="gen";setD(false);editClear();
+    treeRenameId=d.id;treeRenameField="name";
+    if(domainFilter)aside();
+    paint();
+    requestAnimationFrame(()=>{const el=document.querySelector(".nm-inp");if(el){el.focus();el.select&&el.select()}});
+    return d;
+  }).catch(e=>toast(problemText(e)));
 }
 function domainDeviceCount(d){
   let n=0;
@@ -2387,23 +2433,9 @@ function domainFolderCount(did){
   return n;
 }
 function canDeleteDomain(){return domains.length>1}
-// Переносим всё, что у домена было: серверы становятся нераспределёнными в
-// выбранном домене (их состав при этом цел), папки, устройства и сетевые
-// архивы просто меняют домен.
-function moveDomainContents(fromId,toId){
-  const from=domainById(fromId),to=domainById(toId);
-  if(!from||!to)return;
-  [...(from.servers||[]),...(from.unallocServers||[])].forEach(srv=>{
-    to.unallocServers.push(srv);SERVER_DOMAIN[srv.id]=toId;
-  });
-  from.servers=[];from.unallocServers=[];
-  walkFolders(f=>{if(f.domain===fromId)f.domain=toId});
-  arch.forEach(a=>{if(a.domain===fromId)a.domain=toId});
-  Object.keys(DEVICE_DOMAIN).forEach(k=>{if(DEVICE_DOMAIN[k]===fromId)DEVICE_DOMAIN[k]=toId});
-  if((found[fromId]||[]).length)found[toId]=[...(found[toId]||[]),...found[fromId]];
-  delete found[fromId];
-  resetUnallocDisplay(fromId);resetUnallocDisplay(toId);
-}
+// Перенос содержимого удаляемого домена делает сервер (DELETE /domains/{id}?moveTo=):
+// серверы становятся нераспределёнными в выбранном домене, папки, устройства и
+// сетевые архивы меняют домен.
 function deleteDomain(id){
   closeTreeCtx();
   const d=domainById(id);if(!d)return;
@@ -2426,9 +2458,8 @@ function deleteDomain(id){
     const to=document.getElementById("domMoveTo")?.value||others[0]?.id;
     scheduleDelete([id],{label:`${i18n("Домен")} «${locName(d)}»`,commit:()=>{
     if(!domainById(id))return;
-    if(items.length&&to)moveDomainContents(id,to);
-    const i=domains.findIndex(x=>x.id===id);
-    if(i>=0)domains.splice(i,1);
+    // Отсчёт кончился — запрос уходит; не удалось — домен остаётся на месте
+    API.del(`/domains/${id}${items.length&&to?`?moveTo=${to}`:""}`,hwVer.get(id)).then(()=>hwLoad()).then(()=>{
     open.delete(id);delete found[id];resetUnallocDisplay(id);
     delete unallocPick[id];
     treeMatchCache.clear();searchMatchCache.clear();
@@ -2438,6 +2469,7 @@ function deleteDomain(id){
     resetTreeSel(next);sel=next;tab="gen";setD(false);editClear();expandTo(next);
     aside();
     toast("Домен удалён");paint();
+    }).catch(e=>{toast(problemText(e,d));paint()});
     }});
   },{html:true,typeCount:1});
 }
@@ -3654,18 +3686,22 @@ function treeRenameKey(e,id){
   else if(e.key==="Escape"){e.preventDefault();cancelTreeRename()}
 }
 let treeRenamePending=false;
+const RENAME_API={device:"/devices",domain:"/domains",server:"/servers",folder:"/folders"};
+const RENAME_APPLY={device:r=>hwApplyDevice(r),domain:r=>hwApplyDomain(r),server:r=>hwApplyServer(r),folder:r=>hwApplyFolder(r)};
 function commitTreeRename(id,val){
   if(treeRenameId!==id)return;
   const f=find(id);
   // Устройство переименовывается на сервере: поле держится до ответа, иначе
   // на миг показалось бы старое имя
-  if(isApiDevice(f?.n)){
+  const kind=isApiDevice(f?.n)?"device":RENAME_API[f?.n.type]&&hwVer.has(id)?f.n.type:null;
+  if(kind&&!(kind!=="device"&&treeRenameField==="short")){
     if(treeRenamePending)return;
     const field=treeRenameField==="short"?"short":"name",v=String(val||"").trim();
-    if(field==="name"&&!v){toast(i18n("Укажите имя"));requestAnimationFrame(()=>{const el=document.querySelector(".nm-inp");if(el){el.focus();el.select&&el.select()}});return}
+    const err=field!=="name"?"":!v?i18n("Укажите имя"):kind==="domain"?domainNameError(v,id):"";
+    if(err){toast(err);requestAnimationFrame(()=>{const el=document.querySelector(".nm-inp");if(el){el.focus();el.select&&el.select()}});return}
     treeRenamePending=true;
-    API.patch(`/devices/${id}`,{[field]:v},hwVer.get(id)).then(r=>{
-      treeRenamePending=false;hwApplyDevice(r);
+    API.patch(`${RENAME_API[kind]}/${id}`,{[field]:v},hwVer.get(id)).then(r=>{
+      treeRenamePending=false;RENAME_APPLY[kind](r);
       if(treeRenameId===id){treeRenameId=null;treeRenameField="name"}
       treeMatchCache.clear();searchMatchCache.clear();renderTree();
       if(sel===id)gear();
@@ -4750,22 +4786,27 @@ function clearFolder(folderId){
   const count=(f.items||[]).length;
   if(!count){toast(i18n("Папка пуста"));return}
   askConfirm("Убрать все объекты из папки?",`${i18n("Из папки будет убрано объектов:")} ${count}.`,i18n("Сами устройства останутся в системе."),i18n("Убрать"),()=>{
-    f.items=[];
-    treeMatchCache.clear();searchMatchCache.clear();
-    sel=folderId;tab="gen";setD(false);
-    toast(i18n("Папка очищена"));paint();
+    API.patch(`/folders/${f.id}`,{deviceIds:[]},hwVer.get(f.id)).then(r=>{
+      hwApplyFolder(r);
+      treeMatchCache.clear();searchMatchCache.clear();
+      sel=folderId;tab="gen";setD(false);
+      toast(i18n("Папка очищена"));paint();
+    }).catch(e=>toast(problemText(e)));
   });
 }
 function addSubfolder(parentId,domainId){
   closeTreeCtx();
   const parent=parentId?folderById(parentId):null;
   const did=parent?folderDomain(parent.id):(domainId||domains[0].id);
-  const f=mkFolder(i18n("Новая папка"),[],[],parent?null:did);
-  if(parent){parent.folders.push(f);open.add(parent.id)}else{folders.push(f);open.add(did)}
-  treeMatchCache.clear();searchMatchCache.clear();
-  sel=f.id;selFolder=f.id;tab="gen";setD(false);expandTo(f.id);
-  treeRenameId=f.id;treeRenameField="name";
-  paint();
+  API.post("/folders",{name:i18n("Новая папка"),domainId:did,parentId:parent?parent.id:null}).then(r=>{
+    hwVer.set(r.id,r.version);
+    const f=folderNode(r);
+    if(parent){parent.folders.push(f);open.add(parent.id)}else{folders.push(f);open.add(did)}
+    treeMatchCache.clear();searchMatchCache.clear();
+    sel=f.id;selFolder=f.id;tab="gen";setD(false);expandTo(f.id);
+    treeRenameId=f.id;treeRenameField="name";
+    paint();
+  }).catch(e=>toast(problemText(e)));
 }
 function deleteFolder(id){
   closeTreeCtx();
@@ -4774,6 +4815,7 @@ function deleteFolder(id){
   const cnt=folderDeviceIds(f).size;
   askConfirm("Удалить папку?",`${i18n("Будет удалена папка")} «${escHtml(f.name)}».`,
     (cnt?`${i18n("Устройства останутся в системе")} (${cnt}). `:"")+i18n("После подтверждения будет отсчёт с кнопкой «Отменить»."),i18n("Удалить"),()=>scheduleDelete([id],{label:`${i18n("Папка")} «${f.name}»`,commit:()=>{
+    API.del(`/folders/${id}`,hwVer.get(id)).then(()=>{
     const parent=folderParent(id);
     if(parent)parent.folders=parent.folders.filter(x=>x.id!==id);
     else{const i=folders.findIndex(x=>x.id===id);if(i>=0)folders.splice(i,1)}
@@ -4782,6 +4824,7 @@ function deleteFolder(id){
     sel=(parent||folders[0])?.id||sel;tab="gen";setD(false);
     treeMatchCache.clear();searchMatchCache.clear();
     toast(i18n("Папка удалена"));paint();
+    }).catch(e=>toast(problemText(e)));
   }}),{typeCount:1});
 }
 // Одиночное удаление идёт той же дорогой, что и групповое: подтверждение с
@@ -4817,11 +4860,15 @@ function clearTreeSel(){
 // deleteSelected — см. блок «Групповые операции» ниже.
 function refreshUnalloc(domainId){
   closeTreeCtx();
-  resetUnallocDisplay(domainId);
-  const ua=unallocId(domainId);
-  sel=ua;tab="gen";setD(false);
-  treeMatchCache.clear();searchMatchCache.clear();
-  toast("Список серверов обновлён");paint();
+  // «Обновить» — перечитать серверы: кто появился в сети домена, кто пропал
+  API.get("/servers").then(r=>{
+    r.items.forEach(hwApplyServer);
+    resetUnallocDisplay(domainId);
+    const ua=unallocId(domainId);
+    sel=ua;tab="gen";setD(false);
+    treeMatchCache.clear();searchMatchCache.clear();
+    toast("Список серверов обновлён");paint();
+  }).catch(e=>toast(problemText(e)));
 }
 function tctxSep(){return`<div class="tctx-sep" role="separator"></div>`}
 function tctxStarIcon(){return`<span class="tctx-ic tctx-star" aria-hidden="true">${STAR_ON}</span>`}
@@ -6574,11 +6621,14 @@ function redrawUnalloc(did){
 function addUnallocServers(ids,did){
   const list=ids.filter(id=>unallocAddable(did).some(r=>r.id===id));
   if(!list.length){toast("Ничего не выбрано");return}
-  list.forEach(id=>addToDomain(id,did));
-  unallocSel(did).clear();
-  const d=domainById(did);
-  toast(list.length===1?"Сервер добавлен в «"+locName(d)+"»":`Добавлено серверов: ${list.length}`);
-  redrawUnalloc(did);
+  serversAssign(list.map(id=>({s:servers.find(x=>x.id===id),domainId:did,allocated:true}))).then(res=>{
+    res.done.forEach(placeInDomain);
+    unallocSel(did).clear();
+    const d=domainById(did),n=res.done.length;
+    if(res.failed.length)toast(`${i18n("Добавлено серверов")}: ${n} · ${i18n("не добавлено")}: ${res.failed.length} — ${problemText(res.failed[0].code)}`);
+    else toast(n===1?"Сервер добавлен в «"+locName(d)+"»":`Добавлено серверов: ${n}`);
+    redrawUnalloc(did);
+  }).catch(e=>toast(problemText(e)));
 }
 function addPickedUnalloc(did){addUnallocServers(unallocPicked(did).map(r=>r.id),did)}
 function addAllUnalloc(did){closeTreeCtx();addUnallocServers(unallocAddable(did).map(r=>r.id),did)}
@@ -12172,10 +12222,13 @@ function wizAddToDomain(serverId){
   addToDomain(serverId,wizd.domain||domains[0]?.id);
 }
 function refreshUnallocInWizard(domainId){
-  resetUnallocDisplay(domainId);
-  toast("Список серверов обновлён");
-  if(document.getElementById("wiz").classList.contains("open")&&wizd.mode==="server-list")wd();
-  else refreshUnalloc(domainId);
+  if(!(document.getElementById("wiz").classList.contains("open")&&wizd.mode==="server-list")){refreshUnalloc(domainId);return}
+  API.get("/servers").then(r=>{
+    r.items.forEach(hwApplyServer);
+    resetUnallocDisplay(domainId);
+    toast("Список серверов обновлён");
+    wd();
+  }).catch(e=>toast(problemText(e)));
 }
 function chooseAdd(mode,cat,type){
   wizd.mode=mode;wizd.cat=cat||null;wizd.type=type||null;
@@ -12206,19 +12259,18 @@ function runIpProbe(){
   wizd.ipText=text;
   const{targets,bad,over}=parseIpTargets(text);
   if(!targets.length&&!bad.length){toast("Укажите адреса серверов");return}
-  wizd.ipRows=[
-    ...targets.map(t=>{
-      const r=probeServer(t.ip,t.port);
-      return{key:t.ip+":"+t.port,ip:t.ip,port:t.port,status:r.status,
-        serverId:r.server?r.server.id:null,domain:r.domain||null,added:false};
-    }),
-    ...bad.map(raw=>({key:"bad:"+raw,ip:raw,port:null,status:"bad",serverId:null,domain:null,added:false}))
-  ];
-  wizd.ipPick=new Set(wizd.ipRows.filter(r=>r.status==="found").map(r=>r.key));
-  wizd.ipOver=!!over;
-  wizd.ipPhase="done";
-  if(over)toast(`За раз опрашиваем не больше ${IP_SCAN_LIMIT} адресов`);
-  wd();
+  // Отвечает ли адрес и заведён ли уже такой сервер — знает сервер (POST /servers/probe)
+  (targets.length?API.post("/servers/probe",{targets:targets.map(t=>({ip:t.ip,port:t.port}))}):Promise.resolve({items:[]})).then(res=>{
+    wizd.ipRows=[
+      ...res.items.map(r=>({key:r.ip+":"+r.port,ip:r.ip,port:r.port,status:r.status,serverId:r.serverId,domain:domainById(r.domainId),added:false})),
+      ...bad.map(raw=>({key:"bad:"+raw,ip:raw,port:null,status:"bad",serverId:null,domain:null,added:false}))
+    ];
+    wizd.ipPick=new Set(wizd.ipRows.filter(r=>r.status==="found").map(r=>r.key));
+    wizd.ipOver=!!over;
+    wizd.ipPhase="done";
+    if(over)toast(`За раз опрашиваем не больше ${IP_SCAN_LIMIT} адресов`);
+    wd();
+  }).catch(e=>toast(problemText(e)));
 }
 function ipRowsAddable(){return(wizd.ipRows||[]).filter(r=>r.status==="found"&&!r.added)}
 function ipPicked(){const set=wizd.ipPick||new Set();return ipRowsAddable().filter(r=>set.has(r.key))}
@@ -12231,18 +12283,25 @@ function toggleIpPickAll(on){
   wizd.ipPick=new Set(on?ipRowsAddable().map(r=>r.key):[]);
   wd();
 }
-function addProbedServers(){
+async function addProbedServers(){
   const list=ipPicked();
   if(!list.length){toast("Ничего не выбрано");return}
   const did=wizd.domain||domains[0]?.id;
-  list.forEach(r=>{
-    const s2=r.serverId?servers.find(x=>x.id===r.serverId):registerFakeServer(createFakeServer(r.ip,r.port),did);
-    if(!s2)return;
-    addToDomain(s2.id,did);
-    r.added=true;r.serverId=s2.id;
-    wizd.ipPick.delete(r.key);
-  });
-  toast(list.length===1?"Сервер добавлен":`Добавлено серверов: ${list.length}`);
+  let n=0;
+  try{
+    for(const r of list){
+      // Новый адрес сначала заводится (нераспределённым), затем встаёт в домен
+      let id=r.serverId;
+      if(!id){const rec=await API.post("/servers",{ip:r.ip,port:r.port,domainId:did});hwApplyServer(rec);id=rec.id}
+      const s2=servers.find(x=>x.id===id);if(!s2)continue;
+      const res=await serversAssign([{s:s2,domainId:did,allocated:true}]);
+      res.done.forEach(placeInDomain);
+      if(!res.done.length)continue;
+      r.added=true;r.serverId=id;n++;
+      wizd.ipPick.delete(r.key);
+    }
+  }catch(e){toast(problemText(e))}
+  if(n)toast(n===1?"Сервер добавлен":`Добавлено серверов: ${n}`);
   wd();
 }
 function ipBulkHtml(){
@@ -13182,13 +13241,22 @@ function bulkExcludeServers(){
   closeTreeCtx();
   const list=bulkScopeNodes().filter(n=>n.type==="server"&&!isUnallocated(n.id)&&domainOf(n.id));if(!list.length)return;
   const back=list.map(s=>{const d=domainOf(s.id);return{s,d,i:d.servers.indexOf(s)}});
-  back.forEach(({s,d})=>{takeServer(s.id);d.unallocServers.push(s);open.add(d.id);open.add(unallocId(d.id));resetUnallocDisplay(d.id)});
-  treeSel.clear();treeMatchCache.clear();searchMatchCache.clear();
-  sel=list[0].id;afterSelChange(null);paint();
-  toastAction("bkexcl",`${i18n("Исключено из домена серверов")}: ${list.length}`,i18n("Отменить"),()=>{
-    back.slice().reverse().forEach(({s,d,i})=>{d.unallocServers=d.unallocServers.filter(x=>x!==s);servers.includes(s)||servers.push(s);d.servers.splice(Math.min(i,d.servers.length),0,s);resetUnallocDisplay(d.id)});
-    treeMatchCache.clear();searchMatchCache.clear();paint();toast("Серверы возвращены в домен");
-  },8000);
+  serversAssign(back.map(({s,d})=>({s,domainId:d.id,allocated:false}))).then(res=>{
+    res.done.forEach(hwApplyServer);
+    const done=back.filter(b=>res.done.some(r=>r.id===b.s.id));
+    done.forEach(({d})=>{open.add(d.id);open.add(unallocId(d.id));resetUnallocDisplay(d.id)});
+    treeSel.clear();treeMatchCache.clear();searchMatchCache.clear();
+    sel=list[0].id;afterSelChange(null);paint();
+    if(!done.length){toast(problemText(res.failed[0]?.code));return}
+    toastAction("bkexcl",`${i18n("Исключено из домена серверов")}: ${done.length}`,i18n("Отменить"),()=>{
+      // «Отменить» — обратный запрос; серверы встают на прежние места в списке
+      serversAssign(done.map(({s,d})=>({s,domainId:d.id,allocated:true}))).then(r2=>{
+        r2.done.forEach(r=>{hwApplyServer(r);const b=done.find(x=>x.s.id===r.id);
+          b.d.servers=b.d.servers.filter(x=>x!==b.s);b.d.servers.splice(Math.min(b.i,b.d.servers.length),0,b.s);resetUnallocDisplay(b.d.id)});
+        treeMatchCache.clear();searchMatchCache.clear();paint();toast("Серверы возвращены в домен");
+      }).catch(e=>toast(problemText(e)));
+    },8000);
+  }).catch(e=>toast(problemText(e)));
 }
 // Нераспределённые серверы — одна групповая операция: добавить в домен.
 // Домен выбирают из списка; серверы встают в его дерево рядом с остальными
@@ -13205,21 +13273,29 @@ function bulkAddToDomain(did){
   const d=domainById(did);if(!d)return;
   const list=bulkUnallocServers(bulkScopeNodes());if(!list.length)return;
   const back=list.map(s=>{const from=domainById(unallocDomainOf(s.id));return{s,from,i:from?from.unallocServers.indexOf(s):-1}});
-  back.forEach(({s,from})=>{takeServer(s.id);d.servers.push(s);if(from)resetUnallocDisplay(from.id)});
-  resetUnallocDisplay(d.id);
-  open.add(d.id);treeMatchCache.clear();searchMatchCache.clear();
-  list.forEach(s=>expandTo(s.id));
-  afterSelChange(null);paint();
-  // Куда встали — видно сразу: дерево доезжает до них, строки моргают.
-  setTimeout(()=>{
-    const rows=list.map(s=>document.querySelector(`#tree .n[data-pick="${s.id}"]`)).filter(Boolean);
-    rows[0]?.scrollIntoView({block:"center",behavior:"smooth"});
-    if(rows.length)accFlash(()=>rows,true);
-  },60);
-  toastAction("bkadddom",`${i18n("Добавлено в")} «${locName(d)}» ${i18n("серверов")}: ${list.length}`,i18n("Отменить"),()=>{
-    back.slice().sort((x,y)=>x.i-y.i).forEach(({s,from,i})=>{d.servers=d.servers.filter(x=>x!==s);const to=(from||d).unallocServers;to.splice(i<0?to.length:Math.min(i,to.length),0,s);resetUnallocDisplay((from||d).id)});
-    resetUnallocDisplay(d.id);treeMatchCache.clear();searchMatchCache.clear();paint();toast("Серверы снова нераспределённые");
-  },8000);
+  serversAssign(list.map(s=>({s,domainId:d.id,allocated:true}))).then(res=>{
+    res.done.forEach(hwApplyServer);
+    const done=back.filter(b=>res.done.some(r=>r.id===b.s.id));
+    done.forEach(({from})=>{if(from)resetUnallocDisplay(from.id)});
+    resetUnallocDisplay(d.id);
+    open.add(d.id);treeMatchCache.clear();searchMatchCache.clear();
+    done.forEach(({s})=>expandTo(s.id));
+    afterSelChange(null);paint();
+    if(!done.length){toast(problemText(res.failed[0]?.code));return}
+    // Куда встали — видно сразу: дерево доезжает до них, строки моргают.
+    setTimeout(()=>{
+      const rows=done.map(({s})=>document.querySelector(`#tree .n[data-pick="${s.id}"]`)).filter(Boolean);
+      rows[0]?.scrollIntoView({block:"center",behavior:"smooth"});
+      if(rows.length)accFlash(()=>rows,true);
+    },60);
+    toastAction("bkadddom",`${i18n("Добавлено в")} «${locName(d)}» ${i18n("серверов")}: ${done.length}`,i18n("Отменить"),()=>{
+      serversAssign(done.map(({s,from})=>({s,domainId:(from||d).id,allocated:false}))).then(r2=>{
+        r2.done.forEach(r=>{hwApplyServer(r);const b=done.find(x=>x.s.id===r.id),to=b.from||d;
+          to.unallocServers=to.unallocServers.filter(x=>x!==b.s);to.unallocServers.splice(b.i<0?to.unallocServers.length:Math.min(b.i,to.unallocServers.length),0,b.s);resetUnallocDisplay(to.id)});
+        resetUnallocDisplay(d.id);treeMatchCache.clear();searchMatchCache.clear();paint();toast("Серверы снова нераспределённые");
+      }).catch(e=>toast(problemText(e)));
+    },8000);
+  }).catch(e=>toast(problemText(e)));
 }
 function bulkCanRename(n){return n.type!=="domain"&&n.type!=="folder"&&n.type!=="vol"}
 // Параметры одного типа: те же поля, что в карточке объекта.
@@ -13570,6 +13646,25 @@ function bulkRun(ch,opts,nodesIn){
 const DEVICE_PATCH=new Set(Object.keys(window.CONSOLEM_OPENAPI.components.schemas.DevicePatch.properties));
 const HW_NOT_DEVICE=new Set(["domain","server","unalloc","folder","archive","vol","gpu","found","fdev","nofolder","norec"]);
 function isApiDevice(n){return!!n&&!HW_NOT_DEVICE.has(n.type)&&hwVer.has(n.id)}
+const SERVER_PATCH=new Set(Object.keys(window.CONSOLEM_OPENAPI.components.schemas.ServerPatch.properties));
+const DOMAIN_PATCH=new Set(Object.keys(window.CONSOLEM_OPENAPI.components.schemas.DomainPatch.properties));
+// Объект, изменения которого уходят операцией: устройство, сервер, домен
+function isApiTarget(n){return isApiDevice(n)||(!!n&&(n.type==="server"||n.type==="domain")&&hwVer.has(n.id))}
+// Строка плана сервера или домена → изменение; null — не выразить через API
+function srvRowToApi(n,r){
+  if(n.type==="domain"){
+    if(!r.edit||!DOMAIN_PATCH.has(r.prop))return null;
+    return{[r.prop]:String(r.to??"").trim()};
+  }
+  if(r.fld){
+    const k=r.prop||SRV_FLD_API[r.fld];
+    if(!k||!SERVER_PATCH.has(k))return null;
+    let v=String(r.to??"").trim();
+    if(k==="role")v=ROLE_CODE[v]||v;
+    return{[k]:k==="port"?apiVal("port",v):v};
+  }
+  return r.key&&SERVER_PATCH.has(r.key)?{[r.key]:r.to??null}:null;
+}
 function apiVal(k,v){
   if(v===undefined||v===null)return null;
   if(k==="lat"||k==="lon"||k==="azimuth"||DEV_NUM.has(k)){const s=String(v).trim();if(s==="")return null;const x=Number(s);return Number.isNaN(x)?s:x}
@@ -13593,8 +13688,16 @@ function keyToApi(node,key,v){
   return{[k]:apiVal(k,v)};
 }
 function cardApiItems(n,d){
-  if(!isApiDevice(n))return null;
+  if(!isApiTarget(n))return null;
   const items=[];
+  if(!isApiDevice(n)){
+    for(const r of d){
+      if(r.node&&r.node!==n)return null;
+      const set=srvRowToApi(n,r);if(!set)return null;
+      items.push({targetId:n.id,set});
+    }
+    return items;
+  }
   for(const r of d){
     if(r.add||r.edit)return null;
     const target=r.node||n;if(!isApiDevice(target))return null;

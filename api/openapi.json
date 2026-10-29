@@ -167,6 +167,52 @@
             "$ref": "#/components/responses/Problem"
           }
         }
+      },
+      "post": {
+        "operationId": "createDomain",
+        "tags": [
+          "hardware"
+        ],
+        "summary": "Создать домен",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DomainCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Создан",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Domain"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
       }
     },
     "/domains/{domainId}": {
@@ -213,6 +259,145 @@
             }
           }
         ]
+      },
+      "patch": {
+        "operationId": "patchDomain",
+        "tags": [
+          "hardware"
+        ],
+        "summary": "Изменить домен: имя, лицензия",
+        "parameters": [
+          {
+            "name": "domainId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "Версия записи из ETag: \"3\". Нет — 428, не совпала — 412",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DomainPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Готово",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Domain"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteDomain",
+        "tags": [
+          "hardware"
+        ],
+        "summary": "Удалить домен, перенеся содержимое",
+        "description": "Серверы становятся нераспределёнными в домене moveTo, туда же переезжают папки, устройства, сетевые хранилища и найденное поиском. Последний домен удалить нельзя",
+        "parameters": [
+          {
+            "name": "domainId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "Версия записи из ETag: \"3\". Нет — 428, не совпала — 412",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "moveTo",
+            "in": "query",
+            "required": false,
+            "description": "Куда перенести содержимое; обязателен, если домен не пуст",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Удалено"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
       }
     },
     "/servers": {
@@ -244,6 +429,148 @@
                 }
               }
             }
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createServer",
+        "tags": [
+          "hardware"
+        ],
+        "summary": "Завести сервер по адресу",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServerCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Заведён",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Server"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/servers/probe": {
+      "post": {
+        "operationId": "probeServers",
+        "tags": [
+          "hardware"
+        ],
+        "summary": "Опросить адреса: какие серверы отвечают",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProbeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Готово",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "items"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ProbeResult"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/servers/assign": {
+      "post": {
+        "operationId": "assignServers",
+        "tags": [
+          "hardware"
+        ],
+        "summary": "Добавить серверы в домен или исключить из него",
+        "description": "Групповая операция одним запросом: частичный успех, повтор с тем же idempotencyKey ничего не выполняет снова. «Отменить» — обратный запрос",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Готово",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssignResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
           },
           "401": {
             "$ref": "#/components/responses/Problem"
@@ -298,6 +625,78 @@
             }
           }
         ]
+      },
+      "patch": {
+        "operationId": "patchServer",
+        "tags": [
+          "hardware"
+        ],
+        "summary": "Изменить сервер",
+        "parameters": [
+          {
+            "name": "serverId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "Версия записи из ETag: \"3\". Нет — 428, не совпала — 412",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServerPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Готово",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Server"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
       }
     },
     "/devices": {
@@ -495,6 +894,52 @@
             "$ref": "#/components/responses/Problem"
           }
         }
+      },
+      "post": {
+        "operationId": "createFolder",
+        "tags": [
+          "hardware"
+        ],
+        "summary": "Создать папку",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FolderCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Создана",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Folder"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
       }
     },
     "/folders/{folderId}": {
@@ -541,6 +986,125 @@
             }
           }
         ]
+      },
+      "patch": {
+        "operationId": "patchFolder",
+        "tags": [
+          "hardware"
+        ],
+        "summary": "Изменить папку: имя, состав",
+        "parameters": [
+          {
+            "name": "folderId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "Версия записи из ETag: \"3\". Нет — 428, не совпала — 412",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FolderPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Готово",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Folder"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteFolder",
+        "tags": [
+          "hardware"
+        ],
+        "summary": "Удалить папку с подпапками; устройства остаются",
+        "parameters": [
+          {
+            "name": "folderId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "Версия записи из ETag: \"3\". Нет — 428, не совпала — 412",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Удалено"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
       }
     },
     "/archives": {
@@ -1757,8 +2321,10 @@
             "type": "string",
             "enum": [
               "primary",
-              "node"
-            ]
+              "node",
+              "standby"
+            ],
+            "description": "Основной, узел, резервный"
           },
           "domainId": {
             "type": "string",
@@ -1794,6 +2360,18 @@
             "type": "integer",
             "description": "Версия записи: растёт на 1 с каждым изменением; уходит в ETag",
             "minimum": 1
+          },
+          "netmask": {
+            "type": "string",
+            "description": "Маска сети"
+          },
+          "gateway": {
+            "type": "string",
+            "description": "Шлюз"
+          },
+          "dns": {
+            "type": "string",
+            "description": "DNS"
           }
         },
         "additionalProperties": false,
@@ -4713,14 +5291,25 @@
         "required": [
           "targetId"
         ],
-        "description": "Шаг операции над одним объектом: set — изменить поля устройства, folderIds — задать, в каких папках оно лежит. Ровно одно из двух",
+        "description": "Шаг операции над одним объектом: set — изменить поля устройства, сервера или домена, folderIds — задать, в каких папках лежит устройство. Ровно одно из двух",
         "properties": {
           "targetId": {
             "type": "string",
             "format": "uuid"
           },
           "set": {
-            "$ref": "#/components/schemas/DevicePatch"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DevicePatch"
+              },
+              {
+                "$ref": "#/components/schemas/ServerPatch"
+              },
+              {
+                "$ref": "#/components/schemas/DomainPatch"
+              }
+            ],
+            "description": "Изменение объекта: схема — по его виду (устройство, сервер, домен)"
           },
           "folderIds": {
             "type": "array",
@@ -4914,7 +5503,9 @@
           "LOGIN_TAKEN",
           "PASSWORD_POLICY",
           "SELF_LOCKOUT",
-          "TEST_SUPPORT_OFF"
+          "TEST_SUPPORT_OFF",
+          "ADDRESS_TAKEN",
+          "DOMAIN_NOT_EMPTY"
         ],
         "description": "Машинный код ошибки: интерфейс показывает свой текст по коду",
         "x-enum-descriptions": {
@@ -4939,7 +5530,317 @@
           "LOGIN_TAKEN": "Логин уже занят (409)",
           "PASSWORD_POLICY": "Пароль не соответствует политике (422)",
           "SELF_LOCKOUT": "Изменение оставит систему без администратора или лишит вас входа (409)",
-          "TEST_SUPPORT_OFF": "Служебные операции тестового стенда выключены (404)"
+          "TEST_SUPPORT_OFF": "Служебные операции тестового стенда выключены (404)",
+          "ADDRESS_TAKEN": "Сервер с таким адресом и портом уже есть (409)",
+          "DOMAIN_NOT_EMPTY": "В домене есть серверы, папки или устройства, а куда их перенести, не указано (422)"
+        }
+      },
+      "ServerPatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Изменение сервера (JSON Merge Patch). Домен и «нераспределённый» меняет POST /servers/assign",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "ip": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "primary",
+              "node",
+              "standby"
+            ],
+            "description": "Основной, узел, резервный"
+          },
+          "netmask": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "gateway": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dns": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "DomainPatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Изменение домена",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "license": {
+            "type": "string"
+          }
+        }
+      },
+      "DomainCreate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "FolderPatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Изменение папки: имя, состав целиком",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "deviceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        }
+      },
+      "FolderCreate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "domainId",
+          "parentId"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "domainId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "parentId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Родитель; null — корневая папка домена"
+          }
+        }
+      },
+      "ServerCreate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ip",
+          "port",
+          "domainId"
+        ],
+        "description": "Сервер по адресу: найден опросом и ещё не заведён. Встаёт в «Нераспределённые» домена",
+        "properties": {
+          "ip": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "domainId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "ProbeRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "targets"
+        ],
+        "properties": {
+          "targets": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "ip",
+                "port"
+              ],
+              "properties": {
+                "ip": {
+                  "type": "string"
+                },
+                "port": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535
+                }
+              }
+            }
+          }
+        }
+      },
+      "ProbeResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ip",
+          "port",
+          "status",
+          "serverId",
+          "domainId"
+        ],
+        "properties": {
+          "ip": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "in-domain",
+              "found",
+              "dead"
+            ],
+            "description": "Уже в домене; отвечает и его можно добавить; не отвечает"
+          },
+          "serverId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Сервер уже заведён (в домене или нераспределённый)"
+          },
+          "domainId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Домен, в котором сервер уже состоит"
+          }
+        }
+      },
+      "AssignRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "idempotencyKey",
+          "items"
+        ],
+        "description": "Добавить серверы в домен или исключить из него — одним запросом. Каждый сервер — со своей версией",
+        "properties": {
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 8
+          },
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "serverId",
+                "version",
+                "domainId",
+                "allocated"
+              ],
+              "properties": {
+                "serverId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "version": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "domainId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "allocated": {
+                  "type": "boolean",
+                  "description": "true — в домене, false — нераспределённый в этом домене"
+                }
+              }
+            }
+          }
+        }
+      },
+      "AssignResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "done",
+          "failed"
+        ],
+        "description": "Частичный успех: что выполнено и что нет, с кодом по каждому",
+        "properties": {
+          "done": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Server"
+            }
+          },
+          "failed": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "serverId",
+                "code"
+              ],
+              "properties": {
+                "serverId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "code": {
+                  "$ref": "#/components/schemas/ProblemCode"
+                }
+              }
+            }
+          }
         }
       }
     }

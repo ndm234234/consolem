@@ -23,6 +23,8 @@
   }
   const clone = (v) => (v === undefined ? v : JSON.parse(JSON.stringify(v)));
   const DAY = 86400000;
+  const GB = 1024 ** 3;
+  const TB = 1024 ** 4;
   const DATE = /^\d{4}-\d\d-\d\d$/;
   const MOMENT = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z$/;
 
@@ -156,6 +158,39 @@
       }
       return null;
     }
+    // Объект изменения по id: устройство, сервер или домен — у каждого своя схема изменения
+    const KINDS = [
+      ["devices", "device", "DevicePatch"],
+      ["servers", "server", "ServerPatch"],
+      ["domains", "domain", "DomainPatch"],
+    ];
+    function targetOf(id) {
+      for (const [table, kind, schema] of KINDS) {
+        const rec = byId(table, id);
+        if (rec) return { table, kind, schema, rec };
+      }
+      return null;
+    }
+    const view = (t) => (t.kind === "device" ? device(t.rec) : clone(t.rec));
+    function domainNameProblem(name, exceptId) {
+      const v = String(name || "").trim();
+      if (!v) return problem(422, "NAME_REQUIRED", "Укажите имя домена", { field: "name" });
+      if (db.domains.some((d) => d.id !== exceptId && d.name.trim().toLowerCase() === v.toLowerCase())) return problem(409, "NAME_TAKEN", "Домен с таким именем уже есть", { field: "name" });
+      return null;
+    }
+    // Изменение — по схеме своего вида и по смыслу: ссылки ведут в существующие записи, имя не пустое,
+    // имя домена не занято
+    function setProblem(t, patch) {
+      if (SPEC && window.ConsolemContract) {
+        const errs = window.ConsolemContract.check(SPEC, { $ref: `#/components/schemas/${t.schema}` }, patch, "set", []);
+        if (errs.length) {
+          const field = (errs[0].match(/^set\.?([^:\s[]*)/) || [])[1];
+          return problem(422, "VALIDATION_FAILED", errs.slice(0, 3).join("; "), field ? { field } : {});
+        }
+      }
+      if (t.kind === "domain" && "name" in patch) return domainNameProblem(patch.name, t.rec.id);
+      return patchProblem(patch);
+    }
     // Значения до изменения — для отката: поля, которых не было, — null
     function applyPatch(rec, patch) {
       const before = {};
@@ -236,18 +271,21 @@
     // Отказы — как в очереди макета: сервер устройства без связи не примет изменение; включить
     // камеру с превышенной лицензией нельзя; версия объекта для отката не совпала — его меняли после
     function runItem(op, item) {
-      const dev = byId("devices", item.targetId);
-      if (!dev) return Object.assign(item, { state: "fail", code: "NOT_FOUND" });
-      if (item.req.expect !== undefined && dev.version !== item.req.expect) return Object.assign(item, { state: "fail", code: "VERSION_MISMATCH" });
-      if (offline(serverOf(dev))) return Object.assign(item, { state: "fail", code: "SERVER_OFFLINE" });
+      const t = targetOf(item.targetId);
+      if (!t) return Object.assign(item, { state: "fail", code: "NOT_FOUND" });
+      const rec = t.rec;
+      if (item.req.expect !== undefined && rec.version !== item.req.expect) return Object.assign(item, { state: "fail", code: "VERSION_MISMATCH" });
+      // Изменение устройства применяет его сервер, изменение сервера — сам сервер; домен — без сервера
+      const via = t.kind === "device" ? serverOf(rec) : t.kind === "server" ? rec : null;
+      if (offline(via)) return Object.assign(item, { state: "fail", code: "SERVER_OFFLINE" });
       if (item.req.set) {
-        if (item.req.set.enabled === true && dev.licenseExceeded) return Object.assign(item, { state: "fail", code: "LICENSE_EXCEEDED" });
-        item.before = { set: applyPatch(dev, item.req.set) };
-        changed("device", dev);
+        if (t.kind === "device" && item.req.set.enabled === true && rec.licenseExceeded) return Object.assign(item, { state: "fail", code: "LICENSE_EXCEEDED" });
+        item.before = { set: applyPatch(rec, item.req.set) };
+        changed(t.kind, rec);
       } else {
-        item.before = { folderIds: setFolders(dev.id, item.req.folderIds) };
+        item.before = { folderIds: setFolders(rec.id, item.req.folderIds) };
       }
-      return Object.assign(item, { state: "ok", code: null, version: dev.version });
+      return Object.assign(item, { state: "ok", code: null, version: rec.version });
     }
 
     function finish(op, fired) {
@@ -330,6 +368,219 @@
           return one(device(rec));
         },
       ],
+      /* ----- Домены ----- */
+      [
+        "POST",
+        "/domains",
+        (p, q, body) => {
+          const bad = domainNameProblem(body.name);
+          if (bad) return bad;
+          const d = { id: uuid("domain"), name: body.name.trim(), license: "", online: true, version: 1 };
+          db.domains.push(d);
+          send("entity.created", { kind: "domain", entityId: d.id, version: d.version });
+          return one(clone(d), 201);
+        },
+      ],
+      [
+        "PATCH",
+        "/domains/{id}",
+        (p, q, body, headers) => {
+          const t = targetOf(p.id);
+          if (!t || t.kind !== "domain") return notFound("Домен");
+          const bad = precondition(t.rec, headers) || setProblem(t, body);
+          if (bad) return bad;
+          if ("name" in body) body.name = body.name.trim();
+          applyPatch(t.rec, body);
+          changed("domain", t.rec);
+          return one(clone(t.rec));
+        },
+      ],
+      [
+        "DELETE",
+        "/domains/{id}",
+        (p, q, body, headers) => {
+          const d = byId("domains", p.id);
+          if (!d) return notFound("Домен");
+          const bad = precondition(d, headers);
+          if (bad) return bad;
+          if (db.domains.length < 2) return problem(409, "LAST_DOMAIN", "Последний домен удалить нельзя");
+          const inside = (r) => r.domainId === d.id;
+          const busyWith = db.servers.some(inside) || db.folders.some(inside) || db.devices.some(inside) || db.archives.some(inside);
+          const to = q.moveTo ? byId("domains", q.moveTo) : null;
+          if (busyWith && (!to || to.id === d.id)) return problem(422, "DOMAIN_NOT_EMPTY", "Укажите домен, куда перенести содержимое", { field: "moveTo" });
+          // Ничего не пропадает: серверы становятся нераспределёнными в домене moveTo, папки, устройства и
+          // сетевые хранилища меняют домен, найденное поиском переходит туда же
+          const move = (table, kind, extra) =>
+            db[table].filter(inside).forEach((r) => {
+              Object.assign(r, { domainId: to.id }, extra || {});
+              r.version += 1;
+              changed(kind, r);
+            });
+          if (to) {
+            move("servers", "server", { allocated: false });
+            move("folders", "folder");
+            move("devices", "device");
+            move("archives", "archive");
+            const from = db.discovery.find((x) => x.domainId === d.id);
+            if (from) {
+              const into = db.discovery.find((x) => x.domainId === to.id);
+              if (into) into.candidateIds = into.candidateIds.concat(from.candidateIds.filter((c) => !into.candidateIds.includes(c)));
+              else from.domainId = to.id;
+            }
+            db.network.forEach((c) => (c.domainIds = [...new Set(c.domainIds.map((x) => (x === d.id ? to.id : x)))]));
+          }
+          db.discovery = db.discovery.filter((x) => x.domainId !== d.id);
+          db.domains = db.domains.filter((x) => x !== d);
+          send("entity.deleted", { kind: "domain", entityId: d.id });
+          return { status: 204, body: null };
+        },
+      ],
+
+      /* ----- Серверы ----- */
+      [
+        "POST",
+        "/servers",
+        (p, q, body) => {
+          if (!byId("domains", body.domainId)) return notFound("Домен");
+          const ip = String(body.ip).trim();
+          if (!/^[\w.-]+$/.test(ip)) return problem(422, "INVALID_IP", "Неверный адрес", { field: "ip" });
+          if (db.servers.some((s) => s.ip.toLowerCase() === ip.toLowerCase() && s.port === body.port)) return problem(409, "ADDRESS_TAKEN", "Сервер с таким адресом уже есть", { field: "ip" });
+          // Найденный опросом сервер сообщает о себе имя, нагрузку и диски; встроенный сервер их придумывает
+          const s = {
+            id: uuid("server"),
+            name: `Сервер — ${ip}`,
+            ip,
+            port: body.port,
+            role: "node",
+            domainId: body.domainId,
+            allocated: false,
+            online: true,
+            telemetry: { cpu: 5, ram: 18, net: 2, disk: 0 },
+            gpu: null,
+            disks: [["C:", 256 * GB, true], ["D:", 4 * TB], ["E:", 6 * TB], ["F:", 8 * TB], ["G:", 12 * TB]].map(([disk, sizeBytes, system]) => ({ disk, sizeBytes, system: !!system })),
+            version: 1,
+          };
+          db.servers.push(s);
+          send("entity.created", { kind: "server", entityId: s.id, version: s.version });
+          return one(clone(s), 201);
+        },
+      ],
+      [
+        "PATCH",
+        "/servers/{id}",
+        (p, q, body, headers) => {
+          const t = targetOf(p.id);
+          if (!t || t.kind !== "server") return notFound("Сервер");
+          const bad = precondition(t.rec, headers) || setProblem(t, body);
+          if (bad) return bad;
+          applyPatch(t.rec, body);
+          changed("server", t.rec);
+          return one(clone(t.rec));
+        },
+      ],
+      [
+        "POST",
+        "/servers/probe",
+        (p, q, body) => {
+          const max = db.reference.limits.ipScanMax;
+          if (body.targets.length > max) return problem(422, "IP_RANGE_TOO_LARGE", `За раз — не больше ${max} адресов`, { params: { max } });
+          // Отвечает ли адрес — у встроенного сервера по хешу адреса: так же, как в макете на константах
+          const hash = (s) => [...s].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 0);
+          const items = body.targets.map(({ ip, port }) => {
+            const s = db.servers.find((x) => x.ip.toLowerCase() === ip.toLowerCase() && x.port === port);
+            if (s) return { ip, port, status: s.allocated ? "in-domain" : "found", serverId: s.id, domainId: s.allocated ? s.domainId : null };
+            return { ip, port, status: hash(`${ip}:${port}`) % 3 === 0 ? "dead" : "found", serverId: null, domainId: null };
+          });
+          return { status: 200, body: { items } };
+        },
+      ],
+      [
+        "POST",
+        "/servers/assign",
+        (p, q, body) => {
+          const done = [];
+          const failed = [];
+          body.items.forEach((x) => {
+            const s = byId("servers", x.serverId);
+            if (!s) return failed.push({ serverId: x.serverId, code: "NOT_FOUND" });
+            if (!byId("domains", x.domainId)) return failed.push({ serverId: x.serverId, code: "NOT_FOUND" });
+            if (s.version !== x.version) return failed.push({ serverId: x.serverId, code: "VERSION_MISMATCH" });
+            if (s.domainId !== x.domainId || s.allocated !== x.allocated) {
+              Object.assign(s, { domainId: x.domainId, allocated: x.allocated });
+              s.version += 1;
+              // Добавленный встаёт в конец списка — там, где его и ждут увидеть
+              db.servers = db.servers.filter((r) => r !== s).concat(s);
+              changed("server", s);
+            }
+            done.push(clone(s));
+          });
+          return { status: 200, body: { done, failed } };
+        },
+      ],
+
+      /* ----- Папки ----- */
+      [
+        "POST",
+        "/folders",
+        (p, q, body) => {
+          if (!byId("domains", body.domainId)) return notFound("Домен");
+          if (!String(body.name).trim()) return problem(422, "NAME_REQUIRED", "Укажите имя папки", { field: "name" });
+          if (body.parentId) {
+            const parent = byId("folders", body.parentId);
+            if (!parent) return notFound("Папка");
+            if (parent.domainId !== body.domainId) return problem(422, "VALIDATION_FAILED", "Родительская папка — в другом домене", { field: "parentId" });
+          }
+          const f = { id: uuid("folder"), name: body.name.trim(), domainId: body.domainId, parentId: body.parentId, deviceIds: [], version: 1 };
+          db.folders.push(f);
+          send("entity.created", { kind: "folder", entityId: f.id, version: f.version });
+          return one(clone(f), 201);
+        },
+      ],
+      [
+        "PATCH",
+        "/folders/{id}",
+        (p, q, body, headers) => {
+          const f = byId("folders", p.id);
+          if (!f) return notFound("Папка");
+          const bad = precondition(f, headers);
+          if (bad) return bad;
+          if ("name" in body && !String(body.name).trim()) return problem(422, "NAME_REQUIRED", "Укажите имя папки", { field: "name" });
+          const alien = (body.deviceIds || []).find((id) => {
+            const d = byId("devices", id);
+            return !d || d.domainId !== f.domainId;
+          });
+          if (alien) return problem(422, "VALIDATION_FAILED", `Устройства ${alien} нет в домене папки`, { field: "deviceIds" });
+          if ("name" in body) body.name = body.name.trim();
+          if (body.deviceIds) body.deviceIds = [...new Set(body.deviceIds)];
+          applyPatch(f, body);
+          changed("folder", f);
+          return one(clone(f));
+        },
+      ],
+      [
+        "DELETE",
+        "/folders/{id}",
+        (p, q, body, headers) => {
+          const f = byId("folders", p.id);
+          if (!f) return notFound("Папка");
+          const bad = precondition(f, headers);
+          if (bad) return bad;
+          // Вместе с подпапками; сами устройства остаются в системе
+          const gone = new Set([f.id]);
+          for (let grew = true; grew; ) {
+            grew = false;
+            db.folders.forEach((x) => {
+              if (x.parentId && gone.has(x.parentId) && !gone.has(x.id)) {
+                gone.add(x.id);
+                grew = true;
+              }
+            });
+          }
+          db.folders = db.folders.filter((x) => !gone.has(x.id));
+          gone.forEach((id) => send("entity.deleted", { kind: "folder", entityId: id }));
+          return { status: 204, body: null };
+        },
+      ],
       [
         "GET",
         "/domains/{id}/discovery",
@@ -367,13 +618,15 @@
         (p, q, body) => {
           for (const [i, r] of body.items.entries()) {
             if (!!r.set === !!r.folderIds) return problem(422, "VALIDATION_FAILED", "У шага ровно одно из set и folderIds", { field: `items[${i}]` });
-            if (!byId("devices", r.targetId)) return problem(404, "NOT_FOUND", `Устройство ${r.targetId} не найдено`, { params: { targetId: r.targetId } });
+            const t = targetOf(r.targetId);
+            if (!t) return problem(404, "NOT_FOUND", `Объект ${r.targetId} не найден`, { params: { targetId: r.targetId } });
             if (r.set) {
-              const bad = patchProblem(r.set);
+              const bad = setProblem(t, r.set);
               if (bad) return bad;
             }
             if (r.folderIds) {
-              const dev = byId("devices", r.targetId);
+              if (t.kind !== "device") return problem(422, "VALIDATION_FAILED", "В папках лежат только устройства", { field: `items[${i}].folderIds` });
+              const dev = t.rec;
               const wrong = r.folderIds.find((f) => {
                 const folder = byId("folders", f);
                 return !folder || folder.domainId !== dev.domainId;
@@ -384,9 +637,9 @@
           const targets = [...new Set(body.items.map((r) => r.targetId))];
           const missing = targets.find((t) => !(t in body.expectedVersions));
           if (missing) return problem(428, "PRECONDITION_REQUIRED", "Для каждого объекта нужна версия, по которой построен план", { params: { targetId: missing } });
-          for (const t of targets) {
-            const rec = byId("devices", t);
-            if (rec.version !== body.expectedVersions[t]) return problem(412, "VERSION_MISMATCH", "Объект изменился с момента построения плана", { current: device(rec), params: { targetId: t } });
+          for (const id of targets) {
+            const t = targetOf(id);
+            if (t.rec.version !== body.expectedVersions[id]) return problem(412, "VERSION_MISMATCH", "Объект изменился с момента построения плана", { current: view(t), params: { targetId: id } });
           }
           const taken = targets.find(busy);
           if (taken) return problem(409, "BUSY", "Над объектом выполняется другая операция", { params: { targetId: taken } });
