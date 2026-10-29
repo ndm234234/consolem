@@ -89,6 +89,11 @@ SCREENS = [
     ["acc", None, None, ["accGo('check')"]],
     ["acc", None, None, ["accGo('history')"]],
     ["rules", None, None, ["setUiLang('en')"]],
+    # Ключевые диалоги: подтверждение удаления, мастер добавления, новое хранилище, план изменений правила
+    ["hw", None, None, ["setUiLang('ru')", "pick(id('c2r'))", "confirmDeleteNodes([id('c2r')])"]],
+    ["hw", None, None, ["closeConfirm()", "pick(id('d1'))", "openW()"]],
+    ["hw", None, None, ["closeWizard()", "addArchive(id('s1'))"]],
+    ["rules", None, None, ["closeBulkModal()", "rule=id('r1')", "ruleEdit(x=>{x.name='Охрана входа — план'})", "rulePlan()"]],
 ]
 
 # Случайность в разметке (разброс шагов очереди, подсказки) — одна и та же в обоих прототипах
