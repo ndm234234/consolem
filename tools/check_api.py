@@ -27,7 +27,7 @@ import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PROTOTYPE = "index_10_api-server.html"
+PROTOTYPE = "index_11_api-server-main.html"
 METHODS = ("get", "post", "put", "patch", "delete")
 
 # Константы с данными сервера в HTML прототипа: образец → что это
@@ -48,9 +48,29 @@ DATA_CONSTANTS = {
     r"\bfunction accSeed\b": "права",
     r"\bconst SETTINGS\s*=[^;]*value:": "значения опций",
     r"\bconst LOG_EVENTS\s*=": "журнал",
+    # «Автоматизация» основного макета (прототип 11)
+    r"\bconst SCHEDS\s*=\s*\[\s*\{": "расписания",
+    r"\bconst DAY_GROUPS\s*=\s*\[\s*\{": "особые дни",
+    r"\bconst OBJ_MODES\s*=\s*\[\s*\{": "режимы объекта",
+    r"\bconst MAINT_WINDOWS\s*=\s*\[\s*\{": "окна обслуживания",
+    r"\bfunction ruleHistInit\b": "история версий правил",
+    r"\bfunction ruleFiresInit\b": "демо-запуски правил",
+    r"\bconst RULE_(LAYOUTS|MONS)\s*=\s*\[\s*\"": "раскладки и мониторы видеостены",
+    r"\bconst RULE_(IDS|DEV)_A\s*=": "временная таблица этапа А: старые id в правилах, поля устройств",
 }
-# Ещё не переведены на API: этапы 4–5 убирали их отсюда вместе с константами; теперь переведено всё
-PENDING = set()
+# Ещё не переведены на API. Прототип 11, этап А: «Автоматизация» — ещё константы макета, на этапе Б
+# переводится целиком, и PENDING снова пустеет
+PENDING = {
+    r"\bconst rules\s*=\s*\[\s*\{",
+    r"\bconst SCHEDS\s*=\s*\[\s*\{",
+    r"\bconst DAY_GROUPS\s*=\s*\[\s*\{",
+    r"\bconst OBJ_MODES\s*=\s*\[\s*\{",
+    r"\bconst MAINT_WINDOWS\s*=\s*\[\s*\{",
+    r"\bfunction ruleHistInit\b",
+    r"\bfunction ruleFiresInit\b",
+    r"\bconst RULE_(LAYOUTS|MONS)\s*=\s*\[\s*\"",
+    r"\bconst RULE_(IDS|DEV)_A\s*=",
+}
 
 
 class Report:

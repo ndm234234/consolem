@@ -1990,12 +1990,40 @@ function setUiLang(v){
 // (api/client.js) и раскладывает в структуры, по которым рисует, — это кэш
 // прочитанного. Кэш меняется только ответом сервера или событием потока,
 // никогда до ответа. С ?api=https://… тот же интерфейс работает с настоящим
-// бэкендом, с ?latency=300 — с задержкой, как по медленной сети.
+// бэкендом, с ?latency=300 — с задержкой, как по медленной сети, с
+// ?fixture=one-domain — встроенный сервер с набором профиля: системой, которая
+// умеет только часть контракта.
 const API=(()=>{
   const q=new URLSearchParams(location.search),base=q.get("api"),latency=+q.get("latency")||0;
   if(base)return ConsolemApi.create({baseUrl:base,latency});
-  return ConsolemApi.create({server:ConsolemServer.create({fixture:window.CONSOLEM_FIXTURE,openapi:window.CONSOLEM_OPENAPI}),latency});
+  const all=window.CONSOLEM_FIXTURES||{demo:window.CONSOLEM_FIXTURE};
+  return ConsolemApi.create({server:ConsolemServer.create({fixture:all[q.get("fixture")]||all.demo,fixtures:all,openapi:window.CONSOLEM_OPENAPI}),latency});
 })();
+// Что умеет система — GET /reference → capabilities. Неподдержанное интерфейс
+// не показывает: пункты меню и кнопки — по can(), разметка с data-needs —
+// скрыта стилем (capsApply). needs: operationId, "type:<вид>", "feature:<код>".
+const CAPS={operations:new Set(),deviceTypes:new Set(),features:new Set()};
+function can(need){
+  if(need.startsWith("type:"))return CAPS.deviceTypes.has(need.slice(5));
+  if(need.startsWith("feature:"))return CAPS.features.has(need.slice(8));
+  return CAPS.operations.has(need);
+}
+async function capsLoad(){
+  const c=(await API.get("/reference")).capabilities;
+  CAPS.operations=new Set(c.operations);CAPS.deviceTypes=new Set(c.deviceTypes);CAPS.features=new Set(c.features);
+  capsApply();
+}
+function capsApply(){
+  // Мастер добавления: только виды устройств системы («ipsrv-nvr» — вид ipsrv)
+  Object.keys(WIZ).forEach(k=>{WIZ[k].types=WIZ[k].types.filter(t=>can("type:"+t[0].split("-")[0]));if(!WIZ[k].types.length)delete WIZ[k]});
+  if(!can("listLicenses"))sysOpts.splice(0,sysOpts.length,...sysOpts.filter(o=>o.id!=="lic"));
+  const spec=window.CONSOLEM_OPENAPI,needs=[];
+  if(spec)Object.values(spec.paths).forEach(item=>Object.values(item).forEach(o=>{if(o&&o.operationId&&!can(o.operationId))needs.push(o.operationId)}));
+  ["serverRoles","serverNetwork","archiveEncryption"].forEach(f=>{if(!can("feature:"+f))needs.push("feature:"+f)});
+  const st=document.createElement("style");st.id="capsStyle";
+  st.textContent=needs.map(n=>`[data-needs~="${n}"]{display:none!important}`).join("\n");
+  document.head.appendChild(st);
+}
 const servers=[],domains=[];
 // Версия записи — для If-Match и плана операции. В объекты кэша не кладётся:
 // иначе она попала бы в «было → станет» карточки.
@@ -2102,7 +2130,7 @@ const HW_LISTS=["domains","servers","devices","folders","archives","volumes"];
 async function hwLoad(){
   const lists=await Promise.all(HW_LISTS.map(p=>API.get("/"+p).then(r=>r.items)));
   const L=Object.fromEntries(HW_LISTS.map((p,i)=>[p,lists[i]]));
-  const disc=await Promise.all(L.domains.map(d=>API.get(`/domains/${d.id}/discovery`)));
+  const disc=can("getDiscovery")?await Promise.all(L.domains.map(d=>API.get(`/domains/${d.id}/discovery`))):[];
   const was=hwDeviceNames();
   hwFill(L);
   seedFound(disc);
@@ -2244,8 +2272,19 @@ const HW_EVENT={device:["/devices",hwApplyDevice],folder:["/folders",hwApplyFold
   archive:["/archives",hwApplyArchive],volume:["/volumes",hwApplyVolume]};
 // Чужая запись появилась или пропала — кэш «Оборудования» перечитывается целиком
 // (своя уже в кэше: ответ сервера приходит раньше события)
+// По сети событие о своей новой записи может обогнать ответ на запрос: перед
+// перечитыванием ещё раз смотрим, не пришла ли она ответом
 let hwReloadT=0;
-function hwReloadSoon(){clearTimeout(hwReloadT);hwReloadT=setTimeout(apiReload,100)}
+const hwPending=new Map();
+function hwReloadSoon(m){
+  if(m)hwPending.set(m.entityId,m.type);
+  clearTimeout(hwReloadT);
+  hwReloadT=setTimeout(()=>{
+    const stale=[...hwPending].some(([id,type])=>(type==="entity.created")!==hwVer.has(id));
+    hwPending.clear();
+    if(stale||!m)apiReload();
+  },100);
+}
 // Поток событий: изменения (свои и чужие), ход операций. Запись перечитывается
 // по id; если поток потерян — весь кэш заново.
 function apiOnEvent(m){
@@ -2262,7 +2301,7 @@ function apiOnEvent(m){
     return;
   }
   if(m.type==="entity.deleted"&&m.kind==="device"&&hwVer.has(m.entityId)){hwRemoveDevice(m.entityId);renderTree();if(sel===m.entityId)paint();return}
-  if(m.type==="entity.created"||m.type==="entity.deleted"){if((m.type==="entity.created")!==hwVer.has(m.entityId))hwReloadSoon();return}
+  if(m.type==="entity.created"||m.type==="entity.deleted"){if((m.type==="entity.created")!==hwVer.has(m.entityId))hwReloadSoon(m);return}
   if(m.type!=="entity.changed")return;
   if(hwVer.get(m.entityId)===m.version&&!m.payload?.status)return;
   API.get(`${h[0]}/${m.entityId}`).then(r=>{
@@ -2271,7 +2310,7 @@ function apiOnEvent(m){
   }).catch(()=>{});
 }
 function hwDeviceNames(){const m=new Map();walkAll(n=>{if(n.type!=="domain"&&n.type!=="server")m.set(n.id,locName(n))});devicePool.forEach(function w(n){m.set(n.id,locName(n));(n.devices||[]).forEach(w)});return m}
-function apiReload(){hwLoad().then(()=>{if(!find(sel))sel=domains[0]?.id||null;paint()})}
+function apiReload(){Promise.all([hwLoad(),appLoad()]).then(()=>{if(!find(sel))sel=domains[0]?.id||null;paint()})}
 // Код ошибки сервера → текст для показа: интерфейс говорит своими словами
 function problemText(e,n){
   const code=e?.problem?.code||e?.code||e;
@@ -2881,7 +2920,7 @@ let licenses=[];
 const LOG_KIND_RU={audit:"Аудит",alarm:"Тревога",info:"Инфо"};
 // Этап А: правила — ещё константы макета; на этапе Б appLoad читает и их
 async function appLoad(){
-  const [me,st,lic,jr,acc]=await Promise.all([API.get("/me"),API.get("/settings"),API.get("/licenses"),API.get("/journal"),API.get("/access")]);
+  const [me,st,lic,jr,acc]=await Promise.all([API.get("/me"),API.get("/settings"),can("listLicenses")?API.get("/licenses"):{items:[]},API.get("/journal"),API.get("/access")]);
   sysTz=me.timezone||sysTz;ACC_ME=me.login;
   accSetSnapshot(acc);accLast=acc;
   settingsApply(st);
@@ -3098,6 +3137,8 @@ function freeDomainName(){
 }
 // Домен из ответа сервера — в кэш
 function createDomain(r){
+  // Уже пришёл с перечитанным кэшем (событие обогнало ответ)
+  if(domainById(r.id)){hwVer.set(r.id,r.version);return domainById(r.id)}
   const d={id:r.id,type:"domain",name:r.name,license:r.license,online:r.online,servers:[],unallocServers:[]};
   domains.push(d);found[d.id]=[];hwVer.set(r.id,r.version);
   open.add(d.id);
@@ -5412,7 +5453,7 @@ function canInspectorAdd(n){
 }
 // Первой кнопкой — откуда берут устройства чаще всего: из того, что видно в сети.
 function lanFoundBtn(n){
-  if(!lanHost(n))return"";
+  if(!lanHost(n)||!can("getDiscovery"))return"";
   return`<button type="button" class="btn s" title="${i18n("Показать устройства сети, которых нет в системе")}" onclick="lanShowFound('${n.id}')">${lu("plus")}${i18n("Найденные")}</button>`;
 }
 // Завести устройство — такое же действие объекта, как «＋ Службу», и место ему
@@ -5519,8 +5560,9 @@ function addSubfolder(parentId,domainId){
   const did=parent?folderDomain(parent.id):(domainId||domains[0].id);
   API.post("/folders",{name:i18n("Новая папка"),domainId:did,parentId:parent?parent.id:null}).then(r=>{
     hwVer.set(r.id,r.version);
-    const f=folderNode(r);
-    if(parent){parent.folders.push(f);open.add(parent.id)}else{folders.push(f);open.add(did)}
+    const f=folderById(r.id)||folderNode(r);
+    if(!folderById(r.id)){if(parent)parent.folders.push(f);else folders.push(f)}
+    open.add(parent?parent.id:did);
     treeMatchCache.clear();searchMatchCache.clear();
     sel=f.id;selFolder=f.id;tab="gen";setD(false);expandTo(f.id);
     treeRenameId=f.id;treeRenameField="name";
@@ -5663,17 +5705,19 @@ function openTreeCtx(n,xy){
     }else if(n.type==="archive"){
       // Те же три пути, что и кнопки в шапке архива: камеры привязывают к
       // архиву, поэтому и заводить их удобно прямо отсюда.
-      addItems.push(tctxItem(i18n("Добавить найденные"),`closeTreeCtx();lanShowFound('${n.id}')`,tctxPlusIcon()));
+      if(can("getDiscovery"))addItems.push(tctxItem(i18n("Добавить найденные"),`closeTreeCtx();lanShowFound('${n.id}')`,tctxPlusIcon()));
       addItems.push(tctxItem(i18n("Добавить вручную"),`closeTreeCtx();lanOpenWizard('manual')`,tctxPlusIcon()));
       addItems.push(tctxItem(i18n("Добавить из файла"),`closeTreeCtx();lanOpenWizard('csv')`,tctxPlusIcon()));
-      addItems.push(tctxSep());
-      addItems.push(tctxItem(i18n("Добавить том"),`closeTreeCtx();addVolume('${n.id}')`,tctxPlusIcon()));
+      if(can("createVolume")){
+        addItems.push(tctxSep());
+        addItems.push(tctxItem(i18n("Добавить том"),`closeTreeCtx();addVolume('${n.id}')`,tctxPlusIcon()));
+      }
     }else if(n.type==="domain"){
       // Всё, что заводит карточка домена: устройства — тремя путями, как у
       // архива, дальше то, из чего домен состоит. Раскладка больше не решает,
       // что здесь показать, — в карточке это есть всегда, и меню не должно
       // прятать половину только потому, что дерево разложено по папкам.
-      addItems.push(tctxItem(i18n("Добавить найденные"),`closeTreeCtx();lanShowFound('${n.id}')`,tctxPlusIcon()));
+      if(can("getDiscovery"))addItems.push(tctxItem(i18n("Добавить найденные"),`closeTreeCtx();lanShowFound('${n.id}')`,tctxPlusIcon()));
       addItems.push(tctxItem(i18n("Добавить вручную"),`closeTreeCtx();lanOpenWizard('manual')`,tctxPlusIcon()));
       addItems.push(tctxItem(i18n("Добавить из файла"),`closeTreeCtx();lanOpenWizard('csv')`,tctxPlusIcon()));
       addItems.push(tctxSep());
@@ -5684,11 +5728,11 @@ function openTreeCtx(n,xy){
     }else if(n.type==="server"&&!isUnallocated(n.id)){
       // Как у домена: всё, что заводит карточка сервера. Устройства — тремя
       // путями, дальше службы и хранилище этого сервера.
-      addItems.push(tctxItem(i18n("Добавить найденные"),`closeTreeCtx();lanShowFound('${n.id}')`,tctxPlusIcon()));
+      if(can("getDiscovery"))addItems.push(tctxItem(i18n("Добавить найденные"),`closeTreeCtx();lanShowFound('${n.id}')`,tctxPlusIcon()));
       addItems.push(tctxItem(i18n("Добавить вручную"),`closeTreeCtx();lanOpenWizard('manual')`,tctxPlusIcon()));
       addItems.push(tctxItem(i18n("Добавить из файла"),`closeTreeCtx();lanOpenWizard('csv')`,tctxPlusIcon()));
       addItems.push(tctxSep());
-      addItems.push(tctxItem(addTreeLabel(n),`closeTreeCtx();openW('svc')`,tctxPlusIcon()));
+      if(WIZ.svc)addItems.push(tctxItem(addTreeLabel(n),`closeTreeCtx();openW('svc')`,tctxPlusIcon()));
       addItems.push(tctxItem(i18n("Создать хранилище…"),`closeTreeCtx();addArchive('${n.id}')`,tctxPlusIcon()));
     }else if(canTreeCtxAdd(n)){
       const lb=addTreeLabel(n);
@@ -5712,9 +5756,9 @@ function openTreeCtx(n,xy){
         rest.push(tctxItem(i18n("Удалить папку"),`deleteFolder('${n.id}')`));
       }
       if(n.type==="archive")rest.push(tctxItem(i18n("Удалить хранилище"),`deleteArchive('${n.id}')`));
-      if(n.type==="vol")rest.push(tctxItem(i18n("Удалить том"),`deleteVolume('${n.id}')`));
+      if(n.type==="vol"&&can("deleteVolume"))rest.push(tctxItem(i18n("Удалить том"),`deleteVolume('${n.id}')`));
     }
-    if(n.type==="domain"){
+    if(n.type==="domain"&&can("deleteDomain")){
       rest.push(tctxItem(i18n("Удалить домен"),`deleteDomain('${n.id}')`,null,!canDeleteDomain()));
     }
     if(canFav(n))rest.push(tctxItem(isFav(n.id)?i18n("Убрать из избранного"):i18n("В избранное"),`toggleFav('${n.id}',${selCtx?`'${selCtx}'`:"null"})`,tctxStarIcon()));
@@ -5734,7 +5778,7 @@ function openTreeCtx(n,xy){
       if(main.length)main.push(tctxSep());
       main.push(...rest);
     }
-    if(n.type==="domain"||n.type==="unalloc"){
+    if((n.type==="domain"||n.type==="unalloc")&&can("createDomain")){
       if(main.length)main.push(tctxSep());
       main.push(tctxItem(i18n("Создать домен"),`addDomain()`,tctxPlusIcon()));
     }
@@ -6216,7 +6260,7 @@ function tabsFor(n){
   if(n.type==="domain")return[["gen","Общие"],["cams","Устройства"],["srvs","Серверы"],["lic","Лицензии"]];
   if(n.type==="unalloc")return[];
   if(n.type==="server"&&isUnallocated(n.id))return[];
-  if(n.type==="server")return[["gen","Общие"],["cams","Устройства"],["svc","Службы"],["disk","Хранилище"],["net","Сеть"]];
+  if(n.type==="server")return[["gen","Общие"],["cams","Устройства"],["svc","Службы"],["disk","Хранилище"]].concat(can("feature:serverNetwork")?[["net","Сеть"]]:[]);
   // Хранилище открывают ради камер, что в него пишут: «Устройства» — первая
   // вкладка и открывается по умолчанию, параметры и тома — во второй.
   if(n.type==="archive")return[["cams","Устройства"],["arch","Хранилище"]];
@@ -7627,7 +7671,7 @@ function formBase(n){
         ${fldRo("Тип",archKindLabel(n))}
         <div>${fldRo("Тип хранения",k==="cloud"?i18n("Облачное"):i18n((ARCH_STORAGE.find(x=>x[0]===n.storage)||ARCH_STORAGE[0])[1])).replace(/^<div>|<\/div>$/g,"")}<div class="bk-hint">${i18n("задаётся при создании и не меняется — тома размечены под него")}</div></div>
       </div>
-      <div class="ln ln-sw"><div>${i18n("Шифрование томов")} <span class="sub">${canEnc?"AES-256-GCM":i18n("— только у объектного хранилища")}</span></div><div class="sw ${n.enc&&canEnc?"on":""} ${canEnc?"":"dis"}" ${canEnc?`onclick="archSet('${n.id}','enc',!this.classList.contains('on'))"`:""}></div></div>
+      <div class="ln ln-sw" data-needs="feature:archiveEncryption"><div>${i18n("Шифрование томов")} <span class="sub">${canEnc?"AES-256-GCM":i18n("— только у объектного хранилища")}</span></div><div class="sw ${n.enc&&canEnc?"on":""} ${canEnc?"":"dis"}" ${canEnc?`onclick="archSet('${n.id}','enc',!this.classList.contains('on'))"`:""}></div></div>
       <div class="mx" style="margin-top:10px">
         <button type="button" class="mc" onclick="goTab('cams')"><span>${i18n("Камер пишется")}</span><b>${cams.length}</b></button>
         <div class="mc"><span>${i18n("Томов")}</span><b>${vols.length}</b></div>
@@ -7645,7 +7689,7 @@ function formBase(n){
         empty:"Томов нет — записывать некуда",
         ph:"Путь, диск или бакет…",
         unit:"том|тома|томов",
-        head:`<button type="button" class="btn s" onclick="addVolume('${n.id}')">${lu("plus")}${i18n("Том")}</button>`
+        head:`<button type="button" class="btn s" data-needs="createVolume" onclick="addVolume('${n.id}')">${lu("plus")}${i18n("Том")}</button>`
       })+
       `<p class="sub">${i18n(rules)}</p>`;
   }
@@ -7659,7 +7703,7 @@ function formBase(n){
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
         ${k==="local"?(n.mode==="part"?`<button type="button" class="btn s" onclick="formatVolume('${n.id}')" ${n.state==="format"?"disabled":""}>${i18n("Форматировать…")}</button>`:""):`<button type="button" class="btn s" onclick="volCheck('${n.id}')">${i18n(k==="cloud"?"Проверить подключение":"Подключиться")}</button>`}
-        <button type="button" class="btn s" onclick="deleteVolume('${n.id}')">${i18n("Удалить том")}</button>
+        <button type="button" class="btn s" data-needs="deleteVolume" onclick="deleteVolume('${n.id}')">${i18n("Удалить том")}</button>
       </div>
       <p class="sub" style="margin-top:10px">${i18n("Глубина и шифрование задаются на хранилище; у тома — где он лежит и какого он размера.")}</p>`);
   }
@@ -7770,8 +7814,8 @@ function formBase(n){
         <button type="button" class="btn s" onclick="addSubfolder(null,'${n.id}')">${lu("plus")}${i18n("Папка")}</button>
         <button type="button" class="btn s" onclick="addArchive('${n.id}')">${lu("plus")}${i18n("Хранилище")}…</button>
         <span style="flex:1"></span>
-        <button type="button" class="btn s" onclick="addDomain()">${lu("plus")}${i18n("Домен")}</button>
-        <button type="button" class="btn s danger" onclick="deleteDomain('${n.id}')" ${canDeleteDomain()?"":"disabled title=\""+i18n("Последний домен удалить нельзя")+"\""}>${i18n("Удалить домен")}</button>
+        <button type="button" class="btn s" data-needs="createDomain" onclick="addDomain()">${lu("plus")}${i18n("Домен")}</button>
+        <button type="button" class="btn s danger" data-needs="deleteDomain" onclick="deleteDomain('${n.id}')" ${canDeleteDomain()?"":"disabled title=\""+i18n("Последний домен удалить нельзя")+"\""}>${i18n("Удалить домен")}</button>
       </div>`);
   }
   if(n.type==="server"){
@@ -7821,7 +7865,7 @@ function formBase(n){
     const svc=(n.devices||[]).filter(d=>isSvc(d)).length;
     const recCams=serverCameras(n.id).filter(isRecording);
     return card("Общие",`${bdg(n)}${n.online===false?` <span class="sub">${i18n("нет связи")}</span>`:` <span class="sub">${i18n("ведёт запись и службы")}</span>`}
-      <div class="g" style="margin-top:10px">${fld("Имя",locName(n))}${fld("IP",n.ip)}${sl("Роль",[n.role||"Узел","Резервный"])}</div>
+      <div class="g" style="margin-top:10px">${fld("Имя",locName(n))}${fld("IP",n.ip)}${can("feature:serverRoles")?sl("Роль",[n.role||"Узел","Резервный"]):""}</div>
       ${serverLoadHtml(n)}
       <div class="mx" style="margin-top:10px">
         <button type="button" class="mc" onclick="goTab('svc')"><span>${i18n("Службы сервера")}</span><b>${svc}</b></button>
@@ -14841,7 +14885,7 @@ function assignDeviceFolder(deviceId,folderId){
 }
 function initDeviceWizard(c){
   const w={
-    mode:"device-add",deviceTab:"search",deviceStep:1,domain:c.domain?.id||domains[0]?.id,
+    mode:"device-add",deviceTab:can("startDiscovery")?"search":"manual",deviceStep:1,domain:c.domain?.id||domains[0]?.id,
     server:c.server?.id||null,folder:(c.node?.type==="folder"?c.node.id:selFolder)||null,serverOnly:false,view:c.view,
     devState:"idle",devSearchProgress:0,devFilter:"",devFiltPop:false,devSelectedOnly:false,devStatuses:{ok:true,manual:true,bad:true},
     devMode:"current",templateId:"",devResults:[],devFieldsPop:false,devViewMode:defaultDevViewMode(),devSelected:new Set(),
@@ -15473,7 +15517,7 @@ function renderArchNew(){
       <div><label>${i18n("Имя")}</label><input value="${escHtml(an.name)}" placeholder="${escHtml(an.kind==="cloud"?cloudLabel(an.provider):i18n(an.kind==="remote"?"Сетевое хранилище":"Хранилище"))}" oninput="anSet('name',this.value,true)"></div>
       <div><label>${i18n("Глубина, дней")}</label><input type="number" value="${an.days}" oninput="anSet('days',this.value,true)"><div class="bk-hint">${i18n("0 — без ограничения")}</div></div>
       ${an.kind==="cloud"?fldRo("Тип хранения",i18n("Облачное")):`<div><label>${i18n("Тип хранения")}</label><select onchange="anSet('storage',this.value)">${ARCH_STORAGE.map(([v,l])=>`<option value="${v}" ${an.storage===v?"selected":""}>${i18n(l)}</option>`).join("")}</select><div class="bk-hint">${i18n(an.storage==="object"?"объём тома меняется на ходу, том можно зашифровать":"меньше задержка под большой нагрузкой")}</div></div>`}
-      <div><label>${i18n("Шифрование")}</label><select ${canEnc?"":"disabled"} onchange="anSet('enc',this.value==='1')"><option value="0">${i18n("Нет")}</option><option value="1" ${an.enc&&canEnc?"selected":""}>AES-256-GCM</option></select>${canEnc?"":`<div class="bk-hint">${i18n("только у объектного хранилища")}</div>`}</div>
+      <div data-needs="feature:archiveEncryption"><label>${i18n("Шифрование")}</label><select ${canEnc?"":"disabled"} onchange="anSet('enc',this.value==='1')"><option value="0">${i18n("Нет")}</option><option value="1" ${an.enc&&canEnc?"selected":""}>AES-256-GCM</option></select>${canEnc?"":`<div class="bk-hint">${i18n("только у объектного хранилища")}</div>`}</div>
     </div>
     <div class="an-vol-h">${i18n("Первый том")}<span class="sub">${i18n("остальные — «＋ Том» в карточке хранилища")}</span></div>
     ${an.kind==="local"&&an.server&&!an.vol.disk?`<div class="nt err">${i18n("Свободных дисков на сервере нет: на каждом уже есть раздел хранилища.")}</div>`:volFieldsHtml(a,an.vol,"anSet(")}
@@ -15516,9 +15560,9 @@ function createArchive(){
   if(!an||anBlock())return;
   API.post("/archives",anArchive()).then(res=>{
   hwVer.set(res.archive.id,res.archive.version);
-  const a=archNode(res.archive);
-  arch.push(a);
-  res.volumes.forEach(r=>{hwVer.set(r.id,r.version);a.vols.push(volNode(r))});
+  const a=archById(res.archive.id)||archNode(res.archive);
+  if(!arch.includes(a))arch.push(a);
+  res.volumes.forEach(r=>{hwVer.set(r.id,r.version);if(!volById(r.id))a.vols.push(volNode(r))});
   const v=a.vols[0];
   an=null;closeBulkModal();
   open.add(a.server);sel=a.id;tab="arch";setD(true);
@@ -15532,7 +15576,7 @@ function addVolume(archId){
   if(!d){toast("Свободных дисков нет: на одном диске у хранилища один том, а разделы других хранилищ заняты");return}
   API.post(`/archives/${a.id}/volumes`,volSpec(a,d)).then(r=>{
     hwVer.set(r.id,r.version);
-    a.vols.push(volNode(r));
+    if(!volById(r.id))a.vols.push(volNode(r));
     open.add(a.id);sel=r.id;tab="gen";setD(true);
     toast(i18n("Том добавлен"));
     paint();
@@ -16219,9 +16263,9 @@ function deviceManualHtml(){
     <div class="dev-grid">
       <div class="full"><label>Тип устройства</label><select onchange="changeManualType(this.value)">
         <option value="camera" ${m.type==="camera"?"selected":""}>IP-устройство</option>
-        <option value="storage" ${m.type==="storage"?"selected":""}>IP-устройство с хранилищем</option>
-        <option value="eventsrc" ${m.type==="eventsrc"?"selected":""}>Источник событий</option>
-        <option value="acfa" ${m.type==="acfa"?"selected":""}>Устройство ACFA</option>
+        ${can("type:storage")?`<option value="storage" ${m.type==="storage"?"selected":""}>IP-устройство с хранилищем</option>`:""}
+        ${can("type:eventsrc")?`<option value="eventsrc" ${m.type==="eventsrc"?"selected":""}>Источник событий</option>`:""}
+        ${can("type:acfa")?`<option value="acfa" ${m.type==="acfa"?"selected":""}>Устройство ACFA</option>`:""}
       </select></div>
       <div><label>IP-адрес</label><input value="${escHtml(m.ip)}" placeholder="192.168.1.100" oninput="updateManual('ip',this.value)"></div>
       <div><label>Порт</label><input type="number" value="${m.port}" oninput="updateManual('port',this.value)"></div>
@@ -16374,13 +16418,13 @@ function renderDeviceWizardFooter(){
   df.style.display="";df.classList.add("device-footer");wb.style.display="none";wn.style.display="none";
   if(wizd.deviceTab==="manual"){
     const templateMissing=wizd.devMode==="template"&&!wizd.templateId;
-    foot.innerHTML=`<div class="dev-footer-left"><button type="button" class="lk lk-act" onclick="setDeviceTab('search')">← К результатам поиска</button></div>
+    foot.innerHTML=`<div class="dev-footer-left">${devTabBackHtml("csv")}</div>
       <div class="dev-footer-right dev-footer-manual">${wizd.manualAddedId?`<div class="dev-action-btns dev-action-btns-inline">${devAddedActionsHtml(wizd.manualAddedId)}</div>`:`${deviceAddParamsHtml()}<button class="btn pri" onclick="addManualDevice()" ${templateMissing?"disabled":""}>Добавить устройство</button>`}</div>`;
     return;
   }
   if(wizd.deviceTab==="csv"){
     const valid=csvImportableRows(wizd.csvRows||[]).length;
-    foot.innerHTML=`<div class="dev-footer-left"><button type="button" class="lk lk-act" onclick="setDeviceTab('search')">← К результатам поиска</button></div>
+    foot.innerHTML=`<div class="dev-footer-left">${devTabBackHtml("manual")}</div>
       <div class="dev-footer-right">${valid?`<button class="btn pri" onclick="importCsvDevices()">Импортировать (${valid})</button>`:""}</div>`;
     return;
   }
@@ -16417,9 +16461,15 @@ function renderDeviceWizardInline(host){
   document.removeEventListener("mousedown",onDeviceFiltOutside);
   if(wizd.devFiltPop||wizd.modePop||wizd.devFieldsPop)document.addEventListener("mousedown",onDeviceFiltOutside);
 }
+// Из «Вручную» и «Из файла» — назад к поиску; без поиска в сети (capabilities) —
+// на соседнюю вкладку
+function devTabBackHtml(other){
+  if(can("startDiscovery"))return`<button type="button" class="lk lk-act" onclick="setDeviceTab('search')">← К результатам поиска</button>`;
+  return`<button type="button" class="btn" onclick="setDeviceTab('${other}')">${other==="csv"?"Добавить из файла":"Добавить вручную"}</button>`;
+}
 function foundFootHtml(){
   if(wizd.deviceTab!=="search")
-    return`<button type="button" class="lk lk-act" onclick="setDeviceTab('search')">← К результатам поиска</button>
+    return`${devTabBackHtml(wizd.deviceTab==="manual"?"csv":"manual")}
       <span style="flex:1"></span>
       ${wizd.deviceTab==="manual"
         ?`${wizd.manualAddedId?devAddedActionsHtml(wizd.manualAddedId):`<button class="btn pri" onclick="addManualDevice()">Добавить устройство</button>`}`
@@ -18699,7 +18749,7 @@ function ruleIdsA(){
 // Старт: данные с сервера, затем первая отрисовка. Раскрыто то же, что в
 // макете на константах: первый и третий домен, нераспределённые первого,
 // первый сервер, первое хранилище, первая папка с подпапкой.
-window.appReady=Promise.all([hwLoad(),appLoad()]).then(()=>{
+window.appReady=capsLoad().then(()=>Promise.all([hwLoad(),appLoad()])).then(()=>{
   sel=domains[0]?.id||null;appSel.srvs=sel;
   [domains[0]?.id,domains[2]?.id,domains[0]&&unallocId(domains[0].id),servers[0]?.id,arch[0]?.id].forEach(x=>{if(x)open.add(x)});
   [folders[0],folders[0]?.folders?.[0]].forEach(f=>{if(f)open.add(f.id)});
@@ -18711,6 +18761,8 @@ window.appReady=Promise.all([hwLoad(),appLoad()]).then(()=>{
 }).catch(e=>{
   document.body.insertAdjacentHTML("afterbegin",`<div class="nt bk-warn" style="margin:16px">${i18n("Сервер не ответил")}: ${escHtml(e?.problem?.message||e?.message||String(e))}</div>`);
 });
+// ?selftest — самопроверка прототипа через API (tests/selftest.js); ?selftest-run=… — страница одного её сценария
+if(/[?&]selftest(-run)?\b/.test(location.search)){const s=document.createElement("script");s.src="tests/selftest.js";document.body.appendChild(s)}
 </script>
 </body>
 </html>
