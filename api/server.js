@@ -51,10 +51,17 @@
   }
 
   // Вид записи — первая цифра UUID (api/README.md, «Идентификаторы»): сервер продолжает номера набора
-  const KIND = { operation: "0", domain: "1", server: "2", device: "3", folder: "4", archive: "5", volume: "6", rule: "7", history: "e" };
+  const KIND = { operation: "0", domain: "1", server: "2", device: "3", folder: "4", archive: "5", volume: "6", rule: "7", fire: "d", history: "e",
+    // «Автоматизация»: первая цифра «f», вид — во второй группе UUID
+    schedule: "f-0001", dayGroup: "f-0002", mode: "f-0003", window: "f-0004", ruleVersion: "f-0005" };
   const TABLES = { domains: "domain", servers: "server", devices: "device", folders: "folder", archives: "archive", volumes: "volume", rules: "rule" };
   // Ответ на запрос с ключом повтора помнится 10 минут: повтор получает его же и ничего не выполняет снова
   const IDEMPOTENCY_MS = 10 * 60 * 1000;
+  // Движок «Автоматизации» (api/rule-engine.js): расписания, режим объекта, запуски правил
+  const Engine = typeof window !== "undefined" && window.ConsolemRuleEngine ? window.ConsolemRuleEngine : require("./rule-engine.js");
+  // Содержимое правила: то, что правит администратор и что хранят версии истории
+  const RULE_CONTENT = ["name", "enabled", "logOnly", "logOnlySince", "start", "runMode", "operatorMenu", "ratePerMinute", "windowSec", "runAt", "repeat",
+    "triggers", "conditions", "steps", "owner", "purpose", "serverId", "runAsRoleId", "allowChain"];
   const STREAM_DEPTH = 500;
 
   function create(opts) {
@@ -86,6 +93,10 @@
 
     function load(fixture) {
       db = shiftTimes(clone(fixture), now() - Date.parse(fixture.capturedAt));
+      // Расписания и особые дни — календарь (праздники, даты ярмарки): их даты не сдвигаются
+      db.schedules = clone(fixture.schedules || []);
+      db.dayGroups = clone(fixture.dayGroups || []);
+      lastMode = null;
       me = db.me.userId;
       secrets = new Map();
       ops = new Map();
@@ -95,16 +106,20 @@
       answered.clear();
       // Номера новых id — после самых больших в наборе
       Object.keys(seq).forEach((k) => delete seq[k]);
-      JSON.stringify(db).replace(/"id":"([0-9a-f])(\d{7})-0000-4000-8000-0{12}"/g, (m, kind, n) => {
-        seq[kind] = Math.max(seq[kind] || 0, Number(n));
+      JSON.stringify(db).replace(/"id":"([0-9a-f])(\d{7})-(\d{4})-4000-8000-0{12}"/g, (m, kind, n, sub) => {
+        const k = sub === "0000" ? kind : `${kind}-${sub}`;
+        seq[k] = Math.max(seq[k] || 0, Number(n));
         return m;
       });
     }
     const uuid = (kind) => {
       const k = KIND[kind];
+      const [first, sub] = k.split("-");
       seq[k] = (seq[k] || 0) + 1;
-      return `${k}${String(seq[k]).padStart(7, "0")}-0000-4000-8000-000000000000`;
+      return `${first}${String(seq[k]).padStart(7, "0")}-${sub || "0000"}-4000-8000-000000000000`;
     };
+    const engine = Engine.forDb(() => db);
+    let lastMode = null;
     const byId = (table, id) => db[table].find((r) => r.id === id) || null;
     // Возможности системы — из набора: так же их объявляет бэкенд в GET /reference
     const caps = () => db.reference.capabilities;
@@ -363,7 +378,9 @@
           }
         });
       }
+      const names = new Map(db.devices.filter((d) => gone.has(d.id)).map((d) => [d.id, d.name]));
       db.devices = db.devices.filter((d) => !gone.has(d.id));
+      rulesGone(names);
       db.folders.forEach((f) => {
         if (!f.deviceIds.some((x) => gone.has(x))) return;
         f.deviceIds = f.deviceIds.filter((x) => !gone.has(x));
@@ -418,10 +435,119 @@
       db.archives = db.archives.filter((x) => x !== a);
       send("entity.deleted", { kind: "archive", entityId: a.id });
     }
+    // Правило — с историей версий; журнал его запусков остаётся
+    function removeRule(r) {
+      db.rules = db.rules.filter((x) => x !== r);
+      db.ruleVersions = db.ruleVersions.filter((v) => v.ruleId !== r.id);
+      send("entity.deleted", { kind: "rule", entityId: r.id });
+    }
     function removeVolume(v) {
       db.volumes = db.volumes.filter((x) => x !== v);
       formatting.delete(v.id);
       send("entity.deleted", { kind: "volume", entityId: v.id });
+    }
+
+    /* ===== Автоматизация ===== */
+
+    const ruleView = (r) => clone(r);
+    const content = (r) => Object.fromEntries(RULE_CONTENT.map((k) => [k, clone(r[k])]));
+    const myLogin = () => (db.access.users.find((u) => u.id === me) || {}).login || "";
+    // Цели правила (и вложенные — в шагах, ожидаемом событии): fn(target) → новая цель
+    function eachTarget(c, fn) {
+      c.triggers.forEach((t) => (t.target = fn(t.target)));
+      c.conditions.forEach((x) => "target" in x && (x.target = fn(x.target)));
+      const walk = (l) => l.forEach((a) => {
+        if ("target" in a) a.target = fn(a.target);
+        if (a.event) a.event.target = fn(a.event.target);
+        walk(a.yes || []);
+        walk(a.no || []);
+      });
+      walk(c.steps);
+    }
+    // Удалённое устройство остаётся в цели битым элементом — по имени; исключение удалённого просто снимается.
+    // В версиях истории — так же, иначе «Сравнить» покажет удаление как правку
+    function rulesGone(names) {
+      if (!names.size) return;
+      const fix = (t) => {
+        if (!t) return t;
+        const hit = t.include.filter((x) => x.kind === "device" && names.has(x.id));
+        if (!hit.length && !t.exclude.some((x) => names.has(x))) return t;
+        return Object.assign({}, t, { include: t.include.filter((x) => !hit.includes(x)), exclude: t.exclude.filter((x) => !names.has(x)),
+          gone: [...t.gone, ...hit.map((x) => names.get(x.id))] });
+      };
+      db.rules.forEach((r) => {
+        const was = JSON.stringify(r);
+        eachTarget(r, fix);
+        if (JSON.stringify(r) === was) return;
+        bump(r);
+        changed("rule", r);
+      });
+      db.ruleVersions.forEach((v) => eachTarget(v.rule, fix));
+    }
+    // Версия истории: что стало после изменения. undo убирает версию, которую отменяет, если она последняя
+    function pushVersion(r, note) {
+      const h = db.ruleVersions.filter((v) => v.ruleId === r.id);
+      if (note && note.code === "undo") {
+        const last = h[h.length - 1];
+        if (last && last.number === note.params.number) {
+          db.ruleVersions = db.ruleVersions.filter((v) => v !== last);
+          return;
+        }
+      }
+      db.ruleVersions.push({ id: uuid("ruleVersion"), ruleId: r.id, number: h.length ? h[h.length - 1].number + 1 : 1, at: iso(now()), by: myLogin(), note: note || null, rule: content(r) });
+    }
+    function ruleProblem(c) {
+      if (!String(c.name || "").trim()) return problem(422, "NAME_REQUIRED", "Укажите название правила", { field: "name" });
+      if (c.enabled) {
+        const why = engine.issue(Object.assign({ id: null }, c));
+        if (why) return problem(422, "RULE_INVALID", "Правило с ошибкой нельзя включить: исправьте ошибку или выключите правило", { params: { issue: why } });
+      }
+      return null;
+    }
+    const stateNote = (r) => ({ code: "state", params: { mode: !r.enabled ? "off" : r.logOnly ? "watch" : "on" } });
+    const sysToday = () => engine.stamp(now()).slice(0, 10);
+    function storeFire(f) {
+      const rec = Object.assign({ id: uuid("fire") }, f);
+      db.ruleFires.push(rec);
+      send("entity.created", { kind: "ruleFire", entityId: rec.id, payload: { ruleId: rec.ruleId } });
+      return rec;
+    }
+    // Где используется расписание: режимы, условия «Время», окна обслуживания
+    const scheduleUsed = (id) =>
+      db.modes.items.some((m) => m.scheduleId === id) || db.maintenanceWindows.some((w) => w.scheduleId === id) ||
+      db.rules.some((r) => r.conditions.some((c) => c.kind === "time" && c.scheduleId === id));
+    const never = () => (db.schedules.find((s) => s.builtin && s.kind === "never") || {}).id || null;
+    function removeSchedule(sc) {
+      db.schedules = db.schedules.filter((x) => x !== sc);
+      send("entity.deleted", { kind: "schedule", entityId: sc.id });
+      if (db.modes.items.some((m) => m.scheduleId === sc.id)) {
+        db.modes.items.forEach((m) => m.scheduleId === sc.id && (m.scheduleId = null));
+        bump(db.modes);
+        send("entity.changed", { kind: "modes", version: db.modes.version });
+      }
+      db.rules.forEach((r) => {
+        const hit = r.conditions.filter((c) => c.kind === "time" && c.scheduleId === sc.id);
+        if (!hit.length) return;
+        hit.forEach((c) => (c.scheduleId = never()));
+        bump(r);
+        changed("rule", r);
+      });
+      db.maintenanceWindows.forEach((w) => {
+        if (w.scheduleId !== sc.id) return;
+        w.scheduleId = never();
+        bump(w);
+        changed("maintenanceWindow", w);
+      });
+    }
+    const modeCurrent = () => {
+      const m = db.modeManual, live = m && db.modes.items.some((x) => x.id === m.modeId) && (!m.until || Date.parse(m.until) > now());
+      return { modeId: engine.modeNow(now()), manual: live ? { until: m.until || null } : null };
+    };
+    // Смена текущего режима (по расписанию или вручную) — событием objectMode
+    function modeTick() {
+      const m = engine.modeNow(now());
+      if (lastMode !== null && m !== lastMode) send("entity.changed", { kind: "objectMode", entityId: m });
+      lastMode = m;
     }
 
     /* ===== Права ===== */
@@ -645,6 +771,7 @@
         fired.push({ kind: "catalog", id: cid });
       });
       tickDiscovery(fired);
+      modeTick();
       formatting.forEach((at, id) => {
         if (at > now()) return;
         formatting.delete(id);
@@ -1140,7 +1267,7 @@
         (p, q, body) => {
           const done = [];
           const failed = [];
-          const kinds = { devices: (r) => removeDevice(r.id), folders: removeFolder, archives: removeArchive, volumes: removeVolume };
+          const kinds = { devices: (r) => removeDevice(r.id), folders: removeFolder, archives: removeArchive, volumes: removeVolume, rules: removeRule };
           body.items.forEach((x) => {
             const table = Object.keys(kinds).find((k) => byId(k, x.id));
             // Уже удалён вместе с родителем из этого же запроса — тоже удалён
@@ -1160,13 +1287,14 @@
         (p, q, body, headers) => {
           const r = byId("rules", p.id);
           if (!r) return notFound("Правило");
-          const bad = precondition(r, headers);
+          const bad = precondition(r, headers) || ruleProblem(body);
           if (bad) return bad;
-          if (!String(body.name).trim()) return problem(422, "NAME_REQUIRED", "Укажите название правила", { field: "name" });
-          Object.assign(r, clone(body));
+          RULE_CONTENT.forEach((k) => (r[k] = clone(body[k])));
+          Object.assign(r, { changedAt: iso(now()), changedBy: myLogin() });
           bump(r);
+          pushVersion(r, body.historyNote);
           changed("rule", r);
-          return one(clone(r));
+          return one(ruleView(r));
         },
       ],
       [
@@ -1240,6 +1368,292 @@
         "GET",
         "/rules/{id}/fires",
         (p) => (byId("rules", p.id) ? items(db.ruleFires.filter((f) => f.ruleId === p.id).sort((a, b) => b.at.localeCompare(a.at)).map(clone)) : notFound("Правило")),
+      ],
+      [
+        "POST",
+        "/rules",
+        (p, q, body) => {
+          const bad = ruleProblem(body);
+          if (bad) return bad;
+          const at = iso(now());
+          const r = Object.assign({ id: uuid("rule") }, content(body), { createdAt: at, createdBy: myLogin(), changedAt: at, changedBy: myLogin(), mute: null,
+            order: Math.max(0, ...db.rules.map((x) => x.order)) + 1, version: newVersion() });
+          db.rules.push(r);
+          pushVersion(r, { code: "created", params: {} });
+          send("entity.created", { kind: "rule", entityId: r.id, version: r.version });
+          return one(ruleView(r), 201);
+        },
+      ],
+      [
+        "POST",
+        "/rules/update",
+        (p, q, body) => {
+          const done = [], failed = [];
+          body.items.forEach((x) => {
+            const r = byId("rules", x.ruleId);
+            if (!r) return failed.push({ ruleId: x.ruleId, code: "NOT_FOUND" });
+            if (r.version !== x.version) return failed.push({ ruleId: x.ruleId, code: "VERSION_MISMATCH" });
+            const set = x.set, was = stateNote(r).params.mode;
+            const next = Object.assign({}, r, "enabled" in set ? { enabled: set.enabled } : {}, "logOnly" in set ? { logOnly: set.logOnly } : {});
+            if (next.enabled && !r.enabled && engine.issue(next)) return failed.push({ ruleId: x.ruleId, code: "RULE_INVALID" });
+            if ("enabled" in set || "logOnly" in set) {
+              if (next.enabled && next.logOnly && !(r.enabled && r.logOnly)) next.logOnlySince = sysToday();
+              if (next.enabled && !next.logOnly) next.logOnlySince = null;
+              ["enabled", "logOnly", "logOnlySince"].forEach((k) => (r[k] = next[k]));
+              Object.assign(r, { changedAt: iso(now()), changedBy: myLogin() });
+            }
+            if ("mute" in set) r.mute = set.mute ? { since: iso(now()), until: set.mute.until, by: myLogin(), reason: set.mute.reason || "" } : null;
+            bump(r);
+            if (stateNote(r).params.mode !== was || x.historyNote) pushVersion(r, x.historyNote || stateNote(r));
+            changed("rule", r);
+            done.push(ruleView(r));
+          });
+          return { status: 200, body: { done, failed } };
+        },
+      ],
+      [
+        "POST",
+        "/rules/reorder",
+        (p, q, body) => {
+          for (const x of body.items) {
+            const r = byId("rules", x.ruleId);
+            if (!r) return notFound("Правило");
+            if (r.version !== x.version) return problem(412, "VERSION_MISMATCH", "Правило изменилось с момента чтения", { current: ruleView(r), params: { ruleId: r.id } });
+          }
+          const out = body.items.map((x) => {
+            const r = byId("rules", x.ruleId);
+            if (r.order === x.order) return r;
+            r.order = x.order;
+            bump(r);
+            changed("rule", r);
+            return r;
+          });
+          return { status: 200, body: { items: out.map(ruleView) } };
+        },
+      ],
+      [
+        "POST",
+        "/rules/test",
+        (p, q, body) => {
+          const saved = body.ruleId ? byId("rules", body.ruleId) : null;
+          if (body.ruleId && !saved) return notFound("Правило");
+          if (body.log && !saved) return problem(422, "VALIDATION_FAILED", "Записать в журнал можно проверку сохранённого правила", { field: "log" });
+          const r = Object.assign({ id: body.ruleId || null, mute: saved ? saved.mute : null, order: saved ? saved.order : 0 }, clone(body.rule));
+          const at = body.at ? Date.parse(body.at) : now();
+          const pre = r.enabled ? [] : [{ code: "testOff", params: {}, ok: true, reason: null }];
+          let events;
+          if (r.start === "event") {
+            events = (body.events || []).map((e) => ({ source: e.source, kind: e.kind, match: e.match || {}, deviceId: e.deviceId, at: iso(at) }));
+            pre.push(...engine.eventChecks(r, events));
+          }
+          const f = engine.fire(r, { by: "test", at, now: !body.at, watch: true, events, pre, br: body.branches || {} });
+          if (body.log) return { status: 200, body: storeFire(f) };
+          return { status: 200, body: Object.assign({ id: uuid("fire") }, f) };
+        },
+      ],
+      [
+        "POST",
+        "/rules/{id}/run",
+        (p) => {
+          const r = byId("rules", p.id);
+          if (!r) return notFound("Правило");
+          const why = !r.enabled ? { code: "off" } : engine.issue(r);
+          if (why) return problem(409, "NOT_RUNNABLE", "Правило сейчас не запустить", { params: { reason: why } });
+          return { status: 201, body: storeFire(engine.fire(r, { via: "manual", at: now(), now: true, i: 0 })) };
+        },
+      ],
+      ["GET", "/rules/{id}/versions", (p) => (byId("rules", p.id) ? items(db.ruleVersions.filter((v) => v.ruleId === p.id).map(clone)) : notFound("Правило"))],
+      [
+        "POST",
+        "/rules/{id}/fires/{fireId}/retry",
+        (p) => {
+          const r = byId("rules", p.id);
+          const f = db.ruleFires.find((x) => x.id === p.fireId && x.ruleId === p.id);
+          if (!r || !f) return notFound(r ? "Запуск" : "Правило");
+          const why = !r.enabled ? { code: "off" } : r.logOnly ? { code: "logOnly" } : engine.issue(r);
+          if (why) return problem(409, "NOT_RUNNABLE", "Правило сейчас не запустить", { params: { reason: why } });
+          if (!f.steps.some(engine.retryable)) return problem(409, "NOT_RUNNABLE", "В запуске нет невыполненных шагов", { params: { reason: { code: "nothing" } } });
+          return { status: 201, body: storeFire(engine.retry(r, f, now())) };
+        },
+      ],
+      /* ----- Расписания, особые дни, режимы объекта, окна обслуживания ----- */
+      ...getter("schedules", "Расписание"),
+      [
+        "POST",
+        "/schedules",
+        (p, q, body) => {
+          if (!String(body.name || "").trim()) return problem(422, "NAME_REQUIRED", "Укажите название расписания", { field: "name" });
+          const sc = Object.assign({ id: uuid("schedule") }, clone(body), { builtin: false, version: newVersion() });
+          db.schedules.push(sc);
+          send("entity.created", { kind: "schedule", entityId: sc.id, version: sc.version });
+          return one(clone(sc), 201);
+        },
+      ],
+      [
+        "PUT",
+        "/schedules/{id}",
+        (p, q, body, headers) => {
+          const sc = byId("schedules", p.id);
+          if (!sc) return notFound("Расписание");
+          const bad = precondition(sc, headers);
+          if (bad) return bad;
+          if (sc.builtin) return problem(409, "BUILTIN", "Встроенное расписание не правится");
+          if (!String(body.name || "").trim()) return problem(422, "NAME_REQUIRED", "Укажите название расписания", { field: "name" });
+          Object.assign(sc, clone(body));
+          bump(sc);
+          changed("schedule", sc);
+          return one(clone(sc));
+        },
+      ],
+      [
+        "DELETE",
+        "/schedules/{id}",
+        (p, q, body, headers) => {
+          const sc = byId("schedules", p.id);
+          if (!sc) return notFound("Расписание");
+          const bad = precondition(sc, headers);
+          if (bad) return bad;
+          if (sc.builtin) return problem(409, "BUILTIN", "Встроенное расписание не удаляется");
+          removeSchedule(sc);
+          return { status: 204 };
+        },
+      ],
+      ...getter("dayGroups", "Группа дат").map(([m, path, fn]) => [m, path.replace("/dayGroups", "/day-groups"), fn]),
+      [
+        "POST",
+        "/day-groups",
+        (p, q, body) => {
+          if (!String(body.name || "").trim()) return problem(422, "NAME_REQUIRED", "Укажите название группы", { field: "name" });
+          const g = Object.assign({ id: uuid("dayGroup") }, clone(body), { version: newVersion() });
+          db.dayGroups.push(g);
+          send("entity.created", { kind: "dayGroup", entityId: g.id, version: g.version });
+          return one(clone(g), 201);
+        },
+      ],
+      [
+        "PUT",
+        "/day-groups/{id}",
+        (p, q, body, headers) => {
+          const g = byId("dayGroups", p.id);
+          if (!g) return notFound("Группа дат");
+          const bad = precondition(g, headers);
+          if (bad) return bad;
+          if (!String(body.name || "").trim()) return problem(422, "NAME_REQUIRED", "Укажите название группы", { field: "name" });
+          Object.assign(g, clone(body));
+          bump(g);
+          changed("dayGroup", g);
+          return one(clone(g));
+        },
+      ],
+      [
+        "DELETE",
+        "/day-groups/{id}",
+        (p, q, body, headers) => {
+          const g = byId("dayGroups", p.id);
+          if (!g) return notFound("Группа дат");
+          const bad = precondition(g, headers);
+          if (bad) return bad;
+          db.dayGroups = db.dayGroups.filter((x) => x !== g);
+          send("entity.deleted", { kind: "dayGroup", entityId: g.id });
+          // Из расписаний пропадают особые дни этой группы: в эти даты действуют их обычные интервалы
+          db.schedules.forEach((sc) => {
+            if (!sc.overrides.some((o) => o.dayGroupId === g.id)) return;
+            sc.overrides = sc.overrides.filter((o) => o.dayGroupId !== g.id);
+            bump(sc);
+            changed("schedule", sc);
+          });
+          return { status: 204 };
+        },
+      ],
+      ["GET", "/modes", () => one(clone(db.modes))],
+      [
+        "PUT",
+        "/modes",
+        (p, q, body, headers) => {
+          const M = db.modes;
+          const bad = precondition(M, headers);
+          if (bad) return bad;
+          const ids = new Set(body.items.map((m) => m.id));
+          const sys = M.items.find((m) => m.system && !ids.has(m.id));
+          if (sys) return problem(409, "BUILTIN", "Системный режим не удаляется", { params: { modeId: sys.id } });
+          if (!ids.has(body.otherwise)) return problem(422, "VALIDATION_FAILED", "Режим «иначе» — один из режимов", { field: "otherwise" });
+          const blank = body.items.find((m) => !String(m.name || "").trim());
+          if (blank) return problem(422, "NAME_REQUIRED", "Укажите название режима", { field: "items" });
+          const gone = M.items.filter((m) => !ids.has(m.id)).map((m) => m.id);
+          Object.assign(M, { items: clone(body.items), otherwise: body.otherwise });
+          bump(M);
+          send("entity.changed", { kind: "modes", version: M.version });
+          // Удалённый режим уходит из условий «Режим объекта»; включённый вручную — снимается
+          db.rules.forEach((r) => {
+            const hit = r.conditions.filter((c) => c.kind === "mode" && (c.modeIds || []).some((x) => gone.includes(x)));
+            if (!hit.length) return;
+            hit.forEach((c) => (c.modeIds = c.modeIds.filter((x) => !gone.includes(x))));
+            bump(r);
+            changed("rule", r);
+          });
+          if (db.modeManual && gone.includes(db.modeManual.modeId)) db.modeManual = null;
+          modeTick();
+          return one(clone(M));
+        },
+      ],
+      ["GET", "/modes/current", () => ({ status: 200, body: modeCurrent() })],
+      [
+        "POST",
+        "/modes/current",
+        (p, q, body) => {
+          if (body.modeId && !db.modes.items.some((m) => m.id === body.modeId)) return notFound("Режим");
+          db.modeManual = body.modeId ? { modeId: body.modeId, until: body.until || null } : null;
+          send("entity.changed", { kind: "objectMode", entityId: engine.modeNow(now()) });
+          lastMode = engine.modeNow(now());
+          return { status: 200, body: modeCurrent() };
+        },
+      ],
+      ...getter("maintenanceWindows", "Окно обслуживания").map(([m, path, fn]) => [m, path.replace("/maintenanceWindows", "/maintenance-windows"), fn]),
+      [
+        "POST",
+        "/maintenance-windows",
+        (p, q, body) => {
+          if (!String(body.name || "").trim()) return problem(422, "NAME_REQUIRED", "Укажите название окна", { field: "name" });
+          const w = { id: uuid("window"), name: body.name, scheduleId: null, ruleIds: clone(body.ruleIds), enabled: body.enabled, version: newVersion() };
+          const sc = Object.assign({ id: uuid("schedule") }, clone(body.schedule), { builtin: false, owner: { kind: "maintenanceWindow", id: w.id }, version: newVersion() });
+          w.scheduleId = sc.id;
+          db.schedules.push(sc);
+          db.maintenanceWindows.push(w);
+          send("entity.created", { kind: "schedule", entityId: sc.id, version: sc.version });
+          send("entity.created", { kind: "maintenanceWindow", entityId: w.id, version: w.version });
+          return { status: 201, body: { window: clone(w), schedule: clone(sc) } };
+        },
+      ],
+      [
+        "PUT",
+        "/maintenance-windows/{id}",
+        (p, q, body, headers) => {
+          const w = byId("maintenanceWindows", p.id);
+          if (!w) return notFound("Окно обслуживания");
+          const bad = precondition(w, headers);
+          if (bad) return bad;
+          if (!String(body.name || "").trim()) return problem(422, "NAME_REQUIRED", "Укажите название окна", { field: "name" });
+          if (!byId("schedules", body.scheduleId)) return problem(422, "VALIDATION_FAILED", "Расписания нет", { field: "scheduleId" });
+          Object.assign(w, clone(body));
+          bump(w);
+          changed("maintenanceWindow", w);
+          return one(clone(w));
+        },
+      ],
+      [
+        "DELETE",
+        "/maintenance-windows/{id}",
+        (p, q, body, headers) => {
+          const w = byId("maintenanceWindows", p.id);
+          if (!w) return notFound("Окно обслуживания");
+          const bad = precondition(w, headers);
+          if (bad) return bad;
+          db.maintenanceWindows = db.maintenanceWindows.filter((x) => x !== w);
+          send("entity.deleted", { kind: "maintenanceWindow", entityId: w.id });
+          // Своё расписание окна — вместе с ним, если больше нигде не используется
+          db.schedules.filter((sc) => sc.owner && sc.owner.id === w.id && !scheduleUsed(sc.id)).forEach(removeSchedule);
+          return { status: 204 };
+        },
       ],
       ["GET", "/access", () => one(clone(db.access))],
       ["GET", "/settings", () => one(clone(db.settings))],

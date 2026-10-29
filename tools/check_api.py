@@ -268,10 +268,11 @@ def check_fixture(rep, spec, fx, label="Эталонный набор"):
     # их строение проверяется ниже, в ссылках
     collections = {
         "domains": "Domain", "servers": "Server", "devices": "Device", "folders": "Folder",
-        "archives": "Archive", "volumes": "Volume", "rules": "Rule", "ruleFires": "RuleFire",
+        "archives": "Archive", "volumes": "Volume", "rules": "Rule", "ruleFires": "RuleFire", "ruleVersions": "RuleVersion",
+        "schedules": "Schedule", "dayGroups": "DayGroup", "maintenanceWindows": "MaintenanceWindow",
         "licenses": "License", "journal": "JournalEvent",
     }
-    singles = {"access": "Access", "settings": "Settings", "reference": "Reference"}
+    singles = {"access": "Access", "settings": "Settings", "reference": "Reference", "modes": "Modes"}
     problems = []
     total = 0
     for key, name in collections.items():
@@ -284,7 +285,10 @@ def check_fixture(rep, spec, fx, label="Эталонный набор"):
     net_schema = dict(cand, properties=dict(cand["properties"], domainIds={"type": "array", "items": {"type": "string", "format": "uuid"}}))
     for i, rec in enumerate(fx.get("network", [])):
         validate(spec, net_schema, rec, f"network[{i}]", problems)
-    known = set(collections) | set(singles) | {"$comment", "version", "capturedAt", "timezone", "me", "network", "discovery"}
+    # modeManual — режим, включённый вручную ({ modeId, until } или null): состояние стенда, ответ — GET /modes/current
+    if fx.get("modeManual") is not None:
+        validate(spec, {"$ref": "#/components/schemas/ModeCurrentWrite"}, fx["modeManual"], "modeManual", problems)
+    known = set(collections) | set(singles) | {"$comment", "version", "capturedAt", "timezone", "me", "network", "discovery", "modeManual"}
     problems += [f"раздел {k} не описан в check_api.py" for k in fx if k not in known]
     rep.check(f"{label} соответствует схемам контракта", problems, f"{total} записей + access, settings, reference")
 
@@ -308,6 +312,13 @@ def check_fixture(rep, spec, fx, label="Эталонный набор"):
     volumes = own("volume", fx["volumes"])
     rules = own("rule", fx["rules"])
     own("ruleFire", fx["ruleFires"])
+    own("ruleVersion", fx["ruleVersions"])
+    schedules = own("schedule", fx["schedules"])
+    day_groups = own("dayGroup", fx["dayGroups"])
+    modes = own("mode", fx["modes"]["items"])
+    windows = own("window", fx["maintenanceWindows"])
+    layouts = own("layout", fx["reference"]["layouts"])
+    monitors = own("monitor", fx["reference"]["monitors"])
     network = own("candidate", fx["network"])
     roles = own("role", acc["roles"])
     users = own("user", acc["users"])
@@ -353,8 +364,64 @@ def check_fixture(rep, spec, fx, label="Эталонный набор"):
         must(domains, a["domainId"], w, "домена")
     for v in volumes.values():
         must(archives, v["archiveId"], f"volume {v['name']}", "хранилища")
+    # Правила: цели — существующие устройства и области (удалённые — в gone по имени), расписания, режимы, роли
+    def target(t, w):
+        if not t:
+            return
+        for x in t["include"]:
+            must({"device": devices, "folder": folders, "server": servers, "domain": domains}[x["kind"]], x["id"], w, x["kind"])
+        for x in t["exclude"]:
+            must(devices, x, w, "устройства")
+
+    def step_refs(lst, w):
+        for a in lst:
+            if a.get("control") == "waitEvent":
+                target(a["event"]["target"], w)
+            for k in ("yes", "no"):
+                step_refs(a.get(k, []), w)
+            for lv in a.get("levels", []):
+                must(roles, lv["roleId"], w, "роли")
+            target(a.get("target"), w)
+            must(roles, a.get("roleId"), w, "роли")
+            must(rules, a.get("ruleId"), w, "правила")
+            must(layouts, a.get("layoutId"), w, "раскладки")
+            must(monitors, a.get("monitorId"), w, "монитора")
+
+    for r in rules.values():
+        w = f"rule {r['name']}"
+        must(servers, r["serverId"], w, "сервера")
+        must(roles, r["runAsRoleId"], w, "роли")
+        for t in r["triggers"]:
+            target(t["target"], w)
+        for c in r["conditions"]:
+            target(c.get("target"), w)
+            must(schedules, c.get("scheduleId"), w, "расписания")
+            for m in c.get("modeIds", []):
+                must(modes, m, w, "режима")
+        step_refs(r["steps"], w)
+    for v in fx["ruleVersions"]:
+        must(rules, v["ruleId"], f"ruleVersion {v['id']}", "правила")
     for f in fx["ruleFires"]:
-        must(rules, f["ruleId"], f"ruleFire {f['id']}", "правила")
+        w = f"ruleFire {f['id']}"
+        must(rules, f["ruleId"], w, "правила")
+        for x in f["sourceDeviceIds"] + [e["deviceId"] for e in f["events"]] + [s["deviceId"] for s in f["steps"]]:
+            must(devices, x, w, "устройства")
+    for s in schedules.values():
+        for x in s["overrides"]:
+            must(day_groups, x["dayGroupId"], f"schedule {s['name']}", "группы дат")
+        if s["owner"]:
+            must(windows, s["owner"]["id"], f"schedule {s['name']}", "окна обслуживания")
+    for m in modes.values():
+        must(schedules, m["scheduleId"], f"mode {m['name']}", "расписания")
+    must(modes, fx["modes"]["otherwise"], "modes.otherwise", "режима")
+    if fx.get("modeManual"):
+        must(modes, fx["modeManual"]["modeId"], "modeManual", "режима")
+    for x in windows.values():
+        must(schedules, x["scheduleId"], f"window {x['name']}", "расписания")
+        for r in x["ruleIds"] or []:
+            must(rules, r, f"window {x['name']}", "правила")
+    for d in devices.values():
+        must(rules, d.get("disabledByRuleId"), f"device {d['name']}", "правила")
     for c in network.values():
         for d in c["domainIds"]:
             must(domains, d, f"network {c['name']}", "домена")

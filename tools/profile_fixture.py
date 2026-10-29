@@ -81,19 +81,68 @@ def build(demo):
     fx["folders"] = folders
     fids = {f["id"] for f in folders}
 
-    # Правила ссылаются на устройства по имени: условия и действия с пропавшими устройствами уходят,
-    # правило без условий или без действий — целиком
-    names = {d["name"] for d in devices}
-    alive = lambda x: all(x[k] in names for k in ("unit", "camera") if k in x)
+    # Правила: из целей уходят устройства и области, которых в профиле нет; события, условия и шаги
+    # с опустевшей целью — тоже; правило без событий (по событию) или без действий — целиком
+    sids = {s["id"] for s in fx["servers"]}
+    areas = {"device": kept, "folder": fids, "server": sids, "domain": {did}}
+
+    def tgt(t):
+        if not t or t["fromEvent"]:
+            return t, True
+        t = dict(t, include=[x for x in t["include"] if x["id"] in areas[x["kind"]]], exclude=[x for x in t["exclude"] if x in kept])
+        return t, bool(t["include"] or t["gone"])
+
+    def steps(lst):
+        out = []
+        for a in lst:
+            a = dict(a)
+            if a.get("control") == "waitEvent":
+                a["event"]["target"], ok = tgt(a["event"]["target"])
+                if not ok:
+                    continue
+            for k in ("yes", "no"):
+                if k in a:
+                    a[k] = steps(a[k])
+            if "target" in a:
+                a["target"], ok = tgt(a["target"])
+                if not ok and a["target"] is not None:
+                    continue
+            out.append(a)
+        return out
+
+    def has_action(lst):
+        return any("action" in a or has_action(a.get("yes", []) + a.get("no", [])) for a in lst)
+
+    def prune(r):
+        r["triggers"] = [dict(t, target=tgt(t["target"])[0]) for t in r["triggers"] if tgt(t["target"])[1]]
+        r["conditions"] = [dict(c, target=tgt(c["target"])[0]) if "target" in c else c for c in r["conditions"] if "target" not in c or tgt(c["target"])[1]]
+        r["steps"] = steps(r["steps"])
+        if len(r["triggers"]) < 2:
+            r["windowSec"] = 0
+        if r["serverId"] not in sids:
+            r["serverId"] = None
+
     rules = []
     for r in fx["rules"]:
-        r["triggers"] = [t for t in r["triggers"] if alive(t)]
-        r["actions"] = [a for a in r["actions"] if alive(a)]
-        if r["triggers"] and r["actions"]:
+        prune(r)
+        if (r["triggers"] or r["start"] != "event") and has_action(r["steps"]):
             rules.append(r)
     fx["rules"] = rules
     rids = {r["id"] for r in rules}
-    fx["ruleFires"] = [f for f in fx["ruleFires"] if f["ruleId"] in rids]
+    for r in rules:
+        r["steps"] = [a for a in r["steps"] if a.get("action") != "runrule" or a["ruleId"] in rids]
+    fx["ruleVersions"] = [v for v in fx["ruleVersions"] if v["ruleId"] in rids]
+    for v in fx["ruleVersions"]:
+        prune(v["rule"])
+        v["rule"]["steps"] = [a for a in v["rule"]["steps"] if a.get("action") != "runrule" or a["ruleId"] in rids]
+    devs = lambda f: f["sourceDeviceIds"] + [e["deviceId"] for e in f["events"]] + [s["deviceId"] for s in f["steps"]]
+    fx["ruleFires"] = [f for f in fx["ruleFires"] if f["ruleId"] in rids and all(x is None or x in kept for x in devs(f))]
+    for w in fx["maintenanceWindows"]:
+        if w["ruleIds"] is not None:
+            w["ruleIds"] = [x for x in w["ruleIds"] if x in rids]
+    for d in fx["devices"]:
+        if d.get("disabledByRuleId") and d["disabledByRuleId"] not in rids:
+            d["disabledByRuleId"], d["disabledByRuleAt"] = None, None
 
     fx["licenses"] = []
     fx["network"] = []

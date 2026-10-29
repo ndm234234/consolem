@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Собрать эталонный набор api/fixtures/demo.json из прототипа 09.
+"""Собрать эталонный набор api/fixtures/demo.json из основного макета index.html.
 
-Разовый перенос: до переделки данные макета жили константами в HTML и
-достраивались демо-генерацией при старте. Скрипт открывает
-index_09_one-psim.html в headless Chrome с остановленными часами
-(CAPTURED_AT), после старта забирает из памяти всё, что в продукте хранит
-бэкенд, и приводит к виду контракта api/openapi.json: идентификаторы — UUID,
-коды вместо русских строк, числа вместо «4 ТБ», связи — id.
+Перенос: данные макета живут константами в HTML и достраиваются демо-генерацией
+при старте. Скрипт открывает index.html в headless Chrome с остановленными
+часами (CAPTURED_AT) в часовом поясе системы, после старта забирает из памяти
+всё, что в продукте хранит бэкенд, и приводит к виду контракта api/openapi.json:
+идентификаторы — UUID, коды вместо русских строк, числа вместо «4 ТБ», связи — id.
+Запуски правил считает движок сервера (tools/fixture_fires.js) — так же, как
+макет считал свои демо-запуски.
 
 Так набор совпадает с тем, что прототип показывал до переделки. Дальше набор
 правят руками: этот скрипт перезапишет правки, поэтому без --force он
@@ -29,10 +30,12 @@ import sys
 import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SOURCE = os.path.join(ROOT, "index_09_one-psim.html")
+SOURCE = os.path.join(ROOT, "index.html")
 OUT = os.path.join(ROOT, "api", "fixtures", "demo.json")
 # Момент снимка: 12:00 по Москве. Демо-данные прав считают сроки от «сегодня»
 CAPTURED_AT = "2026-10-29T09:00:00Z"
+# Часовой пояс системы: в нём макет считает расписания и пишет время (Chrome открывается в нём)
+TZ = "Europe/Moscow"
 
 # Часы страницы стоят: new Date() и Date.now() — момент снимка
 FREEZE = """<script>(()=>{const FIX=Date.parse("%s"),R=Date;
@@ -45,6 +48,7 @@ DUMP = r"""<script>(()=>{
 const refs={DEVICE_MODELS,WIZ,IPSUB,SYS:[...SYS],ARCH_KINDS,CLOUD_PROVIDERS,ARCH_STORAGE,VOL_STATES,REC_MODES,
   CLOUD_REGIONS,DEV_PARAMS,DET_TYPES,IP_SCAN_LIMIT,TRIGGER_KINDS,ACTION_KINDS,ACC_FEATURES,ACC_LV,ACC_DEFS,ACC_GF,
   ACC_GF_DEF,ACC_VIS,ACC_GLOB,ACC_RESTR,ACC_PLUGINS,ACC_TPL,ACC_TZ,ACC_TZN,ACC_STALE,ACC_SOON,DEVICE_STATUS_LABELS};
+if(typeof COND_KINDS!=="undefined")Object.assign(refs,{COND_KINDS,CTL_KINDS});
 const out={
   capturedAt:new Date().toISOString(),
   domains:domains.map(d=>({...d,servers:(d.servers||[]).map(s=>s.id),unallocServers:(d.unallocServers||[]).map(s=>s.id)})),
@@ -59,7 +63,7 @@ const out={
 // Данные, которых в прототипе 09 нет: «Автоматизация» основного макета
 const extra={};
 if(typeof SCHEDS!=="undefined")Object.assign(extra,{scheds:SCHEDS,dayGroups:DAY_GROUPS,objModes:OBJ_MODES,
-  objModeElse,maintWindows:MAINT_WINDOWS,ruleHist,ruleLayouts:RULE_LAYOUTS,ruleMonitors:RULE_MONS});
+  objModeElse,maintWindows:MAINT_WINDOWS,ruleHist,ruleLayouts:RULE_LAYOUTS,ruleMonitors:RULE_MONS,ruleOffAt});
 if(Object.keys(extra).length)out.extra=extra;
 const el=document.createElement("script");el.type="text/plain";el.id="__dump";
 el.textContent=JSON.stringify(out).replace(/</g,"\\u003c");
@@ -82,7 +86,7 @@ def snapshot(source=SOURCE):
         res = subprocess.run(
             [chrome, "--headless=new", "--disable-gpu", "--no-sandbox", "--no-first-run",
              "--allow-file-access-from-files", f"--user-data-dir={tmp}/profile", "--dump-dom", "file://" + path],
-            capture_output=True, text=True, timeout=120)
+            capture_output=True, text=True, timeout=120, env=dict(os.environ, TZ=TZ))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     m = re.search(r'<script type="text/plain" id="__dump">(.*?)</script>', res.stdout, re.S)
@@ -110,6 +114,13 @@ def main():
     from fixture_normalize import normalize
 
     fixture = normalize(raw, CAPTURED_AT)
+    # Запуски правил — движком сервера, с теми же демо-исходами, что у макета
+    res = subprocess.run(["node", os.path.join(ROOT, "tools", "fixture_fires.js")], input=json.dumps(
+        {"fixture": fixture, "rules": {old: uid for old, uid in normalize.ids.items() if uid.startswith("7")}}),
+        capture_output=True, text=True, cwd=ROOT)
+    if res.returncode:
+        sys.exit("Запуски правил не посчитаны:\n" + res.stderr[-2000:])
+    fixture["ruleFires"] = json.loads(res.stdout)
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w", encoding="utf-8") as f:
         json.dump(fixture, f, ensure_ascii=False, indent=1)

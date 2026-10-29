@@ -1,4 +1,4 @@
-"""Снимок памяти прототипа 09 → эталонный набор в виде контракта api/openapi.json.
+"""Снимок памяти основного макета (index.html) → эталонный набор в виде контракта api/openapi.json.
 
 Вызывается из tools/extract_fixture.py. Что меняется по сравнению с данными макета:
 - идентификаторы — UUID: первая цифра — вид записи (KIND), дальше — номер по порядку;
@@ -19,6 +19,9 @@ KIND = {
     "operation": "0", "domain": "1", "server": "2", "device": "3", "folder": "4", "archive": "5",
     "volume": "6", "rule": "7", "role": "8", "user": "9", "group": "a", "catalog": "b",
     "journal": "c", "fire": "d", "history": "e", "candidate": "f",
+    # Виды «Автоматизации» основного макета: первая цифра «f» и свой номер во второй группе UUID
+    "schedule": ("f", "0001"), "dayGroup": ("f", "0002"), "mode": ("f", "0003"), "window": ("f", "0004"),
+    "ruleVersion": ("f", "0005"), "layout": ("f", "0006"), "monitor": ("f", "0007"),
 }
 # Часовой пояс системы (настройка ntp.tz): в нём записано местное время макета
 TZ = "Europe/Moscow"
@@ -38,10 +41,10 @@ TWO_FA = {"Нет": "off", "Обязательно админам": "admins"}
 # Поля устройства: имя в макете → имя в контракте. Остальные переносятся как есть
 FIELD = {
     "srvId": "serverId", "arch": "archiveId", "rec": "recordMode", "recDets": "recordDetectorIds",
-    "err": "fault", "ruleOff": "disabledByRule", "vch": "videoChannel", "ch": "channel",
+    "err": "fault", "vch": "videoChannel", "ch": "channel",
     "server": "onServer", "camera": "cameraId", "user": "login", "pre": "preRecordSec",
 }
-DROP = {"devices", "type", "id", "pass", "kind", "sens", "size", "archx", "lat", "lon", "azimuth"}
+DROP = {"devices", "type", "id", "pass", "kind", "sens", "size", "archx", "lat", "lon", "azimuth", "ruleOff", "armed"}
 
 
 class Ids:
@@ -51,7 +54,8 @@ class Ids:
 
     def new(self, kind, old):
         self.seq[kind] += 1
-        uid = f"{KIND[kind]}{self.seq[kind]:07d}-0000-4000-8000-000000000000"
+        first, second = KIND[kind] if isinstance(KIND[kind], tuple) else (KIND[kind], "0000")
+        uid = f"{first}{self.seq[kind]:07d}-{second}-4000-8000-000000000000"
         self.map[(kind, old)] = uid
         return uid
 
@@ -166,6 +170,19 @@ def normalize(raw, captured_at):
         ids.new("catalog", x["id"])
     for x in raw["discoverySeed"]:
         ids.new("candidate", x["id"])
+    ex = raw.get("extra") or {}
+    for x in ex.get("scheds", []):
+        ids.new("schedule", x["id"])
+    for x in ex.get("dayGroups", []):
+        ids.new("dayGroup", x["id"])
+    for x in ex.get("objModes", []):
+        ids.new("mode", x["id"])
+    for x in ex.get("maintWindows", []):
+        ids.new("window", x["id"])
+    for x in ex.get("ruleLayouts", []):
+        ids.new("layout", x)
+    for x in ex.get("ruleMonitors", []):
+        ids.new("monitor", x)
 
     # ===== Оборудование =====
 
@@ -224,6 +241,12 @@ def normalize(raw, captured_at):
             d["extraArchives"] = [{"archiveId": ids("archive", x["arch"]), "recordMode": x.get("rec"), "stream": x.get("stream")} for x in n["archx"]]
         if "pass" in n:
             d["hasPassword"] = bool(n["pass"])
+        if n["type"] == "camera":
+            d["armed"] = bool(n.get("armed"))
+        if n.get("ruleOff"):
+            # Камера выключена правилом («Выключить камеру на время»): каким и с какого времени
+            d["disabledByRuleId"] = ids("rule", n["ruleOff"]) if isinstance(n["ruleOff"], str) else None
+            d["disabledByRuleAt"] = clock_to_utc(ex["ruleOffAt"], captured) if ex.get("ruleOffAt") else None
         d.setdefault("enabled", True)
         d["online"] = n.get("online", True) is not False
         d["version"] = 1
@@ -300,34 +323,7 @@ def normalize(raw, captured_at):
     out["volumes"] = volumes
 
     # ===== Автоматизация =====
-
-    def trigger(t):
-        x = {"source": t["sub"], "kind": t["kind"], "unit": t.get("unit", "")}
-        if t.get("match"):
-            x["match"] = t["match"]
-        return x
-
-    ACTION_FIELD = {"sub": "source", "cam": "camera", "n": "preset", "pulse_ms": "pulseMs"}
-    out["rules"] = [
-        {
-            "id": ids("rule", r["id"]),
-            "name": r["name"],
-            "enabled": bool(r["on"]),
-            "ratePerMinute": r["rate"],
-            "windowSec": r["within"],
-            "triggers": [trigger(t) for t in r["when"]],
-            "actions": [{ACTION_FIELD.get(k, k): v for k, v in a.items()} for a in r["then"]],
-            "version": 1,
-        }
-        for r in raw["rules"]
-    ]
-    fires = []
-    for rid, rows in raw["ruleFires"].items():
-        for at, (_, event, result) in zip(clock_seq_to_utc([r[0] for r in rows], captured), rows):
-            fires.append({"id": None, "ruleId": ids("rule", rid), "at": at, "event": event, "result": result})
-    for i, f in enumerate(fires):
-        f["id"] = f"{KIND['fire']}{i + 1:07d}-0000-4000-8000-000000000000"
-    out["ruleFires"] = fires
+    out.update(automation(raw, ids, captured))
 
     # ===== Поиск устройств в сети =====
 
@@ -497,7 +493,7 @@ def normalize(raw, captured_at):
         for i, (at, (_, kind, text)) in enumerate(zip(clock_seq_to_utc([r[0] for r in raw["journal"]], captured), raw["journal"]))
     ]
 
-    out["reference"] = reference(raw["refs"])
+    out["reference"] = reference(raw["refs"], ids, ex)
     out["reference"]["capabilities"] = capabilities()
     # Старый id → UUID: по нему tools/compare_screens.py сопоставляет экраны прототипов 09 и 10
     normalize.ids = {old: uid for (kind, old), uid in ids.map.items()}
@@ -529,8 +525,154 @@ def capabilities():
     return {"operations": ops, "deviceTypes": schemas["DeviceType"]["enum"], "features": schemas["Feature"]["enum"]}
 
 
-def reference(r):
+# Поля действия: имя в макете → имя в контракте (to — роль у «Открыть раскладку», адрес у письма)
+ACTION_FIELD = {"sub": "source", "ref": "target", "n": "preset", "dur": "duration", "after": "afterSec", "prio": "priority",
+                "layout": "layoutId", "mon": "monitorId", "subj": "subject", "pulse_ms": "pulseMs", "rule": "ruleId"}
+CONTROL = {"wait": "wait", "waitev": "waitEvent", "ask": "ask", "escalate": "escalate"}
+
+
+def automation(raw, ids, captured):
+    """Правила, их история, расписания, особые дни, режимы объекта и окна обслуживания — записями API.
+    Запуски правил считает движок сервера (tools/fixture_fires.js), здесь их нет."""
+    ex = raw.get("extra") or {}
+
+    def target(ref):
+        if not ref:
+            return None
+        if ref == "$src":
+            return {"include": [], "exclude": [], "gone": [], "fromEvent": True}
+        t = {"include": [], "exclude": [], "gone": [], "fromEvent": False}
+        for tok in (ref[4:].split(",") if ref.startswith("set:") else [ref]):
+            if tok.startswith("-"):
+                t["exclude"].append(ids("device", tok[1:]))
+            elif tok.startswith("gone:"):
+                t["gone"].append(tok[5:].replace(";", ","))
+            elif re.match(r"^(folder|server|domain):", tok):
+                k, v = tok.split(":", 1)
+                t["include"].append({"kind": k, "id": ids(k, v)})
+            else:
+                t["include"].append({"kind": "device", "id": ids("device", tok)})
+        return t
+
+    def trigger(t):
+        return {"source": t["sub"], "kind": t["kind"], "target": target(t.get("ref")), "match": dict(t.get("match") or {})}
+
+    def cond(c):
+        x = {"kind": c["kind"]}
+        if c["kind"] == "time":
+            x["scheduleId"] = ids("schedule", c["sched"])
+        elif c["kind"] == "mode":
+            x["modeIds"] = [ids("mode", m) for m in c.get("modes") or []]
+        else:
+            x["target"] = target(c.get("ref"))
+            if c["kind"] == "armed":
+                x["value"] = c.get("val") is not False
+        return x
+
+    def step(a):
+        if "ctl" in a:
+            k = CONTROL[a["ctl"]]
+            if k == "wait":
+                return {"control": k, "sec": a.get("sec", 0)}
+            if k == "waitEvent":
+                return {"control": k, "event": trigger(a["ev"]), "sec": a.get("sec", 0), "yes": steps(a.get("yes")), "no": steps(a.get("no"))}
+            if k == "ask":
+                return {"control": k, "text": a.get("text", ""), "roleId": ids("role", a["to"]) if a.get("to") else None, "sec": a.get("sec", 0),
+                        "default": "yes" if a.get("def") == "yes" else "no", "yes": steps(a.get("yes")), "no": steps(a.get("no"))}
+            return {"control": k, "levels": [{"roleId": ids("role", l["to"]) if l.get("to") else None, "via": l.get("via", "client"), "waitMin": l.get("wait", 0)}
+                                             for l in a.get("levels") or []], "stop": "reset" if a.get("stop") == "reset" else "ack"}
+        x = {}
+        for k, v in a.items():
+            f = ACTION_FIELD.get(k, k)
+            if k == "ref":
+                v = target(v)
+            elif k == "to" and a["action"] == "layout":
+                f, v = "roleId", ids("role", v) if v else None
+            elif f == "layoutId":
+                v = ids("layout", v) if v else None
+            elif f == "monitorId":
+                v = ids("monitor", v) if v else None
+            elif f == "ruleId":
+                v = ids("rule", v)
+            elif f in ("preset", "port", "minutes", "afterSec", "pulseMs") and isinstance(v, str) and re.match(r"^\d+$", v):
+                v = int(v)
+            x[f] = v
+        return x
+
+    def steps(lst):
+        return [step(a) for a in lst or []]
+
+    def content(r):
+        return {
+            "name": r["name"], "enabled": bool(r["on"]), "logOnly": bool(r.get("watch")), "logOnlySince": r.get("watchSince") or None,
+            "start": "schedule" if r["start"] == "sched" else r["start"], "runMode": (r.get("run") or {}).get("mode", "always"),
+            "operatorMenu": bool(r.get("menu")), "ratePerMinute": r["rate"], "windowSec": r["within"],
+            "runAt": {"days": r["sched"]["days"], "time": r["sched"]["at"]} if r.get("sched") else None,
+            "repeat": r.get("repeat") or "skip",
+            "triggers": [trigger(t) for t in r["when"]], "conditions": [cond(c) for c in r.get("cond") or []], "steps": steps(r["then"]),
+            "owner": r.get("owner", ""), "purpose": r.get("purpose", ""),
+            "serverId": ids("server", r["server"]) if r.get("server") else None,
+            "runAsRoleId": None if r.get("runAs") in (None, "", "system") else ids("role", r["runAs"]),
+            "allowChain": r.get("chain") is not False,
+        }
+
+    rules = []
+    for r in raw["rules"]:
+        x = {"id": ids("rule", r["id"])}
+        x.update(content(r))
+        m = r.get("mute")
+        x.update({
+            "createdAt": local_to_utc(r["created"]["at"]), "createdBy": r["created"]["by"],
+            "changedAt": local_to_utc(r["changed"]["at"]), "changedBy": r["changed"]["by"],
+            "mute": {"since": local_to_utc(m["since"]), "until": local_to_utc(m["until"]), "by": m["by"], "reason": m.get("why", "")} if m else None,
+            "order": r.get("order", 0), "version": 1,
+        })
+        rules.append(x)
+    versions = []
+    for rid, hist in (ex.get("ruleHist") or {}).items():
+        for e in hist:
+            versions.append({"id": ids.new("ruleVersion", f"{rid}:{e['v']}"), "ruleId": ids("rule", rid), "number": e["v"], "at": local_to_utc(e["at"]), "by": e["by"],
+                             "note": {"code": "created", "params": {}} if e.get("note") == "Правило создано" else None, "rule": content(e["snap"])})
+
+    def iv(lst):
+        return [[a, b] for a, b in lst or []]
+
+    schedules = []
+    for x in ex.get("scheds", []):
+        c, a = x.get("cycle") or {}, x.get("astro") or {}
+        schedules.append({
+            "id": ids("schedule", x["id"]), "name": x["name"], "kind": x["kind"],
+            "week": [iv(d) for d in (x.get("week") or [[]] * 7)],
+            "overrides": [dict({"dayGroupId": ids("dayGroup", o["g"]), "mode": o["m"]}, **({"dow": int(o["dow"])} if o.get("dow") else {}),
+                               **({"intervals": iv(o["iv"])} if "iv" in o else {})) for o in x.get("ovr") or []],
+            "valid": {"from": (x.get("valid") or {}).get("from", ""), "to": (x.get("valid") or {}).get("to", "")},
+            "cycle": {"length": c.get("len", 4), "start": c.get("start", captured.strftime("%Y-%m-%d")), "days": [iv(d) for d in c.get("days") or []]},
+            "dates": [{"date": d["d"], "intervals": iv(d["iv"])} for d in x.get("dates") or []],
+            "astro": {"window": a.get("win", "night"), "offsetStartMin": a.get("off1", 0), "offsetEndMin": a.get("off2", 0),
+                      "lat": a.get("lat", 55.75), "lon": a.get("lon", 37.62), "utcOffsetHours": a.get("tz", 3)},
+            "builtin": bool(x.get("builtin")),
+            "owner": {"kind": "maintenanceWindow", "id": ids("window", x["own"]["id"])} if x.get("own") else None,
+            "version": 1,
+        })
+    day_groups = [{"id": ids("dayGroup", g["id"]), "name": g["name"],
+                   "rules": [{{"t": "type"}.get(k, k): v for k, v in r.items()} for r in g["rules"]], "version": 1} for g in ex.get("dayGroups", [])]
+    modes = {
+        "items": [{"id": ids("mode", m["id"]), "name": m["name"], "scheduleId": ids("schedule", m["sched"]) if m.get("sched") else None,
+                   "system": m["id"] if m.get("sys") else "", "color": m.get("color")} for m in ex.get("objModes", [])],
+        "otherwise": ids("mode", ex["objModeElse"]) if ex.get("objModeElse") else None,
+        "version": 1,
+    }
+    windows = [{"id": ids("window", w["id"]), "name": w["name"], "scheduleId": ids("schedule", w["sched"]),
+                "ruleIds": None if w["scope"] == "all" else [ids("rule", r) for r in w["scope"]], "enabled": bool(w.get("on")), "version": 1}
+               for w in ex.get("maintWindows", [])]
+    return {"rules": rules, "ruleVersions": versions, "ruleFires": [], "schedules": schedules, "dayGroups": day_groups,
+            "modes": modes, "modeManual": None, "maintenanceWindows": windows}
+
+
+def reference(r, ids=None, ex=None):
     """Справочники: коды и строение. Подписи к кодам — в интерфейсе."""
+    ex = ex or {}
+    opt = lambda o: o[0] if isinstance(o, list) else o
     return {
         "deviceModels": [{"vendor": v, "models": m} for v, m in r["DEVICE_MODELS"].items()],
         "deviceKinds": [{"group": g, "view": x["view"], "types": [t[0] for t in x["types"]]} for g, x in r["WIZ"].items()],
@@ -558,15 +700,20 @@ def reference(r):
             {
                 "source": a["sub"],
                 "action": a["action"],
+                "deviceTypes": a.get("devTypes", []),
                 "fields": [
-                    dict({"id": {"pulse_ms": "pulseMs", "n": "preset", "cam": "camera"}.get(f["id"], f["id"])},
-                         **({"options": f["opts"]} if f.get("opts") else {}),
-                         **({"optional": True} if "необязательно" in f["label"] else {}))
+                    dict({"id": "roleId" if f["id"] == "to" and a["action"] == "layout" else ACTION_FIELD.get(f["id"], f["id"])},
+                         **({"options": [ids("monitor", o) if f["id"] == "mon" else opt(o) for o in f["opts"]]} if f.get("opts") else {}),
+                         **({"optional": True} if "необязательно" in f["label"] or f.get("req") is False else {}))
                     for f in a["fields"]
                 ],
             }
             for a in r["ACTION_KINDS"]
         ],
+        "ruleConditions": [{"kind": c["kind"], "deviceTypes": c.get("devTypes", [])} for c in r.get("COND_KINDS", [])],
+        "ruleControls": [{"control": CONTROL[c["ctl"]], "branches": [b[0] for b in c.get("br", [])]} for c in r.get("CTL_KINDS", [])],
+        "layouts": [{"id": ids("layout", x), "name": x} for x in ex.get("ruleLayouts", [])],
+        "monitors": [{"id": ids("monitor", x), "name": x} for x in ex.get("ruleMonitors", [])],
         "access": {
             "features": [f[0] for f in r["ACC_FEATURES"]],
             "levels": {k: [x[0] for x in v] for k, v in r["ACC_LV"].items()},
