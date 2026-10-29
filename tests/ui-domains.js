@@ -58,6 +58,13 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   clearFolder(full.id);await confirmWith(null);
   ok(await until(()=>full.items.length===0),"папка очищена");
   ok((await API.get("/folders/"+full.id)).deviceIds.length===0,"на сервере — пусто");
+  addSubfolder(nf.id);
+  ok(await until(()=>(nf.folders||[]).length===1),"в ней подпапка");
+  treeRenameId=null;
+  const sub=nf.folders[0];
+  // Удаление папки не перечитывает всё: черновик «Прав» и прочее введённое остаются
+  let reloads=0;const reload0=window.apiReload;window.apiReload=()=>{reloads++;reload0()};
+  const ed0=ACC.ed;
   deleteFolder(nf.id);
   ok(document.getElementById("confirmOk").disabled,"«Удалить» неактивна, пока не введено число");
   await confirmWith(1);
@@ -65,6 +72,10 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   ok((await API.raw("GET","/folders/"+nf.id)).status===200,"во время отсчёта на сервере ещё есть");
   ok(await until(()=>!folderById(nf.id)),"по истечении — удалена");
   ok((await API.raw("GET","/folders/"+nf.id)).status===404,"на сервере — нет");
+  await new Promise(r=>setTimeout(r,400));
+  window.apiReload=reload0;
+  ok(reloads===0&&ACC.ed===ed0,"без полного перечитывания: черновик «Прав» тот же (перечитываний "+reloads+")");
+  ok(!hwVer.has(nf.id)&&!hwVer.has(sub.id)&&!folderById(sub.id),"папка и подпапка ушли из кэша");
   // Удалить домен с переносом
   const d2=domains[1],moved=d2.servers.length+d2.unallocServers.length;
   deleteDomain(d2.id);

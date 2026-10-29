@@ -2222,6 +2222,18 @@ function hwAddDevices(list,flds){
   (flds||[]).forEach(hwApplyFolder);
   remakeAcfa();treeMatchCache.clear();searchMatchCache.clear();
 }
+// Папка удалена (своим удалением или чужим) — из кэша вместе с подпапками и их версиями:
+// иначе событие entity.deleted сочтёт кэш устаревшим и перечитает всё, с потерей черновиков
+function hwRemoveFolder(id){
+  const f=folderById(id);if(!f)return;
+  const parent=folderParent(id);
+  if(parent)parent.folders=parent.folders.filter(x=>x.id!==id);
+  else{const i=folders.findIndex(x=>x.id===id);if(i>=0)folders.splice(i,1)}
+  const gone=[id];walkFolders(x=>gone.push(x.id),f.folders||[]);
+  gone.forEach(x=>{hwVer.delete(x);open.delete(x)});
+  if(gone.includes(selFolder))selFolder=null;
+  treeMatchCache.clear();searchMatchCache.clear();
+}
 // Удалённое устройство (ответ сервера): из дерева, папок и записи по детекторам
 function hwRemoveDevice(id){
   const f=find(id);if(!f)return;
@@ -2333,6 +2345,7 @@ function apiOnEvent(m){
     return;
   }
   if(m.type==="entity.deleted"&&m.kind==="device"&&hwVer.has(m.entityId)){hwRemoveDevice(m.entityId);renderTree();if(sel===m.entityId)paint();return}
+  if(m.type==="entity.deleted"&&m.kind==="folder"&&hwVer.has(m.entityId)){const own=sel===m.entityId;hwRemoveFolder(m.entityId);renderTree();if(own)paint();return}
   if(m.type==="entity.created"||m.type==="entity.deleted"){if((m.type==="entity.created")!==hwVer.has(m.entityId))hwReloadSoon(m);return}
   if(m.type!=="entity.changed")return;
   if(hwVer.get(m.entityId)===m.version&&!m.payload?.status)return;
@@ -5807,14 +5820,11 @@ function deleteFolder(id){
   const cnt=folderDeviceIds(f).size;
   askConfirm("Удалить папку?",`${i18n("Будет удалена папка")} «${escHtml(f.name)}».`,
     (cnt?`${i18n("Устройства останутся в системе")} (${cnt}). `:"")+i18n("После подтверждения будет отсчёт с кнопкой «Отменить»."),i18n("Удалить"),()=>scheduleDelete([id],{label:`${i18n("Папка")} «${f.name}»`,commit:()=>{
-    API.del(`/folders/${id}`,hwVer.get(id)).then(()=>{
+    // Родитель — до запроса: событие об удалении может прийти раньше ответа и убрать папку из кэша
     const parent=folderParent(id);
-    if(parent)parent.folders=parent.folders.filter(x=>x.id!==id);
-    else{const i=folders.findIndex(x=>x.id===id);if(i>=0)folders.splice(i,1)}
-    open.delete(id);
-    if(selFolder===id)selFolder=null;
+    API.del(`/folders/${id}`,hwVer.get(id)).then(()=>{
+    hwRemoveFolder(id);
     sel=(parent||folders[0])?.id||sel;tab="gen";setD(false);
-    treeMatchCache.clear();searchMatchCache.clear();
     toast(i18n("Папка удалена"));paint();
     }).catch(e=>toast(problemText(e)));
   }}),{typeCount:1});
@@ -17632,6 +17642,7 @@ function paramShow(n,k){
 function paramPut(n,k,v,def){n[k]=k==="ssl"?v==="вкл":typeof def==="number"?Number(v):v}
 function bulkSet(k,v){
   if(v===""||v==null)delete bulkDraft[k];else bulkDraft[k]=v;
+  if(k==="pass")delete bulkDraft.passCopied;
   const foot=document.getElementById("bulkFoot");if(foot)foot.innerHTML=bulkFootHtml();
 }
 function bulkResetDraft(){bulkDraft={};gear()}
@@ -17921,7 +17932,8 @@ function bulkChanges(draft){
     step("enabled",want?"Включить":"Выключить",ops,lic?`${i18n("лицензия")}: ${lic} ${i18n(plural(lic,"камера|камеры|камер"))} ${i18n("сверх лимита не включатся")}`:"");
   }
   if(d.user||d.pass)step("creds","Учётные данные",nodes.filter(canCreds).map(n=>Object.assign(mkOp(n,"Учётные данные","creds",()=>{if(d.user)n.user=d.user;if(d.pass)n.pass="•".repeat(8)}),
-    {api:{set:Object.assign({},d.user?{login:d.user}:{},d.pass?{password:d.pass}:{})}})),i18n("устройство переподключится"));
+    // Пароль, скопированный с другой камеры, — только маска: клиент его не знает, на сервер уходит логин
+    {api:{set:Object.assign({},d.user?{login:d.user}:{},d.pass&&!d.passCopied?{password:d.pass}:{})}})),i18n("устройство переподключится"));
   [...(d.folderAdd?[d.folderAdd]:[]),...(d.folderAddMany||[])].forEach(fid=>{
     const f=folderById(fid);
     if(f)step("folderAdd:"+fid,`В папку «${folderPathName(f.id)}»`,nodes.filter(n=>canFolder(n)&&!f.items.includes(n.id)).map(n=>mkOp(n,"В папку","folder",()=>folderAddDevice(f.id,n.id),null,()=>{f.items=f.items.filter(x=>x!==n.id)})));
@@ -18147,14 +18159,15 @@ function bulkApply(opts){
 // Шаги очереди (замыкания run) → шаги операции на сервере. Шаги прогоняются по
 // порядку на объектах кэша: что поменял каждый, то и уходит (поля, папки или
 // новый дочерний объект); затем кэш возвращается к «до» — итог придёт с сервера.
-// null — какой-то шаг так не выразить
+// null — какой-то шаг так не выразить; {noop:true} — шаг ничего не меняет (имя уже по шаблону,
+// видео уже такое): на сервер не уходит, в очереди сразу выполнен — как в очереди браузера
 function opsToItems(ops){
   const snaps=new Map(),folderItems=new Map(flatFolders().map(f=>[f.id,[...(f.items||[])]]));
   const items=[];
   try{
     for(const o of ops){
       const n=o.n;if(!isApiTarget(n))return null;
-      if(o.api){items.push({targetId:n.id,...o.api});continue}
+      if(o.api){items.push(o.api.set&&!Object.keys(o.api.set).length?{noop:true}:{targetId:n.id,...o.api});continue}
       if(!snaps.has(n.id))snaps.set(n.id,[n,cardClone(n)]);
       const before=cardClone(n),fBefore=cardFolders(n.id);
       o.run();
@@ -18167,6 +18180,7 @@ function opsToItems(ops){
       const was=new Set((before.devices||[]).map(x=>x.id)),made=(n.devices||[]).filter(x=>!was.has(x.id));
       const fNow=cardFolders(n.id),moved=JSON.stringify(fNow)!==JSON.stringify(fBefore);
       const kinds=[Object.keys(set).length>0,made.length>0,moved].filter(Boolean).length;
+      if(!kinds){items.push({noop:true});continue}
       if(kinds!==1||made.length>1)return null;
       items.push(made.length?{targetId:n.id,create:nodeCreate(made[0])}:moved?{targetId:n.id,folderIds:fNow}:{targetId:n.id,set});
     }
@@ -18184,12 +18198,15 @@ function bulkRun(ch,opts,nodesIn){
   const title=`${nodes.length} ${i18n(plural(nodes.length,"объект|объекта|объектов"))}`;
   // Выполняет сервер: одна операция, ход — в потоке; пропущенные и исключённые не уходят
   const live=steps.flatMap(s=>s.ops).filter(o=>!o.done);
-  const items=live.length?opsToItems(live):null;
-  if(items){
+  const all=live.length?opsToItems(live):null;
+  const items=all&&all.filter(x=>!x.noop);
+  if(items&&items.length){
     const targets=[...new Set(items.map(x=>x.targetId))];
-    apiQueue(steps,title,opts||{},()=>API.post("/operations",{idempotencyKey:opKey(),items,expectedVersions:Object.fromEntries(targets.map(x=>[x,hwVer.get(x)]))}),live);
+    apiQueue(steps,title,opts||{},()=>API.post("/operations",{idempotencyKey:opKey(),items,expectedVersions:Object.fromEntries(targets.map(x=>[x,hwVer.get(x)]))}),
+      live.filter((o,i)=>!all[i].noop),live.filter((o,i)=>all[i].noop));
     return;
   }
+  // Все шаги ничего не меняют — серверу нечего делать, очередь браузера их просто отметит
   startQueue(steps,title,opts);
 }
 // ── Очередь на сервере ─────────────────────────────────────────────────────
@@ -18328,9 +18345,15 @@ const opKey=()=>`ui-${Date.now().toString(36)}-${++opKeySeq}`;
 let opEarly=[];
 // Кто ждёт конца операции, которую очередь не показывает (откат по «Отменить»)
 const opWait=new Map();
-function apiQueue(steps,title,opts,call,apiOps){
+function apiQueue(steps,title,opts,call,apiOps,noopOps){
   startQueue(steps,title,Object.assign({},opts,{api:"pending"}));
   const q=bq;if(!q||q.api!=="pending")return;
+  if(noopOps&&noopOps.length){
+    noopOps.forEach(o=>{o.state="ok";o.msg="";o.done=true;q.ok++;q.done++});
+    q.steps.forEach(s=>s.ops.forEach(x=>{if(x.state==="run")x.state="wait"}));
+    const nx=queueNext();if(nx){nx.o.state="run";q.cur=nx.s.label}
+    renderRailStatus();renderTree();
+  }
   q.apiOps=apiOps||steps.flatMap(s=>s.ops);
   opEarly=[];
   call().then(op=>{q.api=op.id;const early=opEarly;opEarly=[];early.forEach(opOnEvent)}).catch(e=>{
@@ -18881,7 +18904,7 @@ function cpShowPlan(){
   if(g.has("rec")){d.rec=src.rec||"none";d.pre=String(src.pre??5)}
   if(g.has("enabled"))d.enabled=src.enabled!==false?"on":"off";
   if(g.has("folders"))d.folderAddMany=foldersOfDevice(src.id).filter(f=>f.items.includes(src.id)).map(f=>f.id);
-  if(g.has("creds")){d.user=src.user||"admin";d.pass="********"}
+  if(g.has("creds")){d.user=src.user||"admin";d.pass="********";d.passCopied=true}
   if(g.has("video")){d.codec=src.codec||"H.265";d.res=src.res||"1920×1080";d.fps=String(src.fps||25);d.bitrate=String(src.bitrate||4096)}
   const dets=camDetectors(src).filter(x=>cp.dets.has(x.id));
   if(dets.length){d.copyDets=dets.map(x=>({name:locName(x),kind:x.kind||DET_TYPES[0],sens:x.sens||"12",builtin:!!x.builtin}));d.detModel=modelOf(src)}
@@ -18906,7 +18929,8 @@ function cpChangesGeneric(src,nodes,groups){
       foldersOfDevice(src.id).filter(f=>f.items.includes(src.id)).forEach(f=>step("folderAdd:"+f.id,`В папку «${folderPathName(f.id)}»`,
         nodes.filter(n=>!f.items.includes(n.id)).map(n=>mkOp(n,"В папку","folder",()=>folderAddDevice(f.id,n.id),devicePool.includes(n)?null:i18n("вложенный объект — папку задают его устройству"),()=>{f.items=f.items.filter(x=>x!==n.id)}))));
     }else if(g.key==="creds"){
-      step("creds","Учётные данные",nodes.map(n=>mkOp(n,"Учётные данные","creds",()=>{n.user=src.user||"admin";n.pass="•".repeat(8)})),i18n("устройство переподключится"));
+      // Пароль источника клиент не знает: на сервер уходит логин, маска — только в кэше
+      step("creds","Учётные данные",nodes.map(n=>Object.assign(mkOp(n,"Учётные данные","creds",()=>{n.user=src.user||"admin";n.pass="•".repeat(8)}),{api:{set:{login:src.user||"admin"}}})),i18n("устройство переподключится"));
     }else if(g.fields){
       step(g.key,g.label,nodes.filter(n=>g.fields.some(k=>cpVal(n,k)!==cpVal(src,k))).map(n=>{
         const prev={};g.fields.forEach(k=>prev[k]=n[k]);

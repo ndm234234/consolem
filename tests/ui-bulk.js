@@ -68,4 +68,22 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   const [rc, rs] = await Promise.all([API.get("/devices/" + cam.id), API.get("/servers/" + s1.id)]);
   ok(rc.name === want[0] && rs.name === want[1], "на сервере новые имена: " + rc.name + "; " + rs.name);
   ok(await until(() => find(cam.id)?.n.name === want[0] && find(s1.id)?.n.name === want[1]), "и в дереве");
+  // Шаг, который у объекта ничего не меняет (имя уже по шаблону), не уводит всю правку мимо сервера
+  const cam2 = devicePool.find((n) => n.type === "camera" && online(n) && n !== cam && bulkCanRename(n) && n.name !== bulkName(n, "type-ip"));
+  treeSel.clear();
+  [cam, cam2].forEach((x) => treeSel.add(x.id));
+  const want2 = bulkName(cam2, "type-ip");
+  bulkRun(bulkChanges({ rename: "type-ip" }));
+  ok(!!(bq && bq.api), "одно имя уже по шаблону — всё равно операцией на сервере");
+  ok(await until(() => bq.finished) && bq.fail === 0 && bq.ok === 2, "оба шага выполнены: ok " + bq.ok);
+  ok((await API.get("/devices/" + cam2.id)).name === want2, "на сервере новое имя: " + want2);
+  // Учётные данные, скопированные с камеры: пароль источника клиенту не известен — маска на сервер не уходит
+  const cp1 = bulkChanges({ user: "op3", pass: "********", passCopied: true }).find((s) => s.key === "creds");
+  ok(cp1 && cp1.ops.every((o) => o.api.set.login === "op3" && !("password" in o.api.set)), "копия: на сервер — логин, без пароля");
+  bulkDraft = { pass: "********", passCopied: true };
+  bulkSet("pass", "new-secret");
+  ok(!bulkDraft.passCopied && bulkChanges().find((s) => s.key === "creds")?.ops.every((o) => o.api.set.password === "new-secret"), "введённый пароль уходит как есть");
+  bulkDraft = {};
+  const gen = cpChangesGeneric(cam, [cam2], new Set(["creds"])).find((s) => s.key === "creds");
+  ok(!gen || gen.ops.every((o) => o.api && !("password" in o.api.set)), "«Применить к другим» — тоже без маски");
 });
