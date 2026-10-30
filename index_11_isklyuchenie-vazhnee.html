@@ -2401,6 +2401,7 @@ function devicesMutate(nodes,mutate){
 }
 // Состав папки — PATCH папки, кэш — по ответу
 function folderSetItems(fid,ids){
+  if(busyHit(fid)||ids.some(id=>busyIds().has(id)))return Promise.reject({problem:{code:"BUSY"}});
   return API.patch(`/folders/${fid}`,{deviceIds:ids},hwVer.get(fid)).then(r=>{hwApplyFolder(r);treeMatchCache.clear();searchMatchCache.clear();return r});
 }
 function hwApplyArchive(r){
@@ -2481,7 +2482,7 @@ function problemText(e,n){
     LICENSE_EXCEEDED:i18n("лицензия превышена — камера останется выключенной"),
     DEVICE_OFFLINE:i18n("устройство не отвечает — проверьте сеть и учётные данные"),
     VERSION_MISMATCH:i18n("объект изменился — откройте его заново"),
-    BUSY:i18n("над объектом уже выполняется операция"),
+    BUSY:i18n("над объектом выполняется групповая операция"),
     NAME_REQUIRED:i18n("Укажите имя"),
     NAME_TAKEN:n?.type==="domain"?i18n("Домен с таким именем уже есть"):i18n("Имя уже занято"),
     ADDRESS_TAKEN:i18n("Сервер с таким адресом уже есть"),
@@ -3551,6 +3552,7 @@ function deleteDomain(id){
         <p class="sub" style="margin:8px 0 0">${i18n("Серверы станут нераспределёнными в выбранном домене; папки, устройства и сетевые архивы переедут туда же.")}</p>`
       :`<p class="sub" style="margin:0">${i18n("Домен пуст.")}</p>`);
   if(pendingDelHas(id)){toast("Домен уже ждёт удаления — отменить можно в тосте");return}
+  if(busyRefuse(id))return;
   askConfirm("Удалить домен?",body+`<p class="sub" style="margin:10px 0 0">${i18n("После подтверждения будет отсчёт с кнопкой «Отменить».")}</p>`,"",i18n("Удалить"),()=>{
     const to=document.getElementById("domMoveTo")?.value||others[0]?.id;
     scheduleDelete([id],{label:`${i18n("Домен")} «${locName(d)}»`,commit:()=>{
@@ -3724,7 +3726,7 @@ function cardFootHtml(){
   if(!d.length)return`<div id="cardFoot" hidden></div>`;
   return`<div class="main-actions bk-foot card-foot" id="cardFoot"><span class="sub bk-foot-text">${i18n("Не применено")}: <b>${d.length}</b> ${i18n(plural(d.length,"изменение|изменения|изменений"))} — ${escHtml(d.slice(0,2).map(r=>r.label).join(", "))}${d.length>2?"…":""}</span><span class="tfoot-gap"></span>
     <button type="button" class="btn s" ${onEv("click",["cardReset"])}>${i18n("Сбросить")}</button>
-    <button type="button" class="btn s pri" ${onEv("click",["cardPlan"])}>${i18n("Показать план")} (${d.length})</button></div>`;
+    <button type="button" class="btn s pri" ${bq&&!bq.finished?`disabled title="${i18n(busyIds().has(sel)?"Над объектом выполняется групповая операция":"Выполняется групповая операция — план можно применить после её конца")}"`:""} ${onEv("click",["cardPlan"])}>${i18n("Показать план")} (${d.length})</button></div>`;
 }
 function cardFootRefresh(){
   const el=document.getElementById("cardFoot");if(el)el.outerHTML=cardFootHtml();
@@ -3732,17 +3734,20 @@ function cardFootRefresh(){
 }
 function cardPlan(){
   const d=cardDiff();if(!d.length){toast("Нечего применять");return}
-  if(bq&&!bq.finished){toast("Очередь ещё выполняется — дождитесь её конца");return}
+  if(bq&&!bq.finished){toast("Групповая операция ещё выполняется — дождитесь её конца");return}
+  if(busyRefuse(cardDraft.id))return;
   const n=find(cardDraft.id).n,s=srv(n.id),off=s&&hasNoSignal(s);
   const rows=d.map((r,i)=>`<tr><td class="bk-num">${i+1}</td><td>${escHtml(r.label)}</td><td class="bk-note">${escHtml(r.fromT)}</td><td><b>${escHtml(r.toT)}</b></td></tr>`).join("");
   openBulkModal(`${i18n("План")}: «${escHtml(locName(n))}», ${d.length} ${i18n(plural(d.length,"изменение|изменения|изменений"))}`,
     `<table class="bk-table"><thead><tr><th>#</th><th>${i18n("Параметр")}</th><th>${i18n("Было")}</th><th>${i18n("Станет")}</th></tr></thead><tbody>${rows}</tbody></table>
      ${off?`<div class="nt bk-warn">${lu("triangle-alert")} ${i18n("сервер")} «${escHtml(locName(s))}» ${i18n("без связи — изменения не применятся, в отчёте они будут «не применено»")}</div>`:""}
-     <p class="sub" style="margin:10px 0 0">${i18n("Так же, как правка выборки: изменения уходят на сервер очередью, итог — в отчёте; после применения — «Отменить».")}</p>`,
+     <p class="sub" style="margin:10px 0 0">${i18n("Так же, как правка выборки: изменения уходят на сервер одной операцией, итог — в отчёте; после применения — «Отменить».")}</p>`,
     `<button type="button" class="btn" ${onEv("click",["closeBulkModal"])}>${i18n("Назад")}</button><button type="button" class="btn pri" ${onEv("click",["closeBulkModal"],["cardApply"])}>${i18n("Применить")} (${d.length})</button>`,"bbox-wide");
 }
 function cardApply(){
   const d=cardDiff();if(!d.length)return;
+  if(bq&&!bq.finished){toast("Групповая операция ещё выполняется — дождитесь её конца");return}
+  if(busyRefuse(cardDraft.id))return;
   const n=find(cardDraft.id).n;
   const items=cardApiItems(n,d);
   if(items){
@@ -3976,9 +3981,10 @@ function toggleNodeEnabled(id,el){
 }
 function objectStatusNotesHtml(n){
   const e=n&&devErr(n);
+  const busyNote=n&&busyIds().has(n.id)?`<div class="nt" role="status">${i18n("Над объектом выполняется групповая операция — изменить можно после её окончания или отмены оставшегося")}</div>`:"";
   const errNote=e?`<div class="nt err dev-err-nt" role="status"><span class="n-err e-${e}">${devErrIc(e)}</span><span><b>${i18n("Нет сигнала")}: ${i18n(DEV_ERR[e].t)}.</b> ${i18n(DEV_ERR[e].fix)}${e==="auth"&&tab!=="gen"?` <button type="button" class="lk lk-act" ${onEv("click",["goTab","gen"])}>${i18n("К подключению")}</button>`:""}</span></div>`:"";
-  if(!n||n.type!=="camera")return errNote;
-  const st=nodeStatus(n);let h=errNote;
+  if(!n||n.type!=="camera")return busyNote+errNote;
+  const st=nodeStatus(n);let h=busyNote+errNote;
   if(st.license)h+=`<div class="nt err" role="status">${i18n("Лицензия превышена. Камера недоступна до освобождения лицензии.")} <button type="button" class="lk lk-act" ${onEv("click",["goApp","sys"])}>${i18n("К опциям / лицензиям")}</button></div>`;
   if(st.ruleOff){
     const rr=typeof n.ruleOff==="string"?rules.find(x=>x.id===n.ruleOff):null;
@@ -4815,6 +4821,7 @@ function commitTreeRename(id,val){
     const field=treeRenameField==="short"?"short":"name",v=String(val||"").trim();
     const err=field!=="name"?"":!v?i18n("Укажите имя"):kind==="domain"?domainNameError(v,id):"";
     if(err){toast(err);requestAnimationFrame(()=>{const el=document.querySelector(".nm-inp");if(el){el.focus();el.select&&el.select()}});return}
+    if(busyRefuse(id)){treeRenameId=null;treeRenameField="name";renderTree();return}
     treeRenamePending=true;
     API.patch(`${RENAME_API[kind]}/${id}`,{[field]:v},hwVer.get(id)).then(r=>{
       treeRenamePending=false;RENAME_APPLY[kind](r);
@@ -5906,6 +5913,7 @@ function clearFolder(folderId){
   const f=folderById(folderId);if(!f)return;
   const count=(f.items||[]).length;
   if(!count){toast(i18n("Папка пуста"));return}
+  if(busyRefuse(folderId))return;
   askConfirm("Убрать все объекты из папки?",`${i18n("Из папки будет убрано объектов:")} ${count}.`,i18n("Сами устройства останутся в системе."),i18n("Убрать"),()=>{
     API.patch(`/folders/${f.id}`,{deviceIds:[]},hwVer.get(f.id)).then(r=>{
       hwApplyFolder(r);
@@ -5934,6 +5942,7 @@ function deleteFolder(id){
   closeTreeCtx();
   const f=folderById(id);if(!f)return;
   if(pendingDelHas(id)){toast("Папка уже ждёт удаления — отменить можно в тосте");return}
+  if(busyRefuse(id))return;
   const cnt=folderDeviceIds(f).size;
   askConfirm("Удалить папку?",`${i18n("Будет удалена папка")} «${escHtml(f.name)}».`,
     (cnt?`${i18n("Устройства останутся в системе")} (${cnt}). `:"")+i18n("После подтверждения будет отсчёт с кнопкой «Отменить»."),i18n("Удалить"),()=>scheduleDelete([id],{label:`${i18n("Папка")} «${f.name}»`,commit:()=>{
@@ -5952,6 +5961,7 @@ function deleteTreeNode(id){
   closeTreeCtx();
   const f=find(id);if(!f||!canTreeCtxDelete(f.n))return;
   if(pendingDelHas(id)){toast("Объект уже ждёт удаления — отменить можно в тосте");return}
+  if(busyRefuse(id))return;
   if(bulkBusyGuard())return;
   const back=f.p?f.p.id:(foldersOfDevice(id)[0]?.id||selFolder||folders[0]?.id);
   confirmDeleteNodes([id],back);
@@ -7946,6 +7956,7 @@ function deleteDetector(camId,detId){
   const f=find(camId);if(!f)return;
   const d=camDetectors(f.n).find(x=>x.id===detId);if(!d)return;
   if(pendingDelHas(detId)){toast("Детектор уже ждёт удаления — отменить можно в тосте");return}
+  if(busyRefuse(detId)||busyRefuse(camId))return;
   askConfirm("Удалить детектор?",`${i18n("Будет удалён")} «${escHtml(locName(d))}».`,i18n("После подтверждения будет отсчёт с кнопкой «Отменить»."),i18n("Удалить"),()=>scheduleDelete([detId],{label:`${i18n("Детектор")} «${locName(d)}»`,commit:()=>{
     if(!hwVer.has(detId)){deleteDetectorDraft(f,detId);return}
     API.del(`/devices/${detId}`,hwVer.get(detId)).then(()=>{
@@ -16025,6 +16036,7 @@ function deleteVolume(id){
   const v=volById(id),a=v&&archById(v.archId);if(!v||!a)return;
   const last=archVols(a).length===1,n=archCameras(a.id).length;
   if(pendingDelHas(id)){toast("Том уже ждёт удаления — отменить можно в тосте");return}
+  if(busyRefuse(id))return;
   askConfirm("Удалить том",`${i18n("Том")} «${escHtml(v.disk)}» ${i18n("хранилища")} «${escHtml(locName(a))}» ${i18n("будет удалён вместе с записями на нём.")}`,
     (last&&n?`${i18n("Это последний том: хранилищу будет некуда писать, камер:")} ${n}. `:"")+i18n("После подтверждения будет отсчёт с кнопкой «Отменить»."),
     "Удалить",()=>scheduleDelete([id],{label:`${i18n("Том")} «${v.disk}»`,commit:()=>{
@@ -16046,6 +16058,7 @@ function deleteArchive(id){
   const a=arch.find(x=>x.id===id);if(!a)return;
   const n=archCameras(id).length;
   if(pendingDelHas(id)){toast("Хранилище уже ждёт удаления — отменить можно в тосте");return}
+  if(busyRefuse(id))return;
   askConfirm("Удалить хранилище",`${i18n("Хранилище")} «${locName(a)}» ${i18n("будет удалено вместе с томами.")}`,
     (n?`${i18n("Перестанут писать камер:")} ${n}. ${i18n("Сами камеры останутся в системе — в разделе «Без записи».")} `:"")+i18n("После подтверждения будет отсчёт с кнопкой «Отменить»."),
     "Удалить",()=>scheduleDelete([id],{label:`«${locName(a)}»`,commit:()=>{
@@ -17448,14 +17461,29 @@ function tsBanner(key){
 }
 // «Частично» у шапки ставится только свойством, разметкой его не задать.
 function tsFixInd(root){(root||document).querySelectorAll("input.ts-chk[data-ind]").forEach(el=>{el.indeterminate=true})}
-// Объект занят, пока он в очереди применения или ждёт удаления: отмечать и
-// править его нельзя, иначе два плана лягут друг на друга.
+// Объект занят, пока над ним идёт групповая операция или он ждёт удаления:
+// отмечать и править его нельзя, иначе два плана лягут друг на друга. Сервер
+// на правку занятого отвечает 409 BUSY — интерфейс отказывает раньше.
 function busyIds(){
   const s=new Set();
   if(bq&&!bq.finished)bq.steps.forEach(st=>st.ops.forEach(o=>{if(!o.done)s.add(o.n.id)}));
   return s;
 }
 function blockedId(id){return pendingDelHas(id)||busyIds().has(id)}
+// Правка объекта, над которым идёт групповая операция: отказ тостом.
+// Занят сам объект или то, что в нём: папка — устройства её и вложенных папок (с дочерними),
+// домен — его объекты, том — его хранилище. Цели операции — устройства, серверы и хранилища.
+function busyHit(id){
+  const b=busyIds();if(!b.size)return false;if(b.has(id))return true;
+  const f=folderById(id);
+  if(f){const ids=[],dev=n=>{if(!n)return;ids.push(n.id);(n.devices||[]).forEach(dev)},walk=x=>{(x.items||[]).forEach(i=>dev(find(i)?.n));(x.folders||[]).forEach(walk)};walk(f);return ids.some(i=>b.has(i))}
+  if(domainById(id))return[...b].some(x=>deviceDomain(x)===id||archDomainId(archById(x)||{})===id);
+  const n=find(id)?.n;return!!(n&&n.archId&&b.has(n.archId));
+}
+function busyRefuse(id){
+  if(!busyHit(id))return false;
+  toast("Над объектом выполняется групповая операция — дождитесь её конца");return true;
+}
 // Всё, что можно отметить в текущем срезе под текущими фильтрами и поиском.
 function selCandidates(){
   const q=qval(),out=[],seen=new Set(),busy=busyIds();
@@ -17552,7 +17580,7 @@ function decorateTreeSel(){
       row.querySelector(":scope>.nm")?.after(chip);
     }else if(busy.has(id)){
       row.classList.add("busy");
-      const chip=document.createElement("span");chip.className="busy-chip";chip.textContent=i18n("изменяется");
+      const chip=document.createElement("span");chip.className="busy-chip";chip.textContent=i18n("выполняется операция");
       row.querySelector(":scope>.nm")?.after(chip);
     }
     if(app!=="hw")return;
@@ -17588,7 +17616,7 @@ function decorateTreeSel(){
     if(!ph&&!on&&!canMultiPick(f.n)&&!selDescendants(f.n).length)ph=true;
     chk.className="n-chk"+(ph?" n-chk-ph":"")+(state?" "+state:"")+(blockedId(id)?" dis":"");
     chk.setAttribute("role","checkbox");chk.setAttribute("aria-checked",state==="part"?"mixed":state?"true":"false");
-    chk.title=blockedId(id)?i18n("Объект в очереди"):selDeep(f.n)?i18n("Отметить вместе со всем внутри; только сам объект — Ctrl+клик по строке"):canMultiPick(f.n)?i18n("Отметить"):i18n("Отметить всё внутри");
+    chk.title=blockedId(id)?i18n("Над объектом выполняется операция"):selDeep(f.n)?i18n("Отметить вместе со всем внутри; только сам объект — Ctrl+клик по строке"):canMultiPick(f.n)?i18n("Отметить"):i18n("Отметить всё внутри");
     const tw=row.querySelector(":scope>.tw");
     if(tw)tw.after(chk);else row.prepend(chk);
   });
@@ -17604,7 +17632,7 @@ function selDeep(n){
 }
 function selChkClick(id,ctx){
   const f=find(id);if(!f)return;
-  if(blockedId(id)){toast(pendingDelHas(id)?"Объект ждёт удаления — отмените его в тосте":"Объект в очереди применения — дождитесь конца");return}
+  if(blockedId(id)){toast(pendingDelHas(id)?"Объект ждёт удаления — отмените его в тосте":"Над объектом выполняется групповая операция — дождитесь её конца");return}
   const entering=!selMode;selMode=true;
   // Открытые домен, сервер, папка или хранилище — это обычно место, откуда
   // начинают отмечать, а не первый объект выборки: галочка у другой строки
@@ -17645,7 +17673,7 @@ function selChkClick(id,ctx){
 // а не снимает её.
 function selToggle(id,ctx){
   const f=find(id);if(!f||!canMultiPick(f.n))return;
-  if(selShownAt(id,ctx))treeSel.delete(id);else{if(blockedId(id)){toast("Объект в очереди — отметить нельзя");return}treeSel.add(id,ctx)}
+  if(selShownAt(id,ctx))treeSel.delete(id);else{if(blockedId(id)){toast("Над объектом выполняется операция — отметить нельзя");return}treeSel.add(id,ctx)}
   treeAnchor=id;
   afterSelChange(id,ctx);
 }
@@ -18366,9 +18394,9 @@ function openBulkModal(title,body,foot,cls){
 }
 function closeBulkModal(){document.getElementById("bmodal")?.classList.remove("open")}
 function bulkBusyGuard(){
-  if(bq&&!bq.finished){toast("Очередь ещё выполняется — дождитесь её конца");return true}
+  if(bq&&!bq.finished){toast("Групповая операция ещё выполняется — дождитесь её конца");return true}
   const busy=busyIds();
-  if(bulkScopeNodes().some(n=>busy.has(n.id)||pendingDelHas(n.id))){toast("В выборке есть объекты в очереди или на удалении");return true}
+  if(bulkScopeNodes().some(n=>busy.has(n.id)||pendingDelHas(n.id))){toast("В выборке есть объекты, над которыми идёт операция или которые ждут удаления");return true}
   return false;
 }
 // План по выборке дерева; «Применить к другим» для устройств без галочек
@@ -18376,7 +18404,7 @@ function bulkBusyGuard(){
 function bulkShowPlan(chIn,nodesIn,applyJs,backJs){
   const ch=chIn||bulkChanges(),nodes=nodesIn||bulkScopeNodes();
   if(!ch.length){toast("Нечего применять");return}
-  if(chIn?(bq&&!bq.finished&&(toast("Очередь ещё выполняется — дождитесь её конца"),true)):bulkBusyGuard())return;
+  if(chIn?(bq&&!bq.finished&&(toast("Групповая операция ещё выполняется — дождитесь её конца"),true)):bulkBusyGuard())return;
   const st=bulkStats(nodes);
   const excluded=new Set(st.offline.map(n=>n.id));
   let total=0,skip=0;
@@ -18461,8 +18489,8 @@ function bulkRun(ch,opts,nodesIn){
 }
 // ── Очередь на сервере ─────────────────────────────────────────────────────
 // План карточки устройства уходит на сервер одной операцией (POST /operations):
-// шаги выполняет сервер, ход приходит в поток событий, «Пауза», «Отменить
-// оставшееся», «Повторить неудачные» и «Отменить» — запросы к операции. Очередь
+// шаги выполняет сервер, ход приходит в поток событий, «Отменить оставшееся»,
+// «Повторить неудачные» и «Отменить» — запросы к операции (паузы нет). Очередь
 // в шапке и окно хода те же, что у очереди в браузере; правка выборки пока идёт
 // очередью в браузере (этап «Групповые операции»).
 const DEVICE_PATCH=new Set(Object.keys(window.CONSOLEM_OPENAPI.components.schemas.DevicePatch.properties));
@@ -18606,7 +18634,7 @@ function apiQueue(steps,title,opts,call,apiOps,noopOps){
   }
   q.apiOps=apiOps||steps.flatMap(s=>s.ops);
   opEarly=[];
-  call().then(op=>{q.api=op.id;const early=opEarly;opEarly=[];early.forEach(opOnEvent)}).catch(e=>{
+  call().then(op=>{q.api=op.id;const early=opEarly;opEarly=[];early.forEach(opOnEvent);if(q.cancelled&&!q.finished&&bq===q)apiQueueOp("cancel").catch(e=>toast(problemText(e)))}).catch(e=>{
     // Сервер не принял операцию целиком (план устарел, объект занят, ошибка в поле): ни один шаг не выполнен
     const msg=problemText(e);
     q.steps.forEach(s=>s.ops.forEach(o=>{if(!o.done){o.state="fail";o.msg=msg;o.done=true;q.fail++;q.done++}}));
@@ -18627,7 +18655,7 @@ function opOnEvent(m){
     if(it.createdId)API.get(`/devices/${it.createdId}`).then(r=>{hwAddDevices([r]);if(o.tempId&&detSel===o.tempId){detSel=r.id;if(app==="hw")gear()}renderTree()}).catch(()=>{});
     if(it.state==="ok"){o.state="ok";o.msg="";bq.ok++}else{o.state="fail";o.msg=problemText(it.code,o.n);bq.fail++}
     o.done=true;bq.done++;
-    const nx=ops.find(x=>!x.done);if(nx&&!bq.paused)nx.state="run";
+    const nx=ops.find(x=>!x.done);if(nx)nx.state="run";
     bq.steps.forEach(s=>s.ops.forEach(x=>{if(x.state==="run"&&x!==nx)x.state=x.done?x.state:"wait"}));
     bq.cur=bq.steps.find(s=>s.ops.some(x=>!x.done))?.label||"";
     treeMatchCache.clear();searchMatchCache.clear();
@@ -18636,9 +18664,11 @@ function opOnEvent(m){
 }
 function apiQueueOp(path){return API.post(`/operations/${bq.api}/${path}`)}
 function startQueue(steps,title,opts){
-  if(bq&&!bq.finished){toast("Очередь уже выполняется");return}
+  if(bq&&!bq.finished){toast("Групповая операция уже выполняется");return}
   const total=steps.reduce((s,x)=>s+x.ops.filter(o=>!o.done).length,0);
-  bq={steps,title,total,done:0,ok:0,fail:0,skipped:steps.reduce((s,x)=>s+x.ops.filter(o=>o.done).length,0),paused:false,cancelled:false,finished:false,cur:"",started:Date.now(),undo:!!opts?.undo,quiet:!!opts?.undo,api:opts?.api||null};
+  bq={steps,title,total,done:0,ok:0,fail:0,skipped:steps.reduce((s,x)=>s+x.ops.filter(o=>o.done).length,0),cancelled:false,finished:false,cur:"",started:Date.now(),undo:!!opts?.undo,quiet:!!opts?.undo,api:opts?.api||null};
+  // Открытая карточка занятого объекта показывает пометку и закрывает «Показать план»
+  if(sel&&busyIds().has(sel)&&(app==="hw"||app==="dev"||app==="srvs"))gear();
   if(bq.api){const o=queueNext();if(o){o.o.state="run";bq.cur=o.s.label}renderRailStatus();renderTree();return}
   renderRailStatus();renderTree();
   queueTick();
@@ -18651,7 +18681,7 @@ function queueNext(){
 function queueTick(){
   ruleIdxDrop();
   clearTimeout(bqTimer);bqTimer=null;
-  if(!bq||bq.finished||bq.paused)return;
+  if(!bq||bq.finished)return;
   const nx=queueNext();
   if(!nx||bq.cancelled){queueFinish();return}
   const{s,o}=nx;
@@ -18668,14 +18698,11 @@ function queueTick(){
     queueTick();
   },90+Math.random()*140);
 }
-function queuePause(){
-  if(!bq||bq.finished)return;
-  if(bq.api){if(bq.api==="pending")return;const q=bq;apiQueueOp(q.paused?"resume":"pause").then(()=>{q.paused=!q.paused;renderRailStatus();syncQueueModal()}).catch(e=>toast(problemText(e)));return}
-  bq.paused=!bq.paused;if(!bq.paused)queueTick();renderRailStatus();syncQueueModal()}
 function queueCancel(){
   if(!bq||bq.finished)return;
-  if(bq.api){if(bq.api==="pending")return;bq.cancelled=true;apiQueueOp("cancel").catch(e=>toast(problemText(e)));return}
-  bq.cancelled=true;bq.paused=false;queueTick()}
+  // Пока сервер не принял операцию, отмена запоминается и уходит, как только придёт её id
+  if(bq.api){bq.cancelled=true;if(bq.api!=="pending")apiQueueOp("cancel").catch(e=>toast(problemText(e)));return}
+  bq.cancelled=true;queueTick()}
 function queueFinish(){
   if(!bq)return;
   bq.finished=true;bq.cur="";
@@ -18711,9 +18738,9 @@ function railStatusHtml(){
   const pct=bq.total?Math.round(bq.done/bq.total*100):100;
   const bad=bq.fail+(bq.finished?bq.steps.reduce((n,s)=>n+s.ops.filter(o=>o.state==="cancel").length,0):0);
   // Одна строка: число слева постоянной ширины цифр, шаг справа с многоточием.
-  const n=bq.finished?i18n("Готово"):bq.paused?i18n("Пауза"):`${bq.done} ${i18n("из")} ${bq.total}`;
+  const n=bq.finished?i18n("Готово"):`${bq.done} ${i18n("из")} ${bq.total}`;
   const t=bq.finished?(bad?`${bad} ${i18n("не ок")} · ${i18n("Отчёт")}`:i18n("Отчёт")):i18n(bq.cur||"…");
-  const tip=`${i18n("Очередь применения")}: ${bq.title} — ${n}${bq.finished?"":` · ${t}`}`;
+  const tip=`${i18n("Групповая операция")}: ${bq.title} — ${n}${bq.finished?"":` · ${t}`}`;
   return`<button type="button" class="rs-btn ${bq.finished?(bad?"bad":"ok"):""}" title="${escHtml(tip)}" ${onEv("click",[bq.finished?"openReport":"openQueueModal"])}><span class="rs-l1"><span class="rs-n">${n}</span><span class="rs-l2">${escHtml(t)}</span></span><span class="rs-bar" aria-hidden="true"><i style="width:${pct}%"></i></span></button>${bq.finished?`<button type="button" class="rs-x" title="${i18n("Скрыть")}" ${onEv("click",["queueDismiss"])}>${lu("x")}</button>`:""}`;
 }
 // Очередь живёт в шапке, справа от поиска, — и при показанном рельсе, и при
@@ -18732,19 +18759,19 @@ function queueModalHtml(){
     return`<tr><td class="bk-num">${i+1}</td><td>${escHtml(i18n(s.label))}</td><td class="bk-num">${s.ops.length}</td><td>${st}</td></tr>`;
   }).join("");
   const pct=bq.total?Math.round(bq.done/bq.total*100):100;
-  return`<div class="bk-prog"><div class="bk-prog-l"><b>${bq.finished?i18n("Выполнено"):bq.paused?i18n("Приостановлено"):i18n("Применяется")}</b> ${bq.done} ${i18n("из")} ${bq.total}${bq.cur?` · ${escHtml(i18n(bq.cur))}`:""}</div><div class="rs-bar big"><i style="width:${pct}%"></i></div></div>
+  return`<div class="bk-prog"><div class="bk-prog-l"><b>${bq.finished?i18n("Выполнено"):i18n("Применяется")}</b> ${bq.done} ${i18n("из")} ${bq.total}${bq.cur?` · ${escHtml(i18n(bq.cur))}`:""}</div><div class="rs-bar big"><i style="width:${pct}%"></i></div></div>
     <table class="bk-table"><thead><tr><th>#</th><th>${i18n("Шаг")}</th><th>${i18n("Операций")}</th><th>${i18n("Состояние")}</th></tr></thead><tbody>${rows}</tbody></table>
-    <p class="sub" style="margin:10px 0 0">${i18n("Выполненное не откатывается: «Отменить оставшееся» останавливает только то, что ещё не началось. Объекты в очереди помечены в дереве и недоступны для правки; с остальным интерфейсом можно работать.")}</p>`;
+    <p class="sub" style="margin:10px 0 0">${i18n("Выполненное не откатывается: «Отменить оставшееся» останавливает только то, что ещё не началось. Объекты операции помечены в дереве и недоступны для правки; с остальным интерфейсом можно работать.")}</p>`;
 }
 function openQueueModal(){
   if(!bq)return;
   if(bq.finished){openReport();return}
-  openBulkModal(`${i18n("Очередь")}: ${bq.title}`,queueModalHtml(),queueFootHtml(),"bbox-wide bbox-queue");
+  openBulkModal(`${i18n("Групповая операция")}: ${bq.title}`,queueModalHtml(),queueFootHtml(),"bbox-wide bbox-queue");
 }
 function queueFootHtml(){
   if(!bq)return"";
   if(bq.finished)return`<button type="button" class="btn pri" ${onEv("click",["openReport"])}>${i18n("Открыть отчёт")}</button>`;
-  return`<button type="button" class="btn" ${onEv("click",["queuePause"])}>${bq.paused?i18n("Продолжить"):i18n("Пауза")}</button><button type="button" class="btn" ${onEv("click",["queueCancel"])}>${i18n("Отменить оставшееся")}</button><span class="tfoot-gap"></span><button type="button" class="btn" ${onEv("click",["closeBulkModal"])}>${i18n("Свернуть")}</button>`;
+  return`<button type="button" class="btn" ${onEv("click",["queueCancel"])}>${i18n("Отменить оставшееся")}</button><span class="tfoot-gap"></span><button type="button" class="btn" ${onEv("click",["closeBulkModal"])}>${i18n("Свернуть")}</button>`;
 }
 function syncQueueModal(){
   const m=document.getElementById("bmodal");
@@ -18827,7 +18854,7 @@ function deleteSelected(only){
   if(!ids.length){toast(skipped.length?"Серверы исключают из домена, домены удаляют по одному из их меню":"Нечего удалять");return}
   const idSet=new Set(ids);
   const roots=ids.filter(id=>{const n=find(id).n;if(n.type==="vol"&&idSet.has(n.archId))return false;return!path(id).slice(0,-1).some(x=>idSet.has(x.id))}).filter(id=>!pendingDelHas(id));
-  if(!roots.length){toast("Выбранное уже в очереди на удаление");return}
+  if(!roots.length){toast("Выбранное уже ждёт удаления");return}
   confirmDeleteNodes(roots,null,skipped);
 }
 function confirmDeleteNodes(roots,back,skipped){
@@ -19047,7 +19074,7 @@ function cpFiltered(){
 }
 function openCopyDialog(id){
   const f=find(id);if(!f||!cpCanCopy(f.n))return;
-  if(busyIds().size){toast("Очередь ещё выполняется — дождитесь её конца");return}
+  if(busyIds().size){toast("Групповая операция ещё выполняется — дождитесь её конца");return}
   const src=f.n,all=cpCandidates(src);
   if(!all.length){toast(src.type==="camera"?"Других камер нет":"Других устройств этого типа нет");return}
   cp={src,groups:new Set(),dets:new Set(),picked:new Set(),filter:"all",q:""};

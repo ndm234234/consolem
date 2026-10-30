@@ -23,20 +23,35 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   const r0 = await API.get("/devices/" + cams[0].id);
   ok(r0.enabled === false && r0.recordMode === "motion" && r0.login === "op" && r0.hasPassword, "на сервере — изменено, пароль задан");
   ok(cams[0].pass !== "p", "пароль в кэш не попадает");
-  // Пауза: шаги на сервере стоят
+  // Пауза (есть не на всех страницах): шаги на сервере стоят
   const many = devicePool.filter((n) => n.type === "camera" && online(n)).slice(0, 12);
   treeSel.clear();
   many.forEach((c) => treeSel.add(c.id));
   bulkRun(bulkChanges({ pre: "9" }));
   ok(await until(() => bq.api && bq.api !== "pending" && bq.done > 0), "идёт: " + bq.done + " из " + bq.total);
-  queuePause();
-  ok(await until(() => bq.paused), "пауза");
-  const at = bq.done;
-  ok((await API.get("/operations/" + bq.api)).state === "paused", "на сервере — пауза");
-  await new Promise((r) => setTimeout(r, 1500));
-  ok(bq.done === at, "на паузе шаги стоят: " + bq.done);
-  queuePause();
-  ok(await until(() => bq.finished), "продолжили и закончили: ok " + bq.ok);
+  if (typeof queuePause === "function") {
+    queuePause();
+    ok(await until(() => bq.paused), "пауза");
+    const at = bq.done;
+    ok((await API.get("/operations/" + bq.api)).state === "paused", "на сервере — пауза");
+    await new Promise((r) => setTimeout(r, 1500));
+    ok(bq.done === at, "на паузе шаги стоят: " + bq.done);
+    queuePause();
+    ok(await until(() => bq.finished), "продолжили и закончили: ok " + bq.ok);
+  } else {
+    // Без паузы: объекты идущей операции заняты — интерфейс не даёт их править, сервер отвечает 409 BUSY;
+    // после отмены остатка — свободны
+    const left = bq.steps.flatMap((s) => s.ops).filter((o) => !o.done).map((o) => o.n);
+    ok(left.length > 0 && left.every((n) => blockedId(n.id)), "объекты операции заняты: " + left.length);
+    ok(busyRefuse(left[0].id) === true, "правка занятого объекта отклонена");
+    const last = left[left.length - 1];
+    const refused = await API.patch("/devices/" + last.id, { name: last.name }, hwVer.get(last.id)).then(() => null, (e) => e);
+    ok(refused && refused.problem && refused.problem.code === "BUSY", "сервер: правка занятого объекта — " + (refused && refused.problem ? refused.problem.code : "принята"));
+    queueCancel();
+    ok(await until(() => bq.finished), "отмена оставшегося: ok " + bq.ok + ", отменено " + bq.steps[0].ops.filter((o) => o.state === "cancel").length);
+    ok(many.every((c) => !blockedId(c.id)), "после окончания объекты свободны");
+    ok(busyRefuse(many[0].id) === false, "правка свободного объекта разрешена");
+  }
   // Камеры сервера без связи — исключены, на сервер не уходят
   const off = devicePool.filter((n) => n.type === "camera" && !online(n)).slice(0, 2);
   treeSel.clear();
