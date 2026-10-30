@@ -2,7 +2,7 @@
 """Собрать WebUI для консоли VMS из index.html: файлами, без встроенного кода, со списком MANIFEST.json.
 
 Консоль отдаёт страницу под CSP «script-src 'self'; object-src 'none'; base-uri 'none'» (запрос w2c,
-api/requests/2026-10-29-w2c-webui-csp-request.md): код — только файлами со своего адреса, встроенный
+api/requests/2026-10-29-184430Z-w2c-webui-csp-request.md): код — только файлами со своего адреса, встроенный
 <script> и атрибуты onclick="…" не выполняются. Поэтому:
   - главный встроенный <script> index.html → app.js, встроенный <style> и assets/one-psim/bridge.css
     (с его @import) → app.css;

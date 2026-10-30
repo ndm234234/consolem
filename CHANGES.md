@@ -362,7 +362,7 @@
 
 ## 26. Основной макет — обработчики без кода в атрибутах (по запросу w2c)
 
-Консоль VMS команды w2c отдаёт WebUI под CSP `script-src 'self'; object-src 'none'; base-uri 'none'` ([запрос](api/requests/2026-10-29-w2c-webui-csp-request.md), п. 1). Под ней атрибуты `onclick="…"` не выполняются. Внешне ничего не изменилось.
+Консоль VMS команды w2c отдаёт WebUI под CSP `script-src 'self'; object-src 'none'; base-uri 'none'` ([запрос](api/requests/2026-10-29-184430Z-w2c-webui-csp-request.md), п. 1). Под ней атрибуты `onclick="…"` не выполняются. Внешне ничего не изменилось.
 
 - **871 обработчик** (`onclick`, `onchange`, `oninput`, `onkeydown` и другие) переведён на атрибуты `data-on-<событие>` со списком вызовов в JSON. В шаблонах их пишет `${onEv("click",["ruleOpen",r.id,true])}`, в статической разметке — `data-on-click='[["closeWizard"]]'`. Один слушатель на документ (перехват) вызывает их по пути события от цели вверх, `stopPropagation` останавливает, как раньше.
 - **Служебные шаги** вместо кода: `onEv.stop`, `onEv.prevent`, `onEv.self` (только по самому элементу — фон диалога), `onEv.key(…)`, `onEv.ifValue`; значения на момент события — `onEv.value`, `.checked`, `.files`, `.el`, `.event`, `.data(ключ)`.
@@ -375,7 +375,7 @@
 
 ## 27. Сборка WebUI для консоли VMS (по запросу w2c)
 
-Консоль w2c отдаёт WebUI файлами со своего адреса под CSP `script-src 'self'` ([запрос](api/requests/2026-10-29-w2c-webui-csp-request.md), п. 1). Макет на Pages и с диска работает как раньше.
+Консоль w2c отдаёт WebUI файлами со своего адреса под CSP `script-src 'self'` ([запрос](api/requests/2026-10-29-184430Z-w2c-webui-csp-request.md), п. 1). Макет на Pages и с диска работает как раньше.
 
 - **Сборка** — `python3 tools/build_webui.py` → `build/webui/` (в git её нет, `.gitignore`). Встроенный код `index.html` вынесен в `app.js`, стили и дизайн-система — в `app.css`, у ссылок на файлы — `?v=<SHA-256>`. Встроенного сервера и наборов в сборке нет. `MANIFEST.json` — имя, тип, назначение, размер, SHA-256 каждого файла. Сборка повторяема: из того же `index.html` — те же байты. Падает, если во входной странице остался встроенный код или страница, стили, код ссылаются на свой файл, которого в сборке нет (новое подключение в `index.html` надо добавить в `build_webui.py`).
 - **Адрес API и вход** — `<meta name="consolem-api" content="api">` (относительно страницы: `/backend/` → `/backend/api/…`) и `<meta name="consolem-login" content="../">`. На `401` клиент (`api/client.js`, `onUnauthorized`) уводит на вход; поток событий при обрыве спрашивает `GET /me` и по `401` тоже уходит на вход, иначе переподключается через 3 с. Без `meta` — как раньше: `?api=…` или встроенный сервер.

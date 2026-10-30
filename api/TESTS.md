@@ -201,7 +201,7 @@
 
 ## 7. Сборка WebUI под CSP консоли
 
-Консоль VMS (w2c) отдаёт WebUI под `Content-Security-Policy: script-src 'self'; object-src 'none'; base-uri 'none'` ([запрос](requests/2026-10-29-w2c-webui-csp-request.md)): встроенный `<script>` и атрибуты `onclick="…"` там не выполняются.
+Консоль VMS (w2c) отдаёт WebUI под `Content-Security-Policy: script-src 'self'; object-src 'none'; base-uri 'none'` ([запрос](requests/2026-10-29-184430Z-w2c-webui-csp-request.md)): встроенный `<script>` и атрибуты `onclick="…"` там не выполняются.
 
 - **Сборка** — [`tools/build_webui.py`](../tools/build_webui.py) собирает из `index.html` папку `build/webui/` (в git её нет): `index.html` без встроенного кода, `app.js`, `app.css`, `client.js`, `openapi.js`, `i18n-en.js`, шрифт и `MANIFEST.json` (имя, тип, назначение, размер, SHA-256). Встроенного сервера и наборов в сборке нет: адрес API — `<meta name="consolem-api" content="api">` (страница `/backend/`, API `/backend/api/…`), по `401` — переход на `<meta name="consolem-login" content="../">`. Сборка сама падает, если во входной странице остался встроенный код или страница, стили, код ссылаются на свой файл, которого в сборке нет: новое подключение в `index.html` (`<script src>`, CSS, картинка) нужно добавить в `build_webui.py`.
 - **Проверка** — [`tools/check_webui.py`](../tools/check_webui.py). Собирает во временную папку, поднимает `node tools/serve_api.mjs --webui <папка>` — консоль, как её видит WebUI: сборка под `/backend/` с тем же заголовком CSP, API под `/backend/api/`, — и открывает `/backend/?selftest`. Не прошло, если не прошёл хоть один сценарий или браузер сообщил о нарушении политики (стенд печатает их строкой `CSP-VIOLATION`).
