@@ -164,12 +164,19 @@
     const one = (rec, status) => ({ status: status || 200, body: rec, headers: { ETag: etag(rec) } });
     const items = (list) => ({ status: 200, body: { items: list } });
     const parseMatch = (h) => (h == null ? null : String(h).replace(/^W\//, "").replace(/"/g, "").trim());
-    // Версия из If-Match: нет заголовка — 428, не совпала — 412 с актуальной записью
+    // Версия из If-Match: нет заголовка — 428, не совпала — 412 с актуальной записью; над записью идёт
+    // групповая операция — 409 BUSY
     function precondition(rec, headers) {
       const v = parseMatch(headers["if-match"]);
       if (v == null || v === "") return problem(428, "PRECONDITION_REQUIRED", "Нужен заголовок If-Match с версией записи");
       if (v !== rec.version) return problem(412, "VERSION_MISMATCH", "Запись изменилась с момента чтения", { current: clone(rec) });
-      return null;
+      return lockedProblem([rec.id]);
+    }
+    // Объекты групповой операции, пока она не завершена, другим запросам не меняются: первый занятый из ids — 409
+    // test — busy для правок; held для удалений: там занято и то, на что ссылается ждущий шаг
+    function lockedProblem(ids, test = busy) {
+      const at = ids.findIndex(test);
+      return at >= 0 ? problem(409, "BUSY", "Над объектом выполняется групповая операция", { params: { targetId: ids[at] } }) : null;
     }
 
     /* ===== Устройства ===== */
@@ -368,16 +375,7 @@
     }
     // Вместе с дочерними; ссылки на него убираются из папок и из записи по детекторам
     function removeDevice(id) {
-      const gone = new Set([id]);
-      for (let grew = true; grew; ) {
-        grew = false;
-        db.devices.forEach((d) => {
-          if (d.parentId && gone.has(d.parentId) && !gone.has(d.id)) {
-            gone.add(d.id);
-            grew = true;
-          }
-        });
-      }
+      const gone = withChildren(id);
       const names = new Map(db.devices.filter((d) => gone.has(d.id)).map((d) => [d.id, d.name]));
       db.devices = db.devices.filter((d) => !gone.has(d.id));
       rulesGone(names);
@@ -402,16 +400,7 @@
 
     // Папка — вместе с подпапками; сами устройства остаются в системе
     function removeFolder(f) {
-      const gone = new Set([f.id]);
-      for (let grew = true; grew; ) {
-        grew = false;
-        db.folders.forEach((x) => {
-          if (x.parentId && gone.has(x.parentId) && !gone.has(x.id)) {
-            gone.add(x.id);
-            grew = true;
-          }
-        });
-      }
+      const gone = withSubfolders(f);
       db.folders = db.folders.filter((x) => !gone.has(x.id));
       gone.forEach((id) => send("entity.deleted", { kind: "folder", entityId: id }));
     }
@@ -447,6 +436,40 @@
       db.volumes = db.volumes.filter((x) => x !== v);
       formatting.delete(v.id);
       send("entity.deleted", { kind: "volume", entityId: v.id });
+    }
+    // Запись с потомками по parentId: устройство — с дочерними, папка — с подпапками
+    function subtree(table, id) {
+      const all = new Set([id]);
+      for (let grew = true; grew; ) {
+        grew = false;
+        db[table].forEach((x) => {
+          if (x.parentId && all.has(x.parentId) && !all.has(x.id)) {
+            all.add(x.id);
+            grew = true;
+          }
+        });
+      }
+      return all;
+    }
+    const withChildren = (id) => subtree("devices", id);
+    const withSubfolders = (f) => subtree("folders", f.id);
+    // Что меняет удаление записи (для проверки на групповую операцию): устройство — с дочерними и камеры, что
+    // записывают по его детекторам; папка — состав, то есть папки лежащих в ней устройств; хранилище — с томами
+    // и камерами, что в него пишут
+    function touchedBy(table, rec) {
+      if (table === "devices") {
+        const gone = withChildren(rec.id);
+        return [...gone].concat(db.devices.filter((d) => (d.recordDetectorIds || []).some((x) => gone.has(x))).map((d) => d.id));
+      }
+      if (table === "folders") {
+        const gone = withSubfolders(rec);
+        return [...gone].concat(db.folders.filter((f) => gone.has(f.id)).flatMap((f) => f.deviceIds));
+      }
+      if (table === "archives") {
+        const writes = (d) => d.archiveId === rec.id || (d.extraArchives || []).some((x) => x.archiveId === rec.id);
+        return [rec.id].concat(db.volumes.filter((v) => v.archiveId === rec.id).map((v) => v.id), db.devices.filter(writes).map((d) => d.id));
+      }
+      return [rec.id];
     }
 
     /* ===== Автоматизация ===== */
@@ -707,7 +730,11 @@
         return out;
       }),
     });
-    const busy = (targetId) => [...ops.values()].some((op) => op.state !== "done" && op.items.some((x) => x.targetId === targetId && (x.state === "wait" || x.state === "run")));
+    const pending = (fn) => [...ops.values()].some((op) => op.state !== "done" && op.items.some((x) => (x.state === "wait" || x.state === "run") && fn(x)));
+    const busy = (targetId) => pending((x) => x.targetId === targetId);
+    // Папка из folderIds или хранилище из set.archiveId ещё не выполненного шага: удалить их — шаг молча
+    // выполнится не так, как просили. Менять можно, удалять нельзя
+    const held = (id) => busy(id) || pending((x) => (x.req.folderIds || []).includes(id) || (x.req.set || {}).archiveId === id || ((x.req.set || {}).extraArchives || []).some((e) => e.archiveId === id));
 
     function startOperation(requests, extra) {
       const op = Object.assign(
@@ -902,6 +929,8 @@
           const busyWith = db.servers.some(inside) || db.folders.some(inside) || db.devices.some(inside) || db.archives.some(inside);
           const to = q.moveTo ? byId("domains", q.moveTo) : null;
           if (busyWith && (!to || to.id === d.id)) return problem(422, "DOMAIN_NOT_EMPTY", "Укажите домен, куда перенести содержимое", { field: "moveTo" });
+          const locked = lockedProblem([db.servers, db.devices, db.archives].flatMap((t) => t.filter(inside).map((r) => r.id)));
+          if (locked) return locked;
           // Ничего не пропадает: серверы становятся нераспределёнными в домене moveTo, папки, устройства и
           // сетевые хранилища меняют домен, найденное поиском переходит туда же
           const move = (table, kind, extra) =>
@@ -999,6 +1028,7 @@
             if (!s) return failed.push({ serverId: x.serverId, code: "NOT_FOUND" });
             if (!byId("domains", x.domainId)) return failed.push({ serverId: x.serverId, code: "NOT_FOUND" });
             if (s.version !== x.version) return failed.push({ serverId: x.serverId, code: "VERSION_MISMATCH" });
+            if (busy(s.id)) return failed.push({ serverId: x.serverId, code: "BUSY" });
             if (s.domainId !== x.domainId || s.allocated !== x.allocated) {
               Object.assign(s, { domainId: x.domainId, allocated: x.allocated });
               bump(s);
@@ -1044,6 +1074,12 @@
             return !d || d.domainId !== f.domainId;
           });
           if (alien) return problem(422, "VALIDATION_FAILED", `Устройства ${alien} нет в домене папки`, { field: "deviceIds" });
+          // Состав папки — это папки устройства: добавить или убрать устройство групповой операции нельзя
+          if (body.deviceIds) {
+            const moved = body.deviceIds.filter((id) => !f.deviceIds.includes(id)).concat(f.deviceIds.filter((id) => !body.deviceIds.includes(id)));
+            const locked = lockedProblem(moved);
+            if (locked) return locked;
+          }
           if ("name" in body) body.name = body.name.trim();
           if (body.deviceIds) body.deviceIds = [...new Set(body.deviceIds)];
           applyPatch(f, body);
@@ -1057,7 +1093,7 @@
         (p, q, body, headers) => {
           const f = byId("folders", p.id);
           if (!f) return notFound("Папка");
-          const bad = precondition(f, headers);
+          const bad = precondition(f, headers) || lockedProblem(touchedBy("folders", f), held);
           if (bad) return bad;
           removeFolder(f);
           return { status: 204, body: null };
@@ -1126,7 +1162,7 @@
         (p, q, body, headers) => {
           const a = byId("archives", p.id);
           if (!a) return notFound("Хранилище");
-          const bad = precondition(a, headers);
+          const bad = precondition(a, headers) || lockedProblem(touchedBy("archives", a), held);
           if (bad) return bad;
           removeArchive(a);
           return { status: 204, body: null };
@@ -1177,6 +1213,8 @@
           const v = byId("volumes", p.id);
           if (!v) return notFound("Том");
           if (v.state === "format") return problem(409, "BUSY", "Том уже форматируется");
+          const locked = lockedProblem([v.id]);
+          if (locked) return locked;
           v.state = "format";
           bump(v);
           formatting.set(v.id, now() + FORMAT_MS);
@@ -1213,6 +1251,7 @@
             const t = targetOf(x.deviceId);
             if (!t || t.kind !== "device") return failed.push({ deviceId: x.deviceId, code: "NOT_FOUND" });
             if (t.rec.version !== x.version) return failed.push({ deviceId: x.deviceId, code: "VERSION_MISMATCH" });
+            if (busy(x.deviceId)) return failed.push({ deviceId: x.deviceId, code: "BUSY" });
             const bad = setProblem(t, x.set);
             if (bad) return failed.push(Object.assign({ deviceId: x.deviceId, code: bad.body.code }, bad.body.field ? { field: bad.body.field } : {}));
             applyPatch(t.rec, x.set);
@@ -1239,7 +1278,7 @@
         (p, q, body, headers) => {
           const d = byId("devices", p.id);
           if (!d) return notFound("Устройство");
-          const bad = precondition(d, headers);
+          const bad = precondition(d, headers) || lockedProblem(touchedBy("devices", d), held);
           if (bad) return bad;
           removeDevice(d.id);
           return { status: 204, body: null };
@@ -1284,6 +1323,7 @@
             if (!table) return done.includes(x.id) || wasRemoved.has(x.id) ? done.push(x.id) : failed.push({ id: x.id, code: "NOT_FOUND" });
             const rec = byId(table, x.id);
             if (rec.version !== x.version) return failed.push({ id: x.id, code: "VERSION_MISMATCH" });
+            if (lockedProblem(touchedBy(table, rec), held)) return failed.push({ id: x.id, code: "BUSY" });
             kinds[table](rec);
             done.push(x.id);
           });
@@ -1760,6 +1800,9 @@
           if (!op) return notFound("Операция");
           const failed = op.items.filter((x) => x.state === "fail");
           if (op.state !== "done" || !failed.length) return problem(409, "BUSY", "Повторять нечего: операция не завершена или неудачных шагов нет");
+          // Повтор и откат — новые операции: занятый другой операцией объект они тоже не трогают
+          const lockedRetry = lockedProblem(failed.map((x) => x.req.targetId));
+          if (lockedRetry) return lockedRetry;
           return { status: 202, body: opView(startOperation(failed.map((x) => ({ targetId: x.req.targetId, set: x.req.set, folderIds: x.req.folderIds, create: x.req.create })).map(stripUndefined), { retryOf: op.id })) };
         },
       ],
@@ -1771,6 +1814,10 @@
           if (!op) return notFound("Операция");
           const done = op.items.filter((x) => x.state === "ok");
           if (op.state !== "done" || !done.length || op.reverted) return problem(409, "BUSY", "Откатывать нечего: операция не завершена, ничего не выполнено или уже отменена");
+          // Кроме самих объектов — то, что откат удалит: созданное шагом устройство с дочерними
+          const removes = done.map((x) => x.before.remove && byId("devices", x.before.remove)).filter(Boolean);
+          const lockedRevert = lockedProblem(done.map((x) => x.targetId).concat(removes.flatMap((d) => touchedBy("devices", d))), held);
+          if (lockedRevert) return lockedRevert;
           op.reverted = true;
           // Шаги — в обратном порядке: последнее изменение откатывается первым. Каждый ждёт версию,
           // которую объект получил после шага; если его меняли после, шаг отката не выполняется

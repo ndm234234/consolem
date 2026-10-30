@@ -138,6 +138,46 @@
     assert.status(await env.call("POST", "/operations", plan([{ targetId: cam.id, set: { short: "1d" } }], { [cam.id]: cam.version })), 409, "BUSY");
   });
 
+  test("Операция: пока идёт, её объекты не меняются и другими запросами — 409 BUSY, в пакетной правке — failed BUSY; после отмены — можно", async () => {
+    const env = await makeEnv();
+    const res = await env.ok("POST", "/operations", longPlan());
+    const free = FX.devices.find((d) => !res.items.some((x) => x.targetId === d.id));
+    const h = { "If-Match": `"${cam.version}"` };
+    const patch = await env.call("PATCH", `/devices/${cam.id}`, { short: "1h" }, h);
+    assert.status(patch, 409, "BUSY", "одиночная правка");
+    assert.eq(patch.body.params, { targetId: cam.id }, "какой объект занят");
+    assert.status(await env.call("DELETE", `/devices/${cam.id}`, undefined, h), 409, "BUSY", "удаление");
+    const batch = await env.ok("POST", "/devices/update", { idempotencyKey: key(), items: [
+      { deviceId: cam.id, version: cam.version, set: { short: "1h" } },
+      { deviceId: free.id, version: free.version, set: { short: "1i" } },
+    ] });
+    assert.eq([batch.failed, batch.done.map((d) => [d.id, d.short])], [[{ deviceId: cam.id, code: "BUSY" }], [[free.id, "1i"]]], "занятое — failed, остальное выполнено");
+    assert.eq((await env.ok("GET", `/devices/${cam.id}`)).short, cam.short, "занятое не изменилось");
+    // cam — последний шаг: при любых часах к отмене он ещё ждёт
+    const cancelled = await env.ok("POST", `/operations/${res.id}/cancel`);
+    assert.eq(cancelled.items[cancelled.items.length - 1].state, "cancel", "шаг cam отменён");
+    const d = await env.ok("PATCH", `/devices/${cam.id}`, { short: "1h" }, h);
+    assert.eq(d.short, "1h", "после отмены правка проходит");
+  });
+
+  test("Операция: папку, в которую ещё не выполненный шаг кладёт объект, удалить нельзя — 409 BUSY; переименовать можно", async () => {
+    const env = await makeEnv();
+    const dev = await env.ok("GET", `/devices/${cam.id}`);
+    const folder = FX.folders.find((f) => f.domainId === dev.domainId && !f.deviceIds.includes(cam.id));
+    if (!folder) return;
+    const p = longPlan();
+    p.items[p.items.length - 1] = { targetId: cam.id, folderIds: [folder.id] };
+    const res = await env.ok("POST", "/operations", p);
+    const h = { "If-Match": `"${folder.version}"` };
+    const del = await env.call("DELETE", `/folders/${folder.id}`, undefined, h);
+    assert.status(del, 409, "BUSY", "удаление папки из шага");
+    assert.eq(del.body.params, { targetId: folder.id }, "занята сама папка");
+    const renamed = await env.ok("PATCH", `/folders/${folder.id}`, { name: folder.name + " 2" }, h);
+    assert.eq(renamed.name, folder.name + " 2", "переименование проходит");
+    await env.ok("POST", `/operations/${res.id}/cancel`);
+    assert.status(await env.call("DELETE", `/folders/${folder.id}`, undefined, { "If-Match": `"${renamed.version}"` }), 204, null, "после отмены — удаляется");
+  });
+
   test("Операция: частичный успех — сервер без связи и превышенная лицензия дают fail с кодом, остальное выполняется", async () => {
     const env = await makeEnv();
     const items = [{ targetId: cam.id, set: { short: "1e" } }, { targetId: camOffline.id, set: { short: "9z" } }];
