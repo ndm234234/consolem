@@ -1764,6 +1764,12 @@ onEv.key=(...keys)=>[".key",...keys];
   // false — остановиться: служебный шаг не пропустил событие
   function run(el,ev,type){
     const calls=JSON.parse(el.getAttribute("data-on-"+type));
+    // Слушатель один, на документе, а обработчики пишут e.currentTarget, как при onclick:
+    // на время их вызова currentTarget — элемент с data-on-…, потом снова как у браузера
+    Object.defineProperty(ev,"currentTarget",{value:el,configurable:true});
+    try{runCalls(el,ev,calls)}finally{delete ev.currentTarget}
+  }
+  function runCalls(el,ev,calls){
     for(const [name,...args] of calls){
       if(name===".stop"){ev.stopPropagation();continue}
       if(name===".prevent"){ev.preventDefault();continue}
