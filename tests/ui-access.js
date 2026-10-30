@@ -7,7 +7,10 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   const op = accRoles().find((r) => Object.keys(r.groups).length);
   ok(Object.keys(op.groups).every((k) => folderById(k) || domainById(k)), "права роли «" + op.n + "» — на существующие папки: " + Object.keys(op.groups).length);
   ok(Object.keys(op.objs).filter((k) => !k.includes(":")).every((k) => find(k) || archById(k)), "исключения — на существующие объекты");
-  ok(accIssues().length === 20, "проверка: " + accIssues().length);
+  // В прототипе 11 (есть accExCuts) исключение сильнее папок других ролей: понижение,
+  // которое в index.html перебивает другая роль, там действует — на одно замечание меньше.
+  const exov = accIssues().filter((x) => x.key.startsWith("r-exov:")).length;
+  ok(accIssues().length === (typeof accExCuts === "function" ? 19 : 20), "проверка: " + accIssues().length + ", из них понижений не действует: " + exov);
   // Правка в черновике → «Применить» → сервер
   const u = accUsers().find((x) => x.login === "olga");
   accSetUser(u.id, "email", "olga@new.local");

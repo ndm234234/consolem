@@ -1085,6 +1085,8 @@ html[data-theme="light"] .acc-pill.on{background:var(--one-surface-muted);border
 .acc-exarr{color:var(--mu);font-size:12px;flex:none}
 .acc-exdir{flex:0 0 14px;text-align:center;font-weight:700;font-size:12px}.acc-exdir.up{color:var(--gn)}.acc-exdir.dn{color:var(--one-warning-icon)}.acc-exdir.eq{color:var(--mu)}
 .acc-exov{margin:0 0 4px 94px;max-width:520px;font-size:11px;color:var(--one-warning-icon)}
+.acc-excut{margin:0 0 4px 94px;max-width:520px;font-size:11px;color:var(--mu)}
+.acc-why li.acc-why-off b{font-weight:400;text-decoration:line-through}
 .acc-expick{width:380px;padding:4px}.acc-expick input{width:100%;margin:0 0 4px}
 .acc-subtabs{display:inline-flex;border:1px solid var(--ln);border-radius:8px;overflow:hidden;background:var(--p2);margin:0 0 12px}
 .acc-subtabs button{background:0;border:0;border-right:1px solid var(--ln);color:var(--mu);padding:6px 12px;font-size:12px;display:inline-flex;align-items:center;gap:6px;cursor:pointer}
@@ -12498,11 +12500,26 @@ function accJumpObj(rid,oid,dom){
   accGo("role:"+rid,"objects");
   accFlash(()=>{const el=document.querySelector(`tr[data-oid="${CSS.escape(oid)}"]`);return el?[el]:null});
 }
+// Между ролями: неограниченный доступ сильнее всего; иначе исключение для
+// объекта — из любой роли — сильнее папок и умолчаний всех ролей (из
+// нескольких исключений — наибольшее); без исключений — наибольшее по ролям.
+// by — какое правило решило: "unr", "obj" или "max".
 function accEffIn(st,u,id,dom,field="cam"){
   const levels=accUserRoles(u,true,st).map(rid=>accRole(rid,st)).filter(Boolean).map(r=>({r,...accRoleLevel(r,id,field,dom)}));
-  let best=null;
-  levels.forEach(x=>{if(!best||accRank(field,x.lv)>accRank(field,best.lv))best=x});
-  return{lv:best?.lv||ACC_LV[field][0][0],best,levels,field};
+  const top=xs=>{let b=null;xs.forEach(x=>{if(!b||accRank(field,x.lv)>accRank(field,b.lv))b=x});return b};
+  const unr=levels.find(x=>x.src.k==="unr"),ex=levels.filter(x=>x.src.k==="obj");
+  const best=unr||top(ex.length?ex:levels);
+  return{lv:best?.lv||ACC_LV[field][0][0],best,levels,field,by:unr?"unr":ex.length?"obj":"max"};
+}
+// Строки «Почему так»: уровень каждой роли и итог с правилом, которое решило.
+function accEffWhyHtml(e,field){
+  const skip=l=>e.by==="obj"&&l.src.k!=="obj"&&l.src.k!=="unr";
+  const lines=e.levels.map(l=>`<li class="${skip(l)?"acc-why-off":""}">${i18n("Роль")} «${escHtml(l.r.n)}»: <b>${accLv(field,l.lv)}</b> — ${accSrcText(l,field)}${skip(l)?` <span class="sub">(${i18n("не учитывается: есть исключение")})</span>`:""}</li>`).join("");
+  const ex=e.levels.filter(l=>l.src.k==="obj").length;
+  const how=e.by==="unr"?i18n("Итог — неограниченный доступ роли")+` «${escHtml(e.best.r.n)}»:`
+    :e.by==="obj"?i18n(ex>1?"Итог — наибольшее из исключений: исключение для объекта точнее папок и прав по умолчанию и действует поверх других ролей:":"Итог — исключение для объекта: оно точнее папок и прав по умолчанию и действует поверх других ролей:")
+    :i18n("Итог — наибольший по ролям:");
+  return{lines,foot:`<p>${how} <b>${accLv(field,e.lv)}</b></p>`};
 }
 function accEff(u,id,dom,field="cam"){return accEffIn(accSt(),u,id,dom,field)}
 function accUserSignIn(u,st){return accUserActive(u)&&accUserRoles(u,true,st).some(id=>{const r=accRole(id,st);return r&&accCanSignIn(r.g)})}
@@ -12848,7 +12865,7 @@ function accUI(){
   if(accSel==="compare")return accCmpUI();
   accSel="roles";accRolesUI();
 }
-const ACC_SUB="Роли, пользователи и группы пользователей домена. Права выдаются роли на папки устройств (те же, что в «Оборудовании») и на отдельные объекты; пользователь получает наибольшее по всем своим действующим ролям — личным и полученным через группы";
+const ACC_SUB="Роли, пользователи и группы пользователей домена. Права выдаются роли на папки устройств (те же, что в «Оборудовании») и на отдельные объекты; пользователь получает наибольшее по всем своим действующим ролям — личным и полученным через группы, но исключение для объекта из любой роли сильнее папок и прав по умолчанию остальных";
 function accListTabs(){
   const cur=accSel.startsWith("grp:")?"groups":/^(ugroups|ug:|cats|cat:)/.test(accSel)?"ugroups":accSel;
   return[["roles","Роли"],["users","Пользователи"],["ugroups","Группы пользователей"],["groups","Папки устройств"],["check","Проверка"]].map(([id,x])=>`<button class="tab ${cur===id?"on":""}" ${onEv("click",["accGo",`${id}`])}>${i18n(x)}${id==="check"&&accIssues().length?` <span class="acc-tabcnt warn">${accIssues().length}</span>`:""}</button>`).join("");
@@ -13373,23 +13390,32 @@ function accMenuClose(){
 // доступа. «Не задано» снимает своё право, и объект снова получает права
 // папок или по умолчанию.
 // Шаг 3 цепочки: исключения — своё право на отдельный объект. Оно заменяет
-// то, что дают папки (и вверх, и вниз), но только внутри этой роли: другие
-// роли пользователя складываются с ней по «наибольшему», так что понижение —
-// не запрет.
+// то, что дают папки (и вверх, и вниз), — и не только в этой роли: у
+// пользователя исключение сильнее папок и умолчаний всех его ролей. Перебить
+// его может только исключение выше в другой роли или неограниченный доступ.
 const accExAdd={};
 function accExObjs(r,dom){const a=accExAdd[r.id]||new Set();return accObjects(dom).filter(o=>accObjFields(o).some(f=>r.objs[o.id]?.[f])||a.has(o.id))}
-// Для кого исключение-понижение не работает: другая роль даёт больше.
+// Для кого исключение-понижение не работает: у другой роли исключение выше
+// или неограниченный доступ.
 function accExOverridden(r,oid,f,dom,st){
   const ex=r.objs[oid]?.[f];if(!ex||r.g.unr)return[];
   const inh=accRoleLevel(r,oid,f,dom,true);if(accRank(f,ex)>=accRank(f,inh.lv))return[];
   return accRoleUsers(r.id,true,st).map(u=>({u,e:accEffIn(st||accSt(),u,oid,dom,f)})).filter(x=>accRank(f,x.e.lv)>accRank(f,ex)&&x.e.best&&x.e.best.r.id!==r.id);
+}
+// Кому исключение срезает права других ролей: их папки или умолчания дали бы
+// больше, но решает исключение.
+function accExCuts(r,oid,f,dom,st){
+  const ex=r.objs[oid]?.[f];if(!ex||r.g.unr)return[];
+  return accRoleUsers(r.id,true,st).map(u=>({u,e:accEffIn(st||accSt(),u,oid,dom,f)}))
+    .filter(x=>x.e.by==="obj"&&accRank(f,x.e.lv)===accRank(f,ex))
+    .map(x=>({...x,o:x.e.levels.filter(l=>l.r.id!==r.id&&l.src.k!=="obj"&&accRank(f,l.lv)>accRank(f,x.e.lv)).reduce((b,l)=>!b||accRank(f,l.lv)>accRank(f,b.lv)?l:b,null)})).filter(x=>x.o);
 }
 // Исключение для объекта: запомнить, что его добавили в этом черновике, и задать уровень
 function accExSet(rid,oid,f,v){(accExAdd[rid]=accExAdd[rid]||new Set()).add(oid);accSetObj(rid,oid,f,v)}
 function accObjectsHtml(r,ro){
   if(r.g.unr)return`<div class="nt">${i18n("У роли неограниченный доступ: исключения не проверяются")}</div>`;
   const items=accExObjs(r,domainFilter),srv=accSrvRole(r.id),dis=ro;
-  const hint=`<p class="acc-hint">${i18n("Исключение задаёт значение для одного объекта вместо того, что дают его папки устройств, — и больше, и меньше. Оно действует только внутри этой роли: если другая роль пользователя даёт больше, у него будет больше")}</p>`;
+  const hint=`<p class="acc-hint">${i18n("Исключение задаёт значение для одного объекта вместо того, что дают его папки устройств, — и больше, и меньше. Оно точнее папок и прав по умолчанию, поэтому сильнее их во всех ролях пользователя: если другая роль даёт на объект больше через папку, у пользователя всё равно будет значение исключения. Перебить его может только исключение выше в другой роли или неограниченный доступ")}</p>`;
   const add=ro?"":`<button type="button" class="btn s pri" ${onEv("click",["accExPick",onEv.el,`${r.id}`])}>+ ${i18n("Исключение")}…</button>`;
   if(!items.length)return hint+`<div class="card"><div class="cb acc-empty"><p>${i18n("Исключений нет: объекты получают то, что дают их папки устройств или права по умолчанию")}</p>${add}</div></div>`;
   const srcShort=x=>x.src.k==="grp"?`${i18n("папка устройств")} «${escHtml(accGroupName(x.src.g))}»`:i18n("право по умолчанию");
@@ -13398,12 +13424,14 @@ function accObjectsHtml(r,ro){
     text:o=>[o.short!=null?String(o.short):"",locName(o),accObjKind(o)],
     row:o=>{const chg=accCanon(r.objs[o.id])!==accCanon(srv?.objs[o.id]);
       const cells=accObjFields(o).map(f=>{const v=r.objs[o.id]?.[f]||"",inh=accRoleLevel(r,o.id,f,domainFilter,true);
-        const dir=!v?"":accRank(f,v)>accRank(f,inh.lv)?`<span class="acc-exdir up" title="${i18n("Выше, чем без исключения")}">↑</span>`:accRank(f,v)<accRank(f,inh.lv)?`<span class="acc-exdir dn" title="${i18n("Ниже, чем без исключения")}">↓</span>`:`<span class="acc-exdir eq" title="${i18n("Совпадает с тем, что и так действует: исключение лишнее")}">=</span>`;
+        const cut=v?accExCuts(r,o.id,f,domainFilter):[];
+        const dir=!v?"":accRank(f,v)>accRank(f,inh.lv)?`<span class="acc-exdir up" title="${i18n("Выше, чем без исключения")}">↑</span>`:accRank(f,v)<accRank(f,inh.lv)?`<span class="acc-exdir dn" title="${i18n("Ниже, чем без исключения")}">↓</span>`:`<span class="acc-exdir eq" title="${i18n(cut.length?"Совпадает с тем, что дают папки этой роли, но сильнее папок других ролей: убрать — у части пользователей станет больше":"Совпадает с тем, что и так действует: исключение лишнее")}">=</span>`;
         const ov=v?accExOverridden(r,o.id,f,domainFilter):[];
-        const ovH=ov.length?`<div class="acc-exov" title="${escHtml(ov.slice(0,8).map(x=>`${x.u.login}: ${accLv(f,x.e.lv)} — ${i18n("роль")} «${x.e.best.r.n}»`).join("\n"))}">${i18n("Не действует для")} ${ov.length} ${plural(ov.length,"пользователя|пользователей|пользователей")}: ${i18n("другая их роль даёт больше. Понижение — не запрет")}</div>`:"";
+        const ovH=ov.length?`<div class="acc-exov" title="${escHtml(ov.slice(0,8).map(x=>`${x.u.login}: ${accLv(f,x.e.lv)} — ${i18n("роль")} «${x.e.best.r.n}»`).join("\n"))}">${i18n("Не действует для")} ${ov.length} ${plural(ov.length,"пользователя|пользователей|пользователей")}: ${i18n("у другой их роли исключение выше или неограниченный доступ")}</div>`:"";
+        const cutH=cut.length?`<div class="acc-excut" title="${escHtml(cut.slice(0,8).map(x=>`${x.u.login}: ${accLv(f,x.o.lv)} → ${accLv(f,x.e.lv)} — ${i18n("роль")} «${x.o.r.n}»`).join("\n"))}">${i18n("Сильнее других ролей у")} ${cut.length} ${plural(cut.length,"пользователя|пользователей|пользователей")}: ${i18n("их папки или права по умолчанию дали бы больше")}</div>`:"";
         const opts=[["",`${i18n("Без исключения")} (${accLv(f,inh.lv)})`]].concat(ACC_LV[f].map(([k,t])=>[k,i18n(t)]));
         const selH=`<select ${dis?"disabled":""} aria-label="${escHtml(i18n("Исключение для")+" «"+locName(o)+"»")}" ${onEv("change",["accExSet",r.id,o.id,f,onEv.value])}>${opts.map(([k,t])=>`<option value="${k}" ${k===v?"selected":""}>${escHtml(t)}</option>`).join("")}</select>`;
-        return`<div class="acc-exrow"><span class="acc-exf">${i18n(ACC_FIELD_NAME[f])}</span><span class="sub acc-exwo" title="${i18n("Что действует без исключения")}: ${srcShort(inh)}">${accLv(f,inh.lv)} <small>· ${accSrcLink(r.id,inh.src,f,inh.src.k==="grp"?"«"+escHtml(accGroupName(inh.src.g))+"»":i18n("по умолчанию"))}</small></span><span class="acc-exarr">→</span>${selH}${dir}</div>${ovH}`}).join("");
+        return`<div class="acc-exrow"><span class="acc-exf">${i18n(ACC_FIELD_NAME[f])}</span><span class="sub acc-exwo" title="${i18n("Что действует без исключения")}: ${srcShort(inh)}">${accLv(f,inh.lv)} <small>· ${accSrcLink(r.id,inh.src,f,inh.src.k==="grp"?"«"+escHtml(accGroupName(inh.src.g))+"»":i18n("по умолчанию"))}</small></span><span class="acc-exarr">→</span>${selH}${dir}</div>${ovH}${cutH}`}).join("");
       return`<tr class="${chg?"chg":""}" data-oid="${escHtml(o.id)}"><td class="acc-num">${escHtml(o.short??"")}</td><td class="acc-cam">${accObjIc(o)} ${escHtml(locName(o))}<small class="acc-cmt">${i18n(accObjKind(o))}</small></td>
         <td class="acc-ex">${cells}</td><td style="text-align:right">${dis?"":`<button type="button" class="btn s" title="${i18n("Вернуть объекту то, что дают его папки устройств")}" ${onEv("click",["accExDrop",`${r.id}`,`${o.id}`])}>${i18n("Убрать")}</button>`}</td></tr>`},
     wrap:rows=>`<table class="acc-tbl"><tr><th>№</th><th>${i18n("Объект")}</th><th>${i18n("Тип доступа · без исключения → исключение")}</th><th></th></tr>${rows}</table>`,
@@ -13442,7 +13470,8 @@ function accSetObj(rid,oid,f,v){
 // «Итоговый доступ»: что получает пользователь на каждом объекте с учётом
 // всех своих действующих ролей: внутри роли — исключение, папки устройств
 // (ближайшая заданная, из нескольких — наибольшее) или по умолчанию; между
-// ролями — наибольшее. Считает интерфейс, решает
+// ролями — наибольшее, но исключение из любой роли сильнее папок и умолчаний
+// остальных (accEffIn). Считает интерфейс, решает
 // сервер — так и написано. Та же таблица — в карточке пользователя.
 function accEffVisSet(on){accEffVis=on;resetPage("acceff");accUI()}
 function accEffTableHtml(u){
@@ -13454,7 +13483,7 @@ function accEffTableHtml(u){
   window._accEff=items;
   const many=accUserRoles(u,true).length>1;
   const tzs=[...new Set(accUserRoles(u,true).map(id=>accRole(id)?.tz||0))].filter(t=>t);
-  return`<div class="nt">${i18n("Итог — наибольшее по всем действующим ролям. Внутри роли: исключение для объекта, иначе значение его папки устройств (ближайшей, где оно задано; из нескольких папок — наибольшее), иначе право по умолчанию. Считает интерфейс по правилам сервера, окончательно решает сервер")}${tzs.length?`. ${i18n("Вход ограничен расписанием ролей:")} ${tzs.map(t=>i18n(ACC_TZ[t]).toLowerCase()).join("; ")}`:""}</div>
+  return`<div class="nt">${i18n("Права ролей складываются: итог — наибольшее по всем действующим ролям. Но исключение для объекта точнее и побеждает: если хотя бы в одной роли у объекта есть исключение, итог — оно (из нескольких исключений — наибольшее), что бы ни давали папки и права по умолчанию других ролей. Неограниченный доступ сильнее всего. Внутри роли без исключения — значение папки устройств (ближайшей, где оно задано; из нескольких папок — наибольшее), иначе право по умолчанию. Считает интерфейс по правилам сервера, окончательно решает сервер")}${tzs.length?`. ${i18n("Вход ограничен расписанием ролей:")} ${tzs.map(t=>i18n(ACC_TZ[t]).toLowerCase()).join("; ")}`:""}</div>
     <div class="acc-bar"><label class="acc-chk"><input type="checkbox" ${accEffVis?"checked":""} ${onEv("change",["accEffVisSet",onEv.checked])}> ${i18n("Только то, что пользователь увидит")} (${visible.length} ${i18n("из")} ${rows.length})</label></div>
     ${listCard({
       key:"acceff",how:"acc",title:`${i18n("Объекты")} · ${accDomName(domainFilter)}`,items,
@@ -13471,8 +13500,8 @@ function accEffTableHtml(u){
 }
 function accEffWhy(el,i){
   const x=(window._accEff||[])[i];if(!x)return;
-  const blocks=x.fs.map(f=>{const e=x.e[f];
-    return`<div class="acc-why-f">${i18n(ACC_FIELD_NAME[f])}</div><ul>${e.levels.map(l=>`<li>${i18n("Роль")} «${escHtml(l.r.n)}»: <b>${accLv(f,l.lv)}</b> — ${accSrcText(l,f)}</li>`).join("")||`<li>${i18n("нет действующих ролей")}</li>`}</ul><p>${i18n("Итог — наибольший по ролям:")} <b>${accLv(f,e.lv)}</b></p>`}).join("");
+  const blocks=x.fs.map(f=>{const w=accEffWhyHtml(x.e[f],f);
+    return`<div class="acc-why-f">${i18n(ACC_FIELD_NAME[f])}</div><ul>${w.lines||`<li>${i18n("нет действующих ролей")}</li>`}</ul>${w.foot}`}).join("");
   accMenuOpen(el,`<div class="acc-why"><b>${i18n("Почему так")}: «${escHtml(locName(x.o))}»</b>${blocks}</div>`);
 }
 // Срок живёт на назначении «пользователь × роль», а не на роли. У истёкшего —
@@ -14368,7 +14397,7 @@ function accIssues(st){
     else if(!r.g.unr&&!accHasNo(r.g)&&!accCanSignIn(r.g))out.push({key:"r-nologin:"+r.id,k:"role",sev:2,text:`${i18n("Роль")} «${escHtml(r.n)}» ${i18n("не даёт входа:")} ${act} ${plural(act,"пользователь|пользователя|пользователей")}`,go:`accGo('role:${r.id}','global')`});
     if(accHasNo(r.g))out.push({key:"r-norights:"+r.id,k:"role",sev:2,text:`${i18n("У роли")} «${escHtml(r.n)}» ${i18n("не заданы права")}`,go:`accGo('role:${r.id}','global')`});
     if(!r.g.unr){const ov=new Set();let n=0,dom1="";Object.keys(r.objs).forEach(oid=>{const dom=accObjDom(oid);if(!dom)return;let hit=false;Object.keys(r.objs[oid]).forEach(f=>{const xs=accExOverridden(r,oid,f,dom,st);xs.forEach(x=>ov.add(x.u.id));if(xs.length)hit=true});if(hit){n++;dom1=dom1||dom}});
-      if(n)out.push({key:"r-exov:"+r.id,k:"role",sev:1,text:`${i18n("Роль")} «${escHtml(r.n)}»: ${i18n("исключения-понижения на")} ${n} ${plural(n,"объекте|объектах|объектах")} ${i18n("не действуют для")} ${ov.size} ${plural(ov.size,"пользователя|пользователей|пользователей")} — ${i18n("другая их роль даёт больше")}`,go:`accRevealDomain('${dom1}');accGo('role:${r.id}','objects');accFlashExov()`});}
+      if(n)out.push({key:"r-exov:"+r.id,k:"role",sev:1,text:`${i18n("Роль")} «${escHtml(r.n)}»: ${i18n("исключения-понижения на")} ${n} ${plural(n,"объекте|объектах|объектах")} ${i18n("не действуют для")} ${ov.size} ${plural(ov.size,"пользователя|пользователей|пользователей")} — ${i18n("у другой их роли исключение выше или неограниченный доступ")}`,go:`accRevealDomain('${dom1}');accGo('role:${r.id}','objects');accFlashExov()`});}
     if(r.sup?.role&&(r.sup.login||r.sup.export)&&!accRoleUsers(r.sup.role,true,st).length)out.push({key:"r-sup:"+r.id,k:"role",sev:2,text:`${i18n("Роль")} «${escHtml(r.n)}» ${i18n("ждёт подтверждения от роли")} «${escHtml(accRoleName(r.sup.role))}», ${i18n("а в ней нет действующих пользователей")}`,go:`accGo('role:${r.id}','global')`});
   });
   (st.groups||[]).forEach(g=>{
@@ -14460,8 +14489,8 @@ function accCamAccessHtml(n){
 }
 function accCamWhy(el,i){
   const x=(window._accCam||[])[i];if(!x)return;
-  const lines=x.e.levels.map(l=>`<li>${i18n("Роль")} «${escHtml(l.r.n)}»: <b>${accLv("cam",l.lv)}</b> — ${accSrcText(l)}</li>`).join("");
-  accMenuOpen(el,`<div class="acc-why"><b>${escHtml(x.u.login)}</b><ul>${lines||`<li>${i18n(accUserActive(x.u)?"нет действующих ролей":"учётная запись не действует")}</li>`}</ul><p>${i18n("Итог — наибольший по ролям:")} <b>${accLv("cam",x.e.lv)}</b></p></div>`);
+  const w=accEffWhyHtml(x.e,"cam");
+  accMenuOpen(el,`<div class="acc-why"><b>${escHtml(x.u.login)}</b><ul>${w.lines||`<li>${i18n(accUserActive(x.u)?"нет действующих ролей":"учётная запись не действует")}</li>`}</ul>${w.lines?w.foot:""}</div>`);
 }
 
 // ── Общее для боковых окон ──
