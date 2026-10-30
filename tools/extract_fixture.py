@@ -17,7 +17,7 @@
 Запуск из корня репозитория:
   python3 tools/extract_fixture.py --raw /tmp/raw.json   только снимок памяти
   python3 tools/extract_fixture.py --force               перезаписать набор
-  python3 tools/extract_fixture.py --source index_09_one-psim.html --raw /tmp/raw.json
+  python3 tools/extract_fixture.py --source 3f9863a:index_09_one-psim.html --raw /tmp/raw.json
                                                          снимок другого макета (файл или «коммит:путь»)
 """
 import argparse
