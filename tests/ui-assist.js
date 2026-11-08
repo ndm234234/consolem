@@ -547,6 +547,57 @@ UiCheck(async ({ ok, until }) => {
   ok(!asstPick && !tag(), "«Сбросить фильтры» снимает отбор");
   goClose();
 
+  // Учебные ссылки ответа (answer.learn): карточка из своего каталога, запуск только кнопкой; чужое не исполняется
+  goClose();
+  asstOpen("");
+  const learnBox = () => document.getElementById("asstLearn");
+  const dockHtml = () => document.getElementById("asstDock").innerHTML;
+  if (learnShown()) {
+    const ver = Tour.catalog().version, hrefWas = location.href;
+    say("покажи, как создать простое правило");
+    await until(() => document.getElementById("asstAnswer"));
+    // Стенд без каталога сборки (check_stand) учебных ссылок не даёт: тогда ответ со ссылкой подставляет сценарий
+    const standNoCat = !asst.learn && !!(new URLSearchParams(location.search).get("api") || pageMeta("consolem-api")) && !Tour.lazy;
+    if (standNoCat) asstEvent(asst, { type: "answer", text: "пример", context: "c", learn: [{ catalog: ver, topic: Tour.topics[0].id, chapter: Tour.topics[0].chapters[0].id }] });
+    ok(await until(() => learnBox()?.querySelector(".asst-learn")), "просьба научить — карточка учебного примера" + (standNoCat ? " (ответ подставлен: у стенда нет каталога)" : ""));
+    const card = learnBox().querySelector(".asst-learn"), lc = learnParse(card.dataset.learn);
+    ok(lc.ch && card.textContent.includes(lc.ch.title) && card.textContent.includes(lc.ch.why) && card.textContent.includes(lc.tp.title), "карточка: название, тема и цель — из каталога консоли");
+    ok(/Открыть учебный пример/.test(card.querySelector("button")?.textContent || ""), "кнопка «Открыть учебный пример»");
+    ok(asst.learn.every((l) => l.catalog === ver), "ссылка — на эту версию каталога");
+    ok(location.href === hrefWas && !Tour.demo, "приход ссылки сам ничего не открыл");
+    ok(/проверить по разделу/.test(document.getElementById("asstAnswerNote")?.textContent || ""), "текст ответа подписан, как раньше");
+    setUiLang("en");
+    asstRender();
+    ok(/the demo runs in Russian/.test(learnBox().textContent), "английский интерфейс: видно, что показ на русском");
+    setUiLang("ru");
+    asstRender();
+    const real = asst.learn[0];
+    asstEvent(asst, { type: "answer", text: "обычный ответ", context: "c", learn: [{ catalog: ver, topic: real.topic, chapter: real.topic + ".nope" }] });
+    ok(!learnBox().querySelector(".asst-learn") && learnBox().querySelector('[data-learn-state="unknown"] button'), "неизвестная глава: карточки нет, предложен каталог");
+    asstEvent(asst, { type: "answer", text: "обычный ответ", context: "c", learn: [{ catalog: "sha256:" + "0".repeat(64), topic: real.topic, chapter: real.chapter }] });
+    ok(!learnBox().querySelector(".asst-learn") && learnBox().querySelector('[data-learn-state="version"] button'), "чужая версия каталога: карточки нет, предложен каталог");
+    learnBox().querySelector('[data-learn-state="version"] button').click();
+    ok(app === "learn" && learnSel === "home", "«Открыть каталог» — раздел «Обучение»");
+    goApp("hw");
+    // Чужие поля, разметка, адрес и код из ответа не исполняются: ответ — текст, ссылка — только ID
+    window.__learnPwn = 0;
+    asstEvent(asst, { type: "answer", text: '<img src=x onerror="window.__learnPwn=1"> javascript:window.__learnPwn=1 https://evil.example.test', context: "c",
+      learn: [{ catalog: ver, topic: real.topic, chapter: '<img src=x onerror="window.__learnPwn=1">', url: "javascript:window.__learnPwn=1", html: '<b id="learnPwn">x</b>', selector: "#hdAsst" }] });
+    await sleep(100);
+    ok(!document.querySelector("#asstDock img, #learnPwn") && window.__learnPwn === 0 && document.getElementById("asstAnswer").textContent.startsWith("<img"), "разметка и код из ответа не исполнились, текст показан как есть");
+    ok(!/evil\.example|javascript:/.test([...document.querySelectorAll("#asstDock a[href], #asstDock [src]")].map((e) => e.getAttribute("href") || e.getAttribute("src")).join(" ")), "адресов из ответа нет в ссылках панели");
+    ok(asst.learn.every((l) => Object.keys(l).join() === "catalog,topic,chapter"), "из ссылки взяты только catalog, topic, chapter");
+    asstEvent(asst, { type: "answer", text: "ответ без ссылок", context: "c" });
+    ok(!learnBox() && document.getElementById("asstAnswer").textContent === "ответ без ссылок", "старый answer без learn — обычный ответ");
+    goApp("hw");
+  } else {
+    // Сборка без обучения: показа нет, кнопки нет, объяснение
+    asstEvent(asst, { type: "answer", text: "ответ", context: "c", learn: [{ catalog: "sha256:" + "0".repeat(64), topic: "rules", chapter: "rules.simple" }] });
+    ok(learnBox()?.querySelector('[data-learn-state="nocat"]') && !learnBox().querySelector("button"), "без обучения: карточки и кнопки нет, объяснение");
+  }
+  ok(!document.querySelector("#asstDock [onerror], #asstDock [onclick]") && !/<img/i.test(dockHtml()), "в разметке панели нет элементов и атрибутов из ответа");
+  goClose();
+
   // Учебный режим запрещает внешнюю службу из всех трёх источников, обычная демо-страница — как раньше. Адрес страницы,
   // метки и режим — параметрами asstServiceUrlOf: hostname altumur.github.io в сценарии не подставить иначе
   const SVC = "https://assist.example.test", PUB = "https://public.example.test";

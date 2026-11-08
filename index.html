@@ -1789,6 +1789,10 @@ html[data-theme="light"] .acc-sync.run{color:var(--one-warning-icon)}
 .asst-chg{font-size:12px;color:var(--mu);overflow-wrap:anywhere}
 .asst-chg.bad{color:var(--one-danger)}
 .asst-note{font-size:12px;margin-top:4px;font-weight:600}
+.asst-learn{margin:6px 0;padding:10px 12px;border:1px solid var(--ln);border-radius:8px;background:var(--p2)}
+.asst-learn-t{font-weight:600}
+.asst-learn-goal{margin:4px 0}
+.asst-learn .btn{margin-top:8px}
 .asst-ta{width:100%;min-height:52px;margin-top:6px;padding:6px 8px;resize:vertical;background:var(--p2);border:1px solid var(--ln);border-radius:6px;color:var(--tx);font:inherit;font-size:13px}
 .asst-sec{margin-top:6px}
 .asst-ib.asst-mic-on,.asst-ib.asst-mic-on:hover{color:var(--one-danger);background:var(--p2);box-shadow:inset 0 0 0 1px var(--one-danger)}
@@ -3105,7 +3109,8 @@ const API=(()=>{
   const fx=all[q.get("fixture")]||all.demo;
   const fixture=drop.size?JSON.parse(JSON.stringify(fx)):fx;
   if(drop.size){const c=fixture.reference.capabilities;c.operations=c.operations.filter(o=>!drop.has(o))}
-  return ConsolemApi.create({server:ConsolemServer.create({fixture,fixtures:all,openapi:window.CONSOLEM_OPENAPI}),latency});
+  // learn — каталог обучения этой страницы: по нему заглушка ассистента отвечает учебными ссылками (answer.learn)
+  return ConsolemApi.create({server:ConsolemServer.create({fixture,fixtures:all,openapi:window.CONSOLEM_OPENAPI,learn:()=>window.Tour?.catalog?.()||null}),latency});
 })();
 // Что умеет система — GET /reference → capabilities. Неподдержанное интерфейс
 // не показывает: пункты меню и кнопки — по can(), разметка с data-needs —
@@ -29981,7 +29986,7 @@ function asstCodeKey(e){
   if(e.key==="Enter"){e.preventDefault();asstCodeApply()}
 }
 // Разговор заглушки и разговор службы — разные: context одного другому не годится
-function asstModeChanged(a){a.log=a.log.concat(asstLiveItems({ask:a.ask,answer:a.answer,err:a.err,info:a.info}));Object.assign(a,{context:null,ask:"",answer:"",err:"",info:"",down:false,stub:false})}
+function asstModeChanged(a){a.log=a.log.concat(asstLiveItems({ask:a.ask,answer:a.answer,learn:a.learn,err:a.err,info:a.info}));Object.assign(a,{context:null,ask:"",answer:"",learn:null,err:"",info:"",down:false,stub:false})}
 function asstCodeApply(){
   const a=asst,url=asstServiceUrl();if(!a||!url)return;
   const code=(a.codeDraft||"").trim();
@@ -30097,7 +30102,7 @@ async function asstFoundPick(){
 // окончен: следующее сообщение начинает новый, иначе ответ на вопрос ушёл бы со второй попытки
 function asstHoldSecret(a){
   a.log=a.log.concat(asstLiveItems(a));
-  Object.assign(a,{text:"",ask:"",answer:"",found:null,context:null,secrets:[],refused:"",plan:null,result:null,down:false,info:"",err:i18n("Консоль не отправила в службу просьбу о пароле. Пароли остаются на этой странице. Задать пароль в карточке устройства")});
+  Object.assign(a,{text:"",ask:"",answer:"",learn:null,found:null,context:null,secrets:[],refused:"",plan:null,result:null,down:false,info:"",err:i18n("Консоль не отправила в службу просьбу о пароле. Пароли остаются на этой странице. Задать пароль в карточке устройства")});
   asstRender();
 }
 // Вход из строки поиска — Enter или строка «Спросить ассистента». Запрос поиска снимается: он сузил бы дерево до
@@ -30321,6 +30326,7 @@ function asstLiveItems(a){
   const out=[];
   if(a.ask)out.push({k:"ask",t:a.ask});
   if(a.answer)out.push({k:"answer",t:a.answer});
+  if(a.learn?.length)out.push({k:"info",t:`${i18n("Ассистент предложил учебный пример")}: ${a.learn.map(l=>{const r=learnResolve(l);return r.state==="ok"?i18n(r.ch.title):l.chapter}).join(", ")}`});
   if(a.found)out.push({k:"found",t:[a.found.text,`${i18n("Отобрано")}: ${a.found.total??(a.found.ids||[]).length}`].filter(Boolean).join("\n")});
   if(a.refused)out.push({k:"err",t:a.refused});
   if(a.err)out.push({k:"err",t:a.err});
@@ -30730,6 +30736,34 @@ function asstHistHtml(a){
     return`<button type="button" class="asst-hrow ${c===a?"cur":""}" data-asst-chat="${escHtml(c.id)}" ${onEv("click",["asstSwitch",c.id])}><b>${escHtml(c.title||i18n("Новый разговор"))}</b><span class="asst-hmeta ${cls}">${cls==="ready"||cls==="wait"?`<i class="asst-dot"></i>`:""}${escHtml(word)}</span></button>`}).join("")+
     `<div class="asst-hnote">${i18n("Макет: этот браузер хранит историю. Консоль не сохраняет разговор со словом «пароль». Без этого слова консоль не может найти пароль в тексте. Не писать пароль сюда")}</div>`;
 }
+/* Учебные ссылки ответа (answer.learn, AssistLearnLink): только ID главы каталога и его версия. Консоль сверяет их со своим
+   каталогом (Tour.catalog) и рисует карточку из него: название, цель, язык. Чужие поля, адреса, разметку и код из ответа
+   не берёт и не исполняет; запуск — кнопкой человека (learnPlay), приход события ничего не открывает */
+function asstLearnLinks(raw){
+  if(!Array.isArray(raw))return null;
+  const out=raw.filter(l=>l&&typeof l==="object"&&["catalog","topic","chapter"].every(k=>typeof l[k]==="string")).slice(0,3).map(l=>({catalog:l.catalog,topic:l.topic,chapter:l.chapter}));
+  return out.length?out:null;
+}
+// ok — глава есть в каталоге этой версии; version — каталог другой версии; unknown — такой главы нет; nocat — обучения нет
+function learnResolve(l){
+  if(!learnShown())return{state:"nocat"};
+  if(l.catalog!==window.Tour.catalog().version)return{state:"version"};
+  const{tp,ch}=learnParse(l.chapter);
+  return tp&&ch&&ch.stable&&tp.id===l.topic?{state:"ok",tp,ch}:{state:"unknown"};
+}
+function asstLearnHtml(links){
+  const res=links.map(learnResolve),seen=new Set();
+  const cards=res.filter(r=>r.state==="ok"&&!seen.has(r.ch.id)&&seen.add(r.ch.id)).map(({tp,ch})=>`<div class="asst-learn" data-learn="${escHtml(ch.id)}">
+    <div class="asst-learn-t">${escHtml(i18n(ch.title))}</div><div class="sub">${escHtml(i18n(tp.title))}</div>
+    <div class="asst-learn-goal">${escHtml(i18n(ch.why))}</div>
+    <div class="sub">${i18n("на учебных данных")} · ${learnMins(ch.secs)}${(ch.lang||tp.lang||"ru")!==uiLang?` · ${i18n((ch.lang||tp.lang||"ru")==="ru"?"показ на русском языке":"показ на другом языке")}`:""}</div>
+    <button type="button" class="btn s pri" ${onEv("click",["learnPlay",tp.id,ch.id])}>${lu("play")}${i18n("Открыть учебный пример")}</button></div>`);
+  const word={nocat:"Ассистент предложил учебный пример. В этой консоли нет раздела «Обучение», поэтому показа нет.",
+    version:"Ассистент сослался на другую версию учебного каталога. Консоль не запустила пример: глава могла измениться. Выбрать главу в каталоге этой консоли.",
+    unknown:"Такой главы нет в учебном каталоге этой консоли. Консоль не запустила пример. Выбрать главу в каталоге."};
+  const notes=[...new Set(res.map(r=>r.state).filter(s=>s!=="ok"))].map(st=>`<div class="asst-line" data-learn-state="${st}"><span>${i18n(word[st])}</span>${st==="nocat"?"":`<button type="button" class="btn s" ${onEv("click",["learnLink","home"])}>${i18n("Открыть каталог")}</button>`}</div>`);
+  return`<div id="asstLearn">${cards.join("")}${notes.join("")}</div>`;
+}
 function asstThreadHtml(a,mode){
   const empty=!a.log.length&&!a.busy&&!a.err&&!a.answer&&!a.ask;
   return[
@@ -30742,6 +30776,7 @@ function asstThreadHtml(a,mode){
     a.ask?`<div class="asst-who">${i18n("Ассистент")}</div><div class="asst-msg" id="asstAsk">${escHtml(a.ask)}</div>`:"",
     // Ответ модели, а не данные системы: в замере Пилота бывают уверенно неверные числа
     a.answer?`<div class="asst-who" id="asstAnswerNote">${i18n("Ассистент · проверить по разделу")}</div><div class="asst-msg asst-answer" id="asstAnswer">${escHtml(a.answer)}</div>`:"",
+    a.answer&&a.learn?.length?asstLearnHtml(a.learn):"",
     a.found?asstFoundHtml(a.found):"",
     a.refused?`<div class="asst-msg err" id="asstRefused">${escHtml(a.refused)}</div>`:"",
     a.err?`<div class="asst-msg err" id="asstErr">${escHtml(a.err)}</div>`:"",
@@ -30822,7 +30857,7 @@ function asstEvent(a,m){
   // Тип хода служба держит в себе: в событиях его нет, лишнее поле (мост Пилота шлёт kind в progress) форма пропускает
   if("context" in m){a.context=m.context;a.ctxLive=a.live}
   if(m.type==="question")a.ask=m.text;
-  if(m.type==="answer")a.answer=m.text;
+  if(m.type==="answer"){a.answer=m.text;a.learn=asstLearnLinks(m.learn)}
   if(m.type==="found"){a.found=m;if(asstSeen(a))asstFoundToTree(m)}
   if(m.type==="refused")a.refused=m.text;
   if(m.type==="error"){
@@ -30862,7 +30897,7 @@ function asstSend(again,said){
   a.at=Date.now();a.unread=false;a.interrupted=false;
   if(a.plan?.items)asstPlanDrop(a.plan);
   asstScrollEnd=true;
-  Object.assign(a,{last:text,text:"",busy:true,line:i18n("думаю…"),ask:"",answer:"",found:null,refused:"",err:"",plan:null,planLost:[],result:null,abort:new AbortController(),live,down:false,info:""});
+  Object.assign(a,{last:text,text:"",busy:true,line:i18n("думаю…"),ask:"",answer:"",learn:null,found:null,refused:"",err:"",plan:null,planLost:[],result:null,abort:new AbortController(),live,down:false,info:""});
   asstRender();
   asstSave();
   (live?asstServiceTurn(a,body):API.stream("/assist/turns",body,m=>asstEvent(a,m),{ends:asstEnds,signal:a.abort.signal}))
