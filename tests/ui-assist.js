@@ -546,4 +546,19 @@ UiCheck(async ({ ok, until }) => {
   resetAllFilters();
   ok(!asstPick && !tag(), "«Сбросить фильтры» снимает отбор");
   goClose();
+
+  // Учебный режим запрещает внешнюю службу из всех трёх источников, обычная демо-страница — как раньше. Адрес страницы,
+  // метки и режим — параметрами asstServiceUrlOf: hostname altumur.github.io в сценарии не подставить иначе
+  const SVC = "https://assist.example.test", PUB = "https://public.example.test";
+  const metaOf = (m) => (name) => m[name] || "";
+  const cases = [
+    ["?assist=" + encodeURIComponent(SVC), "localhost", {}, "?assist="],
+    ["", "localhost", { "consolem-assist": SVC }, "метка consolem-assist"],
+    ["", "altumur.github.io", { "consolem-assist-public": PUB }, "публичная метка на altumur.github.io"],
+  ];
+  for (const [search, host, m, what] of cases) {
+    ok(asstServiceUrlOf(search, host, metaOf(m), false) !== "", `обычная демо-страница: ${what} включает службу`);
+    ok(asstServiceUrlOf(search, host, metaOf(m), true) === "", `учебный режим: ${what} службу не включает`);
+  }
+  ok(asstServiceUrlOf("", "localhost", metaOf({ "consolem-assist-public": PUB }), false) === "", "публичная метка на чужом адресе службу не включает");
 });

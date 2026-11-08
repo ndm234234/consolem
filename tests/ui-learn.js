@@ -142,6 +142,63 @@ UiCheck(async ({ ok, until }) => {
   ok(xw.history.state != null, "выход: запись истории не потеряла состояние");
   ex.remove();
 
+  // Отказ показа закрыт по умолчанию: сервер показа не загрузился или хранилище не подменилось. Глава известная, каталог полный.
+  // Каждый отказ — с рабочим адресом в ?api= и без него (тогда адрес — метка consolem-api, если страница её задаёт: в сборке под CSP).
+  // Отказ виден, учебные параметры на месте, страница к API не обращается, настоящий localStorage не меняется
+  const metaApi = pageMeta("consolem-api"), metaApiUrl = metaApi ? new URL(metaApi, location.href).href : "";
+  const workHits = (w) => w.performance.getEntriesByType("resource").map((e) => e.name).filter((u) => u.startsWith(API_ADDR) || (metaApiUrl && u.startsWith(metaApiUrl)));
+  const sleepR = (ms) => new Promise((r) => setTimeout(r, ms));
+  for (const why of ["server", "storage"]) {
+    for (const withApi of [true, false]) {
+      const where = withApi ? "адрес в ?api=" : metaApi ? "адрес в метке consolem-api" : "без адреса API";
+      const before = snap();
+      const f = open(`tour=1&demo=0&play&demoFail=${why}`, withApi);
+      const shown = await until(() => f.contentDocument?.querySelector(`#learnRefused[data-why="${why}"]`), 30000);
+      ok(shown, `отказ «${why}», ${where}: понятный отказ показа`);
+      if (shown) {
+        const w = f.contentWindow, d = f.contentDocument;
+        ok(/Показ не запущен/.test(d.getElementById("learnRefused").textContent) && /Настоящая система не изменилась/.test(d.getElementById("learnRefused").textContent), `отказ «${why}»: текст называет, что случилось`);
+        await sleepR(1500);
+        ok(/[?&]demo\b/.test(w.location.search) && /[?&]tour=/.test(w.location.search), `отказ «${why}», ${where}: учебные параметры на месте, перехода нет`);
+        ok(!w.appReady && !d.querySelector(".tour-panel,.tour-mode"), `отказ «${why}»: страница дальше не пошла, показа нет`);
+        ok(workHits(w).length === 0, `отказ «${why}», ${where}: запросов к рабочему API нет` + (workHits(w).length ? ": " + workHits(w)[0] : ""));
+        if (why === "storage") ok(w.localStorage.getItem(SENTRY) === "до показа", "отказ «storage»: хранилище не подменилось — потому показ и не идёт");
+      }
+      ok(snap() === before, `отказ «${why}», ${where}: настоящий localStorage не изменился`);
+      f.remove();
+    }
+  }
+  // Выход из отказа — только кнопкой человека: обычная страница без учебных параметров
+  const rf = open("tour=1&demo=0&demoFail=server", false);
+  ok(await until(() => rf.contentDocument?.querySelector("#learnRefused button"), 30000), "в отказе есть кнопка «Вернуться к работе»");
+  rf.contentDocument.querySelector("#learnRefused button")?.click();
+  ok(await until(() => rf.contentWindow?.appReady && !/demo/.test(rf.contentWindow.location.search) && !rf.contentDocument.getElementById("learnRefused"), 60000), "«Вернуться к работе»: обычная страница");
+  rf.remove();
+
+  // Учебный режим: внешней службы ассистента нет ни из ?assist=, ни из метки consolem-assist. Разговор идёт на заглушке
+  const SVC = "https://assist.example.test";
+  const af = open(`tour=1&demo=${Tour.topics[0].chapters[0].to}&assist=${encodeURIComponent(SVC)}`, false);
+  ok(await until(() => af.contentWindow?.appReady && af.contentDocument.querySelector(".tour-mode"), 60000), "учебный режим с ?assist= открылся");
+  const aw = af.contentWindow;
+  if (aw?.asstServiceUrl) {
+    ok(aw.asstServiceUrl() === "" && aw.asstMode(null) === "off", "учебный режим: ?assist= не включает службу");
+    const m = aw.document.createElement("meta");
+    m.name = "consolem-assist";
+    m.content = SVC;
+    aw.document.head.append(m);
+    ok(aw.asstServiceUrl() === "", "учебный режим: метка consolem-assist не включает службу");
+    aw.document.querySelectorAll(".tour-block,.tour-panel").forEach((e) => e.remove());
+    aw.asstOpen("");
+    const ta = aw.document.getElementById("asstText");
+    ta.value = "сколько камер";
+    ta.dispatchEvent(new aw.Event("input", { bubbles: true }));
+    aw.document.getElementById("asstSend").click();
+    ok(await until(() => aw.document.getElementById("asstAnswer")), "учебный разговор: ответила заглушка");
+    ok(!aw.performance.getEntriesByType("resource").some((e) => e.name.startsWith(SVC)), "учебный разговор: обращений к службе нет");
+    ok(workHits(aw).length === 0, "учебный разговор: запросов к рабочему API нет");
+  }
+  af.remove();
+
   localStorage.removeItem(SENTRY);
   if (themeWas == null) localStorage.removeItem(THEME); else localStorage.setItem(THEME, themeWas);
   if (openWas == null) localStorage.removeItem(TREE_OPEN_LS); else localStorage.setItem(TREE_OPEN_LS, openWas);

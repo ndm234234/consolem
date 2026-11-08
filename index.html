@@ -2528,6 +2528,40 @@ html[data-theme="light"] .cp-step{background:var(--one-control-hover);color:var(
 try{const t=localStorage.getItem("kit-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}
 let uiLang="ru";
 function i18n(s){if(uiLang==="ru"||s==null||s==="")return s;return (window.I18N_EN&&window.I18N_EN[s])||s;}
+// Учебный режим (?demo, раздел «Обучение») идёт только на встроенном сервере и с отдельным хранилищем. Нет обучения в сборке,
+// сервер показа не загрузился (в том числе из-за CSP) или localStorage не подменился (assets/tour.js) — отказ показа: страница
+// дальше не выполняется, к API не обращается, учебные параметры не снимает и в рабочий режим сама не уходит. Выход — кнопкой
+if(/[?&]demo\b/.test(location.search)&&!/[?&]selftest(-run)?\b/.test(location.search)){
+  const why=!window.Tour?"nolearn":window.Tour.refused||(window.Tour.serverMissing()?"server":"");
+  if(why){
+    if(window.Tour)window.Tour.refused=why;
+    learnRefuse(why);
+    throw new Error(`Учебный режим: показ не запущен (${why})`);
+  }
+}
+// Отказ показа поверх страницы. Код страницы до него не дошёл: только DOM, без onEv и без данных
+function learnRefuse(why){
+  const say={storage:"Браузер не дал отделить учебные записи от ваших настроек и черновиков. Поэтому консоль не запустила показ.",
+    server:"Консоль не загрузила учебный сервер. Показ работает только на учебных данных, поэтому консоль не запустила показ.",
+    nolearn:"В этой консоли нет раздела «Обучение». Поэтому консоль не запустила показ."}[why]||"";
+  const st=document.createElement("style");
+  st.textContent=`.lrn-refuse{position:fixed;inset:0;z-index:100005;display:flex;align-items:center;justify-content:center;padding:16px;background:var(--bg,#0f1419);color:var(--tx,#e4e9ef);font:14px/1.45 Inter,"Segoe UI",sans-serif}
+.lrn-refuse>div{max-width:520px;padding:20px 24px;border:1px solid var(--ln,#2d3743);border-radius:10px;background:var(--p,#1a2129)}
+.lrn-refuse h1{margin:0 0 8px;font-size:18px}.lrn-refuse p{margin:0 0 12px}
+.lrn-refuse button{font:inherit;font-weight:600;padding:6px 14px;border-radius:6px;border:1px solid currentColor;background:none;color:inherit;cursor:pointer}`;
+  document.head.append(st);
+  const box=document.createElement("div");box.className="lrn-refuse";box.id="learnRefused";box.dataset.why=why;box.setAttribute("role","alert");
+  const card=document.createElement("div"),h=document.createElement("h1"),p1=document.createElement("p"),p2=document.createElement("p"),b=document.createElement("button");
+  h.textContent=i18n("Показ не запущен");p1.textContent=i18n(say);
+  p2.textContent=i18n("Настоящая система не изменилась. Консоль не обращалась к ней.");
+  b.type="button";b.textContent=i18n("Вернуться к работе");
+  b.addEventListener("click",()=>{
+    if(window.Tour){location.replace(window.Tour.exitUrl());return}
+    const u=new URL(location.href);["tour","demo","play","all","demoFail"].forEach(k=>u.searchParams.delete(k));u.hash="";location.replace(u.href);
+  });
+  card.append(h,p1,p2,b);box.append(card);
+  (document.body||document.documentElement).append(box);
+}
 function locName(n){
   if(!n)return"";
   if(typeof n==="string")return i18n(n);
@@ -3060,15 +3094,10 @@ function apiUnauthorized(){
 }
 const API=(()=>{
   const q=new URLSearchParams(location.search),latency=+q.get("latency")||0;
-  // Учебный режим (раздел «Обучение») — всегда на встроенном сервере: настоящая система в нём не участвует
+  // Учебный режим (раздел «Обучение») — всегда на встроенном сервере: настоящая система в нём не участвует.
+  // Без сервера показа страница сюда не доходит (отказ показа в начале кода); проверка здесь — вторая, на случай правки выше
   const base=window.Tour?.demo?null:q.get("api")||pageMeta("consolem-api");
-  // Файлы сервера показа не загрузились (сборка без demo/): обычная страница вместо пустой
-  if(window.Tour?.demo&&typeof ConsolemServer==="undefined"){
-    const u=new URL(location.href);
-    ["tour","demo","play","all"].forEach(k=>u.searchParams.delete(k));
-    location.replace(u.href);
-    throw new Error("Учебный режим: консоль не загрузила файлы demo/");
-  }
+  if(window.Tour?.demo&&typeof ConsolemServer==="undefined")throw new Error("Учебный режим: нет сервера показа");
   if(base)return ConsolemApi.create({baseUrl:base,latency,onUnauthorized:apiUnauthorized});
   const all=window.CONSOLEM_FIXTURES||{demo:window.CONSOLEM_FIXTURE};
   // ?drop=op1,op2 — система, которая не объявила эти операции: так проверяется запуск без необязательного
@@ -29897,10 +29926,14 @@ const ASST_CODE_KEY="consolem-assist-code";
 // Просьба о пароле: и слова просьбы, и ответ на вопрос о пароле — сам пароль
 const ASST_PASS=/парол|(?<![а-яё])пасс(?![а-яё])|секрет|passw|\bpwd\b|secret/i;
 let asstCodeNow=null,asstCodeWanted=false;
-function asstServiceUrl(){
+function asstServiceUrl(){return asstServiceUrlOf(location.search,location.hostname,pageMeta,!!window.Tour?.demo)}
+// Адрес службы по адресу страницы, её меткам (meta(name)) и учебному режиму: отдельной функцией, чтобы проверить любой адрес
+function asstServiceUrlOf(search,host,meta,demo){
+  // Учебный режим — только встроенная заглушка: внешней службы нет ни из ?assist=, ни из меток, ни из публичной метки
+  if(demo)return"";
   // consolem-assist-public — служба только этой демо-страницы: тесты, стенды и чужие копии в неё не ходят
-  const q=new URLSearchParams(location.search),raw=q.get("assist")||pageMeta("consolem-assist")||(location.hostname==="altumur.github.io"?pageMeta("consolem-assist-public"):"");
-  if(!raw||q.get("api")||pageMeta("consolem-api"))return"";
+  const q=new URLSearchParams(search),raw=q.get("assist")||meta("consolem-assist")||(host==="altumur.github.io"?meta("consolem-assist-public"):"");
+  if(!raw||q.get("api")||meta("consolem-api"))return"";
   try{const u=new URL(raw);return/^https?:$/.test(u.protocol)?u.href.replace(/\/+$/,""):""}catch(e){return""}
 }
 function asstCodeGet(url){

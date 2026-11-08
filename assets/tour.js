@@ -4,9 +4,15 @@
    ?tour=K&demo=N — тема K (с 1), шаг N (с 0). &play — идти сразу, без него ждать на шаге; &all — вся тема, без остановок между главами.
    Учебный режим — это ?demo в адресе: страница работает на встроенном сервере (см. API в index.html), localStorage — копия в памяти,
    настоящие черновики и настройки не меняются. Данные живут до перезагрузки: запуск и «Назад» перезагружают страницу и быстро проходят шаги до нужного.
-   В сборке для консоли (tools/build_webui.py) сервер показа лежит в demo/ и грузится только при ?demo; с --without-learn раздела нет. */
+   В сборке для консоли (tools/build_webui.py) сервер показа лежит в demo/ и грузится только при ?demo; с --without-learn раздела нет.
+   Изоляция закрыта по умолчанию: не удалось подменить localStorage или не загрузился сервер показа — показ не идёт (Tour.refused),
+   страница не обращается к API и сама в рабочий режим не уходит (index.html, learnRefuse). ?demoFail=storage|server — проверка
+   этих отказов: параметр только отказывает, другого хода он не включает. */
 (() => {
+  const Q = new URLSearchParams(location.search);
   const DEMO = /[?&]demo\b/.test(location.search) && !/[?&]selftest(-run)?\b/.test(location.search);
+  // Почему показ не идёт: storage — хранилище не отделено, server — нет сервера показа, nolearn — нет обучения в сборке
+  let refused = null;
   if (DEMO) {
     let realStore = null;
     try {
@@ -30,14 +36,26 @@
         return mem.size;
       },
     };
+    // Подмена не удалась — показ не идёт: на настоящем хранилище учебные шаги изменили бы черновики и настройки человека
     try {
+      if (Q.get("demoFail") === "storage") throw new Error("проверка отказа");
       Object.defineProperty(window, "localStorage", { value: fake, configurable: true });
-    } catch {}
+      if (window.localStorage !== fake) throw new Error("localStorage не подменился");
+    } catch {
+      refused = "storage";
+    }
   }
   // Сборка для консоли: сервера показа нет на обычной странице, он загружается только в учебном режиме, до кода страницы
   const lazy = document.querySelector('meta[name="consolem-demo-files"]')?.content || "";
-  if (DEMO && lazy) lazy.split(",").forEach((src) => document.write(`<script src="${src}"><\/script>`));
-  const t = (s) => (typeof i18n === "function" ? i18n(s) : s);
+  // Отказ уже известен — сервер показа не нужен. ?demoFail=server — как будто файлы не загрузились
+  if (DEMO && lazy && !refused && Q.get("demoFail") !== "server") lazy.split(",").forEach((src) => document.write(`<script src="${src}"><\/script>`));
+  const t = (s) => {
+    try {
+      return typeof i18n === "function" ? i18n(s) : s;
+    } catch {
+      return s;
+    }
+  };
   const CSS = `
 .tour-block{position:fixed;inset:0;z-index:100000;background:transparent}
 .tour-cur{position:fixed;left:0;top:0;width:22px;height:22px;z-index:100003;pointer-events:none;transition:transform .75s cubic-bezier(.45,.05,.25,1);filter:drop-shadow(0 2px 3px #0009)}
@@ -101,7 +119,7 @@
   // Показ всегда на чистых данных: сценарий рассчитан на набор, каким он был при загрузке
   const urlFor = (params) => {
     const u = new URL(location.href);
-    ["tour", "demo", "play", "all"].forEach((k) => u.searchParams.delete(k));
+    ["tour", "demo", "play", "all", "demoFail"].forEach((k) => u.searchParams.delete(k));
     Object.entries(params).forEach(([k, v]) => u.searchParams.set(k, String(v)));
     // Без якоря: адрес с одним только якорем страницу не перезагрузит
     u.hash = "";
@@ -409,7 +427,7 @@
     const st = make("style", "");
     st.textContent = CSS;
     document.head.append(st);
-    if (!DEMO) return;
+    if (!DEMO || Tour.refused) return;
     const q = new URLSearchParams(location.search), k = Number(q.get("tour")) - 1, topic = Tour.topics[k];
     const app = document.querySelector(".app"), bar = make("div", "tour-mode");
     bar.setAttribute("role", "status");
@@ -425,6 +443,11 @@
   const Tour = {
     demo: DEMO,
     lazy: !!lazy,
+    refused,
+    // Куда выходит человек из учебного режима и из отказа показа
+    exitUrl: () => urlFor({}).href,
+    // Сервер показа есть? Нет — отказ показа (index.html проверяет до API)
+    serverMissing: () => Q.get("demoFail") === "server" || typeof ConsolemServer === "undefined",
     topics: [],
     add(topic) {
       const chapters = [];
