@@ -2311,19 +2311,17 @@ html[data-theme="light"] .cp-step{background:var(--one-control-hover);color:var(
 .er-act{display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap}.er-act .sub{margin:0}
 .er-intro{margin:10px 0 0}
 .er-ell{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.er-var{display:inline-flex;align-items:center;gap:6px;font-weight:400}.er-var .sub{margin:0}
 .er-tbl{table-layout:fixed}.er-tbl td,.er-tbl th{vertical-align:middle}
 .er-tbl .er-x{text-align:center;padding-left:4px;padding-right:4px}
 .er-dev{display:flex;align-items:center;gap:8px;min-width:0;border:0;background:0;color:inherit;font:inherit;padding:0;text-align:left;width:100%}
 .er-go{cursor:pointer}.er-go:hover b{color:var(--bl);text-decoration:underline}
 .er-nm{display:flex;flex-direction:column;min-width:0}.er-nm b,.er-nm small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.er-nm small{color:var(--mu);font-size:12px}
-.er-exp{border:0;background:0;color:var(--mu);font-size:18px;line-height:1;cursor:pointer;transition:transform .15s;width:24px;height:24px}
-.er-exp.on{transform:rotate(90deg)}
-.er-row.open td{border-bottom-color:transparent}
-.er-inl>td{background:var(--p2);padding:12px}
-.er-bulk{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 10px;margin-bottom:10px;border:1px solid var(--bl);border-radius:8px;background:var(--one-selected-neutral)}
-.er-bulk label{margin:0}.er-bulk .sub{margin:0}.er-bulk select{field-sizing:content}
-@media (prefers-reduced-motion:reduce){.er-exp{transition:none}}
+.er-row.sel td{background:var(--one-selected-neutral)}
+.er-bulk{display:flex;align-items:center;gap:10px;flex-wrap:nowrap;height:44px;box-sizing:border-box;padding:0 10px;margin-bottom:10px;border:1px solid var(--ln);border-radius:8px;background:var(--p2);transition:border-color .15s,background-color .15s}
+.er-bulk.on{border-color:var(--bl);background:var(--one-selected-neutral)}
+.er-bulk-n{flex:none;min-width:120px;white-space:nowrap}
+.er-bulk select{field-sizing:content;flex:none;width:auto;min-width:0;max-width:260px}.er-bulk .sub{margin:0;min-width:0}
+@media (prefers-reduced-motion:reduce){.er-bulk{transition:none}}
 </style>
 <!-- ONE PSIM: мост по ONE.PSIM.PrototypeKit, подключён после стилей прототипа -->
 <link rel="stylesheet" href="assets/one-psim/bridge.css">
@@ -24985,9 +24983,7 @@ function recEdge(n){return edgeStorage(n)||(n?.type==="camera"?edgeStorage(ipsrv
 // перезагрузке. После утверждения вида — запрос владельцу контракта. В контракте есть только режим записи
 // replica со строкой архива камеры (replicaFrom: null — встроенное хранилище): он соответствует типу «Забирать всё».
 const EDGE_REP=new Map();
-let edgeArchVariant="A";          // вариант вкладки архива: A — переход к хранилищу, B — правка в строке
-const edgeArchOpen=new Set();     // вариант B: раскрытые строки
-const edgeArchSel=new Set();      // вариант A: отмеченные строки
+const edgeArchSel=new Set();      // отмеченные строки вкладки архива
 const EDGE_TYPES=[
   {id:"off",name:"Выключена",
     cam:"Сервер не забирает записи с карты.",nvr:"Сервер не забирает записи с диска регистратора.",
@@ -25077,8 +25073,8 @@ function edgeStripHtml(code){
 function edgeLegendHtml(){
   return`<div class="er-legend"><span><i class="L"></i>${i18n("живой поток в архив")}</span><span><i class="P"></i>${i18n("сервер забрал с устройства")}</span><span><i class="C"></i>${i18n("осталось на устройстве")}</span><span><i class="g"></i>${i18n("пропуск в архиве")}</span><span class="sub">${i18n("полоса — сутки")}</span></div>`;
 }
-// Редактор репликации одного встроенного хранилища. inline — в строке таблицы архива (вариант B)
-function edgeRepEditHtml(st,inline){
+// Редактор репликации одного встроенного хранилища
+function edgeRepEditHtml(st){
   const p=edgeRep(st),nvr=edgeIsNvr(st),o=edgeOwner(st),id=st.id;
   const types=`<div class="er-types" role="radiogroup" aria-label="${i18n("Тип репликации")}">${EDGE_TYPES.map(t=>`<button type="button" role="radio" aria-checked="${p.type===t.id}" class="er-t ${p.type===t.id?"on":""}" ${onEv("click",["edgeSet",id,"type",t.id])}>
       <b>${i18n(t.name)}</b>${edgeStripHtml(t.strip)}<small>${i18n(nvr?t.nvr:t.cam)}</small>${t.fit?`<small class="er-fit">${i18n("Когда выбрать:")} ${i18n(t.fit)}</small>`:""}${t.ax?`<small class="er-ax">${escHtml(t.ax)}</small>`:""}</button>`).join("")}</div>${edgeLegendHtml()}`;
@@ -25097,7 +25093,7 @@ function edgeRepEditHtml(st,inline){
     <div class="nt er-what" data-edge-summary><b>${i18n("Что произойдёт.")}</b> ${edgeSummary(st)}</div>
     ${p.type!=="off"&&p.type!=="all"&&archById(p.arch)?.storage==="block"?`<div class="nt err" data-edge-block>${i18n("Хранилище «")}${escHtml(locName(archById(p.arch)))}${i18n("» блочное: оно принимает записи только в конец архива. Пропуски в середине сервер туда не впишет. Выбрать объектное хранилище.")}</div>`:""}
     ${p.type==="gaps"&&!edgeLiveCams(st).length?`<div class="nt err" data-edge-nolive>${i18n(nvr?"Камеры регистратора не пишут живой поток в архив: пропусков нет, заполнять нечего. Выбрать «Забирать всё» или включить запись камер.":"Камера не пишет живой поток в архив: пропусков нет, заполнять нечего. Выбрать «Забирать всё» или включить запись камеры.")}</div>`:""}
-    ${adv}${inline?"":edgeChecksHtml(st)}`;
+    ${adv}${edgeChecksHtml(st)}`;
 }
 // Проверки перед репликацией — ЗАГЛУШКА: по хешу
 function edgeChecksHtml(st){
@@ -25154,7 +25150,7 @@ function edgeRepScreenHtml(st){
       <div class="mc"><span>${i18n("Репликация")}</span><b>${i18n(edgeType(p.type).name)}</b></div>
     </div>
     <p class="sub er-intro">${o?.type==="ipsrv"?`${i18n("Диск внутри регистратора")} <button type="button" class="lk" ${onEv("click",["pick",o.id])}>${escHtml(locName(o))}</button>.`:o?`${i18n("Карта памяти камеры")} <button type="button" class="lk" ${onEv("click",["pick",o.id,{tab:"rec"}])}>${escHtml(locName(o))}</button>.`:""} ${i18n("Репликация — сервер забирает записи")} ${w.from} ${i18n("в своё хранилище. Тип репликации задаёт, какие записи и когда.")}</p>`;
-  return card("Встроенное хранилище",head)+card("Тип репликации",edgeRepEditHtml(st,false),`<span class="er-stub">${i18n("заглушка")}</span>`)+edgeNvrCamsHtml(st)+edgeStatusHtml(st);
+  return card("Встроенное хранилище",head)+card("Тип репликации",edgeRepEditHtml(st),`<span class="er-stub">${i18n("заглушка")}</span>`)+edgeNvrCamsHtml(st)+edgeStatusHtml(st);
 }
 // Карточка на вкладке «Архив» камеры и регистратора: итог и переход к настройке
 function edgeStorageCardHtml(owner){
@@ -25186,8 +25182,6 @@ function edgeOfServer(sid){
   walkAll(n=>{if(n.type!=="storage")return;const o=find(n.id)?.p;if(!o)return;const s=cameraTreeServer(o.id);if(s&&s.id===sid)out.push(n)});
   return out;
 }
-function edgeArchVariantSet(v){edgeArchVariant=v;gear()}
-function edgeArchRowToggle(id){if(edgeArchOpen.has(id))edgeArchOpen.delete(id);else edgeArchOpen.add(id);gear()}
 function edgeArchPickToggle(id){if(edgeArchSel.has(id))edgeArchSel.delete(id);else edgeArchSel.add(id);gear()}
 function edgeArchPickAll(ids,on){ids.forEach(id=>on?edgeArchSel.add(id):edgeArchSel.delete(id));gear()}
 function edgeArchBulk(aid,type){
@@ -25200,30 +25194,28 @@ function edgeArchHtml(a){
   const sv=archServer(a);if(!sv)return card("Встроенные хранилища",`<p class="sub">${i18n("У сетевого хранилища нет своего сервера. Встроенные хранилища видны у хранилищ серверов.")}</p>`);
   edgeLoadAll();
   const b=edgeLoad,list=edgeOfServer(sv.id);
-  const varSw=`<span class="er-var" role="group" aria-label="${i18n("Вариант прототипа")}"><span class="sub">${i18n("Вариант:")}</span>${[["A","переход к хранилищу"],["B","правка в строке"]].map(([v,l])=>`<button type="button" class="er-chip ${edgeArchVariant===v?"on":""}" aria-pressed="${edgeArchVariant===v}" ${onEv("click",["edgeArchVariantSet",v])}>${v} · ${i18n(l)}</button>`).join("")}</span>`;
-  if(!b?.done&&!list.length)return card("Встроенные хранилища",`<p class="sub">${i18n("Загрузка…")}</p>`,varSw);
+  const stub=`<span class="er-stub">${i18n("заглушка")}</span>`;
+  if(!b?.done&&!list.length)return card("Встроенные хранилища",`<p class="sub">${i18n("Загрузка…")}</p>`,stub);
   const here=list.filter(st=>edgeRep(st).arch===a.id&&edgeRep(st).type!=="off").length;
   const intro=`<p class="sub">${i18n("Камеры и регистраторы сервера")} «${escHtml(locName(sv))}» ${i18n("с картой памяти или диском. Сервер забирает с них записи по типу репликации. Сюда забирают")} ${here} ${i18n("из")} ${list.length}.</p>`;
-  if(!list.length)return card("Встроенные хранилища",intro+`<p class="sub">${i18n("У устройств этого сервера нет встроенных хранилищ.")}</p>`,varSw);
-  const B=edgeArchVariant==="B";
+  if(!list.length)return card("Встроенные хранилища",intro+`<p class="sub">${i18n("У устройств этого сервера нет встроенных хранилищ.")}</p>`,stub);
   const ids=list.map(st=>st.id),allOn=ids.length&&ids.every(id=>edgeArchSel.has(id));
   const row=st=>{
-    const o=edgeOwner(st),p=edgeRep(st),s=edgeStat(st),t=archById(p.arch),open=B&&edgeArchOpen.has(st.id),nvr=o?.type==="ipsrv";
+    const o=edgeOwner(st),p=edgeRep(st),s=edgeStat(st),t=archById(p.arch),nvr=o?.type==="ipsrv";
     const dest=p.type==="off"?"—":t?.id===a.id?i18n("сюда"):escHtml(t?locName(t):"—");
     const name=`${ic(nvr?"ipsrv":"camera")}<span class="er-nm"><b>${escHtml(locName(o||st))}</b><small>${nvr?`${i18n("диск")} · ${ipsrvCameras(o).length} ${i18n("камер")}`:i18n("карта")} · ${st.size?`${escHtml(st.size)} · ${edgeDaysText(edgeDays(st))}`:i18n("объём неизвестен")}</small></span>`;
-    const first=B?`<td class="er-x"><button type="button" class="er-exp ${open?"on":""}" aria-expanded="${open}" aria-label="${i18n("Раскрыть")}" ${onEv("click",["edgeArchRowToggle",st.id])}>›</button></td>`
-      :`<td class="er-x"><input type="checkbox" ${edgeArchSel.has(st.id)?"checked":""} aria-label="${escHtml(locName(o||st))}" ${onEv("change",["edgeArchPickToggle",st.id])}></td>`;
-    const nameCell=B?`<td><span class="er-dev">${name}</span></td>`:`<td><button type="button" class="er-dev er-go" ${onEv("click",["pick",st.id,{tab:"rep"}])}>${name}</button></td>`;
-    return`<tr class="er-row ${open?"open":""}">${first}${nameCell}<td>${i18n(edgeType(p.type).name)}</td><td class="er-ell">${dest}</td><td>${edgeStatChip(s)}</td></tr>`
-      +(open?`<tr class="er-inl"><td></td><td colspan="4">${edgeRepEditHtml(st,true)}<div class="er-act"><button type="button" class="lk" ${onEv("click",["pick",st.id,{tab:"rep"}])}>${i18n("Открыть хранилище: состояние и пропуски")}</button></div></td></tr>`:"");
+    const first=`<td class="er-x"><input type="checkbox" ${edgeArchSel.has(st.id)?"checked":""} aria-label="${escHtml(locName(o||st))}" ${onEv("change",["edgeArchPickToggle",st.id])}></td>`;
+    const nameCell=`<td><button type="button" class="er-dev er-go" ${onEv("click",["pick",st.id,{tab:"rep"}])}>${name}</button></td>`;
+    return`<tr class="er-row ${edgeArchSel.has(st.id)?"sel":""}">${first}${nameCell}<td>${i18n(edgeType(p.type).name)}</td><td class="er-ell">${dest}</td><td>${edgeStatChip(s)}</td></tr>`;
   };
-  const bulk=!B&&edgeArchSel.size?`<div class="er-bulk"><b>${i18n("Отмечено")} ${edgeArchSel.size}</b><label>${i18n("Задать тип репликации")}</label><select ${onEv("change",["edgeArchBulk",a.id,onEv.value])}><option value="">${i18n("Выбрать тип…")}</option>${EDGE_TYPES.map(t=>`<option value="${t.id}">${i18n(t.name)}</option>`).join("")}</select><span class="sub">${i18n("Забранное ляжет в это хранилище.")}</span></div>`:"";
+  // Строка группового действия есть всегда: отметка строк меняет её текст, но не высоту — список не съезжает
+  const nSel=ids.filter(id=>edgeArchSel.has(id)).length;
+  const bulk=`<div class="er-bulk ${nSel?"on":""}" data-edge-bulk><b class="er-bulk-n">${nSel?`${i18n("Отмечено")} ${nSel}`:i18n("Ничего не отмечено")}</b><select aria-label="${i18n("Задать тип репликации")}" ${nSel?"":"disabled"} ${onEv("change",["edgeArchBulk",a.id,onEv.value])}><option value="">${i18n("Задать тип репликации…")}</option>${EDGE_TYPES.map(t=>`<option value="${t.id}">${i18n(t.name)}</option>`).join("")}</select><span class="sub er-ell">${nSel?i18n("Забранное ляжет в это хранилище."):i18n("Отметить устройства, чтобы задать тип сразу нескольким.")}</span></div>`;
   const tbl=`<table class="er-tbl"><colgroup><col style="width:44px"><col><col style="width:170px"><col style="width:180px"><col style="width:130px"></colgroup>
-    <thead><tr><th class="er-x">${B?"":`<input type="checkbox" ${allOn?"checked":""} aria-label="${i18n("Отметить все")}" ${onEv("change",["edgeArchPickAll",ids,onEv.checked])}>`}</th><th>${i18n("Устройство")}</th><th>${i18n("Тип репликации")}</th><th>${i18n("Куда")}</th><th>${i18n("Сейчас")}</th></tr></thead>
+    <thead><tr><th class="er-x"><input type="checkbox" ${allOn?"checked":""} aria-label="${i18n("Отметить все")}" ${onEv("change",["edgeArchPickAll",ids,onEv.checked])}></th><th>${i18n("Устройство")}</th><th>${i18n("Тип репликации")}</th><th>${i18n("Куда")}</th><th>${i18n("Сейчас")}</th></tr></thead>
     <tbody>${list.map(row).join("")}</tbody></table>`;
-  const hint=B?i18n("Раскрыть строку — настроить репликацию прямо здесь. Та же настройка есть во встроенном хранилище устройства.")
-    :i18n("Нажать на устройство — открыть его встроенное хранилище и настроить репликацию там. Отметить несколько — задать тип сразу всем.");
-  return card("Встроенные хранилища",intro+bulk+tbl+`<p class="sub" style="margin-top:10px">${hint}</p>`,varSw+`<span class="er-stub">${i18n("заглушка")}</span>`);
+  const hint=i18n("Нажать на устройство — открыть его встроенное хранилище и настроить репликацию там.");
+  return card("Встроенные хранилища",intro+bulk+tbl+`<p class="sub" style="margin-top:10px">${hint}</p>`,stub);
 }
 function camRecSelectHtml(n){
   const has=replicaSources(n,camArchs(n)[0]||{arch:n.arch}).length>0,cur=n.rec||"none";
