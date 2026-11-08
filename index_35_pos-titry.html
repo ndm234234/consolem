@@ -2284,6 +2284,8 @@ html[data-theme="light"] .cp-step{background:var(--one-control-hover);color:var(
 .pos-layer{position:absolute;inset:0;z-index:2}
 .pos-area{position:absolute;border:1.5px dashed #fff;outline:1px solid #0008;cursor:move;box-sizing:border-box}
 .pos-area.drag{border-style:solid}
+.pos-area.over{border-color:#f0a030}
+.pos-fit{position:absolute;left:8px;right:8px;top:8px;padding:3px 8px;border-radius:4px;background:#3a2a0ce6;color:#ffd58a;font-size:12px;line-height:1.35;pointer-events:none}
 .pos-txt{position:absolute;inset:0;overflow:hidden;white-space:pre;line-height:1.25;padding:2px 4px;pointer-events:none}
 .pos-txt mark{border-radius:2px;padding:0 1px}
 .pos-h{position:absolute;width:10px;height:10px;background:#fff;border:1px solid #1e2a3a;border-radius:2px}
@@ -15446,7 +15448,7 @@ function posTxtStyle(p){
 function posFit(){
   const t=document.querySelector("#main [data-pos-txt]"),note=document.querySelector("#main [data-pos-fit]");if(!t||!note)return;
   const over=t.scrollHeight>t.clientHeight+1||t.scrollWidth>t.clientWidth+1;
-  note.hidden=!over;
+  note.hidden=!over;t.parentElement.classList.toggle("over",over);
 }
 // Кадр с зоной: зона одна на камеру, на кадре — только зона выбранной камеры
 function posFrameHtml(n,p){
@@ -15457,7 +15459,7 @@ function posFrameHtml(n,p){
     <div class="pos-txt" data-pos-txt style="${posTxtStyle(p)}">${posLines(p).map(l=>`<div>${posHi(n,p,l.t)||"&nbsp;"}</div>`).join("")}</div>
     ${["nw","ne","sw","se"].map(h=>`<i class="pos-h pos-h-${h}" data-h="${h}"></i>`).join("")}</div>`;
   setTimeout(posFit,0);
-  return liveFrameHtml(cam,`<div class="pos-layer">${area}</div>`).replace('class="vid live-frame"','class="vid live-frame pos-vid"');
+  return liveFrameHtml(cam,`<div class="pos-layer">${area}<div class="pos-fit" data-pos-fit role="status" hidden>${i18n("Строки чека не помещаются в зону. Увеличить зону или уменьшить шрифт.")}</div></div>`).replace('class="vid live-frame"','class="vid live-frame pos-vid"');
 }
 function posCamsHtml(n,p){
   const free=overlayCameras(n).filter(c=>!p.cams.includes(c.id));
@@ -15469,7 +15471,6 @@ function posPreviewCard(n,p){
   const nums=a?`<div class="pos-nums">${[["x","Слева"],["y","Сверху"],["w","Ширина"],["h","Высота"]].map(([k,l])=>`<label>${i18n(l)}, %<input type="number" min="0" max="100" value="${pc(a[k])}" ${onEv("change",["posAreaNum",`${n.id}`,k,onEv.value])}></label>`).join("")}</div>`:"";
   return card("Титры на камере",`${posCamsHtml(n,p)}
     ${posFrameHtml(n,p)}
-    <div class="nt" data-pos-fit hidden>${i18n("Строки чека не помещаются в зону. Увеличить зону или уменьшить шрифт.")}</div>
     ${a?`<p class="sub">${i18n("Перетащить зону на кадре. Чтобы изменить размер, тянуть за угол.")}</p>
     <div class="pos-presets">${POS_PRESETS.map(([k,l])=>`<button type="button" class="btn s" ${onEv("click",["posPreset",`${n.id}`,k])}>${i18n(l)}</button>`).join("")}${p.cams.length>1?`<button type="button" class="btn s" ${onEv("click",["posAreaAll",`${n.id}`])}>${i18n("Эту зону — всем камерам")}</button>`:""}</div>${nums}`:""}
     <p class="sub">${i18n("В зоне — пример: последние строки от кассы с вашими настройками. Клиент оператора показывает титры поверх живого видео и архива и не добавляет текст в само видео.")}</p>`);
