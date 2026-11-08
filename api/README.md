@@ -79,7 +79,7 @@
 | `access` | `GET /access` — снимок прав (`Role.kindAccess` по классам доступа); `POST /access/apply` — черновик пакетом; `POST /access/catalogs/{id}/sync`; страницами — `GET /access/users`, `/access/groups`, `/access/history`, `/access/cell-history`, `/access/roles/{id}/objects` |
 | `access` — учётки потоков | `GET`, `POST /stream-accounts`; `PATCH`, `DELETE /stream-accounts/{name}`; `POST /stream-accounts/{name}/password` |
 | `settings`, `journal` | `GET`, `PATCH /settings`; `GET /licenses`; `GET /journal` |
-| `assist` | `POST /assist/turns` — ход разговора с ассистентом, ответ потоком (SSE); мир ассистента — `kinds` + `units` |
+| `assist` | `POST /assist/turns` — ход разговора с ассистентом, ответ потоком (SSE); мир ассистента — `kinds` + `units`; учебные ссылки `answer.learn` — только когда глава каталога нашлась, иначе прежний разбор (`BACKEND.md`) |
 | `stream` | `GET /stream` — поток событий (SSE); `PUT /stream/{clientId}/watch` — что наблюдает поток |
 | `test-support` | `POST /test/reset`, `/test/clock`, `/test/events`, `/test/stream-elsewhere`; `PUT /test/kinds/{kind}` (описание вида на ходу — `kinds.changed`) — только на тестовом стенде |
 
