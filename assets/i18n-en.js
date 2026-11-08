@@ -1591,6 +1591,8 @@ window.I18N_EN={
 "Ассистент предложил учебный пример. В этой консоли нет раздела «Обучение», поэтому показа нет.":"The assistant suggested a training example. This console has no “Learning” section, so there is no demo.",
 "Ассистент сослался на другую версию учебного каталога. Консоль не запустила пример: глава могла измениться. Выбрать главу в каталоге этой консоли.":"The assistant referred to another version of the learning catalog. The console did not start the example: the chapter could have changed. Select a chapter in the catalog of this console.",
 "Такой главы нет в учебном каталоге этой консоли. Консоль не запустила пример. Выбрать главу в каталоге.":"This chapter is not in the learning catalog of this console. The console did not start the example. Select a chapter in the catalog.",
+"Готовые учебные главы работают без ассистента: раздел «Обучение» и поиск в шапке.":"The ready training chapters work without the assistant: the “Learning” section and the search in the header.",
+"Открыть «Обучение»":"Open “Learning”",
 "Такой главы нет в этой теме. Консоль открыла тему":"This topic has no such chapter. The console opened the topic",
 "Такой темы нет в учебном каталоге. Консоль открыла раздел «Обучение»":"The learning catalog has no such topic. The console opened the “Learning” section",
 "Это конец темы. Её можно посмотреть снова или попробовать самому на тех же учебных данных.":"This is the end of the topic. You can watch it again or try it yourself on the same training data.",

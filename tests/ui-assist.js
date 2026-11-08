@@ -589,11 +589,18 @@ UiCheck(async ({ ok, until }) => {
     ok(asst.learn.every((l) => Object.keys(l).join() === "catalog,topic,chapter"), "из ссылки взяты только catalog, topic, chapter");
     asstEvent(asst, { type: "answer", text: "ответ без ссылок", context: "c" });
     ok(!learnBox() && document.getElementById("asstAnswer").textContent === "ответ без ссылок", "старый answer без learn — обычный ответ");
+    // Модель не ответила: готовые главы работают без неё
+    say("сбой");
+    ok(await until(() => document.getElementById("asstErr") && document.getElementById("asstLearnAlt")), "ассистент недоступен: предложены раздел «Обучение» и поиск");
+    document.querySelector("#asstLearnAlt button").click();
+    ok(app === "learn", "кнопка открыла раздел «Обучение»");
     goApp("hw");
   } else {
     // Сборка без обучения: показа нет, кнопки нет, объяснение
     asstEvent(asst, { type: "answer", text: "ответ", context: "c", learn: [{ catalog: "sha256:" + "0".repeat(64), topic: "rules", chapter: "rules.simple" }] });
     ok(learnBox()?.querySelector('[data-learn-state="nocat"]') && !learnBox().querySelector("button"), "без обучения: карточки и кнопки нет, объяснение");
+    say("сбой");
+    ok(await until(() => document.getElementById("asstErr")) && !document.getElementById("asstLearnAlt"), "без обучения: раздел «Обучение» не предлагается");
   }
   ok(!document.querySelector("#asstDock [onerror], #asstDock [onclick]") && !/<img/i.test(dockHtml()), "в разметке панели нет элементов и атрибутов из ответа");
   goClose();

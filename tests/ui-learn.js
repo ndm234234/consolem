@@ -147,6 +147,9 @@ UiCheck(async ({ ok, until }) => {
       ok(d.querySelector(".tour-mode")?.textContent.includes("Учебные данные"), `«${t.title}»: видна полоса учебного режима`);
       const urls = w.performance.getEntriesByType("resource").map((e) => e.name);
       ok(!urls.some((u) => u.startsWith(API_ADDR)), `«${t.title}»: запросов к адресу API нет`);
+      // Без внешних обращений: только файлы своей страницы — показ работает без интернета и внешней службы
+      const away = urls.filter((u) => !/^(file|data|blob):/.test(u) && new URL(u).origin !== location.origin);
+      ok(!away.length, `«${t.title}»: внешних обращений нет` + (away.length ? ": " + away[0] : ""));
       ok(w.localStorage.getItem(SENTRY) === null && w.localStorage.getItem(TREE_OPEN_LS) !== localStorage.getItem(TREE_OPEN_LS), `«${t.title}»: черновики и папки в показ не попали`);
       ok(w.localStorage.getItem(THEME) === "light", `«${t.title}»: тема пришла в показ`);
       w.localStorage.setItem(SENTRY, "из показа");
