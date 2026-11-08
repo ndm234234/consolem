@@ -692,12 +692,13 @@ div.exp-ln{display:flex;align-items:center;padding:8px 0}
 @media(prefers-reduced-motion:reduce){.joy-knob{transition:none}}
 /* Прототип 36: туры PTZ — вкладки «Пресеты | Туры», список, редактор */
 .cv-dot{width:7px;height:7px;border-radius:50%;background:var(--one-success-text,#3c3);display:inline-block;align-self:center}.cv-dot.pause{background:var(--one-warning-text)}.cv-dot[hidden]{display:none}
-.cv-sec-n{font-weight:400;font-size:12px;color:var(--mu)}
-.cv-sec-h .cv-tour-new{margin-left:auto;font-weight:400}
-.cv-pre{flex:1 1 0;min-height:110px}
-.cv-tours{flex:0 1 auto;max-height:38%;min-height:0;display:flex;flex-direction:column}
-.cv-tours .cv-sec-h{margin-bottom:4px;align-items:center}
-.cv-trl{flex:0 1 auto}
+.cv-tabs{display:flex;gap:2px;margin:-2px 0 8px;border-bottom:1px solid var(--ln)}
+.cv-tabs button{position:relative;border:0;background:none;color:var(--mu);font:inherit;font-size:13px;font-weight:600;padding:4px 8px 6px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;display:flex;align-items:center;gap:6px;transition:color .2s,border-color .2s}
+.cv-tabs button span{font-weight:400;font-size:12px;color:var(--mu)}
+.cv-tabs button[aria-selected="true"]{color:var(--tx);border-bottom-color:var(--bl)}
+.cv-tabs button:focus-visible{outline:2px solid var(--bl);outline-offset:-2px;border-radius:4px}
+.cv-tab-body{flex:1;min-height:0;display:flex;flex-direction:column}
+.cv-tab-body.cv-in{animation:cv-in .25s ease}
 .cv-ed{flex:1;min-height:0}
 .cv-side-in.cv-in{animation:cv-in .3s ease}
 @keyframes cv-in{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:none}}
@@ -735,7 +736,7 @@ div.exp-ln{display:flex;align-items:center;padding:8px 0}
 .cv-te-f{display:flex;gap:6px;align-items:center;padding-top:8px;border-top:1px solid var(--ln)}.cv-te-f .btn{white-space:nowrap}
 .cv-tour-ov{position:absolute;left:8px;top:8px;z-index:2;max-width:calc(100% - 16px);background:#000a;color:#fff;font-size:12px;padding:3px 8px;border-radius:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
 .cv-tour-ov.pause{background:color-mix(in srgb,#000 55%,var(--one-warning-text))}
-@media(prefers-reduced-motion:reduce){.cv-ts li{transition:none}.cv{transition:none}.cv-side-in.cv-in{animation:none}}
+@media(prefers-reduced-motion:reduce){.cv-ts li{transition:none}.cv{transition:none}.cv-side-in.cv-in,.cv-tab-body.cv-in{animation:none}.cv-tabs button{transition:none}}
 .mx{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}.mc{padding:10px;background:var(--p2);border:1px solid var(--ln);border-radius:8px;font-size:12px;text-align:left}.mc span{color:var(--mu);display:block}.mc b{font-size:18px;font-weight:700;display:block;margin-top:4px}
 button.mc{font:inherit;color:inherit;cursor:pointer;width:100%}
 button.mc:hover{border-color:var(--bl);background:var(--one-control-hover)}
@@ -15480,14 +15481,31 @@ function cvJoyKey(id){
 // ── Пресеты рядом с видео ─────────────────────────────────────────────────
 // Строка: номер, имя (правится на месте), «Перейти», «Запомнить сюда», удалить. Внизу — новый пресет: имя и
 // «Запомнить положение» (следующий свободный номер, нынешнее положение камеры)
-// Пресеты и туры видны вместе: тур собирают из пресетов, и запустить тур можно одним нажатием.
-// Редактор тура занимает всю боковую панель (видео остаётся на экране) и уходит по «Сохранить» или «Отмена».
+// Пресеты и туры — вкладки одной панели: тур собирают из пресетов, поэтому они рядом.
+// Редактор тура занимает всю боковую панель без вкладок (видео остаётся на экране) и уходит по «Сохранить» или «Отмена».
+let cvSideTab="pre";
 function cvPresetsHtml(n){
   if(cvTourEdit?.id===n.id)return`<section class="cv-sec cv-pre cv-ed">${cvTourEditorHtml(n,cvTourEdit.t)}</section>`;
-  const list=presetRows(n);
-  return`<section class="cv-sec cv-pre"><div class="cv-sec-h">${i18n("Пресеты")}<span class="sub">${list.length}${n.presetMax?` ${i18n("из")} ${n.presetMax}`:""}</span></div>${cvPresetListHtml(n)}</section>
-    <section class="cv-sec cv-tours">${cvToursHtml(n)}</section>`;
+  return`<section class="cv-sec cv-pre">${cvSideTabsHtml(n)}<div class="cv-tab-body" data-cv-tab-body>${cvSideTab==="tours"?cvToursHtml(n):cvPresetListHtml(n)}</div></section>`;
 }
+function cvSideTabsHtml(n){
+  const st=cvToursOf(n),run=st.run,pl=presetRows(n).length;
+  const tab=(k,l,c,extra="")=>`<button type="button" role="tab" id="cv-tab-${k}" aria-selected="${cvSideTab===k}" tabindex="${cvSideTab===k?0:-1}" data-cv-tab="${k}" ${onEv("click",["cvSideTabSet",`${n.id}`,k])} ${onEv("keydown",["cvSideTabKey",`${n.id}`])}>${i18n(l)}<span>${c}</span>${extra}</button>`;
+  return`<div class="cv-tabs" role="tablist" aria-label="${i18n("Пресеты и туры")}">${tab("pre","Пресеты",`${pl}${n.presetMax?` ${i18n("из")} ${n.presetMax}`:""}`)}${tab("tours","Туры",st.tours.length,`<i class="cv-dot ${run?.paused?"pause":""}" data-cv-tour-dot ${run?"":"hidden"} title="${i18n(run?.paused?"Тур на паузе":"Тур идёт")}"></i>`)}</div>`;
+}
+// Смена вкладки — только содержимое панели, с проявлением; видео и джойстик не трогает
+function cvSideTabSet(id,k){
+  if(cvSideTab===k)return;cvSideTab=k;
+  const n=find(id)?.n;if(!n)return;
+  const body=document.querySelector("#main [data-cv-tab-body]"),tabs=document.querySelector("#main .cv-tabs");
+  if(!body||!tabs){cvSidePaint(n,true);return}
+  tabs.outerHTML=cvSideTabsHtml(n);
+  body.innerHTML=k==="tours"?cvToursHtml(n):cvPresetListHtml(n);
+  body.classList.remove("cv-in");void body.offsetWidth;body.classList.add("cv-in");
+  document.getElementById("cv-tab-"+k)?.focus();mainSeen.html=null;
+}
+// Стрелки влево и вправо переключают вкладки, как в обычном tablist
+function cvSideTabKey(id){const e=onEv.now;if(e.key!=="ArrowLeft"&&e.key!=="ArrowRight")return;e.preventDefault();e.stopPropagation();cvSideTabSet(id,cvSideTab==="pre"?"tours":"pre")}
 // Боковая панель без перерисовки вкладки: тот же блок .cv, поэтому ширина колонки меняется плавно (transition),
 // а видео не перезапускается. anim — новое содержимое проявляется; без него (правка в редакторе) — сразу.
 function cvSidePaint(n,anim){
@@ -15551,9 +15569,8 @@ function cvToursHtml(n){
         <small>${on?cvTourRunText(n,t,run):`${t.steps.length} ${i18n(plural(t.steps.length,"точка|точки|точек"))} · ${i18n("круг")} ${cvDur(cvTourCycle(t))}${t.order==="random"?` · ${i18n("случайно")}`:""}${st.idleTour===t.id?` · ${i18n("сам через")} ${cvDur(st.idleSec)}`:""}`}${bad?` · <span class="cv-bad">${i18n("ошибка")}</span>`:""}</small></button>
       <button type="button" class="btn s btn-icon" title="${i18n("Удалить тур")}" aria-label="${escHtml(`${i18n("Удалить тур")} ${t.name}`)}" ${onEv("click",["cvTourDel",`${n.id}`,t.id])}>${lu("trash",14)}</button>
       <button type="button" class="lk cv-tr-resume" data-tour-resume ${on&&run.paused?"":"hidden"} ${onEv("click",["cvTourResume",`${n.id}`])}>${lu("circle-play",13)}${i18n("Продолжить тур сейчас")}</button></li>`}).join("");
-  return`<div class="cv-sec-h">${i18n("Туры")}<span class="cv-sec-n">${st.tours.length}</span><i class="cv-dot ${run?.paused?"pause":""}" data-cv-tour-dot ${run?"":"hidden"} title="${i18n(run?.paused?"Тур на паузе":"Тур идёт")}"></i>
-      <button type="button" class="btn s cv-tour-new" ${few?"disabled":""} title="${i18n(few?"Нужно не меньше двух пресетов":"Собрать новый тур из пресетов")}" ${onEv("click",["cvTourNew",`${n.id}`])}>${lu("plus",13)}${i18n("Тур")}</button></div>
-    ${st.tours.length?`<ul class="cv-pl cv-trl" data-keep-scroll>${rows}</ul>`:`<p class="sub cv-pl-empty">${i18n(few?"Тур собирают из пресетов. Сначала запомнить хотя бы два пресета":"Туров нет. Тур водит камеру по пресетам по очереди")}</p>`}`;
+  return`${st.tours.length?`<ul class="cv-pl cv-trl" data-keep-scroll>${rows}</ul>`:`<p class="sub cv-pl-empty">${i18n(few?"Тур собирают из пресетов. Сначала запомнить хотя бы два пресета":"Туров нет. Тур водит камеру по пресетам по очереди")}</p>`}
+    <div class="cv-pre-add"><button type="button" class="btn s pri" ${few?"disabled":""} title="${i18n(few?"Нужно не меньше двух пресетов":"Собрать новый тур из пресетов")}" ${onEv("click",["cvTourNew",`${n.id}`])}>${lu("plus",14)}${i18n("Тур")}</button></div>`;
 }
 function cvTourRunText(n,t,run){
   const s=t.steps[run.step];
