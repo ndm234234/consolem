@@ -7060,7 +7060,7 @@ registerJumpSource(()=>accCats().map(c=>({kind:"Каталог",title:c.n,sub:c.
   go(){goApp("acc");accGo("cat:"+c.id)}})));
 registerJumpSource(()=>rules.map(r=>({kind:"Правило",title:r.name,sub:i18n(r.on?(r.watch?"Только журнал":"Работает"):"Выключено"),icon:"svcs",goId:"rule:"+r.id,
   go(){goApp("rules");ruleOpen(r.id,true)}})));
-registerJumpSource(()=>learnShown()?learnTopics().flatMap((tp,k)=>tp.chapters.map((c,n)=>({kind:"Обучение",title:i18n(c.title),sub:i18n(tp.title),icon:"svcs",goId:`learn:${k}.${n}`,go(){learnLink(`${k}.${n}`)}}))):[]);
+registerJumpSource(()=>learnShown()?learnTopics().flatMap(tp=>tp.chapters.map(c=>({kind:"Обучение",title:i18n(c.title),sub:i18n(tp.title),icon:"svcs",goId:`learn:${c.id}`,go(){learnLink(c.id)}}))):[]);
 registerJumpSource(()=>logCats.map(c=>({kind:"Журнал",title:c.n,sub:i18n("Категория журнала"),icon:"svcs",goId:"log:"+c.id,
   go(){goApp("log");logGo(c.id)}})));
 registerJumpSource(()=>{                          // закладки выбранного объекта
@@ -10953,21 +10953,26 @@ function treeOpts(){const q=qval();if(q!==optLastQ){optLastQ=q;if(app==="sys")qu
 // Раздел открывает сам человек: без автозапуска. Содержание — assets/tour-demos.js, движок — assets/tour.js.
 // Показ идёт в учебном режиме (?demo): перезагрузка на встроенном сервере, настоящая система не участвует.
 // В сборке для консоли сервер показа грузится только при ?demo; с --without-learn движка и раздела нет.
+// Адрес в разделе — ID (Tour.ID): «home», тема «rules», глава «rules.simple». Номер в массиве — не адрес.
 let learnSel="home";
 const learnOpen=new Set();
 function learnTopics(){return window.Tour?.topics||[]}
 function learnShown(){return!!window.Tour&&(window.Tour.lazy||typeof ConsolemServer!=="undefined")}
-function learnParse(id){const[a,b]=String(id).split(".");const tp=learnTopics()[+a];return{k:tp?+a:null,tp:tp||null,c:b==null||!tp?null:+b,ch:tp&&b!=null?tp.chapters[+b]||null:null}}
+// {k, tp, c, ch}: k и c — номера на этой странице (соседние главы), tp и ch — тема и глава по ID; нет такой — null
+function learnParse(id){
+  const s=String(id),dot=s.indexOf("."),hit=window.Tour?.find?.(dot<0?s:s.slice(0,dot),dot<0?null:s)||null;
+  return{k:hit?hit.k:null,tp:hit?.topic||null,c:hit?.c??null,ch:hit?.chapter||null};
+}
 function learnTitle(id){const{tp,ch}=learnParse(id);return ch?i18n(ch.title):tp?i18n(tp.title):""}
 function learnCount(n,forms){return`${n} ${i18n(plural(n,forms))}`}
 function learnMins(s){return`${i18n("около")} ${Math.max(1,Math.round(s/60))} ${i18n("мин")}`}
-function learnSelect(id){learnSel=id;const{k}=learnParse(id);if(k!=null)learnOpen.add(k);paint()}
+function learnSelect(id){learnSel=id;const{tp}=learnParse(id);if(tp)learnOpen.add(tp.id);paint()}
 function learnTree(id){
-  const{k,c}=learnParse(id);
-  if(k!=null&&c==null&&learnSel===id){if(learnOpen.has(k))learnOpen.delete(k);else learnOpen.add(k);paint();return}
+  const{tp,ch}=learnParse(id);
+  if(tp&&!ch&&learnSel===id){if(learnOpen.has(tp.id))learnOpen.delete(tp.id);else learnOpen.add(tp.id);paint();return}
   learnSelect(id);
 }
-function learnToggle(k){if(learnOpen.has(k))learnOpen.delete(k);else learnOpen.add(k);renderTree()}
+function learnToggle(tid){if(learnOpen.has(tid))learnOpen.delete(tid);else learnOpen.add(tid);renderTree()}
 // Переход по ссылке моргает на месте прихода: заголовок и строка дерева
 function learnLink(id){
   navMark();
@@ -10975,51 +10980,53 @@ function learnLink(id){
   learnSelect(id);
   accFlash(()=>[document.querySelector(".hd h1"),document.querySelector("#tree .n.on")].filter(Boolean));
 }
-// #learn=2 или #learn=2.1: сюда возвращает выход из показа
+// #learn=rules или #learn=rules.simple: сюда возвращает выход из показа. Главы нет — её тема, темы нет — первый экран
+// раздела; ближайшую по номеру консоль не берёт. Прежний адрес по номерам (#learn=2.1) — тоже первый экран: номер не ID
 function learnFromHash(){
   if(window.Tour?.demo)return;
-  const m=/^#learn=(\d+(?:\.\d+)?)$/.exec(location.hash);if(!m||!learnShown())return;
+  const m=/^#learn=([\w.-]+)$/.exec(location.hash);if(!m||!learnShown())return;
   const u=new URL(location.href),lang=u.searchParams.get("lang");
   u.searchParams.delete("lang");
   history.replaceState(history.state,"",u.pathname+u.search);
   if(lang==="en")setUiLang("en");
-  const{k,c,ch}=learnParse(m[1]);if(k==null)return;
-  learnSel=ch?`${k}.${c}`:String(k);learnOpen.add(k);setApp("learn");
+  const want=m[1],{tp,ch}=want==="home"?{}:learnParse(want);
+  learnSel=ch?ch.id:tp?tp.id:"home";if(tp)learnOpen.add(tp.id);setApp("learn");
   accFlash(()=>[document.querySelector(".hd h1"),document.querySelector("#tree .n.on")].filter(Boolean),true);
+  if(want!=="home"&&learnSel!==want)toast(i18n(tp?"Такой главы нет в этой теме. Консоль открыла тему":"Такой темы нет в учебном каталоге. Консоль открыла раздел «Обучение»"));
 }
-function learnPlay(k,c){window.Tour.play(k,c)}
+function learnPlay(tid,cid){window.Tour.play(tid,cid)}
 function treeLearn(){
   const q=qval();
   let h=matchesText(q,i18n("С чего начать"))?`<div class="n ${learnSel==="home"?"on":""}" data-go="learn:home" ${onEv("click",["learnTree","home"])}><span class="tw"></span><span class="ici">${lu("graduation-cap")}</span><span class="nm">${hlText(i18n("С чего начать"),q)}</span></div>`:"";
-  learnTopics().forEach((tp,k)=>{
-    const chs=tp.chapters.map((c,n)=>({c,n})).filter(({c})=>matchesText(q,i18n(c.title),i18n(tp.title)));
+  learnTopics().forEach(tp=>{
+    const chs=tp.chapters.filter(c=>matchesText(q,i18n(c.title),i18n(tp.title)));
     if(!chs.length)return;
-    const op=learnOpen.has(k)||!!q;
-    h+=`<div class="n ${learnSel===String(k)?"on":""}" data-go="learn:${k}" ${onEv("click",["learnTree",`${k}`])}><span class="tw" ${onEv("click",onEv.stop,["learnToggle",k])}>${op?TW_OPEN:TW_SHUT}</span><span class="ici">${lu("book-open")}</span><span class="nm">${hlText(i18n(tp.title),q)}</span>${treeCntHtml(tp.chapters.length)}</div>`;
-    if(op)h+=chs.map(({c,n})=>`<div class="n ${learnSel===`${k}.${n}`?"on":""}" style="--l:1" data-go="learn:${k}.${n}" ${onEv("click",["learnTree",`${k}.${n}`])}><span class="tw"></span><span class="ici">${lu("play")}</span><span class="nm">${hlText(i18n(c.title),q)}</span></div>`).join("");
+    const op=learnOpen.has(tp.id)||!!q;
+    h+=`<div class="n ${learnSel===tp.id?"on":""}" data-go="learn:${escHtml(tp.id)}" ${onEv("click",["learnTree",tp.id])}><span class="tw" ${onEv("click",onEv.stop,["learnToggle",tp.id])}>${op?TW_OPEN:TW_SHUT}</span><span class="ici">${lu("book-open")}</span><span class="nm">${hlText(i18n(tp.title),q)}</span>${treeCntHtml(tp.chapters.length)}</div>`;
+    if(op)h+=chs.map(c=>`<div class="n ${learnSel===c.id?"on":""}" style="--l:1" data-go="learn:${escHtml(c.id)}" ${onEv("click",["learnTree",c.id])}><span class="tw"></span><span class="ici">${lu("play")}</span><span class="nm">${hlText(i18n(c.title),q)}</span></div>`).join("");
   });
   return h||`<div class="sub rl-none">${i18n("Ничего не найдено")}</div>`;
 }
 function learnCrumbs(parts){return parts.map(([id,t],i)=>i===parts.length-1?`<span class="cr-it cr-last"><span class="cr-cur">${escHtml(t)}</span></span>`:`<button type="button" class="as-link" ${onEv("click",["learnLink",id])}>${escHtml(t)}</button><span class="sub lrn-sep" aria-hidden="true">›</span>`).join("")}
-function learnPlayBtn(k,c,label,pri=true){return`<button type="button" class="btn ${pri?"pri":""} s" ${onEv("click",["learnPlay",k,c])}>${lu("play")}${i18n(label)}</button>`}
+function learnPlayBtn(tid,cid,label,pri=true){return`<button type="button" class="btn ${pri?"pri":""} s" ${onEv("click",["learnPlay",tid,cid])}>${lu("play")}${i18n(label)}</button>`}
 function learnUI(){
-  const{k,tp,c,ch}=learnParse(learnSel);
+  const{tp,c,ch}=learnParse(learnSel);
   if(ch){
     const steps=tp.steps.slice(ch.from,ch.to+1),prev=tp.chapters[c-1],next=tp.chapters[c+1];
-    paintMain(mainHd(learnCrumbs([["home",i18n("Обучение")],[`${k}`,i18n(tp.title)],[learnSel,i18n(ch.title)]]),i18n(ch.title),"",null,learnPlayBtn(k,c,"Смотреть"))+
+    paintMain(mainHd(learnCrumbs([["home",i18n("Обучение")],[tp.id,i18n(tp.title)],[learnSel,i18n(ch.title)]]),i18n(ch.title),"",null,learnPlayBtn(tp.id,ch.id,"Смотреть"))+
       `<div class="sc lrn"><p class="lrn-why">${escHtml(i18n(ch.why))}</p>
       <p class="sub lrn-meta">${learnCount(steps.length,"шаг|шага|шагов")} · ${learnMins(ch.secs)} · ${i18n("на учебных данных")}${uiLang==="ru"?"":` · ${i18n("показ на русском языке")}`}</p>
       <div class="card"><div class="ch">${i18n("Что покажем")}</div><ol class="lrn-steps">${steps.map(s=>`<li>${escHtml(i18n(s.say))}</li>`).join("")}</ol></div>
-      <div class="lrn-nav">${prev?`<button type="button" class="as-link" ${onEv("click",["learnLink",`${k}.${c-1}`])}>‹ ${escHtml(i18n(prev.title))}</button>`:"<span></span>"}${next?`<button type="button" class="as-link" ${onEv("click",["learnLink",`${k}.${c+1}`])}>${escHtml(i18n(next.title))} ›</button>`:""}</div></div>`);
+      <div class="lrn-nav">${prev?`<button type="button" class="as-link" ${onEv("click",["learnLink",prev.id])}>‹ ${escHtml(i18n(prev.title))}</button>`:"<span></span>"}${next?`<button type="button" class="as-link" ${onEv("click",["learnLink",next.id])}>${escHtml(i18n(next.title))} ›</button>`:""}</div></div>`);
     return;
   }
   if(tp){
-    paintMain(mainHd(learnCrumbs([["home",i18n("Обучение")],[`${k}`,i18n(tp.title)]]),i18n(tp.title),"",null,learnPlayBtn(k,null,"Смотреть всю тему"))+
+    paintMain(mainHd(learnCrumbs([["home",i18n("Обучение")],[tp.id,i18n(tp.title)]]),i18n(tp.title),"",null,learnPlayBtn(tp.id,null,"Смотреть всю тему"))+
       `<div class="sc lrn"><p class="lrn-why">${escHtml(i18n(tp.why))}</p>
       <p class="sub lrn-meta">${learnCount(tp.chapters.length,"глава|главы|глав")} · ${learnMins(tp.secs)} · ${i18n("на учебных данных")}${uiLang==="ru"?"":` · ${i18n("показ на русском языке")}`}</p>
       <div class="card"><table class="lrn-tbl"><colgroup><col class="lrn-c1"><col><col class="lrn-c3"><col class="lrn-c4"></colgroup>
       <tr><th>${i18n("Глава")}</th><th>${i18n("Зачем это нужно")}</th><th>${i18n("Время")}</th><th></th></tr>
-      ${tp.chapters.map((x,n)=>`<tr><td><button type="button" class="as-link" ${onEv("click",["learnLink",`${k}.${n}`])}>${escHtml(i18n(x.title))}</button></td><td class="sub">${escHtml(i18n(x.why))}</td><td class="sub">${learnMins(x.secs)}</td><td>${learnPlayBtn(k,n,"Смотреть",false)}</td></tr>`).join("")}</table></div></div>`);
+      ${tp.chapters.map(x=>`<tr><td><button type="button" class="as-link" ${onEv("click",["learnLink",x.id])}>${escHtml(i18n(x.title))}</button></td><td class="sub">${escHtml(i18n(x.why))}</td><td class="sub">${learnMins(x.secs)}</td><td>${learnPlayBtn(tp.id,x.id,"Смотреть",false)}</td></tr>`).join("")}</table></div></div>`);
     return;
   }
   paintMain(mainHd("",`<span class="hd-ic">${lu("graduation-cap")}</span>${i18n("Обучение")}`,"")+
@@ -11029,7 +11036,7 @@ function learnUI(){
       <div><b>${i18n("Показом управляете вы")}</b><span class="sub">${i18n("Пауза, шаг назад и вперёд, скорость. Клавиша Esc закрывает показ.")}</span></div>
       <div><b>${i18n("Можно попробовать самому")}</b><span class="sub">${i18n("После главы страница остаётся на учебных данных. Можно нажимать что угодно.")}</span></div>
     </div>
-    <div class="lrn-grid">${learnTopics().map((t,n)=>`<div class="card lrn-topic"><button type="button" class="as-link lrn-t" ${onEv("click",["learnLink",`${n}`])}>${escHtml(i18n(t.title))}</button><p class="sub">${escHtml(i18n(t.why))}</p><div class="lrn-foot"><span class="sub">${learnCount(t.chapters.length,"глава|главы|глав")} · ${learnMins(t.secs)}</span>${learnPlayBtn(n,null,"Смотреть")}</div></div>`).join("")}</div></div>`);
+    <div class="lrn-grid">${learnTopics().map(t=>`<div class="card lrn-topic"><button type="button" class="as-link lrn-t" ${onEv("click",["learnLink",t.id])}>${escHtml(i18n(t.title))}</button><p class="sub">${escHtml(i18n(t.why))}</p><div class="lrn-foot"><span class="sub">${learnCount(t.chapters.length,"глава|главы|глав")} · ${learnMins(t.secs)}</span>${learnPlayBtn(t.id,null,"Смотреть")}</div></div>`).join("")}</div></div>`);
 }
 function treeLog(){const q=qval();return logCats.filter(c=>matchesText(q,c.n)).map(c=>`<div class="n ${logFilt===c.id?"on":""}" data-go="log:${c.id}" ${onEv("click",["logGo",c.id])}><span class="tw"></span><span class="ici">${lu("scroll-text")}</span><span class="nm">${hlText(c.n,q)}</span></div>`).join("")}
 

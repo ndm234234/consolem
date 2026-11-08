@@ -1,7 +1,10 @@
 /* Обучение: виртуальный курсор сам проходит задачу в настоящем интерфейсе, а подпись объясняет каждый шаг.
    Темы задаёт assets/tour-demos.js: Tour.add({id, title, why, steps}), в конце Tour.start(). Глава начинается шагом с полем ch:{title, why}.
-   Шаг: {say:"текст", at:()=>элемент, act:"click"|"type", text:"что ввести", before:()=>…, ch:{…}}.
-   ?tour=K&demo=N — тема K (с 1), шаг N (с 0). &play — идти сразу, без него ждать на шаге; &all — вся тема, без остановок между главами.
+   Шаг: {say:"текст", at:()=>элемент, act:"click"|"type", text:"что ввести", before:()=>…, ch:{id, title, why}}.
+   У темы и главы — устойчивые ID (Tour.ID): глава — «<тема>.<глава>», например rules.simple. Позиция в массиве не адрес.
+   ?tour=<тема>&ch=<глава> — показ главы, &all — вся тема без остановок между главами; &demo=N — шаг N темы (с 0), с ним показ
+   продолжает после «Назад». &play — идти сразу, без него ждать на шаге. Неизвестная тема или глава — показ не идёт, ближайшую
+   по номеру консоль не берёт; прежние номера (?tour=1, #learn=0.1) тоже не адрес.
    Учебный режим — это ?demo в адресе: страница работает на встроенном сервере (см. API в index.html), localStorage — копия в памяти,
    настоящие черновики и настройки не меняются. Данные живут до перезагрузки: запуск и «Назад» перезагружают страницу и быстро проходят шаги до нужного.
    В сборке для консоли (tools/build_webui.py) сервер показа лежит в demo/ и грузится только при ?demo; с --without-learn раздела нет.
@@ -117,27 +120,28 @@
     } catch {}
   };
   // Показ всегда на чистых данных: сценарий рассчитан на набор, каким он был при загрузке
-  const urlFor = (params) => {
-    const u = new URL(location.href);
-    ["tour", "demo", "play", "all", "demoFail"].forEach((k) => u.searchParams.delete(k));
+  const urlFor = (params, from) => {
+    const u = new URL(from || location.href);
+    ["tour", "ch", "demo", "play", "all", "demoFail"].forEach((k) => u.searchParams.delete(k));
     Object.entries(params).forEach(([k, v]) => u.searchParams.set(k, String(v)));
     // Без якоря: адрес с одним только якорем страницу не перезагрузит
     u.hash = "";
     return u;
   };
-  const leave = (k, c) => {
+  // Выход: раздел «Обучение» на той же главе (ID), без темы — на первом экране раздела
+  const leave = (tid, cid) => {
     const u = urlFor({});
-    u.hash = `learn=${c == null ? k : `${k}.${c}`}`;
+    u.hash = `learn=${cid || tid || "home"}`;
     // Без записи в историю: «Назад» после выхода не запускает показ снова
     location.replace(u.href);
   };
 
-  function run(topic, k, startAt, opts) {
+  function run(topic, startAt, opts) {
     const steps = topic.steps, chapters = topic.chapters, last = steps.length - 1;
     const chOf = (at) => Math.max(0, chapters.findIndex((c) => at >= c.from && at <= c.to));
     let ch = chOf(startAt), from = opts.all ? 0 : chapters[ch].from, to = opts.all ? last : chapters[ch].to, nextCh = false;
     const reloadAt = (step, play) => {
-      location.href = urlFor({ tour: k + 1, demo: step, ...(play ? { play: 1 } : {}), ...(opts.all ? { all: 1 } : {}) }).href;
+      location.href = urlFor({ tour: topic.id, ...(opts.all ? { all: 1 } : { ch: chapters[chOf(step)].id }), demo: step, ...(play ? { play: 1 } : {}) }).href;
     };
     let i = 0, paused = false, stopped = false, skip = false, back = false, ended = false, target = null, goal = null, corner = "bl", flyTimer = 0, pinned = false, triedAt = null, frame = 0, speed = loadSpeed();
     const block = make("div", "tour-block"), cur = make("div", "tour-cur", ARROW), ring = make("div", "tour-ring"), panel = make("div", "tour-panel");
@@ -280,13 +284,13 @@
     function stop() {
       clear();
       panel.remove();
-      leave(k, opts.all ? null : ch);
+      leave(topic.id, opts.all ? null : chapters[ch].id);
     }
     // Страница остаётся на учебных данных: выйти можно кнопкой в полосе режима
     function tryIt() {
       clear();
       panel.remove();
-      Tour.at = [k, ch];
+      Tour.at = [topic.id, chapters[ch].id];
     }
     function broken() {
       clear();
@@ -428,15 +432,32 @@
     st.textContent = CSS;
     document.head.append(st);
     if (!DEMO || Tour.refused) return;
-    const q = new URLSearchParams(location.search), k = Number(q.get("tour")) - 1, topic = Tour.topics[k];
+    const q = new URLSearchParams(location.search), asked = q.get("tour"), cid = q.get("ch"), all = q.has("all");
+    const hit = asked ? Tour.find(asked, all ? null : cid) : null, topic = hit?.topic;
     const app = document.querySelector(".app"), bar = make("div", "tour-mode");
     bar.setAttribute("role", "status");
-    bar.append(make("span", "", `<b>${t("Учебные данные.")}</b> ${t("Настоящая система не меняется.")}`), button(t("Выйти из учебных данных"), "", () => leave(...(Tour.at || [Math.max(k, 0), null]))));
+    bar.append(make("span", "", `<b>${t("Учебные данные.")}</b> ${t("Настоящая система не меняется.")}`), button(t("Выйти из учебных данных"), "", () => leave(...(Tour.at || [topic?.id, null]))));
     app.classList.add("tour-on");
     app.prepend(bar);
+    // Темы или главы с таким ID нет (удалена, другая версия, прежний номер) — показ не идёт; что есть — в каталоге раздела
+    if (asked && (!topic || (!all && cid && !hit.chapter))) return missing();
     if (!topic) return;
-    const at = Number(q.get("demo"));
-    run(topic, k, Number.isInteger(at) ? Math.max(0, Math.min(at, topic.steps.length - 1)) : 0, { play: q.has("play") || q.get("demo") === "", all: q.has("all") });
+    const raw = q.get("demo"), at = raw ? Number(raw) : NaN, last = topic.steps.length - 1, ch = hit.chapter;
+    // Без номера шага — начало главы (темы). Шаг вне главы адреса — тоже начало главы: глава задаётся ID, номер шага только продолжает её
+    const start = Number.isInteger(at) ? Math.max(0, Math.min(at, last)) : ch ? ch.from : 0;
+    run(topic, ch && !all && (start < ch.from || start > ch.to) ? ch.from : start, { play: q.has("play") || q.get("demo") === "", all });
+  };
+  // Неизвестная тема или глава: панель с объяснением, страница остаётся на учебных данных, выход — в каталог раздела
+  const missing = () => {
+    const panel = make("div", "tour-panel");
+    panel.id = "tourMissing";
+    panel.setAttribute("role", "alert");
+    const say = make("p", "tour-say");
+    say.textContent = t("Такой главы нет в учебном каталоге этой консоли. Консоль не запустила показ. Главы, которые есть, показывает раздел «Обучение».");
+    const btns = make("div", "tour-btns");
+    btns.append(button(t("Открыть каталог"), "btn pri s", () => leave(null, null)));
+    panel.append(make("p", "tour-ti", t("Глава не найдена")), say, btns);
+    document.body.append(panel);
   };
   // Примерное время при скорости ×1: как в run — чтение подписи, плюс ход курсора
   const secs = (steps) => steps.reduce((sum, s) => sum + Math.max(2500, s.say.length * 55) + (s.act ? 1300 : 0), 0) / 1000;
@@ -449,21 +470,48 @@
     // Сервер показа есть? Нет — отказ показа (index.html проверяет до API)
     serverMissing: () => Q.get("demoFail") === "server" || typeof ConsolemServer === "undefined",
     topics: [],
+    // ID темы и главы: латиница, цифры и «-»; «home» — первый экран раздела, не тема
+    ID: /^[a-z][a-z0-9-]*$/,
+    // Глава — «<тема>.<ch.id>». Глава или тема без ID (прототип со своими главами) получает ID по номеру с «_» и в каталог
+    // (Tour.catalog) не входит: номер не устойчив
     add(topic) {
-      const chapters = [];
+      const n = Tour.topics.length, tid = Tour.ID.test(topic.id || "") && topic.id !== "home" && !Tour.topics.some((x) => x.id === topic.id) ? topic.id : null;
+      if (!tid) console.error(`Обучение: у темы «${topic.title}» нет устойчивого ID или он занят: ${topic.id}`);
+      const id = tid || `_${n + 1}`, chapters = [];
       topic.steps.forEach((s, at) => {
-        if (s.ch || !chapters.length) chapters.push({ ...(s.ch || { title: topic.title, why: topic.why }), from: at, to: at });
+        if (s.ch || !chapters.length) {
+          const c = s.ch || { title: topic.title, why: topic.why }, own = tid && Tour.ID.test(c.id || "") && !chapters.some((x) => x.id === `${id}.${c.id}`);
+          if (s.ch && tid && !own) console.error(`Обучение: у главы «${c.title}» темы ${id} нет устойчивого ID или он занят: ${c.id}`);
+          chapters.push({ ...c, id: own ? `${id}.${c.id}` : `${id}._${chapters.length + 1}`, stable: !!own, from: at, to: at });
+        }
         chapters[chapters.length - 1].to = at;
       });
       chapters.forEach((c) => (c.secs = secs(topic.steps.slice(c.from, c.to + 1))));
-      Tour.topics.push({ ...topic, chapters, secs: secs(topic.steps) });
+      Tour.topics.push({ ...topic, id, stable: !!tid, chapters, secs: secs(topic.steps) });
     },
-    // Запуск главы c темы k; без c — вся тема подряд. Перезагрузка: показ идёт на чистых данных
-    play(k, c) {
-      const all = c == null;
+    // Тема и глава по ID: {k, topic, c, chapter}; главы нет — chapter null. Тема не та — null. Номер — не ID
+    find(tid, cid) {
+      const k = Tour.topics.findIndex((x) => x.id === String(tid));
+      if (k < 0) return null;
+      const topic = Tour.topics[k], c = cid == null ? -1 : topic.chapters.findIndex((x) => x.id === String(cid));
+      return { k, topic, c: c < 0 ? null : c, chapter: c < 0 ? null : topic.chapters[c] };
+    },
+    // Адрес показа: тема и глава по ID; без главы — вся тема подряд. Номер темы и главы этой страницы (прототипы зовут play(k, c))
+    // переводится в ID здесь же: страница и показ — одна загрузка
+    url(tid, cid, from) {
+      const topic = typeof tid === "number" ? Tour.topics[tid] : Tour.find(tid)?.topic;
+      const chapter = cid == null ? null : typeof cid === "number" ? topic?.chapters[cid] : Tour.find(tid, cid)?.chapter;
+      if (!topic || (cid != null && !chapter)) return null;
       // Показ идёт на русском: шаги ищут элементы по русским подписям. Язык возвращается при выходе (learnFromHash в index.html)
       const lang = typeof uiLang !== "undefined" && uiLang !== "ru" ? { lang: uiLang } : {};
-      location.href = urlFor({ tour: k + 1, demo: all ? 0 : Tour.topics[k].chapters[c].from, play: 1, ...(all ? { all: 1 } : {}), ...lang }).href;
+      // demo= пустой — учебный режим с начала главы: номер шага не нужен
+      return urlFor({ tour: topic.id, ...(chapter ? { ch: chapter.id } : { all: 1 }), demo: "", play: 1, ...lang }, from).href;
+    },
+    // Запуск главы; без главы — вся тема подряд. Перезагрузка: показ идёт на чистых данных. Неизвестный ID — ничего
+    play(tid, cid) {
+      const href = Tour.url(tid, cid);
+      if (href) location.href = href;
+      return !!href;
     },
     // Вызов в конце файла с темами: темы уже известны, страница — после загрузки данных
     start() {

@@ -12,13 +12,14 @@ UiCheck(async ({ ok, until }) => {
   ok(closed === 7, "дерево свёрнуто: «С чего начать» и темы, строк: " + closed);
   ok(!Tour.demo && !document.querySelector(".tour-panel,.tour-mode"), "пока показ не запущен, учебного режима нет");
 
-  learnTree("0");
+  const T0 = Tour.topics[0], T1 = Tour.topics[1];
+  learnTree(T0.id);
   ok(/Зачем это нужно/.test(main().textContent), "экран темы: таблица глав");
   ok(rows().length === closed + Tour.topics[0].chapters.length, "тема раскрылась");
   ok(getComputedStyle(document.querySelector(".lrn-tbl")).tableLayout === "fixed", "таблица глав не двигает столбцы");
 
-  learnTree("0.1");
-  const ch = Tour.topics[0].chapters[1];
+  const ch = T0.chapters[1];
+  learnTree(ch.id);
   ok(main().querySelector("h1, .hd")?.textContent.includes(ch.title), "экран главы: заголовок");
   ok(document.querySelectorAll(".lrn-steps li").length === ch.to - ch.from + 1, "экран главы: текст всех шагов");
   ok(/\d+ шаг/.test(document.querySelector(".lrn-meta").textContent), "экран главы: число шагов");
@@ -27,7 +28,7 @@ UiCheck(async ({ ok, until }) => {
   learnTree("home");
   learnOpen.clear();
   renderTree();
-  const arrow = () => document.querySelector('#tree .n[data-go="learn:1"] .tw');
+  const arrow = () => document.querySelector(`#tree .n[data-go="learn:${T1.id}"] .tw`);
   const n0 = rows().length;
   arrow().click();
   ok(rows().length === n0 + Tour.topics[1].chapters.length && learnSel === "home", "стрелка раскрыла тему, выбор на месте");
@@ -35,20 +36,46 @@ UiCheck(async ({ ok, until }) => {
   ok(rows().length === n0 && learnSel === "home", "стрелка свернула тему");
 
   // Ссылка моргает на месте прихода
-  learnLink("0");
+  learnLink(T0.id);
   ok(await until(() => document.querySelector("#tree .acc-flash")), "ссылка подсвечивает строку дерева");
 
-  // Адрес #learn: неверная глава ведёт к теме, неверная тема — никуда
+  // Адрес #learn — по ID: глава, тема; неверная глава ведёт к теме, неверная тема и прежний номер — на первый экран раздела
   const atHash = (h) => {
     history.replaceState(history.state, "", location.pathname + location.search + h);
     learnFromHash();
   };
-  atHash("#learn=0.99");
-  ok(learnSel === "0" && document.querySelector("#tree .n.on"), "#learn с неверной главой выбирает тему");
+  atHash(`#learn=${ch.id}`);
+  ok(learnSel === ch.id && document.querySelector("#tree .n.on"), "#learn с ID главы выбирает главу");
+  atHash(`#learn=${T0.id}.nope`);
+  ok(learnSel === T0.id && document.querySelector("#tree .n.on"), "#learn с неверной главой выбирает тему");
   learnSel = "home";
-  atHash("#learn=99");
+  atHash("#learn=nope");
   ok(learnSel === "home", "#learn с неверной темой ничего не выбирает");
+  atHash("#learn=0.1");
+  ok(learnSel === "home", "#learn прежним номером (0.1) главу по номеру не выбирает: первый экран раздела");
   ok(location.hash === "", "якорь снят");
+
+  // Устойчивые ID: у каждой темы и главы свой, латиницей, глава — «<тема>.<глава>», без повторов
+  const allIds = Tour.topics.flatMap((t) => [t.id, ...t.chapters.map((c) => c.id)]);
+  ok(Tour.topics.every((t) => t.stable && Tour.ID.test(t.id) && t.chapters.every((c) => c.stable && c.id.startsWith(t.id + ".") && Tour.ID.test(c.id.slice(t.id.length + 1)))), "у тем и глав устойчивые ID");
+  ok(new Set(allIds).size === allIds.length, "ID без повторов");
+  // Перестановка и удаление: глава находится по ID, а не по месту; удалённую главу консоль не берёт и ближайшую не подставляет
+  const keep = Tour.topics.slice();
+  const step = (id, title, say) => ({ ch: { id, title, why: "проверка" }, say });
+  Tour.add({ id: "zz-check", title: "Проверка", why: "проверка", steps: [step("one", "Первая", "1"), step("two", "Вторая", "2")] });
+  const before2 = Tour.find("zz-check", "zz-check.two");
+  Tour.topics.splice(0, Tour.topics.length, ...keep);
+  Tour.add({ id: "zz-check", title: "Проверка", why: "проверка", steps: [step("two", "Вторая", "2"), step("new", "Новая", "0"), step("one", "Первая", "1")] });
+  const after2 = Tour.find("zz-check", "zz-check.two"), after1 = Tour.find("zz-check", "zz-check.one");
+  ok(before2.c === 1 && after2.c === 0 && after2.chapter.title === "Вторая" && after1.chapter.title === "Первая", "перестановка и новая соседняя глава: ID ведёт к той же главе");
+  ok(new URL(Tour.url("zz-check", "zz-check.one"), location.href).searchParams.get("ch") === "zz-check.one", "адрес показа — ID главы, не номер");
+  Tour.topics.splice(0, Tour.topics.length, ...keep);
+  Tour.add({ id: "zz-check", title: "Проверка", why: "проверка", steps: [step("two", "Вторая", "2")] });
+  ok(Tour.find("zz-check", "zz-check.one").chapter === null && Tour.url("zz-check", "zz-check.one") === null && Tour.play("zz-check", "zz-check.one") === false, "удалённая глава: не найдена, показа нет");
+  ok(Tour.find("nope", null) === null && Tour.url("nope", null) === null, "неизвестная тема: показа нет");
+  Tour.topics.splice(0, Tour.topics.length, ...keep);
+  // Номер темы и главы этой страницы (так зовут play прототипы) становится ID в адресе
+  ok(new URL(Tour.url(0, 1), location.href).searchParams.get("ch") === T0.chapters[1].id, "номер этой страницы переводится в ID");
 
   // Обычная страница сборки не загружает сервер показа
   if (Tour.lazy) ok(!performance.getEntriesByType("resource").some((e) => /\/demo\//.test(e.name)), "обычная страница без файлов demo/");
@@ -88,7 +115,7 @@ UiCheck(async ({ ok, until }) => {
   const snapBefore = snap();
   for (let k = 0; k < Tour.topics.length; k++) {
     const t = Tour.topics[k], last = t.steps.length - 1, want = t.steps[last].say;
-    const f = open(`tour=${k + 1}&demo=${last}`);
+    const f = open(`tour=${t.id}&ch=${t.chapters.at(-1).id}&demo=${last}`);
     // Кнопка появляется, когда последний шаг выполнен: одной подписи мало, она видна раньше
     const reached = await until(() => sayIn(f) === want && btnIn(f, "Показать снова"), 90000);
     ok(reached, `«${t.title}»: показ дошёл до последнего шага` + (reached ? "" : `, на экране: ${sayIn(f)}`));
@@ -113,13 +140,13 @@ UiCheck(async ({ ok, until }) => {
 
   // Глава целиком, настоящим ходом курсора; без ?api= — адрес API из разметки сборки, если он есть
   const chapters = Tour.topics[0].chapters, lastCh = chapters.at(-1);
-  const pl = open(`tour=1&demo=${lastCh.from}&play`, false);
+  const pl = open(`tour=${T0.id}&ch=${lastCh.id}&demo=&play`, false);
   ok(await until(() => sayIn(pl) === Tour.topics[0].steps[lastCh.to].say && btnIn(pl, "Показать снова"), 120000), "глава прошла настоящим ходом до конца: " + sayIn(pl));
   ok(!pl.contentWindow.performance.getEntriesByType("resource").some((e) => /\/backend\/api\//.test(e.name)), "показ без ?api=: запросов к API сборки нет");
   pl.remove();
 
   // Конец главы: кнопки и переход к следующей главе без перезагрузки
-  const f = open(`tour=1&demo=${chapters[0].to}`);
+  const f = open(`tour=${T0.id}&ch=${chapters[0].id}&demo=${chapters[0].to}`);
   ok(await until(() => btnIn(f, "Следующая глава") && btnIn(f, "Попробовать самому") && btnIn(f, "Показать снова"), 60000), "конец главы: следующая глава, попробовать самому, показать снова");
   const mark = (f.contentWindow.__sameLoad = {});
   btnIn(f, "Следующая глава")?.click();
@@ -127,8 +154,21 @@ UiCheck(async ({ ok, until }) => {
   ok(f.contentWindow.__sameLoad === mark, "страница не перезагружалась");
   f.remove();
 
+  // Неизвестная глава, неизвестная тема и прежний адрес по номерам: показа нет, ближайшая глава не запускается, выход — в каталог
+  for (const [q, what] of [[`tour=${T0.id}&ch=${T0.id}.nope&demo=&play`, "неизвестная глава"], ["tour=nope&ch=nope.one&demo=&play", "неизвестная тема"], ["tour=1&demo=3&play", "прежний номер темы"]]) {
+    const mf = open(q);
+    const seen = await until(() => mf.contentDocument?.getElementById("tourMissing"), 60000);
+    ok(seen && !mf.contentDocument.querySelector(".tour-cur,.tour-block"), `${what}: показ не идёт, объяснение на экране`);
+    ok(seen && mf.contentDocument.querySelector(".tour-mode"), `${what}: страница на учебных данных`);
+    if (seen) {
+      [...mf.contentDocument.querySelectorAll("#tourMissing button")].find((b) => /Открыть каталог/.test(b.textContent))?.click();
+      ok(await until(() => mf.contentWindow?.appReady && !/demo/.test(mf.contentWindow.location.search) && mf.contentDocument.querySelector('#tree .n.on[data-go="learn:home"]'), 60000), `${what}: «Открыть каталог» — раздел «Обучение»`);
+    }
+    mf.remove();
+  }
+
   // Выход: раздел на той же главе, учебного режима нет, язык вернулся, у записи истории есть состояние для «Назад»
-  const ex = open(`tour=1&demo=${chapters[1].from}&lang=en`, false);
+  const ex = open(`tour=${T0.id}&ch=${chapters[1].id}&demo=&lang=en`, false);
   const barBtn = () => ex.contentDocument?.querySelector(".tour-mode button");
   ok(await until(() => barBtn() && ex.contentDocument.querySelector(".tour-block"), 60000), "полоса учебного режима с кнопкой выхода");
   // Настоящий клик попадает в кнопку, а не в слой, который закрывает страницу на время показа
@@ -152,7 +192,7 @@ UiCheck(async ({ ok, until }) => {
     for (const withApi of [true, false]) {
       const where = withApi ? "адрес в ?api=" : metaApi ? "адрес в метке consolem-api" : "без адреса API";
       const before = snap();
-      const f = open(`tour=1&demo=0&play&demoFail=${why}`, withApi);
+      const f = open(`tour=${T0.id}&ch=${T0.chapters[0].id}&demo=&play&demoFail=${why}`, withApi);
       const shown = await until(() => f.contentDocument?.querySelector(`#learnRefused[data-why="${why}"]`), 30000);
       ok(shown, `отказ «${why}», ${where}: понятный отказ показа`);
       if (shown) {
@@ -169,7 +209,7 @@ UiCheck(async ({ ok, until }) => {
     }
   }
   // Выход из отказа — только кнопкой человека: обычная страница без учебных параметров
-  const rf = open("tour=1&demo=0&demoFail=server", false);
+  const rf = open(`tour=${T0.id}&ch=${T0.chapters[0].id}&demo=&demoFail=server`, false);
   ok(await until(() => rf.contentDocument?.querySelector("#learnRefused button"), 30000), "в отказе есть кнопка «Вернуться к работе»");
   rf.contentDocument.querySelector("#learnRefused button")?.click();
   ok(await until(() => rf.contentWindow?.appReady && !/demo/.test(rf.contentWindow.location.search) && !rf.contentDocument.getElementById("learnRefused"), 60000), "«Вернуться к работе»: обычная страница");
@@ -177,7 +217,7 @@ UiCheck(async ({ ok, until }) => {
 
   // Учебный режим: внешней службы ассистента нет ни из ?assist=, ни из метки consolem-assist. Разговор идёт на заглушке
   const SVC = "https://assist.example.test";
-  const af = open(`tour=1&demo=${Tour.topics[0].chapters[0].to}&assist=${encodeURIComponent(SVC)}`, false);
+  const af = open(`tour=${T0.id}&ch=${T0.chapters[0].id}&demo=${T0.chapters[0].to}&assist=${encodeURIComponent(SVC)}`, false);
   ok(await until(() => af.contentWindow?.appReady && af.contentDocument.querySelector(".tour-mode"), 60000), "учебный режим с ?assist= открылся");
   const aw = af.contentWindow;
   if (aw?.asstServiceUrl) {
