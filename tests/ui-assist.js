@@ -565,6 +565,10 @@ UiCheck(async ({ ok, until }) => {
     ok(/Открыть учебный пример/.test(card.querySelector("button")?.textContent || ""), "кнопка «Открыть учебный пример»");
     ok(asst.learn.every((l) => l.catalog === ver), "ссылка — на эту версию каталога");
     ok(location.href === hrefWas && !Tour.demo, "приход ссылки сам ничего не открыл");
+    card.querySelector("button").click();
+    ok(document.getElementById("confirm").classList.contains("open") && /рабочие тревоги/.test(document.getElementById("confirmWarn").textContent), "кнопка карточки — сначала предупреждение: тревог на время показа нет");
+    document.getElementById("confirmCancel").click();
+    ok(location.href === hrefWas && !Tour.demo, "«Отменить» — показа нет");
     ok(/проверить по разделу/.test(document.getElementById("asstAnswerNote")?.textContent || ""), "текст ответа подписан, как раньше");
     setUiLang("en");
     asstRender();

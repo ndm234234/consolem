@@ -213,6 +213,43 @@ UiCheck(async ({ ok, until }) => {
   ok(xw.history.state != null, "выход: запись истории не потеряла состояние");
   ex.remove();
 
+  // Запуск — только кнопкой человека и после предупреждения: на время показа рабочих тревог в этой вкладке нет
+  const hrefWas = location.href;
+  learnPlay(T0.id, T0.chapters[0].id);
+  const cf = document.getElementById("confirm");
+  ok(cf.classList.contains("open") && /рабочие тревоги/.test(document.getElementById("confirmWarn").textContent) && /учебных данных/.test(document.getElementById("confirmMsg").textContent) && /Запустить показ/.test(document.getElementById("confirmOk").textContent), "перед показом — предупреждение: тревог нет, данные учебные");
+  document.getElementById("confirmCancel").click();
+  ok(!cf.classList.contains("open") && location.href === hrefWas, "«Отменить» — показа нет, адрес прежний");
+  learnPlay(T0.id, T0.id + ".nope");
+  ok(!cf.classList.contains("open") && location.href === hrefWas, "неизвестная глава: ни предупреждения, ни показа");
+  // Адрес показа — белый список: рабочие api, assist, fixture и прочее в него не переходят
+  const work = "https://console.example.test/backend/?api=https%3A%2F%2Fwork.example.test&assist=https%3A%2F%2Fsvc.example.test&fixture=one-domain&latency=300&drop=listRules&uid=u1#learn=x";
+  const show = new URL(Tour.url(T0.id, T0.chapters[1].id, work));
+  ok(show.origin + show.pathname === "https://console.example.test/backend/" && [...show.searchParams.keys()].every((k) => ["tour", "ch", "demo", "play", "lang"].includes(k)) && show.searchParams.get("ch") === T0.chapters[1].id && !show.hash, "адрес показа: путь страницы и только tour, ch, demo, play: " + show.search);
+  ok([...new URL(Tour.url(T0.id, null, work)).searchParams.keys()].sort().join() === "all,demo,play,tour", "вся тема: tour, all, demo, play");
+  // Весь путь в этой же вкладке: рабочий адрес с assist, fixture и своим параметром → предупреждение → показ без них → выход на тот же адрес
+  const wq = `fixture=demo&assist=${encodeURIComponent("https://svc.example.test")}&latency=0&keep=1`;
+  const wf = open(wq, false);
+  ok(await until(() => wf.contentWindow?.appReady && wf.contentWindow.learnPlay, 60000), "рабочая страница открылась");
+  const ww = () => wf.contentWindow, wd = () => wf.contentDocument;
+  const searchWas = ww().location.search;
+  ww().learnPlay(T0.id, T0.chapters[1].id);
+  ok(wd().getElementById("confirm").classList.contains("open"), "в рабочей вкладке — предупреждение");
+  wd().getElementById("confirmOk").click();
+  ok(await until(() => ww()?.Tour?.demo && wd().querySelector(".tour-mode") && wd().querySelector(".tour-panel"), 60000), "та же вкладка: показ с полосой учебного режима");
+  if (ww()?.Tour?.demo) {
+    const sq = new URLSearchParams(ww().location.search);
+    ok([...sq.keys()].every((k) => ["tour", "ch", "demo", "play", "lang"].includes(k)) && !sq.has("assist") && !sq.has("fixture") && !sq.has("keep"), "в адрес показа не перешли assist, fixture и другие рабочие параметры: " + ww().location.search);
+    ok(/Учебные данные/.test(wd().querySelector(".tour-mode").textContent), "полоса «Учебные данные» видна");
+    ok(ww().asstServiceUrl() === "", "в показе внешней службы нет");
+    wd().querySelector(".tour-mode button").click();
+    ok(await until(() => ww()?.appReady && !ww().Tour.demo && ww().location.hash === "" && wd().querySelector("#tree .n.on"), 60000), "выход: обычная страница");
+    ok(ww().location.search === searchWas && ww().location.pathname === new URL(wf.src).pathname, "выход вернул прежний рабочий адрес: " + ww().location.search);
+    ok(!wd().querySelector(".tour-mode") && wd().querySelector(`#tree .n.on[data-go="learn:${T0.chapters[1].id}"]`), "выход: раздел «Обучение» на той же главе, полосы нет: " + wd().querySelector("#tree .n.on")?.dataset.go);
+    ok(sessionStorage.getItem("tourBack") === null, "рабочий адрес после выхода не хранится");
+  }
+  wf.remove();
+
   // Отказ показа закрыт по умолчанию: сервер показа не загрузился или хранилище не подменилось. Глава известная, каталог полный.
   // Каждый отказ — с рабочим адресом в ?api= и без него (тогда адрес — метка consolem-api, если страница её задаёт: в сборке под CSP).
   // Отказ виден, учебные параметры на месте, страница к API не обращается, настоящий localStorage не меняется

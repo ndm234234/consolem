@@ -10999,7 +10999,14 @@ function learnFromHash(){
   accFlash(()=>[document.querySelector(".hd h1"),document.querySelector("#tree .n.on")].filter(Boolean),true);
   if(want!=="home"&&learnSel!==want)toast(i18n(tp?"Такой главы нет в этой теме. Консоль открыла тему":"Такой темы нет в учебном каталоге. Консоль открыла раздел «Обучение»"));
 }
-function learnPlay(tid,cid){window.Tour.play(tid,cid)}
+// Показ — в этой же вкладке, только по кнопке человека и после предупреждения: на время показа рабочих тревог здесь нет,
+// данные учебные. Полоса «Учебные данные» видна весь показ, выход возвращает рабочий адрес (assets/tour.js, Tour.play)
+function learnPlay(tid,cid){
+  if(!window.Tour?.url(tid,cid)){toast(i18n("Такой главы нет в учебном каталоге этой консоли"));return}
+  if(window.Tour.demo){window.Tour.play(tid,cid);return}
+  askConfirm("Запустить учебный показ?",i18n("Показ работает на учебных данных и не меняет настоящую систему. Полоса «Учебные данные» видна весь показ. Чтобы вернуться к работе, нажать «Выйти из учебных данных»."),
+    i18n("На время показа эта вкладка не получает рабочие тревоги и события."),i18n("Запустить показ"),()=>window.Tour.play(tid,cid),{rawMsg:true});
+}
 function treeLearn(){
   const q=qval();
   let h=matchesText(q,i18n("С чего начать"))?`<div class="n ${learnSel==="home"?"on":""}" data-go="learn:home" ${onEv("click",["learnTree","home"])}><span class="tw"></span><span class="ici">${lu("graduation-cap")}</span><span class="nm">${hlText(i18n("С чего начать"),q)}</span></div>`:"";

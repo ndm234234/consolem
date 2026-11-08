@@ -128,10 +128,32 @@
     u.hash = "";
     return u;
   };
-  // Выход: раздел «Обучение» на той же главе (ID), без темы — на первом экране раздела
+  /* Рабочий адрес, с которого человек запустил показ (Tour.play): выход возвращает на него, с теми же api, assist, fixture,
+     в той же вкладке — вход консоли (куки сеанса) не теряется. Хранится в sessionStorage этой вкладки: показ его не
+     получает и не меняет. Годится только адрес той же страницы: другой путь или чужой origin — нет. Без него (показ
+     открыли ссылкой) — адрес показа без учебных параметров */
+  const BACK_KEY = "tourBack";
+  const backUrl = () => {
+    try {
+      const u = new URL(sessionStorage.getItem(BACK_KEY) || "");
+      if (u.origin === location.origin && u.pathname === location.pathname) return u;
+    } catch {}
+    return null;
+  };
+  const exitUrl = () => {
+    const u = backUrl() || urlFor({}), lang = Q.get("lang");
+    u.hash = "";
+    // Язык показа вернётся на рабочей странице (learnFromHash снимет параметр)
+    if (lang && !u.searchParams.has("lang")) u.searchParams.set("lang", lang);
+    return u;
+  };
+  // Выход: рабочий адрес, раздел «Обучение» на той же главе (ID), без темы — на первом экране раздела
   const leave = (tid, cid) => {
-    const u = urlFor({});
+    const u = exitUrl();
     u.hash = `learn=${cid || tid || "home"}`;
+    try {
+      sessionStorage.removeItem(BACK_KEY);
+    } catch {}
     // Без записи в историю: «Назад» после выхода не запускает показ снова
     location.replace(u.href);
   };
@@ -140,6 +162,8 @@
     const steps = topic.steps, chapters = topic.chapters, last = steps.length - 1;
     const chOf = (at) => Math.max(0, chapters.findIndex((c) => at >= c.from && at <= c.to));
     let ch = chOf(startAt), from = opts.all ? 0 : chapters[ch].from, to = opts.all ? last : chapters[ch].to, nextCh = false;
+    // Выход кнопкой в полосе — к той главе, которую показывают сейчас (draw обновляет)
+    Tour.at = [topic.id, opts.all ? null : chapters[ch].id];
     const reloadAt = (step, play) => {
       location.href = urlFor({ tour: topic.id, ...(opts.all ? { all: 1 } : { ch: chapters[chOf(step)].id }), demo: step, ...(play ? { play: 1 } : {}) }).href;
     };
@@ -302,6 +326,7 @@
     }
     function draw(s) {
       ch = chOf(i);
+      Tour.at = [topic.id, opts.all ? null : chapters[ch].id];
       ti.textContent = `${t(topic.title)} · ${t(chapters[ch].title)}`;
       n.textContent = `${t("Шаг")} ${i - from + 1} ${t("из")} ${to - from + 1}`;
       bar.firstChild.style.width = `${Math.round(((i - from + 1) / (to - from + 1)) * 100)}%`;
@@ -495,7 +520,13 @@
     lazy: !!lazy,
     refused,
     // Куда выходит человек из учебного режима и из отказа показа
-    exitUrl: () => urlFor({}).href,
+    exitUrl: () => {
+      const href = exitUrl().href;
+      try {
+        sessionStorage.removeItem(BACK_KEY);
+      } catch {}
+      return href;
+    },
     // Сервер показа есть? Нет — отказ показа (index.html проверяет до API)
     serverMissing: () => Q.get("demoFail") === "server" || typeof ConsolemServer === "undefined",
     topics: [],
@@ -525,8 +556,10 @@
       const topic = Tour.topics[k], c = cid == null ? -1 : topic.chapters.findIndex((x) => x.id === String(cid));
       return { k, topic, c: c < 0 ? null : c, chapter: c < 0 ? null : topic.chapters[c] };
     },
-    // Адрес показа: тема и глава по ID; без главы — вся тема подряд. Номер темы и главы этой страницы (прототипы зовут play(k, c))
-    // переводится в ID здесь же: страница и показ — одна загрузка
+    /* Адрес показа: тема и глава по ID; без главы — вся тема подряд. Номер темы и главы этой страницы (прототипы зовут play(k, c))
+       переводится в ID здесь же: страница и показ — одна загрузка. Адрес строит код по белому списку: путь страницы и только
+       tour, ch | all, demo, play, lang. Рабочие api, assist, fixture, latency, drop и прочее в показ не переходят: показ всегда
+       на встроенном сервере и учебном наборе, без внешней службы */
     url(tid, cid, from) {
       const topic = typeof tid === "number" ? Tour.topics[tid] : Tour.find(tid)?.topic;
       const chapter = cid == null ? null : typeof cid === "number" ? topic?.chapters[cid] : Tour.find(tid, cid)?.chapter;
@@ -534,13 +567,27 @@
       // Показ идёт на русском: шаги ищут элементы по русским подписям. Язык возвращается при выходе (learnFromHash в index.html)
       const lang = typeof uiLang !== "undefined" && uiLang !== "ru" ? { lang: uiLang } : {};
       // demo= пустой — учебный режим с начала главы: номер шага не нужен
-      return urlFor({ tour: topic.id, ...(chapter ? { ch: chapter.id } : { all: 1 }), demo: "", play: 1, ...lang }, from).href;
+      const u = new URL(from || location.href);
+      u.search = "";
+      u.hash = "";
+      Object.entries({ tour: topic.id, ...(chapter ? { ch: chapter.id } : { all: 1 }), demo: "", play: 1, ...lang }).forEach(([k, v]) => u.searchParams.set(k, String(v)));
+      return u.href;
     },
     // Запуск главы; без главы — вся тема подряд. Перезагрузка: показ идёт на чистых данных. Неизвестный ID — ничего
+    // Запускает человек кнопкой (в index.html — после предупреждения, learnPlay); событие ассистента показ не запускает.
+    // Та же вкладка: рабочий адрес запоминается для выхода
     play(tid, cid) {
       const href = Tour.url(tid, cid);
-      if (href) location.href = href;
-      return !!href;
+      if (!href) return false;
+      if (!DEMO) {
+        try {
+          const back = new URL(location.href);
+          back.hash = "";
+          sessionStorage.setItem(BACK_KEY, back.href);
+        } catch {}
+      }
+      location.href = href;
+      return true;
     },
     /* Каталог готовых глав для UI и бэкенда VMS — из тех же тем, что исполняет показ, второй копии текстов нет.
        Тема и глава: id, title, goal (зачем, поле why источника), lang (язык показа; шаги ищут элементы по русским подписям — «ru»),
