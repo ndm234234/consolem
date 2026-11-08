@@ -11,6 +11,7 @@
   - браузер сообщил о нарушении политики (CSP-VIOLATION: заблокированный скрипт, атрибут on…, eval).
 
 Запуск из корня репозитория:  python3 tools/check_webui.py
+                              python3 tools/check_webui.py --without-learn   сборка без раздела «Обучение»
 Код выхода 1, если что-то не так. Нужны Python 3, Node.js и Google Chrome.
 """
 import os
@@ -45,7 +46,8 @@ def free_port():
 def main():
     tmp = tempfile.mkdtemp(prefix="consolem-webui-")
     out = os.path.join(tmp, "webui")
-    build = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "build_webui.py"), "--out", out, *PASS], capture_output=True, text=True)
+    learn = [] if "--without-learn" not in sys.argv else ["--without-learn"]
+    build = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "build_webui.py"), "--out", out, *learn, *PASS], capture_output=True, text=True)
     print(build.stdout.rstrip() or build.stderr.rstrip())
     if build.returncode:
         print("RESULT fail — сборка не собралась")

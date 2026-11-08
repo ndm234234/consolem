@@ -1,15 +1,22 @@
 /* Сценарий интерфейса: раздел «Обучение» и учебный режим. Запуск — tools/check_ui.py tests/ui-learn.js */
 UiCheck(async ({ ok, until }) => {
+  // Сборка без обучения (tools/build_webui.py --without-learn): раздела нет, каталог сборки — пустой с признаком
+  if (!window.Tour) {
+    ok(!learnShown() && !appsShown().some((a) => a.id === "learn"), "без обучения: вкладки «Обучение» нет");
+    const cat = await fetch(new URL("learn-catalog.json", location.href)).then((r) => (r.ok ? r.json() : null), () => null);
+    ok(cat && cat.available === false && cat.topics.length === 0 && cat.version === null, "без обучения: learn-catalog.json сборки — available:false, тем нет");
+    return;
+  }
   goApp("learn");
   const main = () => document.getElementById("main");
   const rows = () => [...document.querySelectorAll("#tree .n")];
 
   // Раздел и дерево
   ok(appsShown().some((a) => a.id === "learn"), "вкладка «Обучение» в рельсе");
-  ok(Tour.topics.length === 6, "шесть тем");
+  ok(Tour.topics.length >= 6, "темы на месте: " + Tour.topics.length);
   ok(/Ничего не сломается/.test(main().textContent), "первый экран объясняет, зачем раздел");
   const closed = rows().length;
-  ok(closed === 7, "дерево свёрнуто: «С чего начать» и темы, строк: " + closed);
+  ok(closed === Tour.topics.length + 1, "дерево свёрнуто: «С чего начать» и темы, строк: " + closed);
   ok(!Tour.demo && !document.querySelector(".tour-panel,.tour-mode"), "пока показ не запущен, учебного режима нет");
 
   const T0 = Tour.topics[0], T1 = Tour.topics[1];
@@ -74,6 +81,22 @@ UiCheck(async ({ ok, until }) => {
   ok(Tour.find("zz-check", "zz-check.one").chapter === null && Tour.url("zz-check", "zz-check.one") === null && Tour.play("zz-check", "zz-check.one") === false, "удалённая глава: не найдена, показа нет");
   ok(Tour.find("nope", null) === null && Tour.url("nope", null) === null, "неизвестная тема: показа нет");
   Tour.topics.splice(0, Tour.topics.length, ...keep);
+  // Каталог — из тех же тем: ID, название, цель, язык, учебный набор, отпечаток; шагов и кода показа в нём нет
+  const cat = Tour.catalog();
+  ok(cat.format === "consolem-learn-catalog/1" && /^sha256:[0-9a-f]{64}$/.test(cat.version) && cat.available === true, "каталог: формат, отпечаток, материал доступен");
+  ok(cat.topics.length === Tour.topics.length && cat.topics.every((t, n) => t.id === Tour.topics[n].id && t.chapters.length === Tour.topics[n].chapters.length), "каталог: все темы и главы");
+  ok(cat.topics.every((t) => t.title && t.goal && t.lang === "ru" && t.fixture === "demo" && t.chapters.every((c) => c.title && c.goal && c.lang === "ru" && c.fixture === "demo" && Object.keys(c).join() === "id,title,goal,lang,fixture")), "каталог: у глав только id, title, goal, lang, fixture");
+  ok(!/"(say|before|at|act|steps|text)"/.test(JSON.stringify(cat)), "каталог: шагов, селекторов и действий нет");
+  ok(Tour.catalog().version === cat.version, "отпечаток повторяется");
+  Tour.add({ id: "zz-check", title: "Проверка", why: "проверка", steps: [step("one", "Первая", "1")] });
+  ok(Tour.catalog().version !== cat.version, "новая глава меняет отпечаток");
+  Tour.topics.splice(0, Tour.topics.length, ...keep);
+  ok(Tour.catalog().version === cat.version, "без неё отпечаток прежний");
+  // Сборка: learn-catalog.json — тот же каталог, что у страницы (tools/learn_catalog.mjs исполняет те же файлы)
+  if (Tour.lazy) {
+    const file = await fetch(new URL("learn-catalog.json", location.href)).then((r) => (r.ok ? r.json() : null), () => null);
+    ok(file && file.version === cat.version && file.available === true && JSON.stringify(file.topics) === JSON.stringify(cat.topics), "learn-catalog.json сборки совпадает с каталогом страницы");
+  }
   // Номер темы и главы этой страницы (так зовут play прототипы) становится ID в адресе
   ok(new URL(Tour.url(0, 1), location.href).searchParams.get("ch") === T0.chapters[1].id, "номер этой страницы переводится в ID");
 

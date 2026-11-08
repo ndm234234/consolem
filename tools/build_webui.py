@@ -11,7 +11,10 @@ api/requests/2026-10-29-184430Z-w2c-webui-csp-request.md): код — тольк
     интерфейс работает с бэкендом консоли по адресу из <meta name="consolem-api" content="api">
     (относительно страницы: страница /backend/, API /backend/api/…), по 401 уходит на
     <meta name="consolem-login" content="../">;
-  - у ссылок на файлы — ?v=<начало SHA-256>, чтобы браузер не взял старый файл из кэша.
+  - у ссылок на файлы — ?v=<начало SHA-256>, чтобы браузер не взял старый файл из кэша;
+  - learn-catalog.json — каталог учебных глав для бэкенда VMS (запрос w2c, ADR-VMS-0004): его пишет
+    node tools/learn_catalog.mjs из тех же tour.js и tour-demos.js, что идут в сборку (нужен Node.js). Без обучения —
+    тот же файл с available:false и пустым topics: потребитель видит, что запустить материал здесь нельзя.
 Сборка повторяема: из одного index.html — одни и те же байты. Сборка падает, если во входной странице
 остался встроенный код или страница, стили, код ссылаются на свой файл, которого в сборке нет (новое
 подключение в index.html — строкой в SCRIPTS). Проверка под CSP — tools/check_webui.py.
@@ -26,6 +29,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 
 import cli_paths
@@ -62,7 +66,22 @@ LEARN_SCRIPTS = {
 }
 # Сервер показа в порядке подключения; грузится только при ?demo (assets/tour.js)
 DEMO_FILES = ["fixture.js", "contract.js", "rule-engine.js", "kinds.js", "units.js", "profiles.js", "server.js"]
-TYPES = {".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".woff2": "font/woff2", ".mp4": "video/mp4"}
+TYPES = {".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".woff2": "font/woff2", ".mp4": "video/mp4", ".json": "application/json"}
+CATALOG_FORMAT = "consolem-learn-catalog/1"
+
+
+def learn_catalog(learn):
+    """Каталог учебных глав: из тех же тем, что исполняет показ (tools/learn_catalog.mjs), без обучения — пустой с признаком."""
+    if not learn:
+        empty = {"format": CATALOG_FORMAT, "version": None, "available": False, "reason": "сборка без раздела «Обучение» (--without-learn)", "topics": []}
+        return (json.dumps(empty, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+    node = shutil.which("node")
+    if not node:
+        sys.exit("Каталог учебных глав собирает Node.js (tools/learn_catalog.mjs): установите node или соберите с --without-learn")
+    res = subprocess.run([node, os.path.join(ROOT, "tools", "learn_catalog.mjs"), "--tour", "assets/tour.js", "--demos", "assets/tour-demos.js"], capture_output=True, text=True, cwd=ROOT)
+    if res.returncode:
+        sys.exit("Каталог учебных глав не собрался:\n" + res.stderr.strip())
+    return res.stdout.encode("utf-8")
 
 
 def read(rel):
@@ -144,6 +163,7 @@ def build(out, learn=True):
             files[name] = (read(src).encode("utf-8"), why)
             head_scripts.append(name)
     demo_files = []
+    files["learn-catalog.json"] = (learn_catalog("tour.js" in files), "каталог учебных глав для бэкенда VMS: ID тем и глав, название, цель, язык, учебный набор, отпечаток; без обучения — available:false")
     if "tour.js" in files:
         for name in DEMO_FILES:
             files["demo/" + name] = (read(f"{API}/{name}").encode("utf-8"), "сервер показа раздела «Обучение»: только в учебном режиме, с API консоли не работает")
@@ -172,7 +192,7 @@ def build(out, learn=True):
     if os.path.isdir(out):
         shutil.rmtree(out)
     order = ["index.html", "app.js", "app.css", "client.js", "whep-stub.js", "openapi.js", "i18n-en.js", "assets/stub-piece.mp4"] + sorted(n for n in files if n.startswith("fonts/"))
-    order += [n for n in ("tour.js", "tour-demos.js") if n in files] + demo_files
+    order += [n for n in ("tour.js", "tour-demos.js") if n in files] + ["learn-catalog.json"] + demo_files
     assert sorted(order) == sorted(files), (order, sorted(files))
     manifest = []
     for name in order:

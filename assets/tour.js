@@ -459,6 +459,35 @@
     panel.append(make("p", "tour-ti", t("Глава не найдена")), say, btns);
     document.body.append(panel);
   };
+  // SHA-256 строки в UTF-8, hex: отпечаток каталога. Свой, синхронный: crypto.subtle есть не на всяком адресе страницы (http не localhost)
+  const sha256 = (text) => {
+    const K = [], H = [], prime = (n) => { for (let d = 2; d * d <= n; d++) if (n % d === 0) return false; return true; };
+    for (let n = 2, i = 0; i < 64; n++) if (prime(n)) {
+      if (i < 8) H[i] = (Math.pow(n, 1 / 2) * 2 ** 32) | 0;
+      K[i++] = (Math.pow(n, 1 / 3) * 2 ** 32) | 0;
+    }
+    const bytes = [...new TextEncoder().encode(text)], bits = bytes.length * 8;
+    bytes.push(0x80);
+    while (bytes.length % 64 !== 56) bytes.push(0);
+    for (let i = 7; i >= 0; i--) bytes.push(i >= 4 ? 0 : (bits >>> (i * 8)) & 255);
+    const r = (x, n) => (x >>> n) | (x << (32 - n)), w = new Array(64);
+    for (let o = 0; o < bytes.length; o += 64) {
+      for (let i = 0; i < 16; i++) w[i] = (bytes[o + i * 4] << 24) | (bytes[o + i * 4 + 1] << 16) | (bytes[o + i * 4 + 2] << 8) | bytes[o + i * 4 + 3];
+      for (let i = 16; i < 64; i++) {
+        const s0 = r(w[i - 15], 7) ^ r(w[i - 15], 18) ^ (w[i - 15] >>> 3), s1 = r(w[i - 2], 17) ^ r(w[i - 2], 19) ^ (w[i - 2] >>> 10);
+        w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0;
+      }
+      let [a, b, c, d, e, f, g, h] = H;
+      for (let i = 0; i < 64; i++) {
+        const t1 = (h + (r(e, 6) ^ r(e, 11) ^ r(e, 25)) + ((e & f) ^ (~e & g)) + K[i] + w[i]) | 0;
+        const t2 = ((r(a, 2) ^ r(a, 13) ^ r(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) | 0;
+        [h, g, f, e, d, c, b, a] = [g, f, e, (d + t1) | 0, c, b, a, (t1 + t2) | 0];
+      }
+      [a, b, c, d, e, f, g, h].forEach((x, i) => (H[i] = (H[i] + x) | 0));
+    }
+    return H.map((x) => (x >>> 0).toString(16).padStart(8, "0")).join("");
+  };
+  const CATALOG_FORMAT = "consolem-learn-catalog/1";
   // Примерное время при скорости ×1: как в run — чтение подписи, плюс ход курсора
   const secs = (steps) => steps.reduce((sum, s) => sum + Math.max(2500, s.say.length * 55) + (s.act ? 1300 : 0), 0) / 1000;
   const Tour = {
@@ -513,6 +542,24 @@
       if (href) location.href = href;
       return !!href;
     },
+    /* Каталог готовых глав для UI и бэкенда VMS — из тех же тем, что исполняет показ, второй копии текстов нет.
+       Тема и глава: id, title, goal (зачем, поле why источника), lang (язык показа; шаги ищут элементы по русским подписям — «ru»),
+       fixture (учебный набор встроенного сервера). Шагов, before, селекторов и команд в каталоге нет. Главы прототипа без
+       устойчивого ID (Tour.add) не входят. version — «sha256:» и SHA-256 строки JSON.stringify({format, topics}) с ключами
+       в этом порядке: меняется при любой правке каталога (ID, порядок, название, цель, язык, набор), а не текста шагов.
+       available — материал можно запустить в этой поставке: есть движок и сервер показа. Сборка без обучения
+       (tools/build_webui.py --without-learn) кладёт файл с available:false и пустым topics. Файл сборки — learn-catalog.json,
+       его пишет node tools/learn_catalog.mjs. Формат и место поставки — предложение: их утверждает владелец договора */
+    catalog(opts) {
+      const avail = opts && "available" in opts ? !!opts.available : Tour.lazy || typeof ConsolemServer !== "undefined";
+      const topics = Tour.topics.filter((x) => x.stable).map((x) => {
+        const lang = x.lang || "ru", fixture = x.fixture || "demo";
+        return { id: x.id, title: x.title, goal: x.why, lang, fixture,
+          chapters: x.chapters.filter((c) => c.stable).map((c) => ({ id: c.id, title: c.title, goal: c.why, lang: c.lang || lang, fixture: c.fixture || fixture })) };
+      });
+      return { format: CATALOG_FORMAT, version: "sha256:" + sha256(JSON.stringify({ format: CATALOG_FORMAT, topics })), available: avail, topics };
+    },
+    sha256,
     // Вызов в конце файла с темами: темы уже известны, страница — после загрузки данных
     start() {
       (window.appReady || Promise.resolve()).then(() => {
