@@ -455,16 +455,18 @@
         chapters: [{ id: "tree.status", title: "Отбор по статусу", goal: "Статус показывает, что требует внимания.", lang: "ru", fixture: "demo" }] },
     ],
   };
-  test("Ассистент: «покажи, как …», «как настроить …» — answer с учебными ссылками learn из каталога; нет главы или каталога — answer без learn; отбор «покажи» прежний", async () => {
+  test("Ассистент: «покажи, как …», «как настроить …» — answer с учебными ссылками learn, только когда глава нашлась; нет главы или каталога — прежний разбор без learn", async () => {
     const env = await makeEnv();
-    const end = async (text) => (await env.stream("/assist/turns", { text })).pop();
+    const turn = async (text) => (await env.stream("/assist/turns", { text })).map(({ at, ...e }) => e);
+    const end = async (text) => (await turn(text)).pop();
     if (ApiTest.external) {
       const e = await end("покажи, как создать правило");
-      assert.ok(["answer", "question", "refused", "error"].includes(e.type), "просьба научить — конечное событие без плана: " + e.type);
+      assert.ok(["answer", "found", "question", "refused", "error", "plan"].includes(e.type), "конечное событие: " + e.type);
       assert.ok(!e.learn || e.type === "answer", "learn — только у answer");
       return e.learn ? `ссылок: ${e.learn.length}` : "стенд ответил без учебных ссылок";
     }
     try {
+      // (в) С каталогом и найденной главой — answer с learn
       window.ApiTestLearnCatalog = LEARN_CAT;
       const rule = await end("покажи, как создать простое правило");
       assert.eq([rule.type, typeof rule.text, typeof rule.context], ["answer", "string", "string"], "ответ — answer с текстом и context");
@@ -473,14 +475,34 @@
       assert.ok(rule.learn.every((l) => Object.keys(l).join() === "catalog,topic,chapter") && !/https?:|<|javascript:/i.test(JSON.stringify(rule.learn)), "в ссылке только ID: ни адреса, ни разметки");
       const status = await end("как настроить отбор по статусу");
       assert.eq(status.learn && status.learn.map((l) => l.chapter), ["tree.status"], "«как настроить …» — своя глава");
-      const none = await end("как погладить кота");
-      assert.eq([none.type, "learn" in none], ["answer", false], "главы нет — обычный answer без learn");
-      window.ApiTestLearnCatalog = Object.assign({}, LEARN_CAT, { available: false });
-      const off = await end("покажи, как создать правило");
-      assert.eq([off.type, "learn" in off], ["answer", false], "материал недоступен — answer без learn");
+      // Учебный ответ — только когда глава нашлась. Иначе — прежний разбор, тот же, что без каталога (и до учебных ссылок)
+      const same = async (text, what) => {
+        window.ApiTestLearnCatalog = LEARN_CAT;
+        const withCat = await turn(text);
+        window.ApiTestLearnCatalog = null;
+        const noCat = await turn(text);
+        window.ApiTestLearnCatalog = Object.assign({}, LEARN_CAT, { available: false });
+        const off = await turn(text);
+        assert.eq(withCat, noCat, `${what}: с каталогом без подходящей главы — как без каталога`);
+        assert.eq(off, noCat, `${what}: материал недоступен — как без каталога`);
+        assert.ok(noCat.every((e) => !("learn" in e)), `${what}: без learn`);
+        return noCat.pop();
+      };
+      // (а) «как выгрузить …» с камерой — план выгрузки, как раньше
+      if (ApiTest.can("createExport")) {
+        const exp = await same("как выгрузить видео с камеры Главный вход за 5 минут", "«как выгрузить …»");
+        assert.ok(exp.type === "plan" && exp.export && exp.export.cameras.length > 0 && exp.export.mode === "video", "«как выгрузить …» — план выгрузки: " + exp.type);
+      }
+      // (б) Без каталога «как создать правило» — прежний разбор правила: не понял, какое правило
       window.ApiTestLearnCatalog = null;
-      const nocat = await end("покажи, как создать правило");
-      assert.eq([nocat.type, "learn" in nocat], ["answer", false], "каталога нет — answer без learn");
+      const plain = await turn("как создать правило");
+      assert.eq([plain.at(-1).type, plain.at(-1).text, plain.some((e) => "learn" in e)], ["refused", "Не понял, какое правило нужно.", false], "«как создать правило» без каталога — прежний ответ, без learn");
+      window.ApiTestLearnCatalog = LEARN_CAT;
+      assert.ok((await end("как создать правило")).learn, "та же просьба с каталогом — учебная ссылка");
+      const cat = await same("как погладить кота", "«как погладить кота»");
+      assert.ok(cat.type !== "answer" || !cat.learn, "главы нет — прежний разбор: " + cat.type);
+      // Каталог есть, но просьба не учебная — прежний разбор
+      window.ApiTestLearnCatalog = LEARN_CAT;
       const found = await end("покажи камеры без детектора движения");
       assert.eq(found.type, "found", "«покажи» без «как» — прежний отбор");
       const count = await end("сколько камер");
