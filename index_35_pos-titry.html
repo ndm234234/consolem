@@ -2300,14 +2300,15 @@ html[data-theme="light"] .cp-step{background:var(--one-control-hover);color:var(
 .pos-presets{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 .pos-nums{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}.pos-nums label{display:flex;flex-direction:column;font-size:12px;color:var(--mu)}.pos-nums input{width:72px}
 .pos-two{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-top:8px}
-.pos-off{opacity:.55}
+.pos-list.is-off{opacity:.5;background:var(--p2)}.pos-list.is-off .pos-list-in{cursor:not-allowed}
+.pos-two>div{display:flex;flex-direction:column;gap:4px;min-width:0}
 .pos-wide select{field-sizing:content;max-width:100%}
 .pos-list{display:flex;flex-wrap:wrap;gap:4px;align-items:center;min-height:32px;padding:3px;border:1px solid var(--ln);border-radius:6px}
 .pos-list .chip{display:inline-flex;align-items:center;gap:2px}.pos-chip-x{border:0;background:none;color:inherit;cursor:pointer;padding:0 2px}
 .pos-list-in{flex:1;min-width:110px;border:0!important;background:none;outline:none}
 .pos-chks{display:flex;flex-direction:column;gap:4px;margin:8px 0}
 .pos-chk{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.pos-chk .sub{margin-left:4px}
-.pos-dur{display:flex;flex-direction:column;gap:4px;margin-top:8px}.pos-dur .pos-chk{flex-wrap:nowrap;align-items:flex-start}.pos-x{padding:1px 8px}.pos-dur-n{width:70px}
+.pos-dur{display:flex;flex-direction:column;gap:4px;margin-top:8px}.pos-opt{display:flex;align-items:center;gap:6px;min-height:var(--ctrl-h,32px);cursor:pointer}.pos-opt input[type=radio]{margin:0}.pos-opt .pos-dur-n{margin:0;height:28px;padding:0 6px}.pos-opt-hint{margin:0 0 0 22px}.pos-x{padding:1px 8px}.pos-dur-n{width:70px}
 .pos-range input{width:100%}
 .pos-wtbl{table-layout:fixed;width:100%}.pos-wtbl td input:not([type=checkbox]):not([type=color]){width:100%}
 .pos-bgc{white-space:nowrap}.pos-bgc input[type=color]{margin-left:4px}
@@ -15453,7 +15454,7 @@ function posFit(){
 // Кадр с зоной: зона одна на камеру, на кадре — только зона выбранной камеры
 function posFrameHtml(n,p){
   const cam=p.cur?find(p.cur)?.n:null;
-  if(!cam)return`<div class="vid pos-vid"><span class="sub">${i18n("Добавить камеру, на которой клиент оператора покажет титры")}</span></div>`;
+  if(!cam)return`<div class="vid pos-vid"><span class="sub">${i18n("Добавить камеру, на которой оператор увидит титры")}</span></div>`;
   const a=p.areas[p.cur]||POS_AREA0;
   const area=`<div class="pos-area" data-pos-area style="left:${a.x*100}%;top:${a.y*100}%;width:${a.w*100}%;height:${a.h*100}%" ${onEv("mousedown",["posAreaDown",onEv.el,onEv.event,`${n.id}`])}>
     <div class="pos-txt" data-pos-txt style="${posTxtStyle(p)}">${posLines(p).map(l=>`<div>${posHi(n,p,l.t)||"&nbsp;"}</div>`).join("")}</div>
@@ -15473,11 +15474,11 @@ function posPreviewCard(n,p){
     ${posFrameHtml(n,p)}
     ${a?`<p class="sub">${i18n("Перетащить зону на кадре. Чтобы изменить размер, тянуть за угол.")}</p>
     <div class="pos-presets">${POS_PRESETS.map(([k,l])=>`<button type="button" class="btn s" ${onEv("click",["posPreset",`${n.id}`,k])}>${i18n(l)}</button>`).join("")}${p.cams.length>1?`<button type="button" class="btn s" ${onEv("click",["posAreaAll",`${n.id}`])}>${i18n("Эту зону — всем камерам")}</button>`:""}</div>${nums}`:""}
-    <p class="sub">${i18n("В зоне — пример: последние строки от кассы с вашими настройками. Клиент оператора показывает титры поверх живого видео и архива и не добавляет текст в само видео.")}</p>`);
+    <p class="sub">${i18n("В зоне — пример: последние строки от кассы с вашими настройками. Оператор видит титры поверх живого видео и архива. В само видео текст не попадает.")}</p>`);
 }
-function posListHtml(n,p,k,ph){
-  return`<div class="pos-list">${p[k].map((w,i)=>`<span class="chip on">${escHtml(w)}<button type="button" class="pos-chip-x" aria-label="${i18n("Убрать")}" ${onEv("click",["posListDel",`${n.id}`,k,i])}>×</button></span>`).join("")}
-    <input class="pos-list-in" placeholder="${i18n(ph)}" ${onEv("keydown",["posListKey",onEv.event,`${n.id}`,k,onEv.el])}></div>`;
+function posListHtml(n,p,k,ph,off=false){
+  return`<div class="pos-list${off?" is-off":""}" ${off?`aria-disabled="true"`:""}>${p[k].map((w,i)=>`<span class="chip on">${escHtml(w)}${off?"":`<button type="button" class="pos-chip-x" aria-label="${i18n("Убрать")}" ${onEv("click",["posListDel",`${n.id}`,k,i])}>×</button>`}</span>`).join("")}
+    <input class="pos-list-in" placeholder="${i18n(off?"Не нужны":ph)}" ${off?"disabled":""} ${onEv("keydown",["posListKey",onEv.event,`${n.id}`,k,onEv.el])}></div>`;
 }
 function posListKey(e,id,k,el){if(e.key!=="Enter")return;e.preventDefault();posListAdd(id,k,el.value)}
 function posListAdd(id,k,v){const p=POS_STUB.get(id);v=String(v||"").trim();if(!p||!v)return;if(!p[k].includes(v))p[k].push(v);gear();setTimeout(()=>document.querySelector(`#main [data-pos-list="${k}"] .pos-list-in`)?.focus(),0)}
@@ -15503,7 +15504,8 @@ function posBillCard(n,p){
     :`<p class="sub pos-ok">${i18n("Пример: чек — строки")} ${s+1}–${e<0?POS_RAW.length:e+1} ${i18n("из")} ${POS_RAW.length}.</p>`;
   return card("Чек",`<div class="pos-wide">${posSel(n.id,"repeats","Как делить строки на чеки",[["skip","По словам начала и конца"],["none","Только по словам начала"]],p.repeats)}</div>
     <div class="pos-two"><div data-pos-list="start"><label class="sub">${i18n("Слова начала чека")}</label>${posListHtml(n,p,"start","Слово и Enter")}</div>
-      <div data-pos-list="end" class="${byStart?"pos-off":""}"><label class="sub">${i18n("Слова конца чека")}${byStart?` · ${i18n("не используются")}`:""}</label>${posListHtml(n,p,"end","Слово и Enter")}</div></div>
+      <div data-pos-list="end"><label class="sub">${i18n("Слова конца чека")}</label>${posListHtml(n,p,"end","Слово и Enter",byStart)}</div></div>
+    ${byStart?`<p class="sub">${i18n("Новый чек начинается со слова начала. Слова конца сервер не проверяет.")}</p>`:""}
     ${warn}
     <div class="pos-chks">${posChk(n.id,"ignoreCase",p.ignoreCase,"Не учитывать регистр слов начала и конца")}
       ${posChk(n.id,"billsOnly",p.billsOnly,"Показывать только строки чека","Строки между словами начала и конца")}
@@ -15522,7 +15524,7 @@ function posWordsCard(n,p){
       <td><input type="checkbox" ${f.whole?"checked":""} aria-label="${i18n("Подсветить всю строку")}" title="${i18n("Подсветить всю строку")}" ${onEv("change",["posWf",`${n.id}`,i,"whole"])}></td>
       <td class="ca-x"><button type="button" class="btn s pos-x" aria-label="${i18n("Убрать")}" title="${i18n("Убрать")}" ${onEv("click",["posWordDel",`${n.id}`,i])}>×</button></td></tr>`}).join("")}</tbody></table>
     <div class="ca-foot"><button class="btn s" ${onEv("click",["posWordAdd",`${n.id}`,""])}>${lu("plus")}${i18n("Слово")}</button></div>
-    <p class="sub">${i18n("Клиент оператора выделяет слово цветом в титрах. Флажок «Строка» выделяет строку целиком. Без флажка «Аа» клиент находит слово в любом регистре.")}</p>`);
+    <p class="sub">${i18n("Оператор видит слово в титрах этим цветом. Флажок «Строка» выделяет строку целиком. Без флажка «Аа» клиент находит слово в любом регистре.")}</p>`);
 }
 function posWf(id,i,k){const p=POS_STUB.get(id);if(!p)return;const f=p.wf[i]=p.wf[i]||{};f[k]=!f[k];gear()}
 function posWordAdd(id,msg){const n=find(id)?.n,p=n&&posOf(n);if(!p)return;if(msg&&(n.words||[]).some(w=>w.msg===msg))return;wordsEdit(id,l=>l.concat({msg:msg||`${i18n("Слово")} ${l.length+1}`,color:"#ff4444",bg:"#000000"}));p.wf[(n.words||[]).length-1]={}}
@@ -15591,9 +15593,10 @@ function posParserPick(id){const p=POS_STUB.get(id);if(!p)return;p.parser=p.pars
 function posDurHtml(){
   const orig=cardFldOrig("Длительность, с",""),d=String(cardFldVal("Длительность, с",orig)??""),zero=d==="0",sec=zero||d===""?"10":d;
   const at=v=>`data-df="Длительность, с" data-orig="${escHtml(orig??"")}"`;
-  return`<div class="pos-dur"><label class="sub">${i18n("Когда клиент оператора убирает чек с экрана")}</label>
-    <label class="chk pos-chk"><input type="radio" name="posdur" value="${escHtml(sec)}" ${zero?"":"checked"} ${at()} ${onEv("change",["posDurSet",onEv.el])}> ${i18n("Через")} <input type="number" min="1" class="pos-dur-n" value="${escHtml(sec)}" ${zero?"disabled":""} ${at()} ${onEv("change",["posDurSet",onEv.el])}> ${i18n("с после последней строки")}</label>
-    <label class="chk pos-chk"><input type="radio" name="posdur" value="0" ${zero?"checked":""} ${at()} ${onEv("change",["posDurSet",onEv.el])}> ${i18n("Когда после паузы дольше 10 с придёт новая строка")}</label></div>`;
+  return`<div class="pos-dur"><label class="sub">${i18n("Когда убирать чек с экрана оператора")}</label>
+    <label class="pos-opt"><input type="radio" name="posdur" value="${escHtml(sec)}" ${zero?"":"checked"} ${at()} ${onEv("change",["posDurSet",onEv.el])}><span>${i18n("Через")}</span><input type="number" min="1" class="pos-dur-n" value="${escHtml(sec)}" ${zero?"disabled":""} ${at()} ${onEv("change",["posDurSet",onEv.el])}><span>${i18n("с после последней строки")}</span></label>
+    <label class="pos-opt"><input type="radio" name="posdur" value="0" ${zero?"checked":""} ${at()} ${onEv("change",["posDurSet",onEv.el])}><span>${i18n("Держать до следующей строки")}</span></label>
+    <p class="sub pos-opt-hint">${i18n("Чек остаётся на экране, пока касса не пришлёт новую строку. Если касса молчала больше 10 секунд, новая строка начинает экран заново.")}</p></div>`;
 }
 function posDurSet(el){cardFld(el);gear()}
 // ── Единицы СКУД ──────────────────────────────────────────────────────────
