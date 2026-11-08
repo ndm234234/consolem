@@ -2278,8 +2278,8 @@ html[data-theme="light"] .cp-step{background:var(--one-control-hover);color:var(
 /* Прототип 35: карточка POS-устройства */
 .p35-stub{margin:0 0 8px;padding:4px 10px;border:1px dashed var(--ln);border-radius:8px;width:fit-content}
 .pos-grid{display:grid;grid-template-columns:minmax(360px,1.15fr) minmax(380px,1fr);gap:12px;align-items:start}
-.pos-l{position:sticky;top:0}
-@media (max-width:1250px){.pos-grid{grid-template-columns:1fr}.pos-l{position:static}}
+.pos-l{position:sticky;top:0;max-height:var(--pos-sc-h,none);overflow-y:auto;scrollbar-gutter:stable}
+@media (max-width:1250px){.pos-grid{grid-template-columns:1fr}.pos-l{position:static;max-height:none;overflow:visible}}
 .pos-vid{max-width:none;container-type:inline-size}
 .pos-layer{position:absolute;inset:0;z-index:2}
 .pos-area{position:absolute;border:1.5px dashed #fff;outline:1px solid #0008;cursor:move;box-sizing:border-box}
@@ -15456,7 +15456,7 @@ function posFrameHtml(n,p){
   const area=`<div class="pos-area" data-pos-area style="left:${a.x*100}%;top:${a.y*100}%;width:${a.w*100}%;height:${a.h*100}%" ${onEv("mousedown",["posAreaDown",onEv.el,onEv.event,`${n.id}`])}>
     <div class="pos-txt" data-pos-txt style="${posTxtStyle(p)}">${posLines(p).map(l=>`<div>${posHi(n,p,l.t)||"&nbsp;"}</div>`).join("")}</div>
     ${["nw","ne","sw","se"].map(h=>`<i class="pos-h pos-h-${h}" data-h="${h}"></i>`).join("")}</div>`;
-  requestAnimationFrame(posFit);
+  setTimeout(posFit,0);
   return liveFrameHtml(cam,`<div class="pos-layer">${area}</div>`).replace('class="vid live-frame"','class="vid live-frame pos-vid"');
 }
 function posCamsHtml(n,p){
@@ -15542,9 +15542,18 @@ function posRawCard(n,p){
       <span class="pos-raw-acts">${[["start","Начало чека"],["end","Конец чека"],["word","Подсветить"]].map(([k,l])=>`<button type="button" class="btn s" ${onEv("mousedown",onEv.prevent,["posRawSel",onEv.el])} ${onEv("click",["posRawUse",`${n.id}`,i,k])}>${i18n(l)}</button>`).join("")}</span></div>`).join("")}</div>
     <p class="sub">${i18n("Выделить слово в строке и нажать кнопку. Без выделения кнопка берёт строку целиком. Так слово совпадёт с тем, что передаёт касса, вплоть до символа.")}</p>`);
 }
+// Левая колонка (кадр) прилипает к верху и не выше видимой области прокрутки: иначе её низ виден только в конце правой
+// колонки. Высота области меняется со строкой плана и окном — её ловит ResizeObserver
+let posColRO=null;
+function posColFit(){
+  const sc=document.querySelector("#main .sc");if(!sc||!sc.querySelector(".pos-l"))return;
+  const set=()=>{const cs=getComputedStyle(sc);document.documentElement.style.setProperty("--pos-sc-h",sc.clientHeight-parseFloat(cs.paddingTop)-parseFloat(cs.paddingBottom)+"px")};set();
+  posColRO?.disconnect();posColRO=new ResizeObserver(set);posColRO.observe(sc);
+}
 function posStubHtml(){return`<p class="sub p35-stub">${i18n("Прототип 35. Консоль не сохраняет новые поля на сервере: это заглушка.")}</p>`}
 function posTitlesHtml(n){
   const p=posOf(n);
+  setTimeout(posColFit,0);
   return posStubHtml()+`<div class="pos-grid"><div class="pos-l">${posPreviewCard(n,p)}</div><div class="pos-r">${posLookCard(n,p)}${posBillCard(n,p)}${posWordsCard(n,p)}${posRawCard(n,p)}</div></div>`;
 }
 // Подключение: драйвер, приём данных, кодировка; разбор — в «Дополнительно». Поля POSLegacy — только у него
