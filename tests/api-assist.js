@@ -442,5 +442,54 @@
     return `камер по слову: ${withWord.length}`;
   }, { needs: ["assistTurn", "createExport"] });
 
+  // Учебные ссылки (запрос w2c, ADR-VMS-0004): answer.learn — {catalog, topic, chapter} из каталога обучения консоли. Каталог даёт
+  // страница, у встроенного сервера своего нет: тест ставит маленький каталог в window.ApiTestLearnCatalog (harness.js).
+  // Стенд бэкенда каталог знает сам: там проверяется только форма — схемой, общей проверкой в конце прогона
+  const LEARN_CAT = {
+    format: "consolem-learn-catalog/1", version: "sha256:" + "ab".repeat(32), available: true,
+    topics: [
+      { id: "rules", title: "Как создать правило автоматизации", goal: "Правило само реагирует на событие.", lang: "ru", fixture: "demo",
+        chapters: [{ id: "rules.simple", title: "Простое правило: «Если» и «То»", goal: "Простое правило отвечает на два вопроса: что случилось и что сделать.", lang: "ru", fixture: "demo" },
+          { id: "rules.template", title: "Шаблон", goal: "Шаблон сразу даёт рабочую логику.", lang: "ru", fixture: "demo" }] },
+      { id: "tree", title: "Как найти объект в дереве", goal: "Срезы, папки и статус сужают дерево.", lang: "ru", fixture: "demo",
+        chapters: [{ id: "tree.status", title: "Отбор по статусу", goal: "Статус показывает, что требует внимания.", lang: "ru", fixture: "demo" }] },
+    ],
+  };
+  test("Ассистент: «покажи, как …», «как настроить …» — answer с учебными ссылками learn из каталога; нет главы или каталога — answer без learn; отбор «покажи» прежний", async () => {
+    const env = await makeEnv();
+    const end = async (text) => (await env.stream("/assist/turns", { text })).pop();
+    if (ApiTest.external) {
+      const e = await end("покажи, как создать правило");
+      assert.ok(["answer", "question", "refused", "error"].includes(e.type), "просьба научить — конечное событие без плана: " + e.type);
+      assert.ok(!e.learn || e.type === "answer", "learn — только у answer");
+      return e.learn ? `ссылок: ${e.learn.length}` : "стенд ответил без учебных ссылок";
+    }
+    try {
+      window.ApiTestLearnCatalog = LEARN_CAT;
+      const rule = await end("покажи, как создать простое правило");
+      assert.eq([rule.type, typeof rule.text, typeof rule.context], ["answer", "string", "string"], "ответ — answer с текстом и context");
+      assert.eq(rule.learn && rule.learn[0], { catalog: LEARN_CAT.version, topic: "rules", chapter: "rules.simple" }, "первая ссылка — глава каталога по ID");
+      assert.ok(rule.learn.every((l) => l.catalog === LEARN_CAT.version && l.chapter.startsWith(l.topic + ".") && LEARN_CAT.topics.some((t) => t.id === l.topic && t.chapters.some((c) => c.id === l.chapter))), "все ссылки — из каталога, глава своей темы");
+      assert.ok(rule.learn.every((l) => Object.keys(l).join() === "catalog,topic,chapter") && !/https?:|<|javascript:/i.test(JSON.stringify(rule.learn)), "в ссылке только ID: ни адреса, ни разметки");
+      const status = await end("как настроить отбор по статусу");
+      assert.eq(status.learn && status.learn.map((l) => l.chapter), ["tree.status"], "«как настроить …» — своя глава");
+      const none = await end("как погладить кота");
+      assert.eq([none.type, "learn" in none], ["answer", false], "главы нет — обычный answer без learn");
+      window.ApiTestLearnCatalog = Object.assign({}, LEARN_CAT, { available: false });
+      const off = await end("покажи, как создать правило");
+      assert.eq([off.type, "learn" in off], ["answer", false], "материал недоступен — answer без learn");
+      window.ApiTestLearnCatalog = null;
+      const nocat = await end("покажи, как создать правило");
+      assert.eq([nocat.type, "learn" in nocat], ["answer", false], "каталога нет — answer без learn");
+      const found = await end("покажи камеры без детектора движения");
+      assert.eq(found.type, "found", "«покажи» без «как» — прежний отбор");
+      const count = await end("сколько камер");
+      assert.eq([count.type, "learn" in count], ["answer", false], "вопрос о системе — answer без learn");
+      return `ссылок на «создать правило»: ${rule.learn.length}`;
+    } finally {
+      window.ApiTestLearnCatalog = null;
+    }
+  }, NEED);
+
   ApiTest.loaded("api-assist.js");
 })();

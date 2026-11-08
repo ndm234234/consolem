@@ -44,7 +44,8 @@
       return ConsolemApi.create({ baseUrl: new URL("loopback-api", location.href).href });
     }
     if (apiBase) return ConsolemApi.create({ baseUrl: apiBase });
-    return ConsolemApi.create({ server: ConsolemServer.create({ fixture: RAW, fixtures: window.CONSOLEM_FIXTURES, openapi: spec, autoTick: !frozen, testSupport: true }) });
+    // learn — каталог обучения для учебных ссылок заглушки ассистента: его ставит тест (api-assist.js), у стенда его нет
+    return ConsolemApi.create({ server: ConsolemServer.create({ fixture: RAW, fixtures: window.CONSOLEM_FIXTURES, openapi: spec, autoTick: !frozen, testSupport: true, learn: () => window.ApiTestLearnCatalog || null }) });
   }
 
   // Каждый ответ запоминается вместе с операцией контракта — для сверки схем и покрытия

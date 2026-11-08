@@ -12694,7 +12694,7 @@
               "plan": "План: summary, context и items, rules или export. Частичных планов нет: не может всё — refused",
               "refused": "Не может: text, context; field — JSON Pointer поля, если отказ о нём (значение вне схемы вида)",
               "error": "Ошибка: code, message",
-              "answer": "Ответ на вопрос о системе: text, context. Плана нет, ничего не меняется. Разговор продолжается новым запросом с этим context",
+              "answer": "Ответ на вопрос о системе: text, context; learn — учебные ссылки, если они есть. Плана нет, ничего не меняется. Разговор продолжается новым запросом с этим context",
               "found": "Отбор: text, context, conditions и ровно одно из ids или filter; action — если просили команду над отобранным. Только читает. Найдено 0 — тоже found. Разговор продолжается новым запросом с этим context"
             }
           },
@@ -12770,9 +12770,45 @@
           "action": {
             "type": "string",
             "description": "found: код команды из UnitKind.actions отобранных видов, о которой просили («поставь контроллеры на охрану» — ARM). Ход её не выполняет: форма предлагает её над отобранным, выполняет человек (POST /units/{uid}/actions/{action} или шаг action POST /operations)"
+          },
+          "learn": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 3,
+            "items": {
+              "$ref": "#/components/schemas/AssistLearnLink"
+            },
+            "description": "answer: готовые учебные главы по просьбе («покажи, как…», «как настроить…») — ссылки на каталог обучения консоли (learn-catalog.json сборки, Tour.catalog), не адрес и не код. Консоль сверяет каждую ссылку со своим каталогом и показывает карточку «Открыть учебный пример» с названием, целью и языком из каталога; показ запускает человек кнопкой, приход события сам ничего не открывает. Ссылка на неизвестную главу или чужую версию каталога не запускается: консоль предлагает свой каталог. Поля нет — обычный ответ. Только у answer"
           }
         },
         "description": "Сообщение хода. Поток заканчивается одним из question, plan, refused, answer, found, error"
+      },
+      "AssistLearnLink": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "catalog",
+          "topic",
+          "chapter"
+        ],
+        "properties": {
+          "catalog": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "description": "Версия каталога обучения — его version (отпечаток): ссылка годится только для каталога с той же версией"
+          },
+          "topic": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$",
+            "description": "ID темы каталога (topics[].id)"
+          },
+          "chapter": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$",
+            "description": "ID главы каталога (topics[].chapters[].id): «<тема>.<глава>», начинается с ID темы"
+          }
+        },
+        "description": "Учебная ссылка ассистента: глава каталога обучения консоли по устойчивым ID. URL, разметки, селекторов и команд в ней нет: что показать и как запустить, консоль берёт из своего каталога"
       },
       "LiveRequest": {
         "type": "object",

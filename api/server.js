@@ -4992,12 +4992,14 @@
       return last({ type: "plan", summary: "Create a rule", context, rules: rows });
     }
     // Что за реплика, заглушка решает сама по словам просьбы вместе с прежним context: поля типа в запросе нет.
-    // Порядок разбора: слова отбора («покажи») → вопрос о системе → правило → команда → правка. Команда над объектами
+    // Порядок разбора: просьба научить («покажи, как создать…», assistLearnStub) → слова отбора («покажи») → вопрос о системе → правило → команда → правка. Команда над объектами
     // («поставь контроллеры на охрану») — отбор: выполняет её человек. Подпись команды сравнивается по первым пяти буквам
     // слов, поэтому она перехватывает просьбу, только если разбор правки не узнал в ней свойства: «включи запись» — правка,
     // даже когда у вида есть команда «Включить». Выбранное держит в себе, в событиях его нет
     function assistKindOf(said) {
       const low = said.toLowerCase();
+      // «покажи, как создать правило», «как настроить детекторы»: «как» и глагол в неопределённой форме — просьба научить
+      if (/(^|[^а-яё])как\s+[а-яё]+(ть|ться|ти|чь)(?![а-яё])/.test(low)) return "learn";
       if (/выгруз|экспорт|кадр с камер/.test(low) && caps().operations.includes("createExport")) return "export";
       if (/дай список|покажи|выведи/.test(low)) return "found";
       if (/сколько|почему|какой|какая|какие/.test(low)) return "explain";
@@ -5129,6 +5131,30 @@
       if (action) e.action = action.id;
       return out.concat(e);
     }
+    /* Просьба научить: ответ answer, и если в каталоге обучения консоли есть подходящие главы — learn, ссылки на них
+       (AssistLearnLink: версия каталога, ID темы и главы). Каталог даёт страница (opts.learn — функция, Tour.catalog), у сервера
+       своего нет: без каталога или с недоступным материалом — обычный answer. Глава — по словам просьбы в названии темы и главы
+       и в цели главы, название главы весит вдвое; лучшие, не больше трёх. Не нашлось — answer без learn. Это не модель:
+       настоящий выбор главы — у бэкенда VMS по его каталогу */
+    const LEARN_STOP = ["покаж", "научи", "объяс", "пожал", "можно", "нужно", "хочу", "консо", "систе", "через", "чтобы"];
+    function assistLearnStub(said, context, at) {
+      const out = [{ type: "progress", at, text: "ищу учебную главу" }];
+      const last = (e) => out.concat(Object.assign({ at, context }, e));
+      let cat = null;
+      try {
+        cat = typeof opts.learn === "function" ? opts.learn() : null;
+      } catch (e) {}
+      if (!cat || !cat.available || !/^sha256:[0-9a-f]{64}$/.test(cat.version || "") || !(cat.topics || []).length) return last({ type: "answer", text: "В этой консоли нет учебных глав. Спросите администратора." });
+      const stem = (t) => assistWords(t).filter((w) => w.length >= 4).map((w) => w.slice(0, 5));
+      const want = [...new Set(stem(said).filter((w) => !LEARN_STOP.includes(w)))];
+      const hits = (t) => { const have = new Set(stem(t)); return want.filter((w) => have.has(w)).length; };
+      const scored = [];
+      cat.topics.forEach((tp) => (tp.chapters || []).forEach((ch) => scored.push({ tp, ch, n: hits(tp.title) + 2 * hits(ch.title) + hits(ch.goal) })));
+      const best = Math.max(0, ...scored.map((x) => x.n));
+      if (!best) return last({ type: "answer", text: "Готовой учебной главы на эту тему нет. Задайте вопрос иначе или откройте раздел «Обучение»." });
+      const top = scored.filter((x) => x.n === best).slice(0, 3);
+      return last({ type: "answer", text: `Есть готовый учебный пример: «${top[0].ch.title}». Показ идёт на учебных данных и не меняет систему.`, learn: top.map((x) => ({ catalog: cat.version, topic: x.tp.id, chapter: x.ch.id })) });
+    }
     // Вопрос о системе: только чтение, конечное событие answer, плана нет. Виды, названные в просьбе, — по подписи
     function assistExplainStub(said, context, at) {
       const low = said.toLowerCase();
@@ -5237,6 +5263,7 @@
     function assistStub(body) {
       const said = `${(body.context || "").replace(/^stub:/, "")} ${body.text}`.trim();
       const kind = assistKindOf(said);
+      if (kind === "learn") return assistLearnStub(said, `stub:${said}`, iso(now()));
       if (kind === "rules") return assistRulesStub(said, `stub:${said}`, iso(now()));
       if (kind === "explain") return assistExplainStub(said, `stub:${said}`, iso(now()));
       if (kind === "found") return assistFoundStub(said, `stub:${said}`, iso(now()));
