@@ -2330,6 +2330,18 @@ html[data-theme="light"] .cp-step{background:var(--one-control-hover);color:var(
 <script src="api/openapi.js"></script>
 <script src="api/fixture.js"></script>
 <script src="api/contract.js"></script>
+<script>
+// Прототип 35 (заглушка): команда камеры «Начать репликацию» для правил — в контракте её нет (запрос после утверждения).
+// Периоды — как в макросе Axxon One «Camera: Start replication»: Offline periods, Whole period, During, Finish after
+(function(){
+  const act={id:"replicate",label:{key:"proto35.replicate",text:"Начать репликацию",lang:"ru"},execution:"instant",ruleAction:true,ruleOnly:true,
+    right:{level:"FULL"},params:{type:"object",additionalProperties:false,properties:{
+      period:{type:"string",enum:["offline","whole","last","event"]},minutes:{type:"integer",minimum:1,maximum:1440},archive:{type:"string"}},
+      required:["period"]}};
+  Object.values(window.CONSOLEM_FIXTURES||{}).forEach(fx=>(fx.kinds||[]).forEach(k=>{
+    if(k.kind==="camera"&&!(k.actions||[]).some(a=>a.id==="replicate"))k.actions=[...(k.actions||[]),act]}));
+})();
+</script>
 <script src="api/rule-engine.js"></script>
 <script src="api/kinds.js"></script>
 <script src="api/units.js"></script>
@@ -15854,6 +15866,10 @@ const ACTION_KINDS=[
   {grp:"Детектор",sub:"det",action:"scan",unit:true,label:"Проверить архив",short:"Проверка архива",devTypes:["camera"],def:{beforeSec:60,after:60},
    fields:[{id:"ref",label:"Камера"},{id:"detectorKind",label:"Вид детектора",dyn:ruleDetKindOpts},{id:"beforeSec",label:"Секунд до события",req:false},{id:"after",label:"Секунд после события",req:false},
            {id:"archive",label:"Хранилище",req:false,dyn:ruleScanArchOpts},{id:"params",label:"Настройки детектора",req:false}]},
+  // Прототип 35 (заглушка): забрать записи со встроенного хранилища камеры в архив сервера
+  {grp:"Камера",sub:"rec",action:"replicate",unit:true,label:"Начать репликацию",short:"Репликация",devTypes:["camera"],def:{period:"offline",minutes:10},
+   fields:[{id:"ref",label:"Камера"},{id:"period",label:"Что забрать",opts:[["offline","пропуски, пока не было связи"],["whole","всё, чего нет в архиве"],["last","последние минуты"],["event","от начала события до его конца"]]},
+           {id:"minutes",label:"Минут",on:a=>a.period==="last"},{id:"archive",label:"Куда (необязательно)",req:false,dyn:edgeRuleArchOpts}]},
   {grp:"Тревога",sub:"alarm",action:"alarm",unit:true,label:"Поднять тревогу",short:"Тревога",devTypes:["camera"],def:{prio:"normal"},
    fields:[{id:"ref",label:"Камера"},{id:"prio",label:"Приоритет",req:false,opts:[["normal","обычная"],["high","высокая"]]},{id:"text",label:"Текст тревоги (необязательно)",tpl:true}]},
   {grp:"Тревога",sub:"alarm",action:"alarmclose",unit:true,label:"Закрыть тревогу",devTypes:["camera"],fields:[{id:"ref",label:"Камера"}]},
@@ -15878,6 +15894,8 @@ const ACT_DEFAULT=ACTION_KINDS.find(k=>k.action==="output");
 // Виды детектора действия: что объявила система, иначе весь справочник
 function ruleDetKindOpts(a){const rf=ruleRefField(actionKind(a),"detectorKind");return(rf&&rf.options?.length?rf.options:refDetKinds).map(k=>[k,detKindRu(k)])}
 // Хранилища записи камеры действия: проверить можно только их
+// Прототип 35: «Куда» у репликации — по умолчанию архив из настройки встроенного хранилища
+function edgeRuleArchOpts(a){return[["",i18n("как в типе репликации")],...ruleArchOpts(a).slice(1)]}
 function ruleScanArchOpts(a){
   const n=refNode(a.ref),own=n?camArchs(n).map(x=>x.arch):[];
   return[["","основная запись"],...own.map(id=>[id,locName(archById(id)||{name:id})])];
@@ -25119,9 +25137,21 @@ function edgePullAsk(id){
     <div class="g"><div><label>${i18n("С")}</label><input id="erPullFrom" type="datetime-local" value="2026-11-08T08:00"></div><div><label>${i18n("До")}</label><input id="erPullTo" type="datetime-local" value="2026-11-08T09:00"></div></div>`,
     "","Забрать",()=>toast(i18n("Сервер забирает период. Заглушка: забор не идёт.")),{html:true});
 }
+// Правило автоматизации с действием «Начать репликацию» (заглушка): как макрос Axxon One. Тип «Только события» —
+// по движению забрать время события; иначе — после обрыва потока забрать пропуски, пока не было связи
+function edgeRuleNew(id){
+  const st=find(id)?.n,o=st&&edgeOwner(st);if(!o)return;
+  const cams=o.type==="ipsrv"?ipsrvCameras(o).map(c=>c.id):[o.id];
+  const ref=refOf({include:cams.map(uid=>({uid})),exclude:[],gone:[],fromEvent:false});
+  const ev=edgeRep(st).type==="events";
+  const p={start:"event",when:[ev?{sub:"det",kind:"motion",ref,match:{}}:{sub:"vms",kind:"silent",ref,match:{}}],
+    then:[{sub:"rec",action:"replicate",ref:cams.length>1?"$src":ref,period:ev?"event":"offline",minutes:10}]};   // NVR: камера из события
+  ruleQuiet=true;setApp("rules");ruleQuiet=false;
+  ruleNewOpen(p);
+}
 function edgeStatusHtml(st){
   const s=edgeStat(st),id=st.id;
-  if(!s)return card("Состояние репликации",`<p class="sub">${i18n("Репликация выключена. Чтобы забрать отдельный период, нажать «Забрать период».")}</p><button type="button" class="btn s" ${onEv("click",["edgePullAsk",id])}>${i18n("Забрать период…")}</button>`);
+  if(!s)return card("Состояние репликации",`<p class="sub">${i18n("Репликация выключена. Чтобы забрать отдельный период, нажать «Забрать период».")}</p><div class="er-act"><button type="button" class="btn s" ${onEv("click",["edgePullAsk",id])}>${i18n("Забрать период…")}</button><button type="button" class="btn s" ${onEv("click",["edgeRuleNew",id])}>${i18n("Создать правило…")}</button></div>`);
   return card("Состояние репликации",`<div class="mx">
       <div class="mc"><span>${i18n("Сейчас")}</span><b>${edgeStatChip(s)}</b></div>
       <div class="mc"><span>${i18n("Осталось забрать")}</span><b>${escHtml(s.left)}</b></div>
@@ -25130,7 +25160,7 @@ function edgeStatusHtml(st){
       <div class="mc"><span>${i18n("Следующий забор")}</span><b>${escHtml(s.next)}</b></div>
     </div>
     ${s.gaps.length?`<table class="er-gaps"><thead><tr><th>${i18n(edgeRep(st).type==="events"?"Событие":"Пропуск в архиве")}</th><th>${i18n("Длительность")}</th><th>${i18n("Итог")}</th></tr></thead><tbody>${s.gaps.map(g=>`<tr class="${g[2].startsWith("пропал")?"lost":""}"><td>${escHtml(g[0])}</td><td>${escHtml(i18n(g[1]))}</td><td>${escHtml(i18n(g[2]))}</td></tr>`).join("")}</tbody></table>`:`<p class="sub">${i18n("Пропусков за 7 дней нет.")}</p>`}
-    <div class="er-act"><button type="button" class="btn s" ${onEv("click",["edgePullAsk",id])}>${i18n("Забрать период…")}</button><span class="sub">${i18n("Журнал пишет начало и конец каждого забора.")}</span></div>`,`<span class="er-stub">${i18n("заглушка")}</span>`);
+    <div class="er-act"><button type="button" class="btn s" ${onEv("click",["edgePullAsk",id])}>${i18n("Забрать период…")}</button><button type="button" class="btn s" ${onEv("click",["edgeRuleNew",id])}>${i18n("Создать правило…")}</button><span class="sub">${i18n("Журнал пишет начало и конец каждого забора.")}</span></div>`,`<span class="er-stub">${i18n("заглушка")}</span>`);
 }
 // Регистратор: одна настройка на все камеры, камеру можно исключить
 function edgeNvrCamsHtml(st){
