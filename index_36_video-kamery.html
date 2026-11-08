@@ -697,6 +697,7 @@ div.exp-ln{display:flex;align-items:center;padding:8px 0}
 .cv-tabs button span{font-weight:400;font-size:12px;color:var(--mu)}
 .cv-tabs button[aria-selected="true"]{color:var(--tx);border-bottom-color:var(--bl)}
 .cv-tabs button:focus-visible{outline:2px solid var(--bl);outline-offset:-2px;border-radius:4px}
+.cv-nat{margin:0 0 6px;font-size:12px}
 .cv-tab-body{flex:1;min-height:0;display:flex;flex-direction:column}
 .cv-tab-body.cv-in{animation:cv-in .25s ease}
 .cv-ed{flex:1;min-height:0}
@@ -15424,8 +15425,12 @@ function cvRun(id,body){
   window.addEventListener("blur",cvStop,{once:true});
   document.addEventListener("visibilitychange",cvStop,{once:true});
 }
+// Кнопка, которую держат: курсор ушёл с неё — камера останавливается, как при отпускании
+let cvHoldEl=null;
+function cvHoldWatch(el){if(!el)return;cvHoldEl=el;el.addEventListener("mouseleave",cvStop,{once:true})}
 function cvStop(){
   document.removeEventListener("mousemove",cvKnobMove);
+  if(cvHoldEl){cvHoldEl.removeEventListener("mouseleave",cvStop);cvHoldEl=null}
   const k=document.querySelector("#main [data-joy-knob]");if(k){k.style.transform="";k.classList.remove("on")}
   document.querySelectorAll("#main .joy-dir.on,#main .cv-hold.on").forEach(b=>b.classList.remove("on"));
   cvSay(null);cvKnob=null;
@@ -15442,13 +15447,13 @@ function cvDirDown(id,i){
   const[x,y]=CV_DIRS[i],s=cvSpeed/10,k=x&&y?Math.SQRT1_2:1;
   this?.classList.add("on");
   cvRun(id,{pan:+(x*s*k).toFixed(2),tilt:+(y*s*k).toFixed(2)});
-  window.addEventListener("mouseup",cvStop,{once:true});
+  window.addEventListener("mouseup",cvStop,{once:true});cvHoldWatch(this);
 }
 function cvHoldDown(id,axis,sign){
   const e=onEv.now;if(e&&e.button!==0)return;e?.preventDefault();
   this?.classList.add("on");
   cvRun(id,{[axis]:sign*Math.max(.3,cvSpeed/10)});
-  window.addEventListener("mouseup",cvStop,{once:true});
+  window.addEventListener("mouseup",cvStop,{once:true});cvHoldWatch(this);
 }
 function cvKnobDown(id){
   const e=onEv.now;if(e&&e.button!==0)return;e?.preventDefault();
@@ -15477,6 +15482,7 @@ function cvJoyKey(id){
   if(!d&&!z)return;
   // Клавиши джойстика не уходят дереву: оно слушает стрелки на window и сменило бы камеру
   e.stopPropagation();
+  if(this?.classList.contains("off"))return;// камера не на связи: джойстик не двигает её
   if(e.repeat){e.preventDefault();return}
   const body=d?{pan:d[0]*s,tilt:d[1]*s}:{[z[0]]:z[1]*Math.max(.3,s)};
   e.preventDefault();
@@ -15499,7 +15505,7 @@ function cvPresetsHtml(n){
 function cvSideTabsHtml(n){
   const st=cvToursOf(n),run=st.run,pl=presetRows(n).length;
   const tab=(k,l,c,extra="")=>`<button type="button" role="tab" id="cv-tab-${k}" aria-selected="${cvSideTab===k}" tabindex="${cvSideTab===k?0:-1}" data-cv-tab="${k}" ${onEv("click",["cvSideTabSet",`${n.id}`,k])} ${onEv("keydown",["cvSideTabKey",`${n.id}`])}>${i18n(l)}<span>${c}</span>${extra}</button>`;
-  return`<div class="cv-tabs" role="tablist" aria-label="${i18n("Пресеты и туры")}">${tab("pre","Пресеты",`${pl}${n.presetMax?` ${i18n("из")} ${n.presetMax}`:""}`)}${tab("tours","Туры",st.tours.length,`<i class="cv-dot ${run?.paused?"pause":""}" data-cv-tour-dot ${run?"":"hidden"} title="${i18n(run?.paused?"Тур на паузе":"Тур идёт")}"></i>`)}</div>`;
+  return`<div class="cv-tabs" role="tablist" aria-label="${i18n("Пресеты и туры")}">${tab("pre","Пресеты",`${pl}${n.presetMax?`<span data-preset-max> ${i18n("из")} ${n.presetMax}</span>`:""}`)}${tab("tours","Туры",st.tours.length,`<i class="cv-dot ${run?.paused?"pause":""}" data-cv-tour-dot ${run?"":"hidden"} title="${i18n(run?.paused?"Тур на паузе":"Тур идёт")}"></i>`)}</div>`;
 }
 // Смена вкладки — только содержимое панели, с проявлением; видео и джойстик не трогает
 function cvSideTabSet(id,k){
@@ -15518,14 +15524,16 @@ function cvSideTabKey(id){const e=onEv.now;if(e.key!=="ArrowLeft"&&e.key!=="Arro
 // а видео не перезапускается. anim — новое содержимое проявляется; без него (правка в редакторе) — сразу.
 function cvSidePaint(n,anim){
   const cv=document.querySelector("#main .cv"),inn=cv?.querySelector(".cv-side-in");
-  if(!inn||document.querySelector("#main [data-live]")?.dataset.live!==n.id){gear();return}
-  const ed=cvTourEdit?.id===n.id,fk=document.activeElement&&inn.contains(document.activeElement)?document.activeElement.getAttribute("aria-label"):null;
+  if(document.querySelector("#main [data-live]")?.dataset.live!==n.id)return;// на экране другая камера: её вкладка нарисует своё
+  if(!inn){gear();return}
+  const ae=document.activeElement&&inn.contains(document.activeElement)?document.activeElement:null;
+  const ed=cvTourEdit?.id===n.id,fk=ae?(ae.dataset.cvFk?`[data-cv-fk="${CSS.escape(ae.dataset.cvFk)}"]`:ae.getAttribute("aria-label")?`[aria-label="${CSS.escape(ae.getAttribute("aria-label"))}"]`:null):null;
   const keep=[...inn.querySelectorAll("[data-keep-scroll]")].map(el=>el.scrollTop);
   cv.classList.toggle("cv-editing",ed);
   inn.innerHTML=(ed?"":cvPtzHtml(n))+cvPresetsHtml(n);
   if(!anim)inn.querySelectorAll("[data-keep-scroll]").forEach((el,i)=>{if(keep[i]!=null)el.scrollTop=keep[i]});
   if(anim){inn.classList.remove("cv-in");void inn.offsetWidth;inn.classList.add("cv-in")}
-  if(fk)inn.querySelector(`[aria-label="${CSS.escape(fk)}"]`)?.focus();
+  if(fk)inn.querySelector(fk)?.focus();
   mainSeen.html=null;
 }
 function cvPresetListHtml(n){
@@ -15533,9 +15541,9 @@ function cvPresetListHtml(n){
   const rows=list.map(p=>`<li data-preset="${p.n}">
       <button type="button" class="cv-pn" ${off?"disabled":""} title="${i18n("Повернуть камеру в этот пресет")}" ${onEv("click",["cvPresetGo",`${n.id}`,p.n])}>${p.n}</button>
       <input value="${escHtml(p.name)}" placeholder="${escHtml(`${i18n("Пресет")} ${p.n}`)}" aria-label="${i18n("Имя пресета")} ${p.n}" ${onEv("change",["presetName",`${n.id}`,p.n,onEv.value])}>
-      <button type="button" class="btn s btn-icon" data-preset-save ${off?"disabled":""} title="${i18n("Записать в этот пресет нынешнее положение камеры")}" aria-label="${i18n("Записать нынешнее положение")}" ${onEv("click",["cvPresetOverwrite",`${n.id}`,p.n])}>${lu("crosshair",14)}</button>
+      <button type="button" class="btn s btn-icon" data-preset-save ${off?"disabled":""} title="${escHtml(nat?i18n("Камера за NAT. Связи с ней нет, поэтому здесь нельзя запомнить положение"):i18n("Записать в этот пресет нынешнее положение камеры"))}" aria-label="${i18n("Записать нынешнее положение")} ${p.n}" ${onEv("click",["cvPresetOverwrite",`${n.id}`,p.n])}>${lu("crosshair",14)}</button>
       <button type="button" class="btn s btn-icon" title="${i18n("Удалить пресет")}" aria-label="${i18n("Удалить пресет")} ${p.n}" ${onEv("click",["presetDel",`${n.id}`,p.n])}>${lu("trash",14)}</button></li>`).join("");
-  return`${list.length?`<ul class="cv-pl" data-cv-pl data-keep-scroll>${rows}</ul>`:`<p class="sub cv-pl-empty">${i18n("Пресетов нет. Повернуть камеру и запомнить положение")}</p>`}
+  return`${nat?`<p class="sub cv-nat" data-preset-nat>${i18n("Камера за NAT. Связи с ней нет, поэтому отсюда нельзя двигать камеру и запоминать положение. Подпись пресета можно")}</p>`:""}${list.length?`<ul class="cv-pl" data-cv-pl data-keep-scroll>${rows}</ul>`:`<p class="sub cv-pl-empty">${i18n("Пресетов нет. Повернуть камеру и запомнить положение")}</p>`}
     <div class="cv-pre-add"><input data-cv-newname placeholder="${escHtml(full?i18n("Все номера заняты"):`${i18n("Пресет")} ${presetFree(n)}`)}" aria-label="${i18n("Имя нового пресета")}" ${full||off?"disabled":""} ${onEv("keydown",[".key","Enter"],["cvPresetNew",`${n.id}`])}>
       <button type="button" class="btn s pri" data-cv-preset-new ${full||off?"disabled":""} title="${escHtml(full?i18n("Все номера заняты"):nat?i18n("Камера за NAT. Связи с ней нет, поэтому здесь нельзя запомнить положение"):i18n("Запомнить нынешнее положение камеры под следующим свободным номером"))}" ${onEv("click",["cvPresetNew",`${n.id}`])}>${lu("plus",14)}${i18n("Запомнить")}</button></div>`;
 }
@@ -15586,38 +15594,42 @@ function cvTourRunText(n,t,run){
   return`<span class="cv-run">${i18n("точка")} ${run.step+1} ${i18n("из")} ${t.steps.length} · «${escHtml(cvPresetLabel(n,s?.n))}» · ${i18n("ещё")} ${run.left} ${i18n("с")}</span>`;
 }
 // Запуск тура (и пробный запуск из редактора): тик раз в секунду двигает точки; переход — только подпись
-let cvTourTimer=null;
+// Тур у каждой камеры свой: таймер живёт в st.run.timer, а рисует тик только вкладку своей камеры
+function cvTourOnScreen(id){return document.querySelector("#main [data-live]")?.dataset.live===id&&!!document.querySelector("#main .cv")}
 function cvTourToggle(id,tid){
   const n=find(id)?.n;if(!n)return;const st=cvToursOf(n);
   if(st.run?.tid===tid){cvTourHalt(st);toast(i18n("Консоль остановила тур"));cvSidePaint(n);cvTourOvSync(n);return}
   const t=st.tours.find(x=>x.id===tid);if(!t)return;
   cvTourStart(n,st,t);
-  toast(`${i18n("Тур")} «${t.name}» ${i18n("запущен. Прототип: в API нет туров и перехода в пресет, камера не поедет")}`);
+  toast(`${i18n("Консоль запустила тур")} «${t.name}». ${i18n("Прототип: в API нет туров и перехода в пресет, поэтому камера не поедет")}`);
 }
 function cvTourStart(n,st,t,trial){
   cvTourHalt(st);
   st.run={tid:t.id,step:0,left:+t.steps[0].dwell||10,paused:false,resumeIn:null,trial:!!trial,id:n.id,tour:trial?t:null};
-  cvTourTimer=setInterval(()=>cvTourTick(n.id),1000);
+  st.run.timer=setInterval(()=>cvTourTick(n.id),1000);
   cvSidePaint(n);cvTourOvSync(n);
 }
-function cvTourHalt(st){if(cvTourTimer){clearInterval(cvTourTimer);cvTourTimer=null}if(st)st.run=null}
+function cvTourHalt(st){if(st?.run?.timer)clearInterval(st.run.timer);if(st)st.run=null}
 function cvTourOfRun(st){return st.run?.tour||st.tours.find(x=>x.id===st.run?.tid)}
 function cvTourTick(id){
-  const n=find(id)?.n,st=n&&cvToursOf(n),r=st?.run;if(!r){cvTourHalt(null);return}
-  const t=cvTourOfRun(st);if(!t){cvTourHalt(st);gear();return}
+  const n=find(id)?.n,st=n&&cvToursOf(n),r=st?.run;if(!r)return;
+  const t=cvTourOfRun(st),here=cvTourOnScreen(id);
+  // Точек не осталось (их убрали в редакторе во время пробного круга) — тур останавливается
+  if(!t||!t.steps.length){cvTourHalt(st);cvSidePaint(n);cvTourOvSync(n);return}
   if(r.paused){
-    if(cvMove)r.resumeIn=null;
-    else if(r.resumeIn==null){if(t.afterManual==="stop"){cvTourHalt(st);toast(i18n("Консоль остановила тур: камерой управлял оператор"));cvSidePaint(n);cvTourOvSync(n);return}r.resumeIn=+t.resumeSec||15}
+    if(cvMove?.id===id)r.resumeIn=null;
+    else if(r.resumeIn==null){if(t.afterManual==="stop"){cvTourHalt(st);if(here)toast(i18n("Консоль остановила тур: камерой управлял оператор"));cvSidePaint(n);cvTourOvSync(n);return}r.resumeIn=+t.resumeSec||15}
     else if(--r.resumeIn<=0){r.paused=false;r.resumeIn=null;if(t.resumeFrom==="first"){r.step=0;r.left=+t.steps[0].dwell||10}}
   }else if(--r.left<=0){
-    if(r.trial&&r.step===t.steps.length-1){cvTourHalt(st);toast(i18n("Камера прошла пробный круг"));cvSidePaint(n);cvTourOvSync(n);return}
-    r.step=t.order==="random"?Math.floor(Math.random()*t.steps.length):(r.step+1)%t.steps.length;
+    if(r.trial&&r.step>=t.steps.length-1){cvTourHalt(st);if(here)toast(i18n("Камера прошла пробный круг"));cvSidePaint(n);cvTourOvSync(n);return}
+    r.step=t.order==="random"?Math.floor(Math.random()*t.steps.length):(Math.min(r.step,t.steps.length-1)+1)%t.steps.length;
     r.left=(+t.steps[r.step].dwell||10)+(r.step===0?+t.pauseSec||0:0);
   }
   cvTourPaintRun(n,st,t);
 }
 // Тик не перерисовывает всю вкладку: только строку тура, строку редактора и подпись на видео
 function cvTourPaintRun(n,st,t){
+  if(!cvTourOnScreen(n.id))return;
   const r=st.run;
   const sm=document.querySelector(`#main [data-tour="${t.id}"] .cv-tr-name small`);if(sm&&r)sm.innerHTML=cvTourRunText(n,t,r);
   document.querySelectorAll("#main [data-tstep]").forEach(li=>li.classList.toggle("on",!!r&&+li.dataset.tstep===r.step&&!r.paused));
@@ -15626,14 +15638,14 @@ function cvTourPaintRun(n,st,t){
   const rb=document.querySelector(`#main [data-tour="${t.id}"] [data-tour-resume]`);if(rb)rb.hidden=!r?.paused;
   const dot=document.querySelector("#main [data-cv-tour-dot]");if(dot){dot.hidden=!r;dot.classList.toggle("pause",!!r?.paused)}
 }
-function cvTourResume(id){const n=find(id)?.n,st=n&&cvTourState.get(n.id),r=st?.run;if(!r||!r.paused||cvMove)return;r.paused=false;r.resumeIn=null;const t=cvTourOfRun(st);if(t)cvTourPaintRun(n,st,t)}
+function cvTourResume(id){const n=find(id)?.n,st=n&&cvTourState.get(n.id),r=st?.run;if(!r||!r.paused||cvMove?.id===id)return;r.paused=false;r.resumeIn=null;const t=cvTourOfRun(st);if(t)cvTourPaintRun(n,st,t)}
 // Подпись в углу видео: какой тур идёт и где камера сейчас
 function cvTourOvText(n,st){
   const r=st.run,t=r&&cvTourOfRun(st);if(!t)return"";
   if(r.paused)return`${i18n("Тур на паузе")}${r.resumeIn!=null?`. ${i18n("Продолжит через")} ${r.resumeIn} ${i18n("с")}`:""}`;
   return`${r.trial?i18n("Пробный круг"):i18n("Тур")} «${t.name}» · ${r.step+1}/${t.steps.length} ${cvPresetLabel(n,t.steps[r.step]?.n)} · ${r.left} ${i18n("с")}`;
 }
-function cvTourOvSync(n){const ov=document.querySelector("#main [data-cv-tour-ov]"),st=cvToursOf(n);if(ov){ov.hidden=!st.run;ov.classList.toggle("pause",!!st.run?.paused);ov.textContent=cvTourOvText(n,st)}}
+function cvTourOvSync(n){if(!cvTourOnScreen(n.id))return;const ov=document.querySelector("#main [data-cv-tour-ov]"),st=cvToursOf(n);if(ov){ov.hidden=!st.run;ov.classList.toggle("pause",!!st.run?.paused);ov.textContent=cvTourOvText(n,st)}}
 function cvTourOvHtml(n){const st=cvToursOf(n),r=st.run;return`<span class="cv-tour-ov ${r?.paused?"pause":""}" data-cv-tour-ov ${r?"":"hidden"}>${escHtml(cvTourOvText(n,st))}</span>`}
 // Джойстик во время тура: пауза; отпустили — отсчёт до продолжения
 function cvTourManual(id){
@@ -15674,13 +15686,13 @@ function cvTourEditorHtml(n,t){
     <div class="cv-ts-foot"><button type="button" class="btn s cv-ts-add" ${pre.length?"":"disabled"} ${onEv("click",["cvStepAdd"])}>${lu("plus",13)}${i18n("Точка")}</button><span class="sub">${t.steps.length} ${i18n(plural(t.steps.length,"точка|точки|точек"))} · ${i18n("круг")} ${cvDur(cvTourCycle(t))} ${i18n("без учёта переездов")}</span></div>
     <div class="cv-te-more ${cvTourEdit.more?"open":""}" data-cv-more>
       <button type="button" class="cv-te-mh" aria-expanded="${!!cvTourEdit.more}" aria-controls="cv-te-g" title="${i18n(cvTourEdit.more?"Свернуть параметры тура":"Показать параметры тура")}" ${onEv("click",["cvTourMore"])}>${lu("chevron-right",14)}<span><b>${i18n("Параметры тура")}</b><small data-cv-more-sum>${escHtml(cvTourSumText(t))}</small></span></button>
-      <div class="cv-te-mb"><div class="cv-te-mi">
+      <div class="cv-te-mb" data-keep-scroll="te-more"><div class="cv-te-mi">
     <div class="cv-te-g" id="cv-te-g">
-      <label>${i18n("Порядок")}<select ${onEv("change",["cvTourSetF","order",onEv.value])}><option value="seq" ${t.order==="seq"?"selected":""}>${i18n("по списку")}</option><option value="random" ${t.order==="random"?"selected":""}>${i18n("случайно")}</option></select></label>
-      <label>${i18n("Пауза между кругами")}<span class="cv-num"><input type="number" min="0" value="${t.pauseSec}" ${onEv("change",["cvTourSetF","pauseSec",onEv.value])}><small>${i18n("с")}</small></span></label>
-      <label>${i18n("Оператор взял управление")}<select ${onEv("change",["cvTourSetF","afterManual",onEv.value])}><option value="resume" ${t.afterManual==="resume"?"selected":""}>${i18n("пауза, потом продолжить")}</option><option value="stop" ${t.afterManual==="stop"?"selected":""}>${i18n("остановить тур")}</option></select></label>
-      ${t.afterManual==="resume"?`<label>${i18n("Продолжить, когда камерой не управляют")}<span class="cv-num"><input type="number" min="5" value="${t.resumeSec}" ${onEv("change",["cvTourSetF","resumeSec",onEv.value])}><small>${i18n("с")}</small></span></label>
-      <label>${i18n("Продолжить с")}<select ${onEv("change",["cvTourSetF","resumeFrom",onEv.value])}><option value="same" ${t.resumeFrom!=="first"?"selected":""}>${i18n("той же точки")}</option><option value="first" ${t.resumeFrom==="first"?"selected":""}>${i18n("первой точки")}</option></select></label>`:""}
+      <label>${i18n("Порядок")}<select data-cv-fk="te-order" ${onEv("change",["cvTourSetF","order",onEv.value])}><option value="seq" ${t.order==="seq"?"selected":""}>${i18n("по списку")}</option><option value="random" ${t.order==="random"?"selected":""}>${i18n("случайно")}</option></select></label>
+      <label>${i18n("Пауза между кругами")}<span class="cv-num"><input type="number" min="0" value="${t.pauseSec}" data-cv-fk="te-pauseSec" ${onEv("change",["cvTourSetF","pauseSec",onEv.value])}><small>${i18n("с")}</small></span></label>
+      <label>${i18n("Оператор взял управление")}<select data-cv-fk="te-afterManual" ${onEv("change",["cvTourSetF","afterManual",onEv.value])}><option value="resume" ${t.afterManual==="resume"?"selected":""}>${i18n("пауза, потом продолжить")}</option><option value="stop" ${t.afterManual==="stop"?"selected":""}>${i18n("остановить тур")}</option></select></label>
+      ${t.afterManual==="resume"?`<label>${i18n("Продолжить, когда камерой не управляют")}<span class="cv-num"><input type="number" min="5" value="${t.resumeSec}" data-cv-fk="te-resumeSec" ${onEv("change",["cvTourSetF","resumeSec",onEv.value])}><small>${i18n("с")}</small></span></label>
+      <label>${i18n("Продолжить с")}<select data-cv-fk="te-resumeFrom" ${onEv("change",["cvTourSetF","resumeFrom",onEv.value])}><option value="same" ${t.resumeFrom!=="first"?"selected":""}>${i18n("той же точки")}</option><option value="first" ${t.resumeFrom==="first"?"selected":""}>${i18n("первой точки")}</option></select></label>`:""}
       ${cvTourIdleHtml(n,t)}
     </div>
       </div></div>
@@ -15692,7 +15704,7 @@ function cvTourEditorHtml(n,t){
 // Сам, когда камерой не управляют: так может запускаться только один тур камеры (как AutoStart в ONVIF)
 function cvTourIdleHtml(n,t){
   const e=cvTourEdit,st=cvToursOf(n),other=st.idleTour&&st.idleTour!==t.id?st.tours.find(x=>x.id===st.idleTour):null;
-  return`<label class="cv-te-idle"><span class="cv-chk"><input type="checkbox" ${e.idle?"checked":""} ${onEv("change",["cvTourIdleSet","idle",onEv.checked])}>${i18n("Запускать сам, когда камерой не управляют")}</span>${e.idle?`<span class="cv-num"><input type="number" min="10" value="${e.idleSec}" aria-label="${i18n("Через сколько секунд без управления запускать тур")}" ${onEv("change",["cvTourIdleSet","idleSec",onEv.value])}><small>${i18n("с")}</small></span>`:""}</label>
+  return`<label class="cv-te-idle"><span class="cv-chk"><input type="checkbox" ${e.idle?"checked":""} data-cv-fk="te-idle" ${onEv("change",["cvTourIdleSet","idle",onEv.checked])}>${i18n("Запускать сам, когда камерой не управляют")}</span>${e.idle?`<span class="cv-num"><input type="number" min="10" value="${e.idleSec}" aria-label="${i18n("Через сколько секунд без управления запускать тур")}" ${onEv("change",["cvTourIdleSet","idleSec",onEv.value])}><small>${i18n("с")}</small></span>`:""}</label>
     ${e.idle&&other?`<p class="sub cv-te-note">${i18n("Сейчас так запускается тур")} «${escHtml(other.name)}». ${i18n("Этот тур заменит его")}</p>`:""}`;
 }
 function cvTourIdleSet(k,v){const e=cvTE();if(!e)return;cvTourEdit[k]=k==="idleSec"?Math.max(10,Math.round(+v)||cvTourEdit.idleSec):!!v;cvSidePaint(e.n)}
@@ -15773,7 +15785,7 @@ function cvStreamsCardHtml(n){
   const mode=`<div class="cv-mode" role="radiogroup" aria-label="${i18n("Откуда настройки потоков")}">
     ${[["device","Настройки камеры","Консоль берёт потоки такими, какими их настроили в камере. Консоль ничего не меняет в камере."],["console","Настройки консоли","Консоль передаёт параметры потоков в камеру при подключении и после каждого изменения."]].map(([k,t,d])=>`<label class="cv-mode-o ${c.mode===k?"on":""}"><input type="radio" name="cv-mode-${escHtml(n.id)}" value="${k}" ${c.mode===k?"checked":""} ${onEv("change",["cvModeSet",`${n.id}`,`${k}`])}><span><b>${i18n(t)}</b><small>${i18n(d)}</small></span></label>`).join("")}</div>`;
   const note=con?`<div class="nt cv-push">${lu("triangle-alert",14)}${i18n("После изменения камера может перезапустить поток. Тогда видео и запись прервутся на несколько секунд.")}</div>`
-    :`<p class="sub cv-lock">${lu("lock",13)}${i18n("Параметры показаны так, как их сообщила камера. Изменить их можно в веб-интерфейсе камеры или в режиме «Настройки консоли».")}</p>`;
+    :`<p class="sub cv-lock">${lu("lock",13)}${i18n("Консоль показывает параметры так, как их сообщила камера. Изменить их можно в веб-интерфейсе камеры или в режиме «Настройки консоли».")}</p>`;
   const cols=camStreams(n).map((s,i)=>cvStreamColHtml(n,s,i,c,con)).join("");
   return`<div class="card cv-streams" data-cv-streams><div class="ch">${i18n("Параметры потоков")}<span class="sub" style="font-weight:400">${camStreams(n).length}</span></div><div class="cb">
     ${mode}${note}<div class="cv-cols">${cols}</div>
@@ -15800,11 +15812,11 @@ function cvStreamColHtml(n,s,i,c,con){
   }
   const head=`<div class="cv-col-h"><b>${escHtml(s.name)}</b>${i?"":`<span class="sub">${i18n("основной")}</span>`}${s.online===false?`<span class="pf-st bad">${i18n("нет сигнала")}</span>`:`<span class="pf-st ok">${i18n("работает")}</span>`}
     ${con&&i?`<button type="button" class="btn s btn-icon" title="${i18n("Удалить поток")}" aria-label="${i18n("Удалить поток")} ${escHtml(s.name)}" ${onEv("click",["streamDel",`${id}`,`${sid}`])}>${lu("trash",14)}</button>`:""}</div>`;
-  if(!con)return`<div class="cv-col">${head}<div class="cv-g">${ro("Кодек",`${s.codec||p.codec}${p.profile?` · ${p.profile}`:""}`)}${ro("Разрешение",(res||"—").replace("x","×"))}${ro("Кадров в секунду",fps??"—")}${ro("Битрейт",`${p.brc==="cbr"?i18n("постоянный"):i18n("переменный, до")} ${cvKbpsText(p.kbps)}`)}${ro("Опорный кадр",`${i18n("каждые")} ${p.gop} ${i18n("кадров")}`)}${ro("В просмотре",i18n(p.live?"да":"нет"))}</div></div>`;
+  if(!con)return`<div class="cv-col" data-stream="${escHtml(sid)}">${head}<div class="cv-g">${ro("Кодек",`${s.codec||p.codec}${p.profile?` · ${p.profile}`:""}`)}${ro("Разрешение",(res||"—").replace("x","×"))}${ro("Кадров в секунду",fps??"—")}${ro("Битрейт",`${p.brc==="cbr"?i18n("постоянный"):i18n("переменный, до")} ${cvKbpsText(p.kbps)}`)}${ro("Опорный кадр",`${i18n("каждые")} ${p.gop} ${i18n("кадров")}`)}${ro("В просмотре",i18n(p.live?"да":"нет"))}</div></div>`;
   const resOpts=s.resOptions||(i?null:n.resOptions);
-  const resF=`<div class="cv-f"><label>${i18n("Разрешение")}</label>${resInput(resOpts,res,["streamSet",`${id}`,`${sid}`,"res",onEv.value])}</div>`;
+  const resF=`<div class="cv-f"><label>${i18n("Разрешение")}</label>${resInput(resOpts,res,["streamSet",`${id}`,`${sid}`,"res",onEv.value]).replace(/^<(select|input) /,`<$1 data-df="Разрешение" `)}</div>`;
   const fpsF=`<div class="cv-f"><label>${i18n("Кадров в секунду")}</label><span class="cv-num"><input type="number" min="1" value="${escHtml(fps??"")}" ${onEv("change",["streamSet",`${id}`,`${sid}`,"fps",onEv.value])}><small>${i18n("к/с")}</small></span></div>`;
-  return`<div class="cv-col">${head}<div class="cv-g">
+  return`<div class="cv-col" data-stream="${escHtml(sid)}">${head}<div class="cv-g">
     ${sel("Кодек","codec",CV_CODECS,p.codec)}${p.codec==="MJPEG"?"":sel("Профиль кодека","profile",CV_PROFILES,p.profile)}
     ${resF}${fpsF}
     ${sel("Режим битрейта","brc",[["vbr","Переменный (VBR)"],["cbr","Постоянный (CBR)"]],p.brc)}
@@ -15817,13 +15829,13 @@ function cvStreamColHtml(n,s,i,c,con){
 function cvModeSet(id,mode){
   const n=find(id)?.n;if(!n)return;const c=cvCfgOf(n);
   if(mode!=="console"){c.mode=mode;gear();return}
-  gear();// радиокнопка вернётся к «Настройки камеры», пока не подтвердили
+  mainSeen.html=null;gear();// радиокнопка вернётся к «Настройки камеры», пока не подтвердили
   askConfirm("Передавать настройки в камеру?",`<ul class="bk-del"><li>${i18n("Консоль запишет в камеру параметры всех потоков: кодек, разрешение, к/с, битрейт и опорные кадры")}</li><li>${i18n("Настройки, которые сделали в веб-интерфейсе камеры, пропадут")}</li><li>${i18n("Камера может перезапустить поток. Тогда видео и запись прервутся на несколько секунд")}</li></ul>`,"",i18n("Передавать"),()=>{c.mode="console";gear()},{html:true});
 }
 function cvStubSet(id,sid,k,v){
   const n=find(id)?.n;if(!n)return;const p=cvCfgOf(n).streams[sid];if(!p)return;
   p[k]=k==="kbps"||k==="gop"?Math.max(1,Math.round(+v)||p[k]):v;
-  gear();
+  mainSeen.html=null;gear();// поле покажет значение после поправки, даже если разметка та же
 }
 // ── Пресеты и движение для их настройки ───────────────────────────────────
 // Камеру наводят по кадру и запоминают положение. Пока кнопка нажата, аренда продлевается раньше срока;
