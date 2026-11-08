@@ -13,7 +13,12 @@ UiCheck(async ({ ok, until }) => {
 
   // Раздел и дерево
   ok(appsShown().some((a) => a.id === "learn"), "вкладка «Обучение» в рельсе");
-  ok(Tour.topics.length >= 6, "темы на месте: " + Tour.topics.length);
+  ok(Tour.topics.length >= 7 && Tour.find("assistant"), "темы на месте, с темой об ассистенте: " + Tour.topics.length);
+  // Тема Г: работа с ассистентом на заглушке — просьба, вопрос, план, проверка человеком, «Применить», отказ, конфликт версии,
+  // вопрос оператору и эскалация в «Только журнал». Каждая глава доходит до конца ниже (цикл по темам: все шаги подряд)
+  const AT = Tour.find("assistant")?.topic;
+  ok(AT && AT.chapters.map((c) => c.id).join() === "assistant.stub,assistant.question,assistant.check,assistant.refused,assistant.conflict,assistant.ask", "тема об ассистенте: главы по порядку");
+  ok(AT && /заглушка, а не живая модель/.test(AT.why + AT.chapters[0].why) && AT.steps.some((s) => /Только журнал/.test(s.say)) && AT.steps.some((s) => /не меняется/.test(s.say)), "тема об ассистенте: прямо сказано — заглушка, «Только журнал», настоящая система не меняется");
   ok(/Ничего не сломается/.test(main().textContent), "первый экран объясняет, зачем раздел");
   const closed = rows().length;
   ok(closed === Tour.topics.length + 1, "дерево свёрнуто: «С чего начать» и темы, строк: " + closed);
