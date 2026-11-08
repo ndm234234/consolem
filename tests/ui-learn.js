@@ -169,6 +169,32 @@ UiCheck(async ({ ok, until }) => {
   }
   sessionStorage.removeItem("tourSpeed");
 
+  // Рабочая история ассистента и код службы: в показ не переходят и показом не меняются. Две учебные вкладки сразу — у каждой
+  // своя память; перезагрузка показа начинает с чистых учебных данных, настоящее хранилище на месте
+  const histWas = localStorage.getItem(ASST_STORE), codeWas = sessionStorage.getItem(ASST_CODE_KEY);
+  localStorage.setItem(ASST_STORE, JSON.stringify([{ id: "work-1", at: Date.now(), title: "рабочий разговор", log: [{ u: "рабочая просьба" }] }]));
+  sessionStorage.setItem(ASST_CODE_KEY, JSON.stringify({ url: "https://svc.example.test", code: "рабочий-код" }));
+  const histSet = localStorage.getItem(ASST_STORE), codeSet = sessionStorage.getItem(ASST_CODE_KEY);
+  const AR = Tour.find("assistant", "assistant.refused")?.chapter;
+  if (AR) {
+    const t1 = open(`tour=assistant&ch=${AR.id}&demo=${AR.to}`), t2 = open(`tour=${T0.id}&ch=${T0.chapters[0].id}&demo=${T0.chapters[0].to}`);
+    const both = await until(() => t1.contentDocument?.getElementById("asstRefused") && t2.contentDocument?.querySelector(".tour-mode") && t2.contentWindow.appReady, 90000);
+    ok(both, "две учебные вкладки открыты сразу");
+    if (both) {
+      const w1 = t1.contentWindow, w2 = t2.contentWindow;
+      ok(!/рабочий разговор|рабочая просьба/.test(w1.localStorage.getItem(ASST_STORE) || "") && !/рабочая просьба/.test(t1.contentDocument.getElementById("asstDock").textContent), "рабочая история ассистента в показ не перешла");
+      ok(/цвет корпуса/.test(w1.localStorage.getItem(ASST_STORE) || "") && !/цвет корпуса/.test(w2.localStorage.getItem(ASST_STORE) || ""), "учебный разговор — в памяти своей вкладки, в другой учебной вкладке его нет");
+      ok(localStorage.getItem(ASST_STORE) === histSet && sessionStorage.getItem(ASST_CODE_KEY) === codeSet, "рабочая история и код службы не изменились");
+      w1.location.reload();
+      ok(await until(() => t1.contentWindow?.appReady && t1.contentDocument.getElementById("asstRefused"), 90000), "показ после перезагрузки снова дошёл до шага");
+      ok(localStorage.getItem(ASST_STORE) === histSet && sessionStorage.getItem(ASST_CODE_KEY) === codeSet && !/рабочая просьба/.test(t1.contentWindow.localStorage.getItem(ASST_STORE) || ""), "после перезагрузки: рабочее на месте и в показ не перешло");
+    }
+    t1.remove();
+    t2.remove();
+  }
+  if (histWas == null) localStorage.removeItem(ASST_STORE); else localStorage.setItem(ASST_STORE, histWas);
+  if (codeWas == null) sessionStorage.removeItem(ASST_CODE_KEY); else sessionStorage.setItem(ASST_CODE_KEY, codeWas);
+
   // Глава целиком, настоящим ходом курсора; без ?api= — адрес API из разметки сборки, если он есть
   const chapters = Tour.topics[0].chapters, lastCh = chapters.at(-1);
   const pl = open(`tour=${T0.id}&ch=${lastCh.id}&demo=&play`, false);
