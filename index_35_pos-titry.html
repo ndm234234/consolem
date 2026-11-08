@@ -10977,6 +10977,7 @@ function gear(){
   if(n.type==="archive")volsEnsure(n).then(()=>{}).catch(()=>{});
   if(n.type==="domain")domainFresh(n);
   if(n.type==="server")serverArchives(n.id).forEach(a=>volsEnsure(a).catch(()=>{}));
+  if(n.type==="eventsrc"&&tab==="words")tab="overlay"; // прежняя вкладка «Подсветка» теперь внутри «Титров»
   if(tabs.length&&!tabs.some(([id])=>id===tab))tab=tabs[0][0];
   const tabsH=tabs.map(([id,x])=>`<button class="tab ${tab===id?"on":""}" ${onEv("click",["tabGo",id])}>${i18n(x)}</button>`).join("");
   // Слева направо — вход добавления устройств (он один, остальное — стрелкой рядом);
@@ -15600,13 +15601,14 @@ function posParserPick(id){const p=POS_STUB.get(id);if(!p)return;p.parser=p.pars
 // Длительность: 0 — отдельный вариант, а не число. Поле контракта overlayDurationSec, в карточке — «Длительность, с»
 function posDurHtml(){
   const orig=cardFldOrig("Длительность, с",""),d=String(cardFldVal("Длительность, с",orig)??""),zero=d==="0",sec=zero||d===""?"10":d;
-  const at=v=>`data-df="Длительность, с" data-orig="${escHtml(orig??"")}"`;
+  // Одно поле с data-df — число секунд; «Держать до следующей строки» пишет в него 0 (overlayDurationSec=0)
   return`<div class="pos-dur"><label class="sub">${i18n("Когда убирать чек с экрана оператора")}</label>
-    <label class="pos-opt"><input type="radio" name="posdur" value="${escHtml(sec)}" ${zero?"":"checked"} ${at()} ${onEv("change",["posDurSet",onEv.el])}><span>${i18n("Через")}</span><input type="number" min="1" class="pos-dur-n" value="${escHtml(sec)}" ${zero?"disabled":""} ${at()} ${onEv("change",["posDurSet",onEv.el])}><span>${i18n("с после последней строки")}</span></label>
-    <label class="pos-opt"><input type="radio" name="posdur" value="0" ${zero?"checked":""} ${at()} ${onEv("change",["posDurSet",onEv.el])}><span>${i18n("Держать до следующей строки")}</span></label>
+    <label class="pos-opt"><input type="radio" name="posdur" ${zero?"":"checked"} ${onEv("change",["posDurMode",onEv.el,"sec"])}><span>${i18n("Через")}</span><input type="number" min="1" class="pos-dur-n" value="${escHtml(sec)}" ${zero?"disabled":""} data-df="Длительность, с" data-orig="${escHtml(orig??"")}" ${onEv("input",["cardFld",onEv.el])} ${onEv("change",["posDurSet",onEv.el])}><span>${i18n("с после последней строки")}</span></label>
+    <label class="pos-opt"><input type="radio" name="posdur" ${zero?"checked":""} ${onEv("change",["posDurMode",onEv.el,"hold"])}><span>${i18n("Держать до следующей строки")}</span></label>
     <p class="sub pos-opt-hint">${i18n("Чек остаётся на экране, пока касса не пришлёт новую строку. Если касса молчала больше 10 секунд, новая строка начинает экран заново.")}</p></div>`;
 }
 function posDurSet(el){cardFld(el);gear()}
+function posDurMode(el,m){const f=el.closest(".pos-dur")?.querySelector(".pos-dur-n");if(!f)return;cardFld({dataset:f.dataset,value:m==="hold"?"0":(f.value||"10")});gear()}
 // ── Единицы СКУД ──────────────────────────────────────────────────────────
 function unitOptionsOf(n){for(let p=n;p;p=find(p.id)?.p)if(p.unitOptions)return p.unitOptions;return[]}
 function unitOption(n){return n?unitOptionsOf(find(n.id)?.p||n).find(o=>o.model===n.model&&o.type===n.type)||null:null}
