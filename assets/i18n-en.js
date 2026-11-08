@@ -2082,4 +2082,18 @@ window.I18N_EN={
 "средне":"medium",
 "фокус ближе":"focus near",
 "фокус дальше":"focus far",
+// Карточка POS: вкладка «Титры» (из прототипа 35)
+"Титры на камере":"Overlay on camera",
+"Выбрать камеру, на которой оператор увидит титры":"Select the camera where the operator will see the overlay",
+"Оператор видит титры поверх живого видео и архива. В само видео текст не попадает.":"The operator sees the overlay on top of live video and archive. The text does not go into the video.",
+"Показ чека":"Receipt display",
+"Цвет текста":"Text color",
+"Выбрать цвет текста":"Select text color",
+"Выбрать цвет фона":"Select background color",
+"Оператор видит слово в титрах этим цветом.":"The operator sees the word in the overlay in this color.",
+"Когда убирать чек с экрана оператора":"When to remove the receipt from the operator screen",
+"Через":"In",
+"с после последней строки":"s after the last line",
+"Держать до следующей строки":"Keep until the next line",
+"Чек остаётся на экране, пока касса не пришлёт новую строку.":"The receipt stays on the screen until the cash desk sends a new line.",
 };

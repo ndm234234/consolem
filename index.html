@@ -2394,6 +2394,18 @@ html[data-theme="light"] .cp-row:hover{background:var(--one-control-hover)}
 html[data-theme="light"] .cp-det:hover{background:var(--one-control-hover)}
 html[data-theme="light"] .cp-step{background:var(--one-control-hover);color:var(--x-link)}
 
+/* Карточка POS-устройства («Источник событий»), вкладка «Титры»: кадр слева прилипает к верху, справа — показ и подсветка */
+.pos-grid{display:grid;grid-template-columns:minmax(360px,1.15fr) minmax(380px,1fr);gap:12px;align-items:start}
+.pos-l{position:sticky;top:0;max-height:var(--pos-sc-h,none);overflow-y:auto;scrollbar-gutter:stable}
+@media (max-width:1250px){.pos-grid{grid-template-columns:1fr}.pos-l{position:static;max-height:none;overflow:visible}}
+.pos-vid{max-width:none}
+.pos-dur{display:flex;flex-direction:column;gap:4px;margin-top:8px}.pos-opt{display:flex;align-items:center;gap:6px;min-height:var(--ctrl-h,32px);cursor:pointer}.pos-opt input[type=radio]{margin:0}.pos-opt .pos-dur-n{margin:0;height:28px;padding:0 6px}.pos-opt-hint{margin:0 0 0 22px}.pos-dur-n{width:70px}.pos-x{padding:1px 8px}
+.pos-wtbl{table-layout:fixed;width:100%}.pos-wtbl td input:not([type=color]){width:100%}
+.pos-wtbl td{vertical-align:middle;padding:4px 8px 4px 0}.pos-wtbl th:nth-child(n+2),.pos-wtbl td:nth-child(n+2){text-align:center}
+.pos-sw{-webkit-appearance:none;appearance:none;box-sizing:border-box;width:34px;height:28px;padding:3px;margin:0;border:1px solid var(--ln);border-radius:6px;background:var(--p2);cursor:pointer;vertical-align:middle;flex-shrink:0}
+.pos-sw::-webkit-color-swatch-wrapper{padding:0}.pos-sw::-webkit-color-swatch{border:1px solid #ffffff40;border-radius:3px}
+.pos-sw::-moz-color-swatch{border:1px solid #ffffff40;border-radius:3px}
+.pos-sw:hover{border-color:var(--bl)}.pos-sw:focus-visible{outline:2px solid var(--bl);outline-offset:1px}
 </style>
 <!-- ONE PSIM: мост по ONE.PSIM.PrototypeKit, подключён после стилей прототипа -->
 <link rel="stylesheet" href="assets/one-psim/bridge.css">
@@ -8411,7 +8423,7 @@ function goFav(i){
 // курсор в поле, и терять это из-за того, что обновилась соседняя строка,
 // он не должен. Положение ищем по устойчивым признакам (селектор прокручиваемого
 // блока и его номер), а не по узлам — узлы после перерисовки уже другие.
-const VIEW_SCROLLERS=[".sc",".tree",".fav-panel-list",".lan-wrap",".gtbl",".dev-results-scroll",".dev-wrap-scroll",".plan-rows",".srv-list"];
+const VIEW_SCROLLERS=[".sc",".tree",".fav-panel-list",".lan-wrap",".gtbl",".dev-results-scroll",".dev-wrap-scroll",".plan-rows",".srv-list",".pos-l"];
 function focusSelector(el){
   if(!el||!/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))return null;
   if(el.id)return"#"+el.id;
@@ -11016,7 +11028,7 @@ function tabsForHand(n){
   if(n.type==="camera")return[["gen","Подключение"]].concat(can("startUnitLive")?[["view","Просмотр"]]:[],[["vid","Видео"],["rec","Архив"],["det","Детекторы"],["io","Периферия"],["acc","Доступ"]]);
   if(n.type==="ipsrv")return ipsrvCameras(n).length?[["gen","Подключение"],["rec","Архив"],["kids","Дочерние"]]:[["gen","Подключение"],["kids","Дочерние"]];
   if(n.type==="channel")return[["gen","Основные"],["kids","Дочерние"]];
-  if(n.type==="eventsrc")return[["gen","Подключение"],["overlay","Титры"],["words","Подсветка"]];
+  if(n.type==="eventsrc")return[["gen","Подключение"],["overlay","Титры"]];
   if(n.type==="acfa")return[["gen","Подключение"],["kids","Подобъекты"]];
   if(n.type==="export")return[["gen","Параметры"]];
   if(n.type==="email")return[["gen","SMTP"],["params","Получатели"]];
@@ -11041,6 +11053,7 @@ function gear(){
   if(n.type==="archive")volsEnsure(n).then(()=>{}).catch(()=>{});
   if(n.type==="domain")domainFresh(n);
   if(n.type==="server")serverArchives(n.id).forEach(a=>volsEnsure(a).catch(()=>{}));
+  if(n.type==="eventsrc"&&tab==="words")tab="overlay"; // прежняя вкладка «Подсветка» теперь внутри «Титров»
   if(tabs.length&&!tabs.some(([id])=>id===tab))tab=tabs[0][0];
   const tabsH=tabs.map(([id,x])=>`<button class="tab ${tab===id?"on":""}" ${onEv("click",["tabGo",id])}>${i18n(x)}</button>`).join("");
   // Слева направо — вход добавления устройств (он один, остальное — стрелкой рядом);
@@ -15915,6 +15928,53 @@ function sourceSetServer(id,v){const n=find(id)?.n;if(!n||!v)return;n.srvId=v;se
 function overlayCameras(n){const out=[],did=nodeDomainId(n);walkAll(x=>{if(x.type==="camera"&&nodeDomainId(x)===did)out.push(x)});return out}
 function overlaySetCam(id,v){const n=find(id)?.n;if(!n)return;if(v)n.camera=v;else delete n.camera;setD(true);gear()}
 function colorFull(c){return/^#[0-9a-f]{3}$/i.test(c||"")?"#"+[...c.slice(1)].map(x=>x+x).join(""):c||"#000000"}
+// Карточка POS, вкладка «Титры»: слева камера и её кадр, справа — показ чека и подсветка слов. Всё — поля контракта eventsrc:
+// cameraId, overlayDelayMs, overlayDurationSec (0 — держать до следующей строки), words[]. Зона, вид титров, разбор чека
+// и строки от кассы ждут контракта (запрос 2026-11-08-180100Z-mockup-pos-overlay-parser), они — в прототипе 35
+function posPreviewCard(n){
+  const cam=n.camera?find(n.camera)?.n:null;
+  return card("Титры на камере",`<div class="g"><div><label>${i18n("Камера")}</label><select ${onEv("change",["overlaySetCam",`${n.id}`,onEv.value])}><option value="">${i18n("— не выбрана —")}</option>${overlayCameras(n).map(c=>`<option value="${escHtml(c.id)}" ${c.id===n.camera?"selected":""}>${escHtml(locName(c))}</option>`).join("")}</select></div></div>
+    ${cam?liveFrameHtml(cam).replace('class="vid live-frame"','class="vid live-frame pos-vid"'):`<div class="vid pos-vid"><span class="sub">${i18n("Выбрать камеру, на которой оператор увидит титры")}</span></div>`}
+    <p class="sub">${i18n("Оператор видит титры поверх живого видео и архива. В само видео текст не попадает.")}</p>`);
+}
+function posShowCard(){
+  return card("Показ чека",`<div class="g">${fld("Задержка, мс","","number")}</div>${posDurHtml()}`);
+}
+function posWordsCard(n){
+  const ws=n.words||[];
+  return card("Подсветка слов",`<table class="ca-tbl pos-wtbl"><colgroup><col><col style="width:46px"><col style="width:46px"><col style="width:38px"></colgroup>
+    <thead><tr><th>${i18n("Слово")}</th><th>${i18n("Цвет")}</th><th>${i18n("Фон")}</th><th></th></tr></thead><tbody>
+    ${ws.map((w,i)=>`<tr data-word="${i}"><td><input value="${escHtml(w.msg)}" aria-label="${i18n("Слово")}" ${onEv("change",["wordSet",`${n.id}`,i,"msg",onEv.value])}></td>
+      <td><input type="color" class="pos-sw" value="${escHtml(colorFull(w.color))}" aria-label="${i18n("Цвет текста")}" title="${i18n("Выбрать цвет текста")}" ${onEv("change",["wordSet",`${n.id}`,i,"color",onEv.value])}></td>
+      <td><input type="color" class="pos-sw" value="${escHtml(colorFull(w.bg))}" aria-label="${i18n("Цвет фона")}" title="${i18n("Выбрать цвет фона")}" ${onEv("change",["wordSet",`${n.id}`,i,"bg",onEv.value])}></td>
+      <td class="ca-x"><button type="button" class="btn s pos-x" aria-label="${i18n("Убрать")}" title="${i18n("Убрать")}" ${onEv("click",["wordDel",`${n.id}`,i])}>×</button></td></tr>`).join("")}</tbody></table>
+    <div class="ca-foot"><button class="btn s" ${onEv("click",["wordAdd",`${n.id}`])}>${lu("plus")}${i18n("Слово")}</button></div>
+    <p class="sub">${i18n("Оператор видит слово в титрах этим цветом.")}</p>`);
+}
+// Длительность: 0 — отдельный вариант, а не число. Одно поле с data-df — число секунд; «Держать до следующей строки» пишет в него 0.
+// Пустое значение — тоже «держать»: клиент просмотра (liveTitle) без длительности не убирает титры. Правило про паузу 10 с
+// ждёт ответа на п. 4 запроса 2026-11-08-180100Z-mockup-pos-overlay-parser
+function posDurHtml(){
+  const orig=cardFldOrig("Длительность, с",""),d=String(cardFldVal("Длительность, с",orig)??""),zero=d==="0"||d===""||d==="null",sec=zero?(+orig>0?String(orig):"10"):d;
+  return`<div class="pos-dur"><label class="sub">${i18n("Когда убирать чек с экрана оператора")}</label>
+    <label class="pos-opt"><input type="radio" name="posdur" ${zero?"":"checked"} ${onEv("change",["posDurMode",onEv.el,"sec"])}><span>${i18n("Через")}</span><input type="number" min="1" class="pos-dur-n" aria-label="${i18n("Длительность, с")}" value="${escHtml(sec)}" ${zero?"disabled":""} data-df="Длительность, с" data-orig="${escHtml(orig??"")}" ${onEv("input",["cardFld",onEv.el])} ${onEv("change",["posDurSet",onEv.el])}><span>${i18n("с после последней строки")}</span></label>
+    <label class="pos-opt"><input type="radio" name="posdur" ${zero?"checked":""} ${onEv("change",["posDurMode",onEv.el,"hold"])}><span>${i18n("Держать до следующей строки")}</span></label>
+    <p class="sub pos-opt-hint">${i18n("Чек остаётся на экране, пока касса не пришлёт новую строку.")}</p></div>`;
+}
+function posDurSet(el){cardFld(el);gear()}
+function posDurMode(el,m){const f=el.closest(".pos-dur")?.querySelector(".pos-dur-n");if(!f)return;cardFld({dataset:f.dataset,value:m==="hold"?"0":(f.value||"10")});gear()}
+// Левая колонка (кадр) прилипает к верху и не выше видимой области прокрутки: иначе её низ виден только в конце правой
+// колонки. Высота области меняется со строкой плана и окном — её ловит ResizeObserver
+let posColRO=null;
+function posColFit(){
+  const sc=document.querySelector("#main .sc");if(!sc||!sc.querySelector(".pos-l"))return;
+  const set=()=>{const cs=getComputedStyle(sc);document.documentElement.style.setProperty("--pos-sc-h",sc.clientHeight-parseFloat(cs.paddingTop)-parseFloat(cs.paddingBottom)+"px")};set();
+  posColRO?.disconnect();posColRO=new ResizeObserver(set);posColRO.observe(sc);
+}
+function posTitlesHtml(n){
+  setTimeout(posColFit,0);
+  return`<div class="pos-grid"><div class="pos-l">${posPreviewCard(n)}</div><div class="pos-r">${posShowCard()}${posWordsCard(n)}</div></div>`;
+}
 function wordsEdit(id,fn){const n=find(id)?.n;if(!n)return;n.words=fn((n.words||[]).map(w=>({...w})));setD(true);gear()}
 function wordSet(id,i,k,v){wordsEdit(id,l=>{if(l[i])l[i][k]=k==="msg"?String(v).trim():v;return l})}
 function wordAdd(id){wordsEdit(id,l=>l.concat({msg:`${i18n("Слово")} ${l.length+1}`,color:"#ff4444",bg:"#000000"}))}
@@ -16238,19 +16298,7 @@ function formBase(n){
     if(tab==="kids")return childListCard(n,{key:"io",title:"Датчики и реле",filter:d=>d.type==="sensor"||d.type==="relay",empty:"Нет датчиков и реле"});
     return card("Канал",`${bdg(n)}${enabledToggleHtml(n)}<div class="g" style="margin-top:10px">${devFld(n,"Имя","name",n.name)}${fldRo("Номер канала",n.ch??"—")}</div>`)+childListCard(n)}
   if(n.type==="eventsrc"){
-    if(tab==="overlay"){
-      const cam=n.camera?find(n.camera)?.n:null;
-      return card("Область титров",`<div class="g"><div><label>${i18n("Камера")}</label><select ${onEv("change",["overlaySetCam",`${n.id}`,onEv.value])}><option value="">${i18n("— не выбрана —")}</option>${overlayCameras(n).map(c=>`<option value="${escHtml(c.id)}" ${c.id===n.camera?"selected":""}>${escHtml(locName(c))}</option>`).join("")}</select></div></div>
-      ${cam?liveFrameHtml(cam):`<div class="vid"><span class="sub">${i18n("Выберите камеру")}</span></div>`}
-      <div class="g">${fld("Задержка, мс","")}${fld("Длительность, с","")}</div>
-      <p class="sub">${i18n("Здесь только настройка. Клиент оператора показывает титры поверх живого видео и архива. Клиент не добавляет текст в само видео.")}</p>`);
-    }
-    if(tab==="words")return card("Подсветка слов",`<table class="ca-tbl"><thead><tr><th>${i18n("Сообщение")}</th><th>${i18n("Цвет")}</th><th>${i18n("Фон")}</th><th></th></tr></thead><tbody>
-      ${(n.words||[]).map((w,i)=>`<tr data-word="${i}"><td><input value="${escHtml(w.msg)}" aria-label="${i18n("Сообщение")}" ${onEv("change",["wordSet",`${n.id}`,i,"msg",onEv.value])}></td>
-        <td><input type="color" value="${escHtml(colorFull(w.color))}" aria-label="${i18n("Цвет")}" ${onEv("change",["wordSet",`${n.id}`,i,"color",onEv.value])}></td>
-        <td><input type="color" value="${escHtml(colorFull(w.bg))}" aria-label="${i18n("Фон")}" ${onEv("change",["wordSet",`${n.id}`,i,"bg",onEv.value])}></td>
-        <td class="ca-x"><button type="button" class="btn s" ${onEv("click",["wordDel",`${n.id}`,i])}>${i18n("Убрать")}</button></td></tr>`).join("")}</tbody></table>
-      <div class="ca-foot"><button class="btn s" ${onEv("click",["wordAdd",`${n.id}`])}>${lu("plus")}${i18n("Слово")}</button></div>`);
+    if(tab==="overlay")return posTitlesHtml(n);
     return card("Подключение",`${bdg(n)}${enabledToggleHtml(n)}<div class="g" style="margin-top:10px">${fld("Имя",n.name)}${fld("Производитель",n.vendor)}${fld("Модель",n.model)}
       ${fld("Адрес кассы или сервера",n.ip)}${fld("Порт",n.port,"number")}${sourceServerHtml(n)}${fldRo("MAC",n.mac||"—")}</div>
       <p class="sub">${i18n("Получает события от внешних систем (POS, кассы). Источник работает на одном сервере. Если сервер не работает, источник не переходит на другой сервер. Адрес — адрес сервера или имя кассы, не 0.0.0.0.")}</p>`)+deviceFoldersCardHtml(n)}
