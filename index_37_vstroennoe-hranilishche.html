@@ -2274,7 +2274,7 @@ html[data-theme="light"] .cp-row:hover{background:var(--one-control-hover)}
 html[data-theme="light"] .cp-det:hover{background:var(--one-control-hover)}
 html[data-theme="light"] .cp-step{background:var(--one-control-hover);color:var(--x-link)}
 
-/* Прототип 35: встроенное хранилище и репликация */
+/* Прототип 37: встроенное хранилище и репликация */
 .er-stub{font-size:11px;font-weight:500;color:var(--mu);border:1px dashed var(--ln);border-radius:5px;padding:1px 6px}
 .er-types{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
 .er-t{border:1px solid var(--ln);border-radius:8px;padding:10px;background:var(--p2);cursor:pointer;text-align:left;font:inherit;color:inherit;display:flex;flex-direction:column;gap:6px}
@@ -2333,10 +2333,10 @@ html[data-theme="light"] .cp-step{background:var(--one-control-hover);color:var(
 <script src="api/fixture.js"></script>
 <script src="api/contract.js"></script>
 <script>
-// Прототип 35 (заглушка): команда камеры «Начать репликацию» для правил — в контракте её нет (запрос после утверждения).
+// Прототип 37 (заглушка): команда камеры «Начать репликацию» для правил — в контракте её нет (запрос после утверждения).
 // Периоды — как в макросе Axxon One «Camera: Start replication»: Offline periods, Whole period, During, Finish after
 (function(){
-  const act={id:"replicate",label:{key:"proto35.replicate",text:"Начать репликацию",lang:"ru"},execution:"instant",ruleAction:true,ruleOnly:true,
+  const act={id:"replicate",label:{key:"proto37.replicate",text:"Начать репликацию",lang:"ru"},execution:"instant",ruleAction:true,ruleOnly:true,
     right:{level:"FULL"},params:{type:"object",additionalProperties:false,properties:{
       period:{type:"string",enum:["offline","whole","last","event"]},minutes:{type:"integer",minimum:1,maximum:1440},beforeSec:{type:"integer",minimum:0,maximum:3600},afterSec:{type:"integer",minimum:0,maximum:3600},archive:{type:"string"}},
       required:["period"]}};
@@ -10948,7 +10948,7 @@ function tabsForHand(n){
   // Хранилище открывают ради камер, что в него пишут: «Устройства» — первая
   // вкладка и открывается по умолчанию, параметры и тома — во второй.
   // Вид, на который камеры не привязываются (карта сервера, инциденты), — только параметры и тома.
-  // Прототип 35: «Встроенные хранилища» — карты и диски устройств сервера, откуда сервер забирает записи сюда
+  // Прототип 37: «Встроенные хранилища» — карты и диски устройств сервера, откуда сервер забирает записи сюда
   if(n.type==="archive")return archRowOk(n)||archSpec(n).recordModes.length?[["cams","Устройства"],["edge","Встроенные хранилища"],["arch","Хранилище"]]:[["arch","Хранилище"]];
   if(n.type==="storage")return[["rep","Репликация"],["gen","Хранилище"]];
   if(n.type==="vol")return[];
@@ -11201,7 +11201,7 @@ function childListCard(n,o={}){
 // видно, включают и выключают пачкой, а в дерево отдают, когда нужна
 // групповая правка. Отметка в списке своя и живёт, пока открыта камера.
 let periphSel={owner:null,ids:new Set()};
-// Прототип 35: встроенное хранилище камеры — тоже периферия; строка ведёт на его вкладку «Репликация»
+// Прототип 37: встроенное хранилище камеры — тоже периферия; строка ведёт на его вкладку «Репликация»
 function periphItems(n){if(n.type==="camera"&&tab==="io")edgeLoadAll();return(n.devices||[]).filter(d=>d.type!=="det")}
 function periphIds(n){
   if(periphSel.owner!==n.id)periphSel={owner:n.id,ids:new Set()};
@@ -15869,7 +15869,7 @@ const ACTION_KINDS=[
   {grp:"Детектор",sub:"det",action:"scan",unit:true,label:"Проверить архив",short:"Проверка архива",devTypes:["camera"],def:{beforeSec:60,after:60},
    fields:[{id:"ref",label:"Камера"},{id:"detectorKind",label:"Вид детектора",dyn:ruleDetKindOpts},{id:"beforeSec",label:"Секунд до события",req:false},{id:"after",label:"Секунд после события",req:false},
            {id:"archive",label:"Хранилище",req:false,dyn:ruleScanArchOpts},{id:"params",label:"Настройки детектора",req:false}]},
-  // Прототип 35 (заглушка): забрать записи со встроенного хранилища камеры в архив сервера
+  // Прототип 37 (заглушка): забрать записи со встроенного хранилища камеры в архив сервера
   {grp:"Камера",sub:"rec",action:"replicate",unit:true,label:"Начать репликацию",short:"Репликация",devTypes:["camera"],def:{period:"offline",minutes:10},
    fields:[{id:"ref",label:"Камера"},{id:"period",label:"Что забрать",opts:[["offline","пропуски, пока не было связи"],["whole","всё, чего нет в архиве"],["last","последние минуты"],["event","от начала события до его конца"]]},
            {id:"minutes",label:"Минут",on:a=>a.period==="last"},{id:"beforeSec",label:"Секунд до события",req:false,on:a=>a.period==="event"},{id:"after",label:"Секунд после конца события",req:false,on:a=>a.period==="event"},{id:"archive",label:"Куда (необязательно)",req:false,dyn:edgeRuleArchOpts}]},
@@ -15897,7 +15897,7 @@ const ACT_DEFAULT=ACTION_KINDS.find(k=>k.action==="output");
 // Виды детектора действия: что объявила система, иначе весь справочник
 function ruleDetKindOpts(a){const rf=ruleRefField(actionKind(a),"detectorKind");return(rf&&rf.options?.length?rf.options:refDetKinds).map(k=>[k,detKindRu(k)])}
 // Хранилища записи камеры действия: проверить можно только их
-// Прототип 35: «Куда» у репликации — по умолчанию архив из настройки встроенного хранилища
+// Прототип 37: «Куда» у репликации — по умолчанию архив из настройки встроенного хранилища
 function edgeRuleArchOpts(a){return[["",i18n("как в типе репликации")],...ruleArchOpts(a).slice(1)]}
 function ruleScanArchOpts(a){
   const n=refNode(a.ref),own=n?camArchs(n).map(x=>x.arch):[];
@@ -25005,7 +25005,7 @@ function recEdge(n){return edgeStorage(n)||(n?.type==="camera"?edgeStorage(ipsrv
 // Встроенное хранилище — не объект дерева, а часть записи устройства, как
 // edge storage у Milestone и edge recording у Genetec: объём, состояние и
 // выгрузка записей в хранилище сервера.
-// ── Прототип 35: встроенное хранилище и репликация ───────────────────────────
+// ── Прототип 37: встроенное хранилище и репликация ───────────────────────────
 // ЗАГЛУШКА. Типа репликации, окна расписания, событий, предела скорости, исключённых камер регистратора
 // и состояния репликации в контракте нет: всё это живёт здесь, на клиенте (EDGE_REP), и пропадает при
 // перезагрузке. После утверждения вида — запрос владельцу контракта. В контракте есть только режим записи
