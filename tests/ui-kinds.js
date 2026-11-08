@@ -48,12 +48,20 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   // Видео: своего не подставляем, потоки строками, разрешение — из вариантов
   const video = of("camera", (d) => d.resOptions && d.online);
   open(video.id, "vid");
-  ok(document.querySelector('[data-df="Разрешение"]')?.tagName === "SELECT" && !/H\.265|4096|Битрейт/.test(main().textContent), "разрешение — выбор из resOptions, H.265 и битрейта нет");
+  // Вкладка «Видео» с режимом потоков (cvCfgOf): в «Настройках камеры» параметры только для чтения, правка — в «Настройках консоли»
+  const cvModes = typeof cvCfgOf === "function";
+  const resCtl = () => document.querySelector('[data-df="Разрешение"]');
+  const toConsole = (id) => { if (cvModes) { cvCfgOf(find(id).n).mode = "console"; mainSeen.html = null; gear(); } };
+  if (cvModes) ok(!resCtl(), "режим «Настройки камеры»: разрешение только для чтения");
+  toConsole(video.id);
+  const resVals = [...(resCtl()?.options || [])].map((o) => o.value).filter(Boolean);
+  ok(resCtl()?.tagName === "SELECT" && resVals.every((v) => video.resOptions.includes(v) || v === find(video.id).n.streams[0]?.res) && (cvModes || !/H\.265|4096|Битрейт/.test(main().textContent)), "разрешение — выбор из resOptions" + (cvModes ? "" : ", H.265 и битрейта нет"));
   ok(await until(() => lv?.id === video.id && lv.sess?.door.whepUrl, 60000), "живое видео запрошено через POST /devices/{id}/live, сессия у шлюза");
   ok(await until(() => /настоящего видео на стенде нет|На стенде нет настоящего видео/.test(main().textContent)), "подпись: подставной поток");
   const free = of("camera", (d) => !d.resOptions && !d.parentId);
   open(free.id, "vid");
-  ok(document.querySelector('[data-df="Разрешение"]')?.tagName === "INPUT", "нет вариантов — ввод руками");
+  toConsole(free.id);
+  ok(resCtl()?.tagName === "INPUT", "нет вариантов — ввод руками");
   open(video.id, "vid");
   const rowsBefore = main().querySelectorAll("[data-stream]").length;
   streamAdd(video.id);
@@ -203,11 +211,13 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   const realPut = API.put, realDel = API.del;
   API.put = (p, ...a) => (calls.push("PUT " + p), realPut(p, ...a));
   API.del = (p, ...a) => (calls.push("DEL " + p), realDel(p, ...a));
-  main().querySelector('[data-ptz="0"]').dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+  // Кнопка поворота: прежняя [data-ptz] или кнопка джойстика [data-joy-dir] вкладки «Видео»
+  const moving = () => (typeof cvMove !== "undefined" ? cvMove : ptzMove);
+  (main().querySelector('[data-ptz="0"]') || main().querySelector('[data-joy-dir="0"]')).dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
   ok(await until(() => calls.includes(`PUT /units/${ptz.id}/ptz`)), "кнопка нажата — аренда");
-  ok(!!ptzMove, "держим — продлевается");
+  ok(!!moving(), "держим — продлевается");
   window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
-  ok(await until(() => calls.includes(`DEL /units/${ptz.id}/ptz`)) && !ptzMove, "отпустили — стоп");
+  ok(await until(() => calls.includes(`DEL /units/${ptz.id}/ptz`)) && !moving(), "отпустили — стоп");
   API.put = realPut;
   API.del = realDel;
   const count = ptz.presets.length;
