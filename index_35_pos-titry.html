@@ -2276,7 +2276,7 @@ html[data-theme="light"] .cp-step{background:var(--one-control-hover);color:var(
 
 
 /* Прототип 35: карточка POS-устройства */
-.p35-var{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 10px;padding:6px 10px;border:1px dashed var(--ln);border-radius:8px;font-size:12px}
+.p35-stub{margin:0 0 8px;padding:4px 10px;border:1px dashed var(--ln);border-radius:8px;width:fit-content}
 .pos-grid{display:grid;grid-template-columns:minmax(360px,1.15fr) minmax(380px,1fr);gap:12px;align-items:start}
 .pos-l{position:sticky;top:0}
 @media (max-width:1250px){.pos-grid{grid-template-columns:1fr}.pos-l{position:static}}
@@ -10941,7 +10941,7 @@ function tabsForHand(n){
   if(n.type==="camera")return[["gen","Подключение"]].concat(can("startUnitLive")?[["view","Просмотр"]]:[],[["vid","Видео"],["rec","Архив"],["det","Детекторы"],["io","Периферия"],["acc","Доступ"]]);
   if(n.type==="ipsrv")return ipsrvCameras(n).length?[["gen","Подключение"],["rec","Архив"],["kids","Дочерние"]]:[["gen","Подключение"],["kids","Дочерние"]];
   if(n.type==="channel")return[["gen","Основные"],["kids","Дочерние"]];
-  if(n.type==="eventsrc")return posVar==="A"?[["gen","Подключение"],["overlay","Титры"]]:[["gen","Подключение"],["overlay","Титры"],["words","Подсветка"]];
+  if(n.type==="eventsrc")return[["gen","Подключение"],["overlay","Титры"]];
   if(n.type==="acfa")return[["gen","Подключение"],["kids","Подобъекты"]];
   if(n.type==="export")return[["gen","Параметры"]];
   if(n.type==="email")return[["gen","SMTP"],["params","Получатели"]];
@@ -15347,8 +15347,6 @@ function wordDel(id,i){wordsEdit(id,l=>l.filter((w,j)=>j!==i))}
 // парсер. В контракте этого нет: заглушка — POS_STUB по id объекта, мимо черновика карточки и API (запрос владельцу —
 // после утверждения). Из контракта — только cameraId (первая камера), overlayDelayMs, overlayDurationSec, words, vendor
 const POS_STUB=new Map();
-var posVar=(()=>{try{return localStorage.getItem("p35.var")||"A"}catch(e){return"A"}})();
-function posVarSet(v){posVar=v;try{localStorage.setItem("p35.var",v)}catch(e){}if(v==="A"&&tab==="words")tab="overlay";gear()}
 const POS_DRIVERS=["PosXml","POSLegacy","Commax Complex Server","Live Eye"];
 const POS_TERMINALS=["Нет","XML PROTOCOL","DOS TO WIN","RUSSIAN SIEMENS","SUPERMAG UKM","CRYSTAL UKM 323","KKM","ALOHA","MICROS XML","MICROS 9700","NCR USA","IBM LAN","EPSON","SHARP","CASIOHQT2100","WINCOR SPANISH","WINCOR BA63","POSITOUCH","VECTRON","DEBUG POS"];
 const POS_BAUD=["300","600","1200","2400","4800","9600","14400","19200","38400","56000","57600","115200","128000"];
@@ -15544,17 +15542,10 @@ function posRawCard(n,p){
       <span class="pos-raw-acts">${[["start","Начало чека"],["end","Конец чека"],["word","Подсветить"]].map(([k,l])=>`<button type="button" class="btn s" ${onEv("mousedown",onEv.prevent,["posRawSel",onEv.el])} ${onEv("click",["posRawUse",`${n.id}`,i,k])}>${i18n(l)}</button>`).join("")}</span></div>`).join("")}</div>
     <p class="sub">${i18n("Выделить слово в строке и нажать кнопку. Без выделения кнопка берёт строку целиком. Так слово совпадёт с тем, что передаёт касса, вплоть до символа.")}</p>`);
 }
-function posVarHtml(){
-  return`<div class="p35-var"><span>${i18n("Прототип 35, вариант")}:</span>${[["A","Подсветка внутри «Титров»"],["B","Подсветка отдельной вкладкой"]].map(([v,l])=>`<button type="button" class="btn s${posVar===v?" pri":""}" ${onEv("click",["posVarSet",v])}>${v} · ${i18n(l)}</button>`).join("")}
-    <span class="sub">${i18n("Новые поля — заглушка прототипа: консоль не сохраняет их на сервере.")}</span></div>`;
-}
+function posStubHtml(){return`<p class="sub p35-stub">${i18n("Прототип 35. Консоль не сохраняет новые поля на сервере: это заглушка.")}</p>`}
 function posTitlesHtml(n){
   const p=posOf(n);
-  return posVarHtml()+`<div class="pos-grid"><div class="pos-l">${posPreviewCard(n,p)}</div><div class="pos-r">${posLookCard(n,p)}${posBillCard(n,p)}${posVar==="A"?posWordsCard(n,p):""}${posRawCard(n,p)}</div></div>`;
-}
-function posWordsTabHtml(n){
-  const p=posOf(n);
-  return posVarHtml()+`<div class="pos-grid"><div class="pos-l">${posPreviewCard(n,p)}</div><div class="pos-r">${posWordsCard(n,p)}${posRawCard(n,p)}</div></div>`;
+  return posStubHtml()+`<div class="pos-grid"><div class="pos-l">${posPreviewCard(n,p)}</div><div class="pos-r">${posLookCard(n,p)}${posBillCard(n,p)}${posWordsCard(n,p)}${posRawCard(n,p)}</div></div>`;
 }
 // Подключение: драйвер, приём данных, кодировка; разбор — в «Дополнительно». Поля POSLegacy — только у него
 function posDriverSet(el){cardFld(el);gear()}
@@ -15915,7 +15906,6 @@ function formBase(n){
     return card("Канал",`${bdg(n)}${enabledToggleHtml(n)}<div class="g" style="margin-top:10px">${devFld(n,"Имя","name",n.name)}${fldRo("Номер канала",n.ch??"—")}</div>`)+childListCard(n)}
   if(n.type==="eventsrc"){
     if(tab==="overlay")return posTitlesHtml(n);
-    if(tab==="words")return posWordsTabHtml(n);
     return posConnHtml(n)}
   if(n.type==="acfa"){
     const nested=!!find(n.id)?.p;
