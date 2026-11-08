@@ -2281,7 +2281,7 @@ html[data-theme="light"] .cp-step{background:var(--one-control-hover);color:var(
 .pos-l{position:sticky;top:0;max-height:var(--pos-sc-h,none);overflow-y:auto;scrollbar-gutter:stable}
 @media (max-width:1250px){.pos-grid{grid-template-columns:1fr}.pos-l{position:static;max-height:none;overflow:visible}}
 .pos-vid{max-width:none;container-type:inline-size}
-.pos-layer{position:absolute;inset:0;z-index:2}
+.pos-layer{position:absolute;inset:0;z-index:2;pointer-events:none}.pos-layer .pos-area{pointer-events:auto}.pos-vid .live-acts{z-index:3}
 .pos-area{position:absolute;border:1.5px dashed #fff;outline:1px solid #0008;cursor:move;box-sizing:border-box}
 .pos-area.drag{border-style:solid}
 .pos-area.over{border-color:#f0a030}
@@ -2323,7 +2323,7 @@ html[data-theme="light"] .cp-step{background:var(--one-control-hover);color:var(
 .pos-raw{font-family:'Courier New',monospace;font-size:12px;border:1px solid var(--ln);border-radius:6px;max-height:300px;overflow:auto;scrollbar-gutter:stable}
 .pos-raw-ln{position:relative;display:grid;grid-template-columns:62px 1fr;gap:8px;align-items:center;padding:2px 6px;border-left:3px solid transparent}
 .pos-raw-ln:hover{background:var(--hv,#8881)}
-.pos-raw-ln time{color:var(--mu)}.pos-raw-t{white-space:pre;overflow:hidden;text-overflow:ellipsis}
+.pos-raw-ln time{color:var(--mu);user-select:none}.pos-raw-acts{user-select:none}.pos-raw-t{white-space:pre;overflow:hidden;text-overflow:ellipsis}
 .pos-raw-ln.is-s{border-left-color:#3fb950}.pos-raw-ln.is-e{border-left-color:#f0883e}
 .pos-raw-acts{position:absolute;right:4px;top:50%;transform:translateY(-50%);display:none;gap:4px;padding-left:16px;background:linear-gradient(90deg,transparent,var(--p) 16px)}.pos-raw-ln:hover .pos-raw-acts,.pos-raw-ln:focus-within .pos-raw-acts{display:flex}
 .pos-raw-acts .btn{font-family:inherit;padding:1px 6px}
@@ -8348,7 +8348,7 @@ function goFav(i){
 // курсор в поле, и терять это из-за того, что обновилась соседняя строка,
 // он не должен. Положение ищем по устойчивым признакам (селектор прокручиваемого
 // блока и его номер), а не по узлам — узлы после перерисовки уже другие.
-const VIEW_SCROLLERS=[".sc",".tree",".fav-panel-list",".lan-wrap",".gtbl",".dev-results-scroll",".dev-wrap-scroll",".plan-rows",".srv-list"];
+const VIEW_SCROLLERS=[".sc",".tree",".fav-panel-list",".lan-wrap",".gtbl",".dev-results-scroll",".dev-wrap-scroll",".plan-rows",".srv-list",".pos-l"];
 function focusSelector(el){
   if(!el||!/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))return null;
   if(el.id)return"#"+el.id;
@@ -15377,9 +15377,13 @@ function posOf(n){
     const cams=n.camera?[n.camera]:[];
     p={proto:"TCP",com:"COM1",baud:"9600",parity:"none",udpMax:"4096",terminal:"Нет",parser:"",enc:"auto",mode:"line",repeats:"skip",
       timeout:"100",offsetMs:"0",retalix:false,font:"Courier New",size:"12",color:"#ffffff",bg:"#000000",clear:"40",
-      start:[],end:[],ignoreCase:true,billsOnly:false,erase:false,cams,areas:Object.fromEntries(cams.map(c=>[c,{...POS_AREA0}])),cur:cams[0]||"",wf:[]};
+      start:[],end:[],ignoreCase:true,billsOnly:false,erase:false,cams,areas:Object.fromEntries(cams.map(c=>[c,{...POS_AREA0}])),cur:cams[0]||"",wf:{}};
     POS_STUB.set(n.id,p);
   }
+  // Первая камера — cameraId контракта: «Сбросить», уход из карточки и события сервера меняют n.camera мимо заглушки
+  const c0=n.camera||"";
+  if(!c0&&p.cams.length){p.cams=[];p.areas={};p.cur=""}
+  else if(c0&&p.cams[0]!==c0){p.cams=[c0,...p.cams.slice(1).filter(c=>c!==c0)];p.areas[c0]=p.areas[c0]||{...POS_AREA0};if(!p.cams.includes(p.cur))p.cur=c0}
   return p;
 }
 function posSet(id,k,v){const p=POS_STUB.get(id);if(!p)return;p[k]=v;gear()}
@@ -15441,15 +15445,21 @@ function posLines(p){
   return lines;
 }
 function posHi(n,p,t){
-  const ws=(n.words||[]).map((w,i)=>({...w,...(p.wf[i]||{})})).filter(w=>w.msg);
+  const ws=(n.words||[]).map(w=>({...w,...(p.wf[w.msg]||{})})).filter(w=>w.msg);
   const whole=ws.find(w=>posHas(t,w.msg,!!w.cs)&&w.whole);
   const bgOf=w=>w.bgOff?"transparent":colorFull(w.bg);
   if(whole)return`<mark style="color:${colorFull(whole.color)};background:${bgOf(whole)}">${escHtml(t)}</mark>`;
-  let out=escHtml(t);
+  // Совпадения ищем в простом тексте, HTML собираем один раз: иначе следующее слово найдётся внутри разметки предыдущего.
+  // При наложении побеждает слово выше в списке
+  const own=new Array(t.length).fill(null);
   ws.forEach(w=>{
-    const re=new RegExp(w.msg.replace(/[.*+?^${}()|[\]\\]/g,"\\$&").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"),w.cs?"g":"gi");
-    out=out.replace(re,m=>`<mark style="color:${colorFull(w.color)};background:${bgOf(w)}">${m}</mark>`);
+    const hay=w.cs?t:t.toLowerCase(),nd=w.cs?w.msg:w.msg.toLowerCase();
+    for(let at=hay.indexOf(nd);at>=0;at=hay.indexOf(nd,at+nd.length))
+      if(own.slice(at,at+nd.length).every(x=>!x))own.fill(w,at,at+nd.length);
   });
+  let out="";
+  for(let i=0;i<t.length;){let j=i;while(j<t.length&&own[j]===own[i])j++;const w=own[i],seg=escHtml(t.slice(i,j));
+    out+=w?`<mark style="color:${colorFull(w.color)};background:${bgOf(w)}">${seg}</mark>`:seg;i=j}
   return out;
 }
 function posTxtStyle(p){
@@ -15488,10 +15498,10 @@ function posPreviewCard(n,p){
 }
 function posListHtml(n,p,k,ph,off=false){
   return`<div class="pos-list${off?" is-off":""}" ${off?`aria-disabled="true"`:""}>${p[k].map((w,i)=>`<span class="chip on">${escHtml(w)}${off?"":`<button type="button" class="pos-chip-x" aria-label="${i18n("Убрать")}" ${onEv("click",["posListDel",`${n.id}`,k,i])}>×</button>`}</span>`).join("")}
-    <input class="pos-list-in" placeholder="${i18n(off?"Не нужны":ph)}" ${off?"disabled":""} ${onEv("keydown",["posListKey",onEv.event,`${n.id}`,k,onEv.el])}></div>`;
+    <input class="pos-list-in" placeholder="${i18n(off?"Не нужны":ph)}" ${off?"disabled":""} ${onEv("keydown",["posListKey",onEv.event,`${n.id}`,k,onEv.el])} ${onEv("change",["posListAdd",`${n.id}`,k,onEv.value,false])}></div>`;
 }
 function posListKey(e,id,k,el){if(e.key!=="Enter")return;e.preventDefault();posListAdd(id,k,el.value)}
-function posListAdd(id,k,v){const p=POS_STUB.get(id);v=String(v||"").trim();if(!p||!v)return;if(!p[k].includes(v))p[k].push(v);gear();setTimeout(()=>document.querySelector(`#main [data-pos-list="${k}"] .pos-list-in`)?.focus(),0)}
+function posListAdd(id,k,v,focus=true){const p=POS_STUB.get(id);v=String(v||"").trim();if(!p||!v)return;if(!p[k].includes(v))p[k].push(v);gear();if(focus)setTimeout(()=>document.querySelector(`#main [data-pos-list="${k}"] .pos-list-in`)?.focus(),0)}
 function posListDel(id,k,i){const p=POS_STUB.get(id);if(!p)return;p[k].splice(i,1);gear()}
 function posChk(id,k,on,label,hint=""){return`<label class="chk pos-chk"><input type="checkbox" ${on?"checked":""} ${onEv("change",["posTog",`${id}`,k])}> ${i18n(label)}${hint?`<span class="sub">${i18n(hint)}</span>`:""}</label>`}
 function posSel(id,k,label,opts,cur){
@@ -15508,7 +15518,8 @@ function posClear(id,el){const p=POS_STUB.get(id);if(!p)return;p.clear=el.value;
 function posBillCard(n,p){
   const{s,e}=posBounds(p);
   const byStart=p.repeats==="none";
-  const warn=!p.start.length||!p.end.length&&!byStart?`<div class="nt">${i18n("Слова начала и конца чека не заданы. Без них сервер не делит строки на чеки: поиск по чекам в архиве не работает.")}</div>`
+  const warn=byStart&&!p.start.length?`<div class="nt">${i18n("Слова начала чека не заданы. Без них сервер не делит строки на чеки: поиск по чекам в архиве не работает.")}</div>`
+    :!p.start.length||!p.end.length&&!byStart?`<div class="nt">${i18n("Слова начала и конца чека не заданы. Без них сервер не делит строки на чеки: поиск по чекам в архиве не работает.")}</div>`
     :s<0?`<div class="nt">${i18n("В последних строках от кассы нет слова начала чека. Проверить написание: сервер сравнивает слова посимвольно.")}</div>`
     :e<0&&!byStart?`<div class="nt">${i18n("В последних строках от кассы нет слова конца чека. Проверить написание: сервер сравнивает слова посимвольно.")}</div>`
     :`<p class="sub pos-ok">${i18n("Пример: чек — строки")} ${s+1}–${e<0?POS_RAW.length:e+1} ${i18n("из")} ${POS_RAW.length}.</p>`;
@@ -15527,7 +15538,7 @@ function posWordsCard(n,p){
   const ws=n.words||[];
   return card("Подсветка слов",`<table class="ca-tbl pos-wtbl"><colgroup><col><col style="width:46px"><col style="width:74px"><col style="width:38px"></colgroup>
     <thead><tr><th>${i18n("Слово")}</th><th>${i18n("Цвет")}</th><th>${i18n("Фон")}</th><th></th></tr></thead><tbody>
-    ${ws.map((w,i)=>{const f=p.wf[i]||{};return`<tr data-word="${i}"><td><input value="${escHtml(w.msg)}" aria-label="${i18n("Слово")}" ${onEv("change",["wordSet",`${n.id}`,i,"msg",onEv.value])}>
+    ${ws.map((w,i)=>{const f=p.wf[w.msg]||{};return`<tr data-word="${i}"><td><input value="${escHtml(w.msg)}" aria-label="${i18n("Слово")}" ${onEv("change",["posWordRename",`${n.id}`,i,onEv.value])}>
         <div class="pos-wopt"><label class="chk" title="${i18n("Различать заглавные и строчные буквы")}"><input type="checkbox" ${f.cs?"checked":""} ${onEv("change",["posWf",`${n.id}`,i,"cs"])}> ${i18n("С учётом регистра")}</label>
         <label class="chk" title="${i18n("Выделить цветом всю строку чека, в которой есть слово")}"><input type="checkbox" ${f.whole?"checked":""} ${onEv("change",["posWf",`${n.id}`,i,"whole"])}> ${i18n("Вся строка")}</label></div></td>
       <td><input type="color" class="pos-sw" value="${escHtml(colorFull(w.color))}" aria-label="${i18n("Цвет текста")}" title="${i18n("Выбрать цвет текста")}" ${onEv("change",["wordSet",`${n.id}`,i,"color",onEv.value])}></td>
@@ -15536,23 +15547,27 @@ function posWordsCard(n,p){
     <div class="ca-foot"><button class="btn s" ${onEv("click",["posWordAdd",`${n.id}`,""])}>${lu("plus")}${i18n("Слово")}</button></div>
     <p class="sub">${i18n("Оператор видит слово в титрах этим цветом.")}<br>${i18n("«С учётом регистра»: слово «Отмена» не совпадает с «ОТМЕНА». Без флажка совпадает.")}<br>${i18n("«Вся строка»: цветом выделена вся строка чека, а не только слово.")}</p>`);
 }
-function posWf(id,i,k){const p=POS_STUB.get(id);if(!p)return;const f=p.wf[i]=p.wf[i]||{};f[k]=!f[k];gear()}
-function posWordAdd(id,msg){const n=find(id)?.n,p=n&&posOf(n);if(!p)return;if(msg&&(n.words||[]).some(w=>w.msg===msg))return;wordsEdit(id,l=>l.concat({msg:msg||`${i18n("Слово")} ${l.length+1}`,color:"#ff4444",bg:"#000000"}));p.wf[(n.words||[]).length-1]={}}
-function posWordDel(id,i){const p=POS_STUB.get(id);if(p)p.wf.splice(i,1);wordDel(id,i)}
+// Флажки слов (регистр, вся строка, фон) — по тексту слова, а не по номеру: «Сбросить» возвращает n.words, но не заглушку
+function posWf(id,i,k){const n=find(id)?.n,p=n&&posOf(n),m=n?.words?.[i]?.msg;if(!p||m==null)return;const f=p.wf[m]=p.wf[m]||{};f[k]=!f[k];gear()}
+function posWordRename(id,i,v){const n=find(id)?.n,p=n&&posOf(n),old=n?.words?.[i]?.msg,nv=String(v).trim();if(p&&old!=null&&p.wf[old]&&!p.wf[nv]){p.wf[nv]=p.wf[old];delete p.wf[old]}wordSet(id,i,"msg",v)}
+function posWordAdd(id,msg){const n=find(id)?.n,p=n&&posOf(n);if(!p)return false;if(msg&&(n.words||[]).some(w=>w.msg===msg))return false;wordsEdit(id,l=>l.concat({msg:msg||`${i18n("Слово")} ${l.length+1}`,color:"#ff4444",bg:"#000000"}));return true}
+function posWordDel(id,i){wordDel(id,i)}
 // Строки от кассы: первая настройка — по живым данным. Выделить слово в строке и нажать кнопку; без выделения — вся строка
 let posPick=null;
 function posRawSel(el){const ln=el.closest("[data-raw]"),sel=getSelection(),t=String(sel||"").trim();posPick=ln&&t&&ln.contains(sel.anchorNode)?{i:+ln.dataset.raw,t}:null}
 function posRawUse(id,i,k){
   const n=find(id)?.n,p=n&&posOf(n);if(!p)return;
   const t=posPick&&posPick.i===i?posPick.t:POS_RAW[i][1].trim();posPick=null;
-  if(k==="word"){posWordAdd(id,t);toast(`${i18n("Консоль добавила слово в подсветку")}: «${t}»`);return}
-  if(!p[k].includes(t))p[k].push(t);gear();toast(`${i18n(k==="start"?"Консоль добавила слово начала чека":"Консоль добавила слово конца чека")}: «${t}»`);
+  if(k==="word"){toast(posWordAdd(id,t)?`${i18n("Консоль добавила слово в подсветку")}: «${t}»`:`${i18n("Слово уже есть в списке")}: «${t}»`);return}
+  if(k==="end"&&p.repeats==="none")return;
+  if(p[k].includes(t)){toast(`${i18n("Слово уже есть в списке")}: «${t}»`);return}
+  p[k].push(t);gear();toast(`${i18n(k==="start"?"Консоль добавила слово начала чека":"Консоль добавила слово конца чека")}: «${t}»`);
 }
 function posRawCard(n,p){
   const{s,e}=posBounds(p);
   return card("Строки от кассы",`<p class="sub">${i18n("Касса на связи. Последняя строка пришла в")} ${POS_RAW[POS_RAW.length-1][0]}.</p>
     <div class="pos-raw">${POS_RAW.map(([tm,t],i)=>`<div class="pos-raw-ln${i===s?" is-s":""}${i===e?" is-e":""}" data-raw="${i}"><time>${tm}</time><span class="pos-raw-t">${escHtml(t)}</span>
-      <span class="pos-raw-acts">${[["start","Начало чека"],["end","Конец чека"],["word","Подсветить"]].map(([k,l])=>`<button type="button" class="btn s" ${onEv("mousedown",onEv.prevent,["posRawSel",onEv.el])} ${onEv("click",["posRawUse",`${n.id}`,i,k])}>${i18n(l)}</button>`).join("")}</span></div>`).join("")}</div>
+      <span class="pos-raw-acts">${[["start","Начало чека"],...(p.repeats==="none"?[]:[["end","Конец чека"]]),["word","Подсветить"]].map(([k,l])=>`<button type="button" class="btn s" ${onEv("mousedown",onEv.prevent,["posRawSel",onEv.el])} ${onEv("click",["posRawUse",`${n.id}`,i,k])}>${i18n(l)}</button>`).join("")}</span></div>`).join("")}</div>
     <p class="sub">${i18n("Выделить слово в строке и нажать кнопку. Без выделения кнопка берёт строку целиком. Так слово совпадёт с тем, что передаёт касса, вплоть до символа.")}</p>`);
 }
 // Левая колонка (кадр) прилипает к верху и не выше видимой области прокрутки: иначе её низ виден только в конце правой
@@ -15573,7 +15588,7 @@ function posTitlesHtml(n){
 function posDriverSet(el){cardFld(el);gear()}
 function posConnHtml(n){
   const p=posOf(n),drv=cardFldVal("Производитель",cardFldOrig("Производитель",n.vendor))||"PosXml",legacy=drv==="POSLegacy";
-  const drvSel=`<div><label>${i18n("Драйвер")}</label><select data-df="Производитель" data-orig="${escHtml(cardFldOrig("Производитель",n.vendor)||"")}" ${onEv("change",["posDriverSet",onEv.el])}>${POS_DRIVERS.map(d=>`<option value="${escHtml(d)}" ${d===drv?"selected":""}>${escHtml(d)}${d==="PosXml"?` · ${i18n("рекомендуем")}`:""}</option>`).join("")}</select></div>`;
+  const drvSel=`<div><label>${i18n("Драйвер")}</label><select data-df="Производитель" data-orig="${escHtml(cardFldOrig("Производитель",n.vendor)||"")}" ${onEv("change",["posDriverSet",onEv.el])}>${(POS_DRIVERS.includes(drv)?POS_DRIVERS:[drv,...POS_DRIVERS]).map(d=>`<option value="${escHtml(d)}" ${d===drv?"selected":""}>${escHtml(d)}${d==="PosXml"?` · ${i18n("рекомендуем")}`:""}</option>`).join("")}</select></div>`;
   const proto=posSel(n.id,"proto","Протокол",["TCP","UDP","RS-232"],p.proto);
   const com=p.proto==="RS-232"?`${posSel(n.id,"com","COM-порт",["COM1","COM2","COM3","COM4"],p.com)}${posSel(n.id,"baud","Скорость, бит/с",POS_BAUD,p.baud)}${posSel(n.id,"parity","Чётность",[["none","Нет"],["even","Чётная"],["odd","Нечётная"]],p.parity)}`:"";
   const udp=p.proto==="UDP"?posNum(n.id,"udpMax","Наибольший пакет, байт",p.udpMax,0,65536):"";
@@ -15601,7 +15616,7 @@ function posParserPick(id){const p=POS_STUB.get(id);if(!p)return;p.parser=p.pars
 
 // Длительность: 0 — отдельный вариант, а не число. Поле контракта overlayDurationSec, в карточке — «Длительность, с»
 function posDurHtml(){
-  const orig=cardFldOrig("Длительность, с",""),d=String(cardFldVal("Длительность, с",orig)??""),zero=d==="0",sec=zero||d===""?"10":d;
+  const orig=cardFldOrig("Длительность, с",""),d=String(cardFldVal("Длительность, с",orig)??""),zero=d==="0",sec=zero?(+orig>0?String(orig):"10"):d;
   // Одно поле с data-df — число секунд; «Держать до следующей строки» пишет в него 0 (overlayDurationSec=0)
   return`<div class="pos-dur"><label class="sub">${i18n("Когда убирать чек с экрана оператора")}</label>
     <label class="pos-opt"><input type="radio" name="posdur" ${zero?"":"checked"} ${onEv("change",["posDurMode",onEv.el,"sec"])}><span>${i18n("Через")}</span><input type="number" min="1" class="pos-dur-n" value="${escHtml(sec)}" ${zero?"disabled":""} data-df="Длительность, с" data-orig="${escHtml(orig??"")}" ${onEv("input",["cardFld",onEv.el])} ${onEv("change",["posDurSet",onEv.el])}><span>${i18n("с после последней строки")}</span></label>

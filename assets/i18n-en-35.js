@@ -94,5 +94,7 @@ Object.assign(window.I18N_EN, {
   "Через": "In",
   "с после последней строки": "s after the last line",
   "Держать до следующей строки": "Keep until the next line",
-  "Чек остаётся на экране, пока касса не пришлёт новую строку. Если касса молчала больше 10 секунд, новая строка начинает экран заново.": "The receipt stays on the screen until the cash desk sends a new line. If the cash desk was silent for more than 10 seconds, the new line starts the screen again."
+  "Чек остаётся на экране, пока касса не пришлёт новую строку. Если касса молчала больше 10 секунд, новая строка начинает экран заново.": "The receipt stays on the screen until the cash desk sends a new line. If the cash desk was silent for more than 10 seconds, the new line starts the screen again.",
+  "Слова начала чека не заданы. Без них сервер не делит строки на чеки: поиск по чекам в архиве не работает.": "The receipt start words are not set. Without them, the server does not split lines into receipts, and receipt search in the archive does not work.",
+  "Слово уже есть в списке": "The word is already in the list"
 });
