@@ -6258,7 +6258,7 @@ function deleteDomain(id){
     const next=to||domains[0].id;
     if(domainFilter===id)domainFilter=next;
     if(accSel.startsWith("grp:")&&!accGroupRow(accSel.slice(4)))accSel="grp:"+next;
-    resetTreeSel(next);sel=next;tab="gen";setD(false);editClear();expandTo(next);
+    resetTreeSel(next);tab=tabOpen(find(next)?.n);sel=next;setD(false);editClear();expandTo(next);
     aside();
     toast("Домен удалён");paint();
     }).catch(e=>{toast(problemText(e,d));paint()});
@@ -9607,9 +9607,11 @@ function setSlice(v){
   v=normSlice(v);
   if(!SLICE_GROUPS[v]||slice===v)return;
   treeOpenSave();
+  // Вкладку, которую задал прежний срез («Архив» в «Хранилищах», «Детекторы» в «Детекторах»), а не человек, не переносим
+  const prevSel=sel,prevN=find(sel)?.n,tabForced=!!prevN&&(tab===archSliceTab(prevN)||(slice==="det"&&prevN.type==="camera"&&tab==="det"));
   slice=v;syncViews();
   // При смене среза сохраняем запрос, поля поиска и статус. Типы у каждого среза свои — их снимаем.
-  typeFilts.clear();filtPop=false;closeDomainPop();typesExpanded=false;tab="gen";
+  typeFilts.clear();filtPop=false;closeDomainPop();typesExpanded=false;
   treeMatchCache.clear();searchMatchCache.clear();
   // Срезы показывают одни и те же объекты, поэтому выборка переживает смену среза.
   // Вне режима выбора в treeSel лежит только открытый объект: он отметкой не считается.
@@ -9619,8 +9621,9 @@ function setSlice(v){
   treeOpenRestore();
   // Прежний поиск относится к прежнему срезу: шапка не должна нарисоваться с его счётом
   filtSync();
-  tab=archSliceTab(find(sel)?.n)||tab;
   if(v==="det")detEnter();
+  // Тот же объект — та же вкладка; другой объект — по памяти вкладок
+  {const n=find(sel)?.n;tab=archSliceTab(n)||(n&&sel===prevSel&&!tabForced&&tabsFor(n).some(([k])=>k===tab)?tab:tabOpen(n))}
   aside();gear();
 }
 function setGroup(g){
@@ -10095,7 +10098,7 @@ function tctxDanger(label,action,disabled){return tctxItem(label,action,null,dis
 function ctxRename(id,field){
   closeTreeCtx();
   resetTreeSel(id);
-  treeRenameId=id;treeRenameField=field==="short"?"short":"name";treeRenameDraft=null;sel=id;tab="gen";setD(false);expandTo(id);renderTree();gear();
+  treeRenameId=id;treeRenameField=field==="short"?"short":"name";treeRenameDraft=null;if(sel!==id)tab=tabOpen(find(id)?.n);sel=id;setD(false);expandTo(id);renderTree();gear();
 }
 function canRenameShort(n){
   return n&&n.type!=="domain"&&n.type!=="server"&&n.type!=="unalloc"&&n.type!=="det"&&n.type!=="folder"&&treeKind(n)===tview;
@@ -11111,18 +11114,23 @@ function tabGo(id){
 }
 // Первая вкладка без смены запомненной (пункт «Изменить выбранные» в меню дерева)
 function tabFirst(){tab="gen";gear()}
+function tabMemPick(n,m){
+  if(!n||!m)return null;
+  const sf=/^sf\d+$/.test(m.id);
+  // Строка перечня ещё без полной записи: вкладки известны после загрузки, gear() поправит
+  if(n._row)return sf?null:m.id;
+  const t=tabsFor(n).find(sf?([,l])=>l===m.label:([k])=>k===m.id);
+  return t?t[0]:null;
+}
+// Вкладка, выбранная у типа объекта (без последней выбранной вообще)
+function tabTypeKeep(n){return tabMemPick(n,tabMemByType.get(tabMemKey(n)))}
 function tabKeep(n){
   if(!n)return"gen";
-  const pickMem=m=>{
-    if(!m)return null;
-    const sf=/^sf\d+$/.test(m.id);
-    // Строка перечня ещё без полной записи: вкладки известны после загрузки, gear() поправит
-    if(n._row)return sf?null:m.id;
-    const t=tabsFor(n).find(sf?([,l])=>l===m.label:([k])=>k===m.id);
-    return t?t[0]:null;
-  };
-  return pickMem(tabMemByType.get(tabMemKey(n)))||pickMem(tabMemLast)||"gen";
+  return tabTypeKeep(n)||tabMemPick(n,tabMemLast)||"gen";
 }
+// Вкладка объекта, который открывают вместо текущего: вкладка среза важнее памяти (как в pick).
+// Вызывать до смены sel: flDomainTab смотрит, откуда пришли.
+function tabOpen(n){return archSliceTab(n)||(n?flDomainTab(n):null)||(slice==="det"&&n?.type==="camera"?"det":tabKeep(n))}
 function gear(){
   ruleIdxDrop();
   if(bulkActive()&&!bulkPeek){paintMain(bulkCardHtml());return}
@@ -12496,7 +12504,9 @@ function flDom(f){return f.type==="folder"?folderDomain(f.id):f.domainId}
 function flDomainTab(n){
   if(n.type!=="domain")return null;
   const was=find(sel)?.n?.type;
-  return treeLayout()==="folders"||was==="folder"||was==="nofolder"?"flds":null;
+  // Из папки («Вверх», путь) — к папкам домена; иначе вкладка, выбранная у доменов, важнее «Папок»
+  if(was==="folder"||was==="nofolder")return"flds";
+  return treeLayout()==="folders"?tabTypeKeep(n)||"flds":null;
 }
 function flUpBtn(n){
   if(n.type!=="folder"&&n.type!=="nofolder")return"";
@@ -12805,7 +12815,7 @@ function flClick(id,e){
   }
   fl.anchor=id;flSetCur(id);
 }
-function flOpen(id){hwJumpFlash=true;pick(id);hwJumpFlash=false}
+function flOpen(id){hwJumpFlash=true;pick(id,find(id)?.n?.type==="domain"?{tab:"flds"}:undefined);hwJumpFlash=false}
 function flOpenCur(){const f=flHolder(fl.owner),s=f?flSelItems(f):[];if(s.length===1)flOpen(s[0].n.id)}
 function flUp(){
   const f=flHolder(fl.owner);if(!f||f.type==="domain")return;
@@ -26097,7 +26107,7 @@ function deleteArchive(id){
     "Удалить",()=>scheduleDelete([id],{label:`«${locName(a)}»`,commit:()=>{
       // Камеры, что писали сюда, сервер переводит на следующее хранилище или выключает им запись
       API.del(`/units/${id}`,hwVer.get(id)).then(()=>hwReload()).then(()=>{
-      if(sel===id){sel=a.server||a.domain||sel;tab="gen"}
+      if(sel===id){const to=a.server||a.domain||sel;tab=tabOpen(find(to)?.n);sel=to}
       open.delete(id);setD(false);treeMatchCache.clear();searchMatchCache.clear();
       toast(i18n("Хранилище удалено"));
       paint();
@@ -30139,7 +30149,7 @@ async function asstFoundPick(){
   if(asst!==a)return;
   treeSel.clear();ids.forEach(id=>find(id)&&treeSel.add(id));
   selMode=treeSel.size>1;bulkPeek=false;treeAnchor=ids[0];
-  if(treeSel.size===1){sel=ids[0];tab="gen"}
+  if(treeSel.size===1){tab=tabOpen(find(ids[0])?.n);sel=ids[0]}
   aside();gear();
   toast(`${i18n("Отмечено")}: ${treeSel.size}`);
 }
@@ -31660,7 +31670,7 @@ function commitDelete(key){
   unitsDelete(p.ids.filter(id=>hwVer.has(id))).then(res=>hwReload().then(()=>res)).then(res=>{
     const n=res.done.length;
     p.ids.forEach(id=>open.delete(id));if(selFolder&&!folderById(selFolder))selFolder=null;
-    if(!find(sel)){const b=p.back&&(find(p.back)||folderById(p.back))?p.back:domains[0]?.id;sel=b||sel;tab="gen";resetTreeSel(sel);expandTo(sel)}
+    if(!find(sel)){const b=p.back&&(find(p.back)||folderById(p.back))?p.back:domains[0]?.id;tab=tabOpen(find(b||sel)?.n);sel=b||sel;resetTreeSel(sel);expandTo(sel)}
     if(res.failed.length)toast(`${i18n("Удалено объектов")}: ${n} · ${i18n("не удалено")}: ${res.failed.length} — ${problemText(res.failed[0].code)}`);
     else toast(n===1?(kinds.has("folder")||kinds.has("archive")||kinds.has("vol")?"Объект удалён":"Устройство удалено"):`${i18n("Удалено объектов")}: ${n}`);
     paint();
