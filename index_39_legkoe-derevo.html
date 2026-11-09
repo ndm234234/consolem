@@ -2075,7 +2075,6 @@ html[data-theme="light"] .n-chk{border-color:var(--one-border)}
 .tree .n-slice-empty>.n-chk{opacity:0}
 .tree .n-slice-empty:hover>.n-chk{opacity:.55}
 .tree.selmode .n-slice-empty>.n-chk,.tree .n-slice-empty>.n-chk.on,.tree .n-slice-empty>.n-chk.part{opacity:1}
-.ph-tools{margin-left:auto;display:inline-flex;align-items:center;gap:2px;flex:none}
 .ph-tool{width:26px;height:26px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--mu);display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
 .ph-tool:hover{background:var(--one-control-hover);color:var(--tx)}
 .sel-here{font-size:11.5px;color:var(--mu);white-space:nowrap}
@@ -8727,7 +8726,7 @@ function renderTree(){
   treePaint();
   after.forEach(f=>f());
 }
-// Моргание строки дерева (acc-flash: переход по ссылке, treeReveal) переживает перерисовку: новая строка той же
+// Моргание строки дерева (acc-flash: переход по ссылке) переживает перерисовку: новая строка той же
 // цели продолжает вспышку с того же места анимации, а не обрывает её. Вспышку места прихода (flashKeep) переносит
 // flashReapply внутри paintInto — вместе с заголовком и вкладкой, по одним часам; такую строку (_fk) здесь не трогаем,
 // иначе сдвиг лёг бы дважды. Место анимации — активное время: текущее время минус задержка (у строки, которую
@@ -9594,12 +9593,8 @@ function panelHeadHtmlRun(){
   </div><span class="ph-tail">${sliceBtn(ids[ids.length-1],true)}<span class="ph-fold">
     <button type="button" class="ph-choice ${foldersOn?"on":""}" id="viewBtn" aria-pressed="${foldersOn}" ${canFolders?"":"disabled"} title="${canFolders?`${i18n("Группировка")}: ${GROUP_HINT[group()]}`:i18n("В этом срезе нет папок")}" ${onEv("click",["toggleFolders"])}>${IC.folder}<span>${i18n("Папки")}</span></button>
     <button type="button" class="ph-choice ph-status ${filtPop||st?"on":""}" id="filtBtn" aria-haspopup="menu" aria-controls="filtPop" aria-expanded="${filtPop}" title="${statusLabel(st)}" ${onEv("click",["toggleFiltPop",onEv.event])}><span class="st-dot st-${(st||"all").split(":")[0]}" aria-hidden="true"></span><span class="ph-status-label">${statusLabel(st)}</span><span class="ph-chevron" aria-hidden="true"><svg class="btn-chev" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5.5 7.75 4.5 4.5 4.5-4.5"/></svg></span></button>
-  </span></span></div><div class="ph-row">
-    <span class="ph-tools" role="group" aria-label="${i18n("Раскрытие дерева")}">
-      <button type="button" class="ph-tool" id="treeCollapseBtn" title="${i18n("Свернуть всё")}" aria-label="${i18n("Свернуть всё")}" ${onEv("click",["treeCollapseAll"])}>${TREE_IC.shut}</button>
-      <button type="button" class="ph-tool" id="treeRevealBtn" title="${i18n("Показать открытый объект в дереве")}" aria-label="${i18n("Показать открытый объект в дереве")}" ${onEv("click",["treeReveal"])}>${TREE_IC.here}</button>
-    </span>
-  </div></div>`;
+    <button type="button" class="ph-tool" id="treeCollapseBtn" title="${i18n("Свернуть всё")}" aria-label="${i18n("Свернуть всё")}" ${onEv("click",["treeCollapseAll"])}>${TREE_IC.shut}</button>
+  </span></span></div></div>`;
 }
 // ── Раскрытие дерева ─────────────────────────────────────────────────────
 // Дерево открывается коротким: небольшие домены и домен открытого объекта с их первым уровнем. У каждого среза и
@@ -9678,13 +9673,6 @@ function treeExpandSiblings(){
   let b=i;while(b<rows.length-1&&rowLevel(rows[b+1])>=lv)b++;
   rows.slice(a,b+1).forEach(r=>{if(rowLevel(r)===lv&&r.dataset.tid)open.add(r.dataset.tid)});
   renderTree();
-}
-function treeReveal(){
-  if(!find(sel))return;
-  expandTo(sel,selCtx);renderTree();revealSel();
-  const q=`#tree .n[data-pick="${sel}"]`;
-  const row=(selCtx&&document.querySelector(`${q}[data-ctx="${selCtx}"]`))||document.querySelector(q);
-  if(row){row.scrollIntoView({block:"center"});accFlash(()=>{const r=(selCtx&&document.querySelector(`${q}[data-ctx="${selCtx}"]`))||document.querySelector(q);return r?[r]:null},true)}
 }
 function toggleFolders(){setGroup(group()==="folder"?sliceGroups().find(g=>g!=="folder"):"folder")}
 function setSlice(v){
