@@ -149,6 +149,9 @@ aside,main{min-height:0;overflow:hidden}aside{background:var(--one-canvas);borde
 .ph .ph-choice.ph-stc{gap:3px;padding:0 6px 0 3px;color:var(--one-fg)}
 .ph-stc .st-dot{margin:0 2px}
 .ph-stc-n{font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
+.ph .ph-choice.ph-stc.zero{opacity:.4;cursor:default}
+.ph-stc-n:empty{display:none}
+.ph .ph-choice.ph-stc.zero:hover{background:transparent;border-color:transparent}
 .ph-row-st .ph-tools{margin-left:auto;flex:none}
 .ph-cnt{flex:none;min-width:18px;padding:1px 5px;border-radius:99px;background:var(--one-control-bg);color:var(--one-fg-muted);font-size:10px;font-weight:600;line-height:1.4;font-variant-numeric:tabular-nums}
 .ph-choice.on .ph-cnt{background:var(--one-selected-neutral);color:var(--one-fg)}
@@ -7941,8 +7944,7 @@ function filtChromePaint(){
     const dot=btn.querySelector(".st-dot");if(dot)dot.className=`st-dot st-${(st||"all").split(":")[0]}`;
     const label=btn.querySelector(".ph-status-label");if(label)label.textContent=statusLabel(st);
   }
-  const stc=document.getElementById("phStc");
-  if(stc){const h=statusCountersHtml();if(stc.innerHTML!==h)stc.innerHTML=h}
+  statusCountersPaint();
   sliceCntsPaint([...document.querySelectorAll("#aside .ph-choice[data-slice]")]);
   syncGoInput();
   if(tags)tags.innerHTML=tagsHtml();
@@ -8209,23 +8211,45 @@ function asideAdd(){return{
 function treeCntHtml(n){
   return`<span class="n-cnt">${n||""}</span>`;
 }
-// Прототип 39: счётчики проблем рядом с «Все статусы». Число — то же, что в меню (statusCount). Клик включает этот
-// статус, второй клик по тому же счётчику снимает фильтр. Нулевой счётчик не показан.
+// Прототип 39: счётчики проблем рядом с «Все статусы» — всегда три, всегда в этом порядке, чтобы ряд не менялся.
+// Число — то же, что в меню (statusCount): объекты среза с учётом поиска и типа. Консоль читает устройства частями,
+// поэтому счётчики перерисовываются после каждой перерисовки дерева (statusCountersPaint), а не только при смене фильтра.
+// Счётчик горит, только когда выбран ровно этот статус: причина («Нет сигнала: нет связи») — выбор из меню, не счётчик.
+// Щелчок включает статус, щелчок по горящему счётчику снимает фильтр. Счётчик с нулём бледный и не нажимается.
 const STATUS_COUNTERS=["nosignal","off","license"];
+function statusCountsAll(ids){
+  const q=qval(),out=Object.fromEntries(ids.map(id=>[id,0]));
+  walkSliceObjects((x,p)=>{
+    if(!((slice==="det"?detSliceHit(x,p,q):inSlice(x)&&matchesSearch(x,q))&&matchesType(x)&&(slice!=="arch"||x.type==="archive")))return;
+    for(const id of ids)if(statusIs(x,id))out[id]++;
+  });
+  return out;
+}
+// Число статуса полное, когда консоль прочитала срез целиком, поиск по срезу дошёл до конца или сервер нашёл все
+// объекты именно этого статуса (выбран он). Иначе — «N+», как у кнопок срезов: консоль прочитала пока часть устройств.
+function statusCntFull(id){
+  if(sliceAllRead(slice)||sliceFoundAll(slice))return true;
+  return!!fs&&!fs.pick&&fs.done&&!fs.failed&&!typeFilts.size&&curStatus()===id;
+}
+function statusCntText(id,n){return statusCntFull(id)?sliceNum(n):n?`${sliceNum(n)}+`:""}
 function statusCountersHtml(){
-  const st=curStatus();
+  const st=curStatus(),cnt=statusCountsAll(STATUS_COUNTERS);
   return STATUS_COUNTERS.map(id=>{
-    const n=statusCount(id),on=st.split(":")[0]===id;
-    if(!n&&!on)return"";
-    const tip=`${statusLabel(id)}: ${n}. ${i18n(on?"Показать все статусы":"Показать только их")}`;
-    return`<button type="button" class="ph-choice ph-stc ${on?"on":""}" data-stc="${id}" aria-pressed="${on}" title="${escHtml(tip)}" aria-label="${escHtml(tip)}" ${onEv("click",["statusCounterPick",`${id}`])}><span class="st-dot st-${id}" aria-hidden="true"></span><span class="ph-stc-n">${n}</span></button>`;
+    const n=cnt[id],on=st===id,full=statusCntFull(id),zero=full&&!n&&!on;
+    const what=full?`${statusLabel(id)}: ${sliceNum(n)}.`:n?`${statusLabel(id)}: ${i18n("консоль нашла пока")} ${sliceNum(n)}. ${i18n("Их может быть больше.")}`:`${statusLabel(id)}: ${i18n("консоль прочитала ещё не все устройства.")}`;
+    const tip=zero?what:`${what} ${i18n(on?"Показать все статусы":"Показать только их")}`;
+    return`<button type="button" class="ph-choice ph-stc ${on?"on":""} ${zero?"zero":""}" data-stc="${id}" aria-pressed="${on}" ${zero?"disabled":""} title="${escHtml(tip)}" aria-label="${escHtml(tip)}" ${onEv("click",["statusCounterPick",`${id}`])}><span class="st-dot st-${id}" aria-hidden="true"></span><span class="ph-stc-n">${statusCntText(id,n)||""}</span></button>`;
   }).join("");
 }
-function statusCounterPick(id){pickStatus(curStatus().split(":")[0]===id?"":id)}
+function statusCountersPaint(){
+  const el=document.getElementById("phStc");if(!el)return;
+  const h=statusCountersHtml();if(el.innerHTML!==h)el.innerHTML=h;
+}
+function statusCounterPick(id){pickStatus(curStatus()===id?"":id)}
 function filtPopHtml(){
   const st=curStatus();
   return`<div class="filt-pop status-pop ${filtPop?"open":""}" id="filtPop" role="menu" aria-label="${i18n("Статус")}" ${onEv("click",onEv.stop)} ${onEv("keydown",["statusMenuKey",onEv.event])}>
-    ${["",...STATUS_FILTERS.flatMap(x=>x[0]==="nosignal"?[x[0],...Object.keys(DEV_ERR).map(k=>"nosignal:"+k)]:[x[0]])].map(id=>`<button type="button" class="mi ${st===id?"on":""} ${id.includes(":")?"mi-sub":""}" role="menuitemradio" aria-checked="${st===id}" data-status="${id}" ${onEv("click",["pickStatus",`${id}`])}>${id.includes(":")?`<span class="n-err e-${id.split(":")[1]}" aria-hidden="true">${devErrIc(id.split(":")[1])}</span>`:`<span class="st-dot st-${id||"all"}" aria-hidden="true"></span>`}<span>${id.includes(":")?i18n(DEV_ERR[id.split(":")[1]].t):statusLabel(id)}</span><span class="filt-status-cnt">${statusCount(id)}</span><span class="status-tick" aria-hidden="true">${st===id?lu("check"):""}</span></button>`).join("")}
+    ${["",...STATUS_FILTERS.flatMap(x=>x[0]==="nosignal"?[x[0],...Object.keys(DEV_ERR).map(k=>"nosignal:"+k)]:[x[0]])].map(id=>`<button type="button" class="mi ${st===id?"on":""} ${id.includes(":")?"mi-sub":""}" role="menuitemradio" aria-checked="${st===id}" data-status="${id}" ${onEv("click",["pickStatus",`${id}`])}>${id.includes(":")?`<span class="n-err e-${id.split(":")[1]}" aria-hidden="true">${devErrIc(id.split(":")[1])}</span>`:`<span class="st-dot st-${id||"all"}" aria-hidden="true"></span>`}<span>${id.includes(":")?i18n(DEV_ERR[id.split(":")[1]].t):statusLabel(id)}</span><span class="filt-status-cnt">${statusCntText(id,statusCount(id))}</span><span class="status-tick" aria-hidden="true">${st===id?lu("check"):""}</span></button>`).join("")}
   </div>`;
 }
 function domainPopHtml(){
@@ -8682,6 +8706,7 @@ function renderTree(){
     if(!q.chrome)treeSoonClear();
   }
   treePaint();
+  if(app==="hw")statusCountersPaint();
   after.forEach(f=>f());
 }
 // Моргание строки дерева (acc-flash: переход по ссылке, treeReveal) переживает перерисовку: новая строка той же
