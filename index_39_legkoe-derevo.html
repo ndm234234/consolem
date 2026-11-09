@@ -471,6 +471,13 @@ h1{margin:4px 0 10px;font-size:20px;display:flex;align-items:center;gap:10px}
 .g7-hint{position:absolute;left:0;bottom:6px;font-size:11px;color:var(--mu);pointer-events:none}
 .g7-list{margin-top:8px;font-size:12px;color:var(--mu)}
 .n-more .sub,.n-path{color:var(--mu);font-size:11px}
+/* Скелетон читаемой ветки: проявляется после --skd (задержка), серые полосы мерцают */
+.n.n-skel{cursor:default;opacity:0;animation:nSkelIn .18s ease-out var(--skd,300ms) forwards}
+.n-skel .sk{display:block;height:8px;border-radius:4px;background:linear-gradient(90deg,color-mix(in srgb,var(--one-fg) 8%,transparent) 0%,color-mix(in srgb,var(--one-fg) 16%,transparent) 50%,color-mix(in srgb,var(--one-fg) 8%,transparent) 100%) 0 0/200% 100%;animation:nSkelSh 1.4s linear infinite}
+.n-skel .sk-ic{width:var(--ic);height:10px;flex:none}
+@keyframes nSkelIn{to{opacity:1}}
+@keyframes nSkelSh{to{background-position:-200% 0}}
+@media(prefers-reduced-motion:reduce){.n.n-skel{animation-duration:1ms}.n-skel .sk{animation:none}}
 .n-path{display:block;font-weight:400}
 .ici-unalloc,.ici-norec,.ici-nofolder{color:var(--one-fg-muted)}
 .asst-plan{margin-top:10px}
@@ -8810,7 +8817,7 @@ function treePaint(){const treeEl=document.getElementById("tree");if(!treeEl){ru
 // open меняют десятки мест, поэтому чтение решается здесь, после отрисовки, а не у каждого. Сервер отдаёт порядок сам.
 const treeBr=new Map();
 function treeLayout(){return slice==="arch"?"archives":slice==="det"?(group()==="folder"?"folders":"detectors"):group()==="server"?"servers":"folders"}
-function treeReset(){treeBr.clear();sliceReads.clear();fs=null;archUnlinkedAsked.clear();archDomRead.clear();archDomDoneSet.clear();archTblTried.clear()}
+function treeReset(){treeBr.clear();treeSkelAt.clear();sliceReads.clear();fs=null;archUnlinkedAsked.clear();archDomRead.clear();archDomDoneSet.clear();archTblTried.clear()}
 function treeOpenable(id,layout){
   if(id.startsWith("unalloc:"))return false;// нераспределённые — из /servers, он целиком
   // Виртуальные группы: на сервере их нет, стрелка ведёт на /devices с отбором волнами
@@ -8884,6 +8891,7 @@ async function treeLoad(layout,id){
       let r;
       try{r=await treeRead(layout,id,b.cursor)}
       catch(e){if(e?.problem?.code!=="INVALID_CURSOR"||!b.cursor)throw e;b.cursor=null;continue}
+      await treeSkelHold(key);
       if(treeBr.get(key)!==b)return;
       await treeAdd(r.items,id,layout);
       if(r.parentCount!=null)b.count=r.parentCount;
@@ -8893,7 +8901,7 @@ async function treeLoad(layout,id){
     if(!hwDone.archives&&servers.some(s=>s.id===id))(await API.get("/units",{parentId:id,implements:"vms.archive/1",limit:LIM.pageMax})).items.forEach(u=>archAdd(unitRec(u)));
     if(b.done){const n=find(id)?.n;if(n&&n._more&&!(n.devices||[]).length)n._more=false}
   }catch(e){b.done=true;b.failed=true}
-  finally{b.busy=false}
+  finally{b.busy=false;treeSkelAt.delete(key)}
 }
 const volsDone=new Set();
 async function volsEnsure(a){
@@ -8976,8 +8984,25 @@ function treeMoreRow(id,l,key=id){
   if((statusFilts.size||qval())&&!b&&!open.has(key))return"";
   if(b&&b.failed)return`<div class="n n-more" style="--l:${l}"><span class="tw"></span><span class="nm sub">${i18n("Не прочитано")}</span></div>`;
   const scan=treeVirtual(id);
-  if(!b||b.busy||!b.cursor)return`<div class="n n-more" style="--l:${l}"><span class="tw"></span><span class="nm sub">${i18n(scan?"Ищем дальше…":"Загрузка…")}</span></div>`;
+  if(!b||b.busy||!b.cursor)return scan?`<div class="n n-more" style="--l:${l}"><span class="tw"></span><span class="nm sub">${i18n("Ищем дальше…")}</span></div>`:treeSkelHtml(layout+"|"+id,l);
   return`<div class="n n-more n-more-go" style="--l:${l}" data-more="${escHtml(id)}" ${onEv("click",onEv.stop,["treeMore",id])}><span class="tw"></span><span class="nm sub">${i18n(scan?"Искать дальше":"Показать ещё")}</span></div>`;
+}
+// Ветка читается: на месте её строк — скелетон из трёх серых строк. Он проявляется через TREE_SKEL_DELAY: быстрый ответ
+// приходит раньше, и дерево не моргает. Показанный скелетон держится не меньше TREE_SKEL_MIN (treeSkelHold): ответ сразу
+// после появления тоже дал бы мигание. Время начала — по ветке, а не по разметке: перерисовка дерева во время чтения не
+// начинает задержку заново (отрицательная animation-delay — скелетон уже виден)
+const TREE_SKEL_DELAY=300,TREE_SKEL_MIN=400,treeSkelAt=new Map();
+function treeSkelHtml(key,l){
+  let t=treeSkelAt.get(key);if(t==null){t=Date.now();treeSkelAt.set(key,t)}
+  // Три обычные строки высотой в строку дерева: у строк дерева content-visibility, высокая строка-обёртка там сжимается
+  const st=`--l:${l};--skd:${TREE_SKEL_DELAY-(Date.now()-t)}ms`;
+  const row=(w,i)=>`<div class="n n-more n-skel" style="${st}"${i?' aria-hidden="true"':` role="status" aria-label="${i18n("Загрузка…")}"`}><span class="tw"></span><i class="sk sk-ic"></i><i class="sk" style="width:${w}px"></i></div>`;
+  return[132,96,114].map(row).join("");
+}
+function treeSkelHold(key){
+  const t=treeSkelAt.get(key);if(t==null)return null;
+  const shown=Date.now()-t-TREE_SKEL_DELAY;
+  return shown>0&&shown<TREE_SKEL_MIN?new Promise(r=>setTimeout(r,TREE_SKEL_MIN-shown)):null;
 }
 function treeVirtual(id){return id.startsWith("nofolder:")||id.startsWith("svcs:")||id.startsWith("norec:")}
 // Счётчик виртуальной группы — только по загруженному: полного числа нет, пока отбор не дошёл до конца
@@ -9572,7 +9597,6 @@ function panelHeadHtmlRun(){
   </span></span></div><div class="ph-row">
     <span class="ph-tools" role="group" aria-label="${i18n("Раскрытие дерева")}">
       <button type="button" class="ph-tool" id="treeCollapseBtn" title="${i18n("Свернуть всё")}" aria-label="${i18n("Свернуть всё")}" ${onEv("click",["treeCollapseAll"])}>${TREE_IC.shut}</button>
-      <button type="button" class="ph-tool" id="treeExpandBtn" title="${i18n("Развернуть всё")}" aria-label="${i18n("Развернуть всё")}" ${onEv("click",["treeExpandAll"])}>${TREE_IC.open}</button>
       <button type="button" class="ph-tool" id="treeRevealBtn" title="${i18n("Показать открытый объект в дереве")}" aria-label="${i18n("Показать открытый объект в дереве")}" ${onEv("click",["treeReveal"])}>${TREE_IC.here}</button>
     </span>
   </div></div>`;
@@ -9580,14 +9604,14 @@ function panelHeadHtmlRun(){
 // ── Раскрытие дерева ─────────────────────────────────────────────────────
 // Дерево открывается коротким: небольшие домены и домен открытого объекта с их первым уровнем. У каждого среза и
 // раскладки своё раскрытие; оно хранится в браузере и переживает перезагрузку.
-const TREE_OPEN_LS="consolem.treeOpen",TREE_EXPAND_MAX=3000;
+const TREE_OPEN_LS="consolem.treeOpen";
 const TREE_IC={shut:`<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 20 5-5 5 5"/><path d="m7 4 5 5 5-5"/></svg>`,open:`<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>`,here:`<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v4"/><path d="M12 18v4"/><path d="M2 12h4"/><path d="M18 12h4"/></svg>`};
 const treeOpenBy=new Map();
 function treeOpenOwn(id){return!String(id).startsWith("acc")&&id!==FAV_NODE}
 function treeOpenKey(){return slice+"|"+group()}
 let treeOpenAllShown=false;
 // Закрытый домен хранится как «!id»: домен, которого при сохранении ещё не было, откроется, как положено новому.
-let treeOpenCur=null,treeExpandGen=0;
+let treeOpenCur=null;
 function treeOpenSave(){if(!treeOpenAllShown)treeOpenBy.set(treeOpenCur||treeOpenKey(),[...[...open].filter(treeOpenOwn),...domains.filter(d=>!open.has(d.id)).map(d=>"!"+d.id)])}
 // Срез меняют и переход, и шаг истории: раскрытие прежнего среза остаётся за ним.
 function treeOpenFollow(){if(treeOpenCur&&treeOpenCur!==treeOpenKey()){treeOpenSave();treeOpenRestore()}}
@@ -9612,7 +9636,6 @@ function treeOpenStore(){
 const TREE_DOMAIN_BIG=2000;
 function treeDomainBig(d){return(d.summary?.total||0)+(d.servers||[]).length>TREE_DOMAIN_BIG}
 function treeOpenDefault(){
-  treeExpandGen++;
   [...open].filter(treeOpenOwn).forEach(id=>open.delete(id));
   const own=(sel&&domainById(nodeDomainId(find(sel)?.n)))||domains[0];
   domains.forEach(d=>{if(d===own||!treeDomainBig(d))open.add(d.id)});
@@ -9631,29 +9654,9 @@ function treeCollapseAll(){
   renderTree();
   const el=document.getElementById("tree");if(el)el.scrollTop=0;
 }
-// Ветки читаются по запросу: новые строки появляются после ответа сервера,
-// поэтому раскрываем проходами, пока находятся закрытые строки.
-async function treeExpandRows(scope){
-  if(!document.getElementById("tree"))return;
-  const gen=treeExpandGen,key=treeOpenCur;
-  let idle=0,first=true;
-  // Проход считается только за новый уровень: пока ветки читаются, ждём ответа, сколько бы он ни шёл
-  for(let pass=0;pass<12&&idle<2;){
-    renderTreeFlush();                            // строки берутся из разметки: прошлый проход дорисован
-    const tree=document.getElementById("tree");
-    // «Свернуть всё», смена среза или раздела отменяют раскрытие
-    if(!tree||gen!==treeExpandGen||key!==treeOpenCur||app!=="hw")return;
-    const closed=scope(tree).filter(r=>r.dataset.tid&&!open.has(r.dataset.tid));
-    if(tree.querySelectorAll(".n").length>TREE_EXPAND_MAX){toast(`${i18n("Показано больше")} ${TREE_EXPAND_MAX} ${i18n("строк. Остальные ветки раскрыть по одной")}`);return}
-    idle=closed.length||[...treeBr.values()].some(b=>b.busy)?0:idle+1;
-    closed.forEach(r=>open.add(r.dataset.tid));
-    // Первый проход — ответ на клик, сразу; следующие идут по таймеру — в кадр
-    if(closed.length){pass++;first?renderTree():renderTreeSoon()}
-    first=false;
-    await new Promise(r=>setTimeout(r,120));
-  }
-}
-function treeExpandAll(){treeOpenAllShown=true;return treeExpandRows(t=>[...t.querySelectorAll(".n")])}
+// «Развернуть всё» и «Развернуть всё внутри» убраны: в большой конфигурации (сотни тысяч устройств) они читали
+// ветку за веткой тысячи раз, а 3000 строк никто не читает. Объект находят поиском и «Все статусы», ветку раскрывают
+// по одному уровню; «*» раскрывает соседей строки (WAI-ARIA)
 // Строки внутри строки: идут за ней, пока уровень больше её уровня.
 function treeRowsBelow(row){
   const out=[],lv=rowLevel(row);
@@ -9661,12 +9664,8 @@ function treeRowsBelow(row){
   return out;
 }
 function treeRowOfId(id){return document.querySelector(`#tree .n[data-tid="${CSS.escape(id)}"]`)}
-function treeExpandBelow(id){
-  closeTreeCtx();open.add(id);renderTree();
-  return treeExpandRows(()=>{const r=treeRowOfId(id);return r?treeRowsBelow(r):[]});
-}
 function treeCollapseBelow(id){
-  closeTreeCtx();treeExpandGen++;
+  closeTreeCtx();
   const r=treeRowOfId(id);if(!r)return;
   treeRowsBelow(r).forEach(x=>{if(x.dataset.tid)open.delete(x.dataset.tid)});
   renderTree();
@@ -10232,7 +10231,7 @@ function openTreeCtx(n,xy){
 
     // Строка дерева раскрывается по своему ключу: его знает строка, а не объект
     const treeId=document.querySelector(`#tree .n[data-pick="${id}"][data-tid]`)?.dataset.tid;
-    if(treeId)groups.push([tctxItem(i18n("Развернуть всё внутри"),["treeExpandBelow",treeId]),tctxItem(i18n("Свернуть всё внутри"),["treeCollapseBelow",treeId])]);
+    if(treeId)groups.push([tctxItem(i18n("Свернуть всё внутри"),["treeCollapseBelow",treeId])]);
 
     const add=[];
     if(n.type==="unalloc"){
