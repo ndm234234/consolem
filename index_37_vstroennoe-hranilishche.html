@@ -13284,7 +13284,7 @@ function wzResume(id){
 }
 function wzCancel(id){
   // Прототип 37: мастер правила открыт со страницы встроенного хранилища — отмена возвращает на эту страницу
-  const back=id==="rule"?(WZD.rule.get()||wzPeek(id))?.back:null;
+  const back=id==="rule"?WZD.rule.get()?.back:null;   // свёрнутый черновик (док) возврата не знает
   const d=WZD[id],s=d.get()||wzPeek(id),stop=()=>{d.clear?.();wzDrop(id);d.hide();if(back)ruleNewReturn(back)};
   if(d.busy?.()){toast("Консоль ещё применяет план. Подождать конца");return}
   if(!s||!d.work(s)||back){stop();return}   // с хранилища выбран только шаблон: та же кнопка вернёт его, спрашивать не о чем
@@ -13350,7 +13350,7 @@ const WZD={
     where:s=>[s.step,ACC_CT.length,ACC_CT[s.step][1]],sum:s=>escHtml(s.n.trim())},
   // Короткие мастера. Сохраняем при закрытии и при уходе со страницы
   rule:{t:"Новое правило",lost:"Консоль не сохранит выбранный запуск и шаблон.",drop:"Не создавать",
-    get:()=>document.querySelector("#bmodal.open [data-rnw]")?rnw:null,set:s=>{rnw=s},hide:()=>closeBulkModal(),show:()=>{if(app!=="rules")setApp("rules");ruleNewRender()},
+    get:()=>document.querySelector("#bmodal.open [data-rnw]")?rnw:null,set:s=>{rnw={...s,back:null}},hide:()=>closeBulkModal(),show:()=>{if(app!=="rules")setApp("rules");ruleNewRender()},
     work:s=>!!(s.step||s.tpl||s.preset||s.start!==ruleNewStartDef()),
     where:s=>[s.step||0,RULE_NEW_STEPS.length,RULE_NEW_STEPS[s.step||0].t],sum:s=>escHtml(i18n((RULE_STARTS.find(([id])=>id===s.start)||[])[1]||""))},
   accUg:{t:"Новая группа пользователей",lost:"Консоль не сохранит название и описание группы.",drop:"Не создавать",
@@ -25450,11 +25450,11 @@ function eoList(n){
 }
 // Состояния. Название — на чипе, пояснение — в подсказке, в строке и в легенде над таблицей
 const EO_STATE={
-  lost:{t:"записи потеряны",r:0,cls:"lost",d:"Камера записала новые записи поверх старых раньше, чем сервер их забрал. Этих минут нет ни на камере, ни в архиве."},
-  wait:{t:"нет связи",r:1,cls:"wait",d:"Камера недоступна. Записи остаются на карте. Сервер заберёт их, когда связь вернётся, если камера не запишет поверх."},
+  lost:{t:"записи потеряны",r:0,cls:"lost",d:"Камера или регистратор записали новые записи поверх старых раньше, чем сервер их забрал. Этих минут нет ни на устройстве, ни в архиве."},
+  wait:{t:"нет связи",r:1,cls:"wait",d:"Сервер не может связаться с камерой или регистратором. Записи остаются на карте или диске. Сервер заберёт их, когда связь вернётся, если устройство не запишет поверх."},
   run:{t:"забирает",r:2,cls:"run",d:"Сервер сейчас забирает записи с камеры."},
   ok:{t:"всё забрано",r:3,cls:"ok",d:"Сервер забрал всё, что должен был забрать. Пропусков в архиве нет."},
-  out:{t:"не входит",r:4,cls:"off",d:"У регистратора включена постоянная репликация, но эта камера из неё исключена."},
+  out:{t:"не входит",r:4,cls:"off",d:"У регистратора включена постоянная репликация, но пользователь исключил из неё эту камеру."},
   off:{t:"не забирает",r:5,cls:"off",d:"Репликация выключена, правил нет. Записи остаются на карте или диске, сервер их не забирает."}};
 function eoState(x){
   const p=edgeRep(x.st);if(x.nvr&&p.type==="all"&&p.excl.has(x.cam.id)&&!edgeRulesFor(x.st,x.cam.id).length)return"out";
@@ -25470,20 +25470,22 @@ const EO_DIMS=[["state","состояние",x=>EO_STATE[eoState(x)].t,i18n],["r
 function eoFilt(n){if(eoSel.key!==n.id){eoSel.key=n.id;eoSel.f={};eoSel.more=new Set()}return eoSel.f}
 function eoFacet(d,v){const f=eoSel.f;if(f[d]===v)delete f[d];else f[d]=v;gear()}
 function eoFacetClear(){eoSel.f={};gear()}
+function eoRetry(){edgeLoad=null;gear()}
 function eoFacetMore(d){eoSel.more.add(d);gear()}
 // Подробности строки: что случилось и что будет дальше. Текст переносится: обрезать его нельзя
 function eoDetail(x,k){
   const s=edgeStat(x.st,x.nvr?x.cam.id:undefined);
-  if(k==="lost"){const g=s.gaps.find(y=>y[2].startsWith("потерян"));return`<span class="eo-bad">${i18n("Потеряны записи")} ${escHtml(g[0])} (${escHtml(i18n(g[1]))}).</span> <span class="eo-sub">${i18n("Камера записала поверх раньше, чем сервер их забрал.")}</span>`}
-  if(k==="wait")return`<span class="eo-bad">${i18n("Камера недоступна.")}</span> <span class="eo-sub">${i18n("Сервер заберёт записи, когда связь вернётся.")}</span>`;
-  if(k==="out")return`<span class="eo-sub">${i18n("Камера исключена из постоянной репликации регистратора.")}</span>`;
+  if(k==="lost"){const g=s.gaps.find(y=>y[2].startsWith("потерян"));return`<span class="eo-bad">${i18n("Сервер не забрал записи")} ${escHtml(g[0])} (${escHtml(i18n(g[1]))}).</span> <span class="eo-sub">${x.nvr?i18n("Регистратор записал поверх них раньше."):i18n("Камера записала поверх них раньше.")}</span>`}
+  if(k==="wait")return`<span class="eo-bad">${x.nvr?i18n("Регистратор недоступен."):i18n("Камера недоступна.")}</span> <span class="eo-sub">${i18n("Сервер заберёт записи, когда связь вернётся.")}</span>`;
+  if(k==="out")return`<span class="eo-sub">${i18n("Пользователь исключил камеру из постоянной репликации регистратора.")}</span>`;
   if(!s)return`<span class="eo-sub">${i18n("Сервер не забирает записи.")}</span>`;
-  return`${i18n("Последний забор:")} ${escHtml(i18n(s.last))}. <span class="eo-sub">${i18n("Следующий:")} ${escHtml(s.next)}.</span>`;
+  return`${i18n("Сервер забрал записи:")} ${escHtml(i18n(s.last))}. <span class="eo-sub">${i18n("Следующий раз:")} ${escHtml(s.next)}.</span>`;
 }
 function eoHtml(n){
   edgeLoadAll();
   const stub=`<span class="er-stub">${i18n("заглушка")}</span>`,title="Встроенные хранилища";
   const all=eoList(n),where=n.type==="server"?`${i18n("сервера")} «${escHtml(ruleSrvShort(n))}»`:`${i18n("домена")} «${escHtml(locName(n))}»`;
+  if(edgeLoad?.failed)return card(title,`<p class="sub">${i18n("Консоль не смогла загрузить встроенные хранилища.")}</p><button type="button" class="btn s" ${onEv("click",["eoRetry"])}>${i18n("Загрузить снова")}</button>`,stub);
   if(!edgeLoad?.done&&!all.length)return card(title,`<p class="sub">${i18n("Загрузка…")}</p>`,stub);
   if(!all.length)return card(title,`<p class="sub">${i18n("У камер")} ${where} ${i18n("нет встроенных хранилищ.")}</p>`,stub);
   const f=eoFilt(n),q=(listQ["eo:"+n.id]||"").trim().toLowerCase(),on=Object.values(f).some(Boolean);
@@ -25500,7 +25502,7 @@ function eoHtml(n){
   const row=x=>{
     const k=eoState(x),p=edgeRep(x.st),rl=eoRules(x),a=archById(p.arch),w=eoRepWord(x);
     const name=`${ic("camera")}<span class="er-nm"><b>${escHtml(locName(x.cam))}</b><small>${escHtml(eoSrv(x))} · ${x.nvr?`${i18n("диск регистратора")} «${escHtml(locName(x.nvr))}»`:`${i18n("карта")}${x.st.size?` ${escHtml(x.st.size)}`:""}`}</small></span>`;
-    const repl=w==="Забирать всё"?`${i18n("Забирать всё")}<span class="eo-sub">${i18n("в")} «${escHtml(a?locName(a):"—")}»</span>`
+    const repl=w==="Забирать всё"?`${i18n("Забирать всё")}<span class="eo-sub eo-rl">${i18n("в")} «${escHtml(a?locName(a):"—")}»</span>`
       :rl.length?`${i18n("По правилам:")} ${rl.length}<span class="eo-sub eo-rl">${rl.map(r=>`<button type="button" class="lk" ${onEv("click",["ruleGoRule",r.id])}>${escHtml(r.name)}</button>`).join("")}</span>`
       :`<span class="sub">${i18n("Выключена")}</span>`;
     const chip=`<span class="er-st ${EO_STATE[k].cls}" title="${escHtml(i18n(EO_STATE[k].d))}">${i18n(EO_STATE[k].t)}</span>`;
