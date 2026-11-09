@@ -864,6 +864,28 @@ html[data-theme="light"] .cp.done{border-color:var(--one-success-icon);color:var
 .lst-bar .lst-add{flex:0 0 auto;width:auto;field-sizing:content;max-width:100%}
 .cam-conn .cam-conn-full{grid-column:1/-1}
 .cs-cq{container-type:inline-size}
+.cs-drv{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;margin-bottom:12px}
+.cs-drv-sw{display:inline-flex;align-items:center;gap:8px;margin-left:auto;white-space:nowrap}
+.cs-drv-tag{flex:none;margin-left:8px;padding:0 8px;border:1px solid var(--ln);border-radius:999px;font-size:11px;font-weight:400;color:var(--mu);white-space:nowrap}
+.cs-tocw{display:grid;grid-template-columns:210px minmax(0,1fr);gap:14px;align-items:start}
+.cs-toc{position:sticky;top:0;display:flex;flex-direction:column;gap:2px;padding:8px;border:1px solid var(--ln);border-radius:8px;background:var(--p)}
+.cs-toc-h{font-size:12px;color:var(--mu);padding:4px 8px}
+.cs-toc-i{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;min-width:0;padding:6px 8px;border:0;border-radius:6px;background:none;font:inherit;font-size:13px;color:inherit;text-align:left;cursor:pointer}
+.cs-toc-i:hover{background:var(--p2)}
+.cs-toc-i span,.cs-toc-i small{max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cs-toc-i small{color:var(--mu);font-size:12px}
+.cs-toc-acts{display:flex;flex-wrap:wrap;gap:4px 12px;padding:8px 8px 2px;border-top:1px solid var(--ln);margin-top:4px;font-size:12px}
+.cs-sec>.ch{flex-wrap:nowrap;justify-content:flex-start}
+.cs-chev{display:inline-flex;align-items:center;justify-content:center;flex:none;width:24px;height:24px;margin:-4px 4px -4px -6px;padding:0;border:0;border-radius:6px;background:none;color:inherit;cursor:pointer}
+.cs-chev:hover{background:var(--p2)}.cs-chev:focus-visible{outline:2px solid var(--bl)}
+.cs-chev svg{width:16px;height:16px;transform:rotate(90deg);transition:transform .2s ease}
+.cs-sec.closed .cs-chev svg{transform:none}
+.cs-sec.closed>.ch{border-bottom-color:transparent}
+.cs-body{display:grid;grid-template-rows:1fr;transition:grid-template-rows .2s ease}
+.cs-bin{min-height:0;overflow:hidden}
+.cs-sec.closed .cs-body{grid-template-rows:0fr}
+@media (prefers-reduced-motion:reduce){.cs-body,.cs-chev svg{transition:none}}
+@container (max-width:760px){.cs-tocw{grid-template-columns:minmax(0,1fr)}.cs-toc{display:none}}
 .cs-acts{display:flex;gap:6px;margin-left:auto;font-weight:400}
 .cs-dl{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px 16px;margin:0}
 .cs-dl>div{min-width:0}
@@ -3761,7 +3783,7 @@ function canDeleteKind(kind){return can("deleteUnit")&&(!KINDS.size||kindsLike(k
 const SF_WIDGETS=new Set(["text","textarea","switch","select","multiselect","number","password","ref","schedule","file","polygon","line","point","mask"]);
 // Поля — геометрия и прочие массивы чисел: правятся текстом JSON
 const SF_JSON=new Set(["polygon","line","point"]);
-const SF_ATTR={card:"sf",xcard:"sf",wiz:"sw",act:"ap",rule:"rp"};
+const SF_ATTR={card:"sf",xcard:"sf",wiz:"sw",act:"ap",rule:"rp",drv:"sd"};
 const SF_MAIN="Основные",SF_GROUP="Параметры";
 // Ошибки проверки по объектам: uid → {поле: текст}; снимаются правкой поля
 const schemaErrs=new Map();
@@ -3894,6 +3916,7 @@ function sfParse(p,el){
 function sfTarget(scope,owner){
   if(scope==="card"){const n=find(owner)?.n;return n?{schema:schemaOf(n),vals:n.props||(n.props={})}:null}
   if(scope==="xcard"){const n=find(owner)?.n;return n?{schema:KINDS.get(nodeKind(n))?.schema,vals:n.xprops||(n.xprops=xpropsServer(n))}:null}
+  if(scope==="drv")return drvTarget(owner);
   if(scope==="wiz")return swd?{schema:swdSchema(),vals:swd.props}:null;
   if(scope==="act")return actd?{schema:actd.desc.params,vals:actd.params}:null;
   if(scope==="rule"){const a=curRule()&&ruleThenAt(curRule(),owner),k=a&&actionKind(a);return k?.params?{schema:k.params,vals:a.args||{}}:null}
@@ -3903,7 +3926,8 @@ function sfChanged(scope,owner,f){
   if(scope==="card"||scope==="xcard"){
     const e=schemaErrs.get(owner);if(e)delete e[f];
     setD(true);cancelAnimationFrame(cardFootRaf);cardFootRefresh();
-  }else if(scope==="wiz")delete swd.errs[f];
+  }else if(scope==="drv")drvChanged(owner,f);
+  else if(scope==="wiz")delete swd.errs[f];
   else if(scope==="act")delete actd.errs[f];
 }
 function sfInput(scope,owner,f,el){
@@ -12500,8 +12524,198 @@ function camGenLayout(n,p,ips){
     place=card("Размещение и тревоги",csDl([["Метки серверов: где работает",chips(n.labels)],["Что считать тревогой",chips(n.alarmKinds)]]));
   }
   place=csHead(csWrap("place",place),csEditOn(n.id,"place")?`<button type="button" class="btn pri s" ${onEv("click",["csEditSet",`${n.id}`,"place",false])}>${i18n("Готово")}</button>`:csEditBtns(n,"place"));
-  return ident+conn+csWrap("folders",p.folders)+place+csWrap("periph",p.periph)+csWrap("rules",p.rules);
+  return ident+conn+drvSecsHtml(n,"gen")+csWrap("folders",p.folders)+place+csWrap("periph",p.periph)+csWrap("rules",p.rules);
 }
+// ── Параметры драйвера камеры (ЗАГЛУШКА прототипа 45) ─────────────────────────────────────────────────────
+// Набор параметров зависит от драйвера: RTSP, ONVIF или нативная интеграция. В контракте 0.2.0 такой набор отдаёт
+// GET /units/{uid}/schema (вид со schemaPerUnit): JSON Schema с x-ui-tab, x-ui-group, x-label, enum + x-enum-labels,
+// minimum/maximum, readOnly и ветками if/then. В наборе demo.json такой камеры нет, поэтому прототип строит схему
+// сам (camDrvSchema) по образцу свойств Axxon One (DeviceIpint, VideoChannel, Microphone, Telemetry, EmbeddedStorage).
+// Значения живут только в браузере (drvStore) и на сервер не уходят.
+function camDriver(n){const v=camConnVal(n,"Производитель",n.vendor||"");return isRtspVendor(v)?"rtsp":/onvif|generic/i.test(v)?"onvif":"native"}
+const CAM_DRV_NAME={rtsp:"RTSP (общий)",onvif:"ONVIF (общий)",native:"нативный"};
+function drvP(tab,group,order,label,type,x={}){return{type,"x-ui-tab":tab,"x-ui-group":group,"x-ui-order":order,"x-label":label,...x}}
+function drvE(labels,def){return{enum:Object.keys(labels),"x-enum-labels":labels,default:def}}
+function camDrvSchema(n){
+  const d=camDriver(n),P={},allOf=[],on=(f,v,props)=>allOf.push({if:{properties:{[f]:{const:v}}},then:{properties:props}});
+  const G="Характеристики объекта",B="Буферизация видео",GEO="Геолокация",O="Другое";
+  P.firmware=drvP("gen",G,10,"Прошивка","string",{readOnly:true,default:d==="rtsp"?"":d==="onvif"?"2.6.1":"V5.7.3 build 220112"});
+  P.driverVersion=drvP("gen",G,11,"Версия драйвера","string",{readOnly:true,default:d==="rtsp"?"RTSP 1.4":d==="onvif"?"ONVIF 3.92":"3.92.1"});
+  if(d==="native")P.deviceSerialNumber=drvP("gen",G,12,"Серийный номер устройства","string",{readOnly:true,default:"DS-2CD2143G2-I20231104AAWR"});
+  P.breakUnusedConnections=drvP("gen",G,20,"Прервать неиспользуемое соединение","boolean",{default:false});
+  if(d==="rtsp"){
+    P.transport=drvP("gen",G,13,"Транспорт RTSP","string",drvE({tcp:"RTSP через TCP",udp:"RTSP через UDP",http:"RTSP через HTTP"},"tcp"));
+    P.rtspUrl2=drvP("gen",G,14,"Адрес второго потока","string",{default:""});
+  }
+  if(d==="onvif"){
+    P.onvifProfile=drvP("gen",G,13,"Профиль ONVIF","string",drvE({S:"Profile S",T:"Profile T"},"S"));
+    P.onvifEvents=drvP("gen",G,14,"Получать события ONVIF","boolean",{default:true});
+    P.timeSync=drvP("gen",G,15,"Синхронизация времени","string",drvE({none:"Не синхронизировать",ntp:"По серверу NTP",console:"По времени сервера VMS"},"console"));
+    on("timeSync","ntp",{ntpServer:drvP("gen",G,16,"Сервер NTP","string",{default:"pool.ntp.org"})});
+  }
+  P.isVideoBufferOn=drvP("gen",B,30,"Буферизация видео","boolean",{default:false});
+  on("isVideoBufferOn",true,{videoBufferSize:drvP("gen",B,31,"Размер буфера","integer",{minimum:50,maximum:1000,default:200,"x-ui-unit":"мс"})});
+  P.geoLocationLatitude=drvP("gen",GEO,40,"Широта","number",{minimum:-90,maximum:90});
+  P.geoLocationLongitude=drvP("gen",GEO,41,"Долгота","number",{minimum:-180,maximum:180});
+  P.geoLocationAzimuth=drvP("gen",GEO,42,"Азимут","number",{minimum:0,maximum:360,"x-ui-unit":"°"});
+  P.timeout=drvP("gen",O,50,"Тайм-аут ответа","integer",{minimum:1,maximum:60,default:10,"x-ui-unit":"с"});
+  P.reconnectTimeout=drvP("gen",O,51,"Тайм-аут повторного подключения","integer",{minimum:1,maximum:300,default:30,"x-ui-unit":"с"});
+  if(d!=="native")P.rtpReorder=drvP("gen",O,52,"Переупорядочивать пакеты RTP","boolean",{default:false});
+  P.comment=drvP("gen",O,53,"Комментарий","string",{"x-ui-widget":"textarea",default:""});
+  if(d!=="rtsp"){
+    const I="Изображение",dev={"x-dev":true};
+    ["brightness:Яркость","contrast:Контраст","saturation:Насыщенность","sharpness:Резкость"].forEach((x,i)=>{const[f,l]=x.split(":");P[f]=drvP("vid",I,10+i,l,"integer",{minimum:0,maximum:100,default:50,...dev})});
+    P.flickerfree=drvP("vid",I,20,"Подавление мерцания","string",{...drvE({off:"Выключено",hz50:"50 Гц",hz60:"60 Гц",auto:"Авто"},"hz50"),...dev});
+    P.imageFlip=drvP("vid",I,21,"Поворот изображения","string",{...drvE({none:"Нет",r180:"Поворот на 180°",mirror:"Зеркально"},"none"),...dev});
+    P.dayNight=drvP("vid",I,22,"Режим день/ночь","string",{...drvE({auto:"Авто",day:"День",night:"Ночь"},"auto"),...dev});
+    on("dayNight","auto",{dayNightLevel:drvP("vid",I,23,"Порог переключения","integer",{minimum:0,maximum:100,default:40,...dev})});
+    if(d==="native"){
+      P.wdr=drvP("vid",I,24,"Расширенный динамический диапазон (WDR)","boolean",{default:false,...dev});
+      on("wdr",true,{wdrLevel:drvP("vid",I,25,"Уровень WDR","integer",{minimum:0,maximum:100,default:50,...dev})});
+      P.digitalPtz=drvP("vid","Цифровой зум",30,"Цифровой PTZ","boolean",{default:false});
+      on("digitalPtz",true,{maxZoom:drvP("vid","Цифровой зум",31,"Наибольшее увеличение","string",drvE({x2:"2×",x4:"4×",x8:"8×"},"x4"))});
+    }
+    if(n.ptz){
+      const T="Телеметрия";
+      P.ptzMode=drvP("vid",T,40,"Режим управления","string",drvE({continuous:"Плавно",step:"По шагам"},"continuous"));
+      P.patrolTimeout=drvP("vid",T,41,"Пауза в точке обхода","integer",{minimum:10,maximum:600,default:30,"x-ui-unit":"с"});
+      P.homePreset=drvP("vid",T,42,"Домашняя предустановка","integer",{minimum:1,maximum:255,default:1});
+      P.homeReturn=drvP("vid",T,43,"Возврат домой через","integer",{minimum:0,maximum:3600,default:120,"x-ui-unit":"с"});
+    }
+    const A="Аудио";
+    P.micEnabled=drvP("io",A,10,"Микрофон","boolean",{default:false});
+    on("micEnabled",true,{audioCodec:drvP("io",A,11,"Кодек звука","string",drvE({g711u:"G.711 μ-law",g711a:"G.711 A-law",aac:"AAC"},"g711u")),
+      micGain:drvP("io",A,12,"Усиление микрофона","integer",{minimum:0,maximum:100,default:60})});
+    const D="Детекторы на камере";
+    P.camMotion=drvP("det",D,10,d==="onvif"?"Тревога движения из событий ONVIF":"Детектор движения камеры","boolean",{default:false});
+    if(d==="native"){
+      on("camMotion",true,{camMotionSens:drvP("det",D,11,"Чувствительность","integer",{minimum:1,maximum:100,default:50})});
+      P.camTamper=drvP("det",D,12,"Детектор саботажа","boolean",{default:false});
+      P.camLine=drvP("det",D,13,"Пересечение линии","boolean",{default:false});
+    }
+  }
+  if(d==="native"){
+    P.speakerVolume=drvP("io","Аудио",13,"Громкость динамика","integer",{minimum:0,maximum:100,default:70});
+    P.ioInputs=drvP("io","Входы и выходы",20,"Тревожных входов","integer",{readOnly:true,default:2});
+    P.ioOutputs=drvP("io","Входы и выходы",21,"Релейных выходов","integer",{readOnly:true,default:1});
+    const E="Запись на камеру";
+    P.edgeRecording=drvP("rec",E,10,"Запись на карту памяти камеры","boolean",{default:false});
+    on("edgeRecording",true,{edgeMode:drvP("rec",E,11,"Режим записи","string",drvE({continuous:"Непрерывно",alarm:"По тревоге"},"alarm")),
+      edgeSync:drvP("rec",E,12,"Дописать в архив после обрыва связи","boolean",{default:true})});
+  }
+  return{type:"object",properties:P,allOf};
+}
+// Ветки if/then применяются по текущим значениям, поэтому зависимое поле появляется сразу после выбора
+function drvResolve(schema,vals){
+  const props={...schema.properties},conds=new Set();
+  (schema.allOf||[]).forEach(b=>{
+    const c=Object.entries(b.if.properties);c.forEach(([f])=>conds.add(f));
+    if(c.every(([f,x])=>(f in vals?vals[f]:schema.properties[f]?.default)===x.const))Object.assign(props,b.then.properties);
+  });
+  return{props,conds};
+}
+const drvStore=new Map();   // uid → {vals, chg:Set, snap:{group:{…}}, send}
+function drvState(n){
+  let st=drvStore.get(n.id);
+  if(!st){st={vals:{},chg:new Set(),snap:{},send:true};drvStore.set(n.id,st)}
+  const sch=camDrvSchema(n);
+  const fill=ps=>Object.entries(ps).forEach(([f,p])=>{if(!(f in st.vals)&&"default"in p)st.vals[f]=p.default});
+  fill(sch.properties);(sch.allOf||[]).forEach(b=>fill(b.then.properties));
+  return st;
+}
+function drvTarget(id){const n=find(id)?.n;if(!n)return null;const st=drvState(n);return{schema:{properties:drvResolve(camDrvSchema(n),st.vals).props},vals:st.vals}}
+// Поле, от которого зависят другие, перерисовывает карточку: зависимые поля появляются или пропадают
+function drvChanged(id,f){const n=find(id)?.n;if(n&&drvResolve(camDrvSchema(n),drvState(n).vals).conds.has(f))gear()}
+function drvGroups(n,tabId){
+  const st=drvState(n),{props}=drvResolve(camDrvSchema(n),st.vals),groups=new Map();
+  sfEntries({properties:props}).forEach(([f,p])=>{if(p["x-ui-tab"]!==tabId)return;const g=p["x-ui-group"];(groups.get(g)||groups.set(g,[]).get(g)).push([f,p])});
+  return groups;
+}
+function drvKey(g){return"drv:"+g}
+function drvEditStart(id,g){
+  const n=find(id)?.n;if(!n)return;const st=drvState(n);
+  st.snap[g]=cardClone({v:st.vals}).v;csEditSet(id,drvKey(g),true);
+}
+function drvEditCancel(id,g){const n=find(id)?.n;if(!n)return;const st=drvState(n);if(st.snap[g])st.vals=st.snap[g];delete st.snap[g];csEditSet(id,drvKey(g),false)}
+function drvEditDone(id,g){
+  const n=find(id)?.n;if(!n)return;const st=drvState(n),was=st.snap[g]||{};
+  Object.keys(st.vals).forEach(f=>{if(JSON.stringify(st.vals[f])!==JSON.stringify(was[f]))st.chg.add(f)});
+  delete st.snap[g];csEditSet(id,drvKey(g),false);
+  toast("Заглушка: консоль не отправит параметры драйвера на сервер");
+}
+function drvSendToggle(id){const n=find(id)?.n;if(!n)return;const st=drvState(n);st.send=!st.send;gear()}
+// Полоса драйвера над каждой вкладкой камеры: какой драйвер задаёт параметры и пишет ли консоль их в камеру
+function drvBarHtml(n){
+  const d=camDriver(n),st=drvState(n),vendor=camConnVal(n,"Производитель",n.vendor||"");
+  const sw=d==="rtsp"?`<span class="sub">${i18n("Драйвер RTSP не меняет настройки на камере.")}</span>`
+    :`<span class="cs-drv-sw"><span class="sw ${st.send?"on":""}" role="switch" tabindex="0" aria-checked="${st.send}" aria-label="${i18n("Отправлять настройки устройству")}" ${onEv("click",["drvSendToggle",`${n.id}`])}></span>${i18n("Отправлять настройки устройству")}</span>`;
+  return`<div class="nt cs-drv"><span>${i18n("Драйвер")}: <b>${escHtml(i18n(CAM_DRV_NAME[d]))}</b>${vendor?` · ${escHtml(vendor)}`:""}</span>
+    <span class="sub">${i18n("Параметры с меткой «драйвер» задаёт драйвер камеры. Если выбрать другого производителя, набор параметров изменится.")}</span>${sw}</div>`;
+}
+function drvSecsHtml(n,tabId){
+  const groups=drvGroups(n,tabId),st=drvState(n),d=camDriver(n);
+  let out="";
+  groups.forEach((fs,g)=>{
+    const k=drvKey(g),ed=csEditOn(n.id,k),lock=!st.send&&fs.some(([,p])=>p["x-dev"]);
+    const tag=`<span class="cs-drv-tag" title="${escHtml(i18n("Набор полей задаёт драйвер"))}">${i18n("драйвер")} ${escHtml(i18n(CAM_DRV_NAME[d]))}</span>`;
+    const acts=lock?"":ed?`<button type="button" class="btn s" ${onEv("click",["drvEditCancel",`${n.id}`,g])}>${i18n("Отменить")}</button><button type="button" class="btn pri s" ${onEv("click",["drvEditDone",`${n.id}`,g])}>${i18n("Готово")}</button>`
+      :`<button type="button" class="btn s" ${onEv("click",["drvEditStart",`${n.id}`,g])}>${i18n("Изменить")}</button>`;
+    const note=lock?`<div class="nt">${i18n("Консоль не меняет эти настройки на камере: выключено «Отправлять настройки устройству».")}</div>`:"";
+    const body=ed?`<div class="g">${fs.map(([f,p])=>sfFieldHtml("drv",n.id,f,p,st.vals[f],{ro:sfReadOnly(p)})).join("")}</div>`
+      :csDl(fs.map(([f,p])=>[propLabel(p,f),p.type==="boolean"?escHtml(st.vals[f]?i18n("включено"):i18n("выключено")):sfText(p,st.vals[f])==="—"?`<span class="cs-empty">—</span>`:escHtml(sfText(p,st.vals[f])),st.chg.has(f)]));
+    out+=`<div class="card" data-sec="${escHtml(k)}" data-cs-sum="${escHtml(`${fs.length} ${plural(fs.length,"параметр|параметра|параметров")}`)}"><div class="ch">${escHtml(i18n(g))}${tag}<span class="cs-acts">${acts}</span></div><div class="cb">${note}${body}</div></div>`;
+  });
+  if(!groups.size&&tabId!=="gen"&&tabId!=="acc"&&tabId!=="view"&&d==="rtsp")
+    out+=`<div class="nt">${i18n("Драйвер RTSP не даёт настроек камеры на этой вкладке: их задают на самой камере.")}</div>`;
+  return out;
+}
+
+// ── «Разделы с оглавлением» на любой вкладке камеры ───────────────────────────────────────────────────────
+// Верхние карточки вкладки получают кнопку «свернуть», слева — оглавление «На этой странице».
+// Разбор идёт по готовой разметке вкладки, поэтому раздел вкладки можно не переписывать
+const csClosed=new Set();
+function csTitleOf(ch){const c=ch.cloneNode(true);c.querySelectorAll("button,.cs-acts,.cs-drv-tag,.bd,select,input,.sw,.sub").forEach(x=>x.remove());return c.textContent.replace(/\s+/g," ").trim()}
+// Краткое значение для оглавления: счётчик из заголовка карточки (.sub), если карточка не задала своё
+function csSumOf(el,ch){return el.dataset.csSum||ch.querySelector(":scope>.sub")?.textContent.trim()||""}
+function csTabWrap(n,html){
+  const t=document.createElement("template");t.innerHTML=html;
+  const secs=[];
+  [...t.content.children].forEach((el,i)=>{
+    const ch=el.matches(".card")?el.querySelector(":scope>.ch"):null;
+    if(ch){
+      const title=csTitleOf(ch),k=el.dataset.sec||("t:"+title);
+      el.dataset.sec=k;el.classList.add("cs-sec");
+      const closed=csClosed.has(tab+"|"+k);if(closed)el.classList.add("closed");
+      const btn=document.createElement("button");
+      btn.type="button";btn.className="cs-chev";btn.setAttribute("aria-expanded",String(!closed));
+      btn.setAttribute("aria-label",i18n("Свернуть или развернуть")+" «"+title+"»");
+      btn.setAttribute("data-on-click",JSON.stringify([["csSecToggle",k]]));
+      btn.innerHTML=lu("chevron-right");ch.prepend(btn);
+      const body=document.createElement("div");body.className="cs-body";const bin=document.createElement("div");bin.className="cs-bin";body.append(bin);
+      [...el.children].filter(c=>c!==ch).forEach(c=>bin.append(c));el.append(body);
+      secs.push({k,title,sum:csSumOf(el,ch),fold:true});
+    }else{
+      const inner=el.querySelector(".card>.ch");
+      if(inner){const k="w:"+i;el.dataset.sec=k;secs.push({k,title:csTitleOf(inner),sum:"",fold:false})}
+    }
+  });
+  if(secs.filter(x=>x.fold).length<2)return html;
+  const toc=`<nav class="cs-toc" aria-label="${i18n("На этой странице")}"><div class="cs-toc-h">${i18n("На этой странице")}</div>
+    ${secs.map(x=>`<button type="button" class="cs-toc-i" ${onEv("click",["csGo",x.k])}><span>${escHtml(x.title)}</span>${x.sum?`<small>${escHtml(x.sum)}</small>`:""}</button>`).join("")}
+    <div class="cs-toc-acts"><button type="button" class="lk" ${onEv("click",["csAll",true])}>${i18n("Развернуть всё")}</button><button type="button" class="lk" ${onEv("click",["csAll",false])}>${i18n("Свернуть всё")}</button></div></nav>`;
+  const box=document.createElement("div");box.append(t.content.cloneNode(true));
+  return`<div class="cs-tocw">${toc}<div class="cs-secs">${box.innerHTML}</div></div>`;
+}
+function csSecSet(c,open){
+  const k=c.dataset.sec;c.classList.toggle("closed",!open);
+  if(open)csClosed.delete(tab+"|"+k);else csClosed.add(tab+"|"+k);
+  c.querySelector(":scope>.ch>.cs-chev")?.setAttribute("aria-expanded",String(open));
+}
+function csSecEl(k){return[...document.querySelectorAll("#main .cs-sec")].find(c=>c.dataset.sec===k)}
+function csSecToggle(k){const c=csSecEl(k);if(c)csSecSet(c,c.classList.contains("closed"))}
+function csAll(open){document.querySelectorAll("#main .cs-sec").forEach(c=>csSecSet(c,open))}
+function csGo(k){const c=csSecEl(k);if(c&&c.classList.contains("cs-sec"))csSecSet(c,true);
+  accFlash(()=>{const el=[...document.querySelectorAll("#main [data-sec]")].find(x=>x.dataset.sec===k);return el?[el.querySelector(":scope>.ch")||el.querySelector(".card>.ch")].filter(Boolean):[]})}
 function csWrap(k,html){return html?html.replace('<div class="card">',`<div class="card" data-sec="${k}">`):""}
 // Переход к блоку внутри вкладки: прокрутка и вспышка заголовка блока
 function csJump(k){accFlash(()=>[...document.querySelectorAll(`#main [data-sec="${k}"] > .ch`)])}
@@ -16273,7 +16487,9 @@ function lanTabOpen(n){
   return n.type==="server"&&!isUnallocated(n.id)&&tab==="cams";
 }
 // Карточки устройства плюс «Правила автоматизации»: где оно используется, видно, не заходя в раздел правил.
-function form(n){return tab==="topo"&&(n.type==="domain"||n.type==="server")?g7Html(n):formBase(n)+(n.type==="camera"&&tab==="gen"?"":ruleUsesFor(n))}
+function form(n){
+  if(n.type==="camera"&&!isSchemaNode(n))return`<div class="cs-cq">${drvBarHtml(n)}${csTabWrap(n,formBase(n)+(tab==="gen"?"":drvSecsHtml(n,tab)+ruleUsesFor(n)))}</div>`;
+  return tab==="topo"&&(n.type==="domain"||n.type==="server")?g7Html(n):formBase(n)+ruleUsesFor(n)}
 // Переключатель карточки: вид меняется сразу, значение уходит с «Применить»
 function swToggle(el){el.classList.toggle("on");setD(true)}
 function storageSet(id,k,v){const n=find(id)?.n;if(!n)return;n[k]=k==="size"?gbStr(v):v;setD(true);if(k!=="size")gear()}
@@ -16560,7 +16776,7 @@ function formBase(n){
       ,conn:(underIpsrv&&!n.ip?card("Подключение",`<div class="g">${fldRo("Регистратор",locName(ips))}${fldRo("IP регистратора",ips.ip||"—")}${fldRo("RTSP",cardFldOrig("RTSP","")||"—")}</div>
         <p class="sub">${i18n("У камеры регистратора нет своего IP. Сервер берёт её видео через регистратор по номеру канала. Адрес и учётные данные есть в карточке")} <button class="lk" ${onEv("click",["pick",`${ips.id}`])}>${escHtml(locName(ips))}</button>.</p>`)
         :card("Подключение",camConnHtml(n))),folders:deviceFoldersCardHtml(n),place:placeCardHtml(n),periph:periphSummaryHtml(n),rules:ruleUsesFor(n)};
-    return `<div class="cs-cq">${camGenLayout(n,parts,ips)}</div>`}
+    return camGenLayout(n,parts,ips)}
   if(n.type==="det"){
     const cam=find(n.id)?.p;
     return detBackHtml(cam)+detZoneCardHtml(cam,n)+card("Параметры",`${detFieldsHtml(cam,n,"Имя")}
