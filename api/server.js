@@ -571,7 +571,8 @@
       // Расписания и особые дни — календарь (праздники, даты ярмарки): их даты не сдвигаются
       db.schedules = clone(fixture.schedules || []);
       db.dayGroups = clone(fixture.dayGroups || []);
-      lastMode = null;
+      lastMode = undefined;
+      (db.modes.items || []).forEach(modeNorm);
       me = db.me.userId;
       ruleRuns = [];
       prompts = [];
@@ -637,7 +638,7 @@
       rules: () => db.rules, schedules: () => db.schedules, dayGroups: () => db.dayGroups, modes: () => db.modes, manualMode: () => db.modeManual,
       windows: () => db.maintenanceWindows, roles: () => db.access.roles, users: () => db.access.users,
     });
-    let lastMode = null;
+    let lastMode;   // ключ «режим|источник» на прошлом шаге часов; undefined — ещё не считали
     // Записи старых таблиц — по складу: объект по uid и его запись-представление, если он из этой таблицы
     const byId = (table, id) => {
       if (!OLD_TABLES.includes(table)) return db[table].find((r) => r.id === id) || null;
@@ -950,6 +951,12 @@
       db.ruleVersions = db.ruleVersions.filter((v) => v.ruleId !== r.id);
       runsStop(r.id);
       send("entity.deleted", { kind: "rule", entityId: r.id });
+      // Режимы больше не называют удалённое правило
+      if (db.modes.items.some((m) => m.off.ruleIds.includes(r.id))) {
+        db.modes.items.forEach((m) => (m.off.ruleIds = m.off.ruleIds.filter((x) => x !== r.id)));
+        bump(db.modes);
+        send("entity.changed", { kind: "modes", version: db.modes.version });
+      }
       db.schedules.filter((sc) => sc.owner && sc.owner.kind === "rule" && sc.owner.id === r.id && !scheduleUsed(sc.id)).forEach(removeSchedule);
     }
     function dropWatch(w) {
@@ -1038,7 +1045,7 @@
     /* ===== Автоматизация ===== */
 
     // Правило в ответе: умолчание годности, состояние — только у включённого, в версию не входит
-    const ruleView = (r) => Object.assign(clone(r), { validForSec: r.validForSec ?? 30 }, r.enabled ? { status: engine.status(r, db.reference) } : {});
+    const ruleView = (r) => Object.assign(clone(r), { validForSec: r.validForSec ?? 30 }, r.enabled ? { status: engine.status(r, db.reference, now()) } : {});
     const content = (r) => Object.fromEntries(RULE_CONTENT.map((k) => [k, clone(r[k])]));
     const myLogin = () => (db.access.users.find((u) => u.id === me) || {}).login || "";
     // Цели правила (и вложенные — в шагах, ожидаемом событии): fn(target) → новая цель
@@ -1375,16 +1382,53 @@
         changed("maintenanceWindow", w);
       });
     }
-    const modeCurrent = () => {
-      const m = db.modeManual, live = m && db.modes.items.some((x) => x.id === m.modeId) && (!m.until || Date.parse(m.until) > now());
-      return { modeId: engine.modeNow(now()), manual: live ? { until: m.until || null } : null };
+    // Ручное включение режима (или «Обычной работы», modeId null) на срок — пока срок не вышел и режим существует
+    const modeManualLive = () => {
+      const m = db.modeManual;
+      return m && (m.modeId === null || db.modes.items.some((x) => x.id === m.modeId)) && (!m.until || Date.parse(m.until) > now()) ? m : null;
     };
-    // Смена текущего режима (по расписанию или вручную) — событием objectMode
-    function modeTick() {
-      const m = engine.modeNow(now());
-      if (lastMode !== null && m !== lastMode) send("entity.changed", { kind: "objectMode", entityId: m });
-      lastMode = m;
+    // Режим 0.4.0: off и builtin есть всегда; запись старого вида (без них) дополняется умолчаниями
+    function modeNorm(m) {
+      if (!m.off || typeof m.off !== "object") m.off = { all: false, ruleIds: [] };
+      m.off.all = !!m.off.all;
+      m.off.ruleIds = Array.isArray(m.off.ruleIds) ? m.off.ruleIds : [];
+      if (typeof m.builtin !== "boolean") m.builtin = m.system === "service";
+      if (m.system === undefined) m.system = "";
+      if (m.color === undefined) m.color = null;
+      return m;
     }
+    const MODE_MAX_MS = 8 * 3600 * 1000, WEEK_MS = 14 * 24 * 3600 * 1000, MODE_STEP_MS = 60000;
+    // Первое пересечение расписаний a и b в ближайшие 14 дней: { from, to } (ISO) или null
+    function schedulesOverlap(a, b) {
+      // Шаг в минуту: расписания точны до минуты, поэтому короткое пересечение не пропускается
+      const t0 = Math.floor(now() / MODE_STEP_MS) * MODE_STEP_MS;
+      let from = null;
+      for (let t = t0; t < t0 + WEEK_MS; t += MODE_STEP_MS) {
+        const both = engine.schActive(a, t) && engine.schActive(b, t);
+        if (both && from === null) from = t;
+        if (!both && from !== null) return { from: iso(from), to: iso(t) };
+      }
+      return from === null ? null : { from: iso(from), to: iso(t0 + WEEK_MS) };
+    }
+    // Ближайшие моменты, когда меняется действующий режим: конец ручного срока и смена по расписанию
+    const modeDue = () => {
+      const m = modeManualLive(), nx = engine.modeNext(now());
+      return [m && m.until ? Date.parse(m.until) : null, nx == null ? null : +nx].filter((x) => x != null && x > now());
+    };
+    const modeCurrent = () => {
+      const m = modeManualLive(), nx = engine.modeNext(now());
+      return {
+        modeId: engine.modeNow(now()), source: m ? "manual" : "schedule", until: m ? m.until || null : nx == null ? null : iso(+nx),
+        by: m ? m.by || "" : "", manual: m ? { until: m.until || null } : null,
+      };
+    };
+    // Смена текущего режима — по расписанию, вручную или с концом срока — событием objectMode
+    function modeTick() {
+      const c = modeCurrent(), key = `${c.modeId}|${c.source}`;
+      if (lastMode !== undefined && key !== lastMode) modeEvent(c);
+      lastMode = key;
+    }
+    const modeEvent = (c) => send("entity.changed", { kind: "objectMode", entityId: c.modeId || "", payload: { modeId: c.modeId, source: c.source, until: c.until, by: c.by } });
 
     /* ===== Права ===== */
 
@@ -4387,13 +4431,31 @@
           const bad = precondition(M, headers);
           if (bad) return bad;
           const ids = new Set(body.items.map((m) => m.id));
-          const sys = M.items.find((m) => m.system && !ids.has(m.id));
-          if (sys) return problem(409, "BUILTIN", "Системный режим не удаляется", { params: { modeId: sys.id } });
-          if (!ids.has(body.otherwise)) return problem(422, "VALIDATION_FAILED", "Режим «иначе» — один из режимов", { field: "otherwise" });
+          const was = new Map(M.items.map((m) => [m.id, m]));
+          const sys = M.items.find((m) => m.builtin && !ids.has(m.id));
+          if (sys) return problem(409, "BUILTIN", "Встроенный режим не удаляется", { params: { modeId: sys.id } });
+          // otherwise — устарело: нет в записи — остаётся прежний (если режим жив), null — «Обычная работа»
+          const other = body.otherwise === undefined ? (ids.has(M.otherwise) ? M.otherwise : null) : body.otherwise;
+          if (other !== null && !ids.has(other)) return problem(422, "VALIDATION_FAILED", "Режим «иначе» — один из режимов", { field: "otherwise" });
           const blank = body.items.find((m) => !String(m.name || "").trim());
           if (blank) return problem(422, "NAME_REQUIRED", "Укажите название режима", { field: "items" });
+          const ruleIds = new Set(db.rules.map((r) => r.id));
+          const noRule = body.items.find((m) => m.off && (m.off.ruleIds || []).some((x) => !ruleIds.has(x)));
+          if (noRule) return problem(422, "VALIDATION_FAILED", "Правила, которое режим выключает, нет", { field: "items" });
+          // builtin ведёт сервер: у режима, которого не было, — false; у прежнего — как был
+          const items = body.items.map((m) => modeNorm(Object.assign(clone(m), { builtin: was.has(m.id) ? was.get(m.id).builtin : false }, m.off || !was.has(m.id) ? {} : { off: clone(was.get(m.id).off) })));
+          // Расписания режимов не пересекаются: проверяется то, что поменялось (новый режим или другое расписание)
+          if (items.some((m) => m.scheduleId && !byId("schedules", m.scheduleId))) return problem(422, "VALIDATION_FAILED", "Расписания нет", { field: "items" });
+          for (const m of items) {
+            if (!m.scheduleId || (was.has(m.id) && was.get(m.id).scheduleId === m.scheduleId)) continue;
+            for (const o of items) {
+              if (o === m || !o.scheduleId) continue;
+              const hit = schedulesOverlap(m.scheduleId, o.scheduleId);
+              if (hit) return problem(409, "SCHEDULE_OVERLAP", `Расписание режима «${m.name}» пересекается с режимом «${o.name}»`, { params: { modeId: o.id, from: hit.from, to: hit.to } });
+            }
+          }
           const gone = M.items.filter((m) => !ids.has(m.id)).map((m) => m.id);
-          Object.assign(M, { items: clone(body.items), otherwise: body.otherwise });
+          Object.assign(M, { items, otherwise: other });
           bump(M);
           send("entity.changed", { kind: "modes", version: M.version });
           // Удалённый режим уходит из условий «Режим объекта»; включённый вручную — снимается
@@ -4401,11 +4463,13 @@
             const hit = r.conditions.filter((c) => c.kind === "mode" && (c.modeIds || []).some((x) => gone.includes(x)));
             if (!hit.length) return;
             hit.forEach((c) => (c.modeIds = c.modeIds.filter((x) => !gone.includes(x))));
+            // Условие, где не осталось режимов, убирается: правило с ним было бы в ошибке, а пользователь условия не видит
+            r.conditions = r.conditions.filter((c) => c.kind !== "mode" || (c.modeIds || []).length);
             bump(r);
             runsStop(r.id);
             changed("rule", r);
           });
-          if (db.modeManual && gone.includes(db.modeManual.modeId)) db.modeManual = null;
+          if (db.modeManual && db.modeManual.modeId && gone.includes(db.modeManual.modeId)) db.modeManual = null;
           modeTick();
           return one(clone(M));
         },
@@ -4416,10 +4480,19 @@
         "/modes/current",
         (p, q, body) => {
           if (body.modeId && !db.modes.items.some((m) => m.id === body.modeId)) return notFound("Режим");
-          db.modeManual = body.modeId ? { modeId: body.modeId, until: body.until || null } : null;
-          send("entity.changed", { kind: "objectMode", entityId: engine.modeNow(now()) });
-          lastMode = engine.modeNow(now());
-          return { status: 200, body: modeCurrent() };
+          const has = body.until != null, until = has ? Date.parse(body.until) : null;
+          if (has && !Number.isFinite(until)) return problem(422, "VALIDATION_FAILED", "Срок — дата и время", { field: "until" });
+          if (has && until <= now()) return problem(422, "VALIDATION_FAILED", "Срок уже прошёл", { field: "until" });
+          if (has && until > now() + MODE_MAX_MS) return problem(422, "VALIDATION_FAILED", "Срок — не больше 8 часов от текущего времени", { field: "until" });
+          // Без срока: режим — на 8 часов; null без срока — вернуться к режиму по расписанию (так было до 0.4.0)
+          if (body.modeId == null && !has) db.modeManual = null;
+          else db.modeManual = { modeId: body.modeId || null, until: iso(has ? until : now() + MODE_MAX_MS), by: myLogin() };
+          lastMode = undefined;
+          modeTick();
+          const c = modeCurrent();
+          modeEvent(c);
+          lastMode = `${c.modeId}|${c.source}`;
+          return { status: 200, body: c };
         },
       ],
       ...getter("maintenanceWindows", "Окно обслуживания").map(([m, path, fn]) => [m, path.replace("/maintenanceWindows", "/maintenance-windows"), fn]),
@@ -4818,7 +4891,7 @@
           const fired = [];
           const target = now() + ms;
           for (let t = now(); ; ) {
-            const due = Math.min(target, ...[...ops.values()].filter((o) => o.state === "running").map((o) => o.nextAt), ...formatting.values(), ...[...searches.values()].map((s) => s.nextAt), ...[...syncing.values()].map((s) => s.at), ...applying.values(), ...runDue(), ...schedDue());
+            const due = Math.min(target, ...[...ops.values()].filter((o) => o.state === "running").map((o) => o.nextAt), ...formatting.values(), ...[...searches.values()].map((s) => s.nextAt), ...[...syncing.values()].map((s) => s.at), ...applying.values(), ...runDue(), ...schedDue(), ...modeDue());
             if (clock.frozenAt != null) clock.frozenAt = Math.max(t, due);
             else clock.offset += Math.max(t, due) - now();
             fired.push(...tick());

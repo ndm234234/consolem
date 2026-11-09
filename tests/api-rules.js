@@ -247,9 +247,10 @@
     assert.ok(add.body.version !== M.version, "версия новая");
     assert.status(await env.call("PUT", "/modes", { items: add.body.items.filter((m) => m !== sys && m.id !== sys.id), otherwise: M.otherwise }, { "If-Match": `"${add.body.version}"` }), 409, "BUILTIN");
     const cur = await env.ok("POST", "/modes/current", { modeId: mine.id, until: null });
-    assert.eq([cur.modeId, cur.manual], [mine.id, { until: null }], "включён вручную");
-    const r = await env.ok("GET", `/rules/${r1.id}`), cond = r.conditions.find((c) => c.kind === "mode");
-    await env.ok("PUT", `/rules/${r1.id}`, body(r, { conditions: r.conditions.map((c) => (c === cond ? Object.assign({}, c, { modeIds: c.modeIds.concat(mine.id) }) : c)) }), etag(r));
+    assert.eq([cur.modeId, typeof cur.manual.until], [mine.id, "string"], "включён вручную; срока нет в запросе — сервер ставит 8 часов");
+    const r = await env.ok("GET", `/rules/${r1.id}`);
+    // Условие «Режим объекта» устарело (0.4.0), но работает: в эталонном наборе его нет, добавляем
+    await env.ok("PUT", `/rules/${r1.id}`, body(r, { conditions: r.conditions.concat({ kind: "mode", modeIds: [mine.id] }) }), etag(r));
     const del = await env.ok("PUT", "/modes", { items: M.items, otherwise: M.otherwise }, { "If-Match": `"${add.body.version}"` });
     assert.ok(del.items.length === M.items.length, "удалён");
     assert.ok(!JSON.stringify((await env.ok("GET", `/rules/${r1.id}`)).conditions).includes(mine.id), "ушёл из условия «Режим объекта»");

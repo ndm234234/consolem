@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Конфигуратор — API",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "description": "Контракт конфигуратора: всё, что интерфейс читает и меняет. Источник истины: встроенный сервер прототипа (api/server.js) и бэкенд отвечают по нему. Договорённости — api/README.md: версии записей (ETag / If-Match, 428, 412), ошибки application/problem+json с машинным code, групповые операции с частичным успехом и idempotencyKey, поток событий SSE. Система может поддерживать не весь контракт: что она умеет — GET /reference → capabilities; остальные операции отвечают 404 NO_ROUTE, неподдержанные виды устройств и настройки — 422 NOT_SUPPORTED. Операции с тегом test-support есть только на тестовом стенде. Форма работает с одним адресом входа, другой — только если этот недоступен. Список операций, откат и память idempotencyKey у каждого адреса свои: после 5xx и смены адреса запись сперва перечитывается. Версия одной записи на разных адресах может отличаться: 412 и перечитывание. У изменений чужого кластера at — время, когда их увидели.",
     "license": {
       "name": "Внутренний документ",
@@ -1890,7 +1890,7 @@
         "tags": [
           "automation"
         ],
-        "summary": "Режимы объекта",
+        "summary": "Режимы",
         "responses": {
           "200": {
             "description": "Готово",
@@ -1920,8 +1920,8 @@
         "tags": [
           "automation"
         ],
-        "summary": "Режимы объекта целиком",
-        "description": "Удалённый режим уходит из условий «Режим объекта» правил; режим «иначе» — на другой; включённый вручную — снимается",
+        "summary": "Режимы целиком",
+        "description": "Режим можно удалить (если он не builtin): удалённый уходит из условий «Режим объекта» правил (устарело), включённый вручную — снимается. 409 SCHEDULE_OVERLAP — расписание нового или изменённого режима пересекается с расписанием другого",
         "parameters": [
           {
             "name": "If-Match",
@@ -1986,7 +1986,7 @@
         "tags": [
           "automation"
         ],
-        "summary": "Текущий режим объекта",
+        "summary": "Действующий режим",
         "responses": {
           "200": {
             "description": "Готово",
@@ -2011,7 +2011,7 @@
         "tags": [
           "automation"
         ],
-        "summary": "Включить режим вручную или вернуться к расписаниям",
+        "summary": "Включить режим вручную на срок или вернуться к расписанию",
         "requestBody": {
           "required": true,
           "content": {
@@ -2045,7 +2045,8 @@
           "default": {
             "$ref": "#/components/responses/Problem"
           }
-        }
+        },
+        "description": "Срок — не больше 8 часов (422). Забытое переключение кончается само, по концу срока приходит событие objectMode. Кто включил — ModeCurrent.by"
       }
     },
     "/maintenance-windows": {
@@ -2084,7 +2085,9 @@
           "default": {
             "$ref": "#/components/responses/Problem"
           }
-        }
+        },
+        "deprecated": true,
+        "description": "Устарело в 0.4.0, работает как раньше. Окно обслуживания — это режим: расписание окна — ObjectMode.scheduleId, ruleIds (null — все) — ObjectMode.off. Интерфейс 0.4.0 окон не использует; сервер их по-прежнему ведёт и учитывает при запуске правил (проверка запуска maintenance)."
       },
       "post": {
         "operationId": "createMaintenanceWindow",
@@ -2122,7 +2125,9 @@
           "default": {
             "$ref": "#/components/responses/Problem"
           }
-        }
+        },
+        "deprecated": true,
+        "description": "Устарело в 0.4.0, работает как раньше. Окно обслуживания — это режим: расписание окна — ObjectMode.scheduleId, ruleIds (null — все) — ObjectMode.off. Интерфейс 0.4.0 окон не использует; сервер их по-прежнему ведёт и учитывает при запуске правил (проверка запуска maintenance)."
       }
     },
     "/maintenance-windows/{windowId}": {
@@ -2168,7 +2173,9 @@
           "default": {
             "$ref": "#/components/responses/Problem"
           }
-        }
+        },
+        "deprecated": true,
+        "description": "Устарело в 0.4.0, работает как раньше. Окно обслуживания — это режим: расписание окна — ObjectMode.scheduleId, ruleIds (null — все) — ObjectMode.off. Интерфейс 0.4.0 окон не использует; сервер их по-прежнему ведёт и учитывает при запуске правил (проверка запуска maintenance)."
       },
       "put": {
         "operationId": "putMaintenanceWindow",
@@ -2243,7 +2250,9 @@
           "default": {
             "$ref": "#/components/responses/Problem"
           }
-        }
+        },
+        "deprecated": true,
+        "description": "Устарело в 0.4.0, работает как раньше. Окно обслуживания — это режим: расписание окна — ObjectMode.scheduleId, ruleIds (null — все) — ObjectMode.off. Интерфейс 0.4.0 окон не использует; сервер их по-прежнему ведёт и учитывает при запуске правил (проверка запуска maintenance)."
       },
       "delete": {
         "operationId": "deleteMaintenanceWindow",
@@ -2251,7 +2260,7 @@
           "automation"
         ],
         "summary": "MaintenanceWindow: удалить",
-        "description": "Вместе со своим расписанием, если оно больше нигде не используется",
+        "description": "Устарело в 0.4.0, работает как раньше. Окно обслуживания — это режим: расписание окна — ObjectMode.scheduleId, ruleIds (null — все) — ObjectMode.off. Интерфейс 0.4.0 окон не использует; сервер их по-прежнему ведёт и учитывает при запуске правил (проверка запуска maintenance). Вместе со своим расписанием, если оно больше нигде не используется",
         "parameters": [
           {
             "name": "windowId",
@@ -2294,7 +2303,8 @@
           "default": {
             "$ref": "#/components/responses/Problem"
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/access": {
@@ -10086,6 +10096,7 @@
           "NOT_SUPPORTED",
           "RULE_INVALID",
           "BUILTIN",
+          "SCHEDULE_OVERLAP",
           "NOT_RUNNABLE",
           "UPSTREAM_UNAVAILABLE",
           "NOT_REVERTIBLE",
@@ -10133,7 +10144,7 @@
           "PARENT_MISMATCH": "Родитель — в другом домене или такого вида дочерних у него не бывает (422)",
           "NOT_SUPPORTED": "Система этого не поддерживает: вид устройства или настройка вне GET /reference → capabilities (422; в групповых — по объекту)",
           "RULE_INVALID": "Включённое правило с ошибкой не сохраняется: что не так — в params.issue (422)",
-          "BUILTIN": "Встроенное не правится и не удаляется (409): «Всегда», «Никогда», системный режим; у роли «Администратор» меняются только назначения",
+          "BUILTIN": "Встроенное не правится и не удаляется (409): «Всегда», «Никогда», встроенный режим (ObjectMode.builtin); у роли «Администратор» меняются только назначения",
           "NOT_RUNNABLE": "Правило сейчас нельзя запустить: выключено, с ошибкой или только по событию — в params.reason (409)",
           "UPSTREAM_UNAVAILABLE": "Бэкенд недоступен, не ответил вовремя или занят (502, 503, 504; при 503 — Retry-After). Запись могла пройти: повтор — с тем же idempotencyKey или после перечитывания. У шага операции — шаг не выполнен из-за сбоя сервера, в объекте ничего не записано, retry-failed повторяет его",
           "NOT_REVERTIBLE": "Операцию нельзя откатить или повторить (409), причина в params.reason: notLast — не последняя в стопке, isRevert — это сам откат, expired — срок вышел, reverted — уже откачена, running — не закончена, empty — без удачных шагов, stale — повтор очищен или срок вышел",
@@ -10149,7 +10160,8 @@
           "LIMIT_EXCEEDED": "Предел выгрузки: params.limit — какой, params.max — сколько можно (422)",
           "EXPORT_EXPIRED": "Файл выгрузки удалён по сроку (410)",
           "SUPERVISOR_REJECTED": "Супервизор указан, но не подходит (403), field: /supervisor: неверный пароль, нет прав на камеру, сам автор или не из роли супервизоров",
-          "SUPERVISOR_REQUIRED": "Нужен супервизор, а его нет в теле (403), field: /supervisor"
+          "SUPERVISOR_REQUIRED": "Нужен супервизор, а его нет в теле (403), field: /supervisor",
+          "SCHEDULE_OVERLAP": "Расписание режима пересекается с расписанием другого режима (409): params {modeId, from, to} — режим и первое пересечение за 14 дней"
         }
       },
       "ObjectsDeleteRequest": {
@@ -10817,7 +10829,7 @@
               "recording",
               "online"
             ],
-            "description": "Справочник ruleConditions"
+            "description": "Справочник ruleConditions. mode — устарело в 0.4.0: связь правила с режимом задаёт режим (ObjectMode.off), а не правило. Интерфейс 0.4.0 условие не показывает"
           },
           "scheduleId": {
             "type": "string",
@@ -10830,7 +10842,8 @@
               "type": "string",
               "format": "uuid"
             },
-            "description": "mode: режимы объекта, в которых правило выполняется"
+            "description": "Устарело в 0.4.0, работает как раньше. mode: режимы объекта, в которых правило выполняется. Вместо условия режим сам выключает правила (ObjectMode.off)",
+            "deprecated": true
           },
           "target": {
             "anyOf": [
@@ -12485,7 +12498,8 @@
               "string",
               "null"
             ],
-            "format": "uuid"
+            "format": "uuid",
+            "description": "Расписание, по которому режим включается; null — режим включают только вручную. Расписания режимов не пересекаются: запись с пересечением — 409 SCHEDULE_OVERLAP"
           },
           "system": {
             "type": "string",
@@ -12496,13 +12510,41 @@
               "work",
               ""
             ],
-            "description": "Системный режим (не удаляется): его код; пусто — свой режим"
+            "description": "Устарело в 0.4.0: код прежнего системного режима (service, night, weekend, work); пусто — свой режим. Удаление теперь защищает builtin, а не system",
+            "deprecated": true
           },
           "color": {
             "type": [
               "string",
               "null"
             ]
+          },
+          "off": {
+            "type": "object",
+            "properties": {
+              "all": {
+                "type": "boolean",
+                "description": "true — режим выключает все правила, в том числе созданные потом"
+              },
+              "ruleIds": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "description": "Правила, которые режим выключает, когда all false. Удалённое правило уходит отсюда само"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "all",
+              "ruleIds"
+            ],
+            "description": "Что режим выключает, пока действует: сервер не запускает такие правила (RuleStatus.state off, проверка запуска modeOff). Нет в записи — {all: false, ruleIds: []}. Неизвестное правило в ruleIds — 422 VALIDATION_FAILED (field items)"
+          },
+          "builtin": {
+            "type": "boolean",
+            "description": "Встроенный режим не удаляется (409 BUILTIN). Значение ведёт сервер: клиент его не меняет, у нового режима оно false. Сейчас встроен один — «Обслуживание» (только вручную, выключает все правила)"
           }
         },
         "additionalProperties": false,
@@ -12510,9 +12552,9 @@
           "id",
           "name",
           "scheduleId",
-          "system",
           "color"
-        ]
+        ],
+        "description": "Режим: выключает правила на время. В каждый момент действует один режим или ни одного (modeId null, «Обычная работа»: все правила работают по своим условиям). Режим включает расписание scheduleId или оператор на срок (POST /modes/current)"
       },
       "Modes": {
         "type": "object",
@@ -12524,8 +12566,13 @@
             }
           },
           "otherwise": {
-            "type": "string",
-            "format": "uuid"
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "deprecated": true,
+            "description": "Устарело в 0.4.0, работает как раньше. Режим «иначе», когда ни одно расписание не действует. Теперь в этом случае нет режима (modeId null, «Обычная работа»); null — так и есть. Порядок items больше не значит приоритет: расписания не пересекаются"
           },
           "version": {
             "type": "string",
@@ -12536,10 +12583,9 @@
         "additionalProperties": false,
         "required": [
           "items",
-          "otherwise",
           "version"
         ],
-        "description": "Режимы объекта: по расписаниям, а когда ни одно не действует — otherwise. Версия одна на весь список"
+        "description": "Режимы объекта. Версия одна на весь список. Порядок items — устарело (приоритета нет: расписания не пересекаются)"
       },
       "ModesWrite": {
         "type": "object",
@@ -12551,23 +12597,31 @@
             }
           },
           "otherwise": {
-            "type": "string",
-            "format": "uuid"
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "deprecated": true,
+            "description": "Устарело в 0.4.0, работает как раньше. Нет в теле — остаётся прежний; null — нет режима «иначе»"
           }
         },
         "additionalProperties": false,
         "required": [
-          "items",
-          "otherwise"
+          "items"
         ],
-        "description": "Режимы целиком. id нового режима задаёт клиент (UUID)"
+        "description": "Режимы целиком. id нового режима задаёт клиент (UUID). Встроенный режим пропустить нельзя (409 BUILTIN); у режима с новым или другим расписанием, пересекающимся с расписанием другого режима, отказ 409 SCHEDULE_OVERLAP: params {modeId — режим, с которым пересеклось, from, to — первое пересечение за 14 дней}. Пересечение от правки общего расписания в библиотеке (PUT /schedules/{id}) запись принимает; интерфейс проверяет 14 дней вперёд и предупреждает. Правила в off.ruleIds и расписание scheduleId должны существовать: иначе 422 VALIDATION_FAILED, field items. Запись режима без off оставляет прежний off"
       },
       "ModeCurrent": {
         "type": "object",
         "properties": {
           "modeId": {
-            "type": "string",
-            "format": "uuid"
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Действующий режим; null — «Обычная работа» (до 0.4.0 был всегда режим)"
           },
           "manual": {
             "anyOf": [
@@ -12591,15 +12645,39 @@
                 "type": "null"
               }
             ],
-            "description": "Включён вручную: до until (до следующей смены по расписанию) или до отмены (null)"
+            "description": "Устарело в 0.4.0, работает как раньше. Заменено полями source, until и by. Включён вручную: до until (до следующей смены по расписанию) или до отмены (null)",
+            "deprecated": true
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "schedule",
+              "manual"
+            ],
+            "description": "schedule — по расписанию (или расписание ничего не включает); manual — оператор включил вручную на срок"
+          },
+          "until": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "manual: конец срока ручного включения (не позже включения + 8 часов), потом снова действует расписание. schedule: ближайшая смена режима по расписаниям; null — смены не будет"
+          },
+          "by": {
+            "type": "string",
+            "description": "manual: логин того, кто включил; иначе пусто"
           }
         },
         "additionalProperties": false,
         "required": [
           "modeId",
+          "source",
+          "until",
+          "by",
           "manual"
         ],
-        "description": "Текущий режим объекта. Считает сервер; течение времени версией не считается — её здесь нет"
+        "description": "Текущий режим объекта. Считает сервер; течение времени версией не считается — её здесь нет. Смена (по расписанию, вручную, конец срока) — событие потока entity.changed, kind objectMode, payload {modeId, source, until, by}"
       },
       "ModeCurrentWrite": {
         "type": "object",
@@ -12616,15 +12694,15 @@
               "string",
               "null"
             ],
-            "format": "date-time"
+            "format": "date-time",
+            "description": "Конец ручного включения: не позже текущего времени + 8 часов (иначе 422, field until) и позже текущего времени. Нет или null при непустом modeId — сервер ставит максимум, 8 часов"
           }
         },
         "additionalProperties": false,
         "required": [
-          "modeId",
-          "until"
+          "modeId"
         ],
-        "description": "Включить режим вручную; modeId null — вернуться к расписаниям"
+        "description": "Включить режим вручную на срок. modeId — режим; null со сроком until — «Обычная работа» на этот срок; null без срока — вернуться к режиму по расписанию (так было и раньше). Ручное включение заменяет режим по расписанию; по концу срока снова действует расписание"
       },
       "MaintenanceWindow": {
         "type": "object",
@@ -12669,7 +12747,8 @@
           "enabled",
           "version"
         ],
-        "description": "Окно обслуживания: в его расписание правила не выполняют действий"
+        "description": "Устарело в 0.4.0, работает как раньше. Окно обслуживания — режим (ObjectMode): расписание окна — scheduleId режима, ruleIds — off. Окно обслуживания: в его расписание правила не выполняют действий",
+        "deprecated": true
       },
       "MaintenanceWindowWrite": {
         "type": "object",
@@ -12702,7 +12781,9 @@
           "scheduleId",
           "ruleIds",
           "enabled"
-        ]
+        ],
+        "deprecated": true,
+        "description": "Устарело в 0.4.0, работает как раньше: окно обслуживания — это режим. "
       },
       "MaintenanceWindowCreate": {
         "type": "object",
@@ -12735,7 +12816,8 @@
           "enabled",
           "schedule"
         ],
-        "description": "Новое окно вместе со своим расписанием"
+        "description": "Устарело в 0.4.0, работает как раньше: окно обслуживания — это режим. Новое окно вместе со своим расписанием",
+        "deprecated": true
       },
       "MaintenanceWindowCreated": {
         "type": "object",
@@ -12751,7 +12833,9 @@
         "required": [
           "window",
           "schedule"
-        ]
+        ],
+        "deprecated": true,
+        "description": "Устарело в 0.4.0, работает как раньше: окно обслуживания — это режим. "
       },
       "AssistTurnRequest": {
         "type": "object",
@@ -13865,18 +13949,37 @@
               "watching",
               "refused",
               "unfit",
-              "unchecked"
+              "unchecked",
+              "off"
             ],
             "x-enum-descriptions": {
               "watching": "Сервер следит за событиями правила",
               "refused": "Отказано: правило не проходит проверку и не срабатывает",
               "unfit": "Не годится: то, что называет правило, этого не умеет, правило молчит, пока не подойдёт",
-              "unchecked": "Не проверено: устройства не сказали, что умеют, правило работает"
+              "unchecked": "Не проверено: устройства не сказали, что умеют, правило работает",
+              "off": "Выключено: сейчас действует режим (modeId) или, по старому, окно обслуживания (windowId), которые выключают правило. Сервер правило не запускает, запись правила не меняется"
             }
           },
           "reason": {
             "type": "string",
             "description": "Почему — словами сервера, форма показывает как есть. У watching пусто"
+          },
+          "modeId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "off: режим, который выключил правило; иначе нет поля"
+          },
+          "windowId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "deprecated": true,
+            "description": "Устарело в 0.4.0 вместе с окнами обслуживания. off: окно обслуживания, которое выключило правило (modeId тогда нет); иначе нет поля"
           }
         },
         "additionalProperties": false,

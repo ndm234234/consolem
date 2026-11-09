@@ -854,5 +854,171 @@
     assert.eq(issue(res), "control.noTarget", "причина");
   }, { needs: ["kind:camera"] });
 
+
+  /* ----- Режим — одно понятие (0.4.0) ----- */
+
+  const putModes = (env, M, items, extra) => env.call("PUT", "/modes", Object.assign({ items }, extra || {}), { "If-Match": `"${M.version}"` });
+  const iso = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z");
+  const sensorOf = () => FX.devices.find((d) => d.type === "sensor");
+  const sensorRule = (over) => {
+    const tr = { source: "unit", kinds: ["sensor"], event: "io.input", target: dev(sensorOf().id), match: { value: "active" } };
+    return blank(Object.assign({ start: "event", runMode: "always", triggers: [tr], steps: [step] }, over || {}));
+  };
+
+  test("Режим: off и builtin есть у каждого; встроен один — «Обслуживание»; «Обычная работа» — modeId null, а не объект", async () => {
+    const env = await makeEnv();
+    const M = await env.ok("GET", "/modes");
+    assert.ok(M.items.every((m) => typeof m.builtin === "boolean" && typeof m.off.all === "boolean" && Array.isArray(m.off.ruleIds) && "color" in m), "у каждого режима off, builtin, color");
+    const built = M.items.filter((m) => m.builtin);
+    assert.eq([built.length, built[0].name, built[0].scheduleId, built[0].off.all], [1, "Обслуживание", null, true], "встроен один: только вручную, все правила");
+    assert.eq(M.otherwise, null, "режима «иначе» нет: когда ни одно расписание не действует, действует «Обычная работа»");
+    const bad = await putModes(env, M, M.items.filter((m) => !m.builtin));
+    assert.status(bad, 409, "BUILTIN", "встроенный не удалить");
+    const cur = await env.ok("GET", "/modes/current");
+    assert.eq(Object.keys(cur).sort(), ["by", "manual", "modeId", "source", "until"], "поля текущего режима");
+    assert.eq(cur.source, "schedule", "по расписанию");
+  });
+
+  test("Режим: расписания не пересекаются — 409 SCHEDULE_OVERLAP с режимом и первым пересечением; режим только вручную пересечения не имеет", async () => {
+    const env = await makeEnv();
+    const M = await env.ok("GET", "/modes");
+    const work = M.items.find((m) => m.system === "work"), service = M.items.find((m) => m.builtin);
+    const clash = M.items.map((m) => (m === service ? Object.assign({}, m, { scheduleId: work.scheduleId }) : m));
+    const bad = await putModes(env, M, clash);
+    assert.status(bad, 409, "SCHEDULE_OVERLAP");
+    assert.eq(bad.body.params.modeId, work.id, "с каким режимом");
+    assert.ok(Date.parse(bad.body.params.from) < Date.parse(bad.body.params.to), "первое пересечение: from < to");
+    assert.eq((await env.ok("GET", "/modes")).version, M.version, "отказ ничего не записал");
+    const free = await env.ok("GET", "/schedules"), never = free.items.find((s) => s.kind === "never");
+    const mine = { id: "f0009999-0003-4000-8000-000000000000", name: "Праздник", scheduleId: never.id, color: null };
+    const ok = await putModes(env, M, M.items.concat(mine));
+    assert.status(ok, 200, null, "расписание, которое ничего не включает, не пересекается");
+    const again = await putModes(env, ok.body, ok.body.items.map((m) => (m.id === mine.id ? Object.assign({}, m, { name: "Праздник 1" }) : m)));
+    assert.status(again, 200, null, "переименование не проверяет пересечение");
+  });
+
+  test("Ручное включение: на срок не больше 8 часов (иначе 422), без срока — 8 часов; по концу срока снова расписание, и об этом событие", async () => {
+    const env = await makeEnv();
+    const M = await env.ok("GET", "/modes"), service = M.items.find((m) => m.builtin);
+    const seen = [];
+    const stop = ApiTest.subscribeForTest((m) => m.type === "entity.changed" && m.kind === "objectMode" && seen.push(m.payload));
+    await ApiTest.settle();
+    const t = env.now;
+    assert.status(await env.call("POST", "/modes/current", { modeId: service.id, until: iso(t + 8 * 3600e3 + 120e3) }), 422, "VALIDATION_FAILED", "больше 8 часов");
+    assert.status(await env.call("POST", "/modes/current", { modeId: service.id, until: iso(t - 1000) }), 422, "VALIDATION_FAILED", "срок прошёл");
+    const on = await env.ok("POST", "/modes/current", { modeId: service.id, until: iso(t + 2 * 3600e3) });
+    assert.eq([on.modeId, on.source, on.until], [service.id, "manual", iso(t + 2 * 3600e3)], "включён на два часа");
+    assert.ok(on.by, "кто включил — в ответе");
+    const none = await env.ok("POST", "/modes/current", { modeId: service.id });
+    assert.ok(Math.abs(Date.parse(none.until) - (t + 8 * 3600e3)) < 5000, "без срока — 8 часов: " + none.until);
+    const normal = await env.ok("POST", "/modes/current", { modeId: null, until: iso(t + 3600e3) });
+    assert.eq([normal.modeId, normal.source], [null, "manual"], "«Обычная работа» вручную на срок: modeId null");
+    await ApiTest.settle();
+    const before = seen.length;
+    await env.advance(3600 + 5);
+    await ApiTest.settle();
+    assert.ok(seen.slice(before).some((p) => p.source === "schedule"), "конец срока — новое событие с source schedule: " + JSON.stringify(seen.slice(before)));
+    const back = await env.ok("GET", "/modes/current");
+    assert.eq(back.source, "schedule", "срок вышел — расписание");
+    const clear = await env.ok("POST", "/modes/current", { modeId: service.id, until: iso(env.now + 3600e3) });
+    assert.eq((await env.ok("POST", "/modes/current", { modeId: null, until: null })).source, "schedule", "null без срока — вернуться к расписанию (как раньше)");
+    assert.ok(clear.modeId, "включён");
+    await ApiTest.settle();
+    stop();
+    assert.ok(seen.length >= 4 && seen.some((p) => p.source === "manual" && p.modeId === service.id) && seen.some((p) => p.source === "schedule"), "события на включении и на конце срока: " + JSON.stringify(seen));
+    assert.status(await env.call("POST", "/modes/current", { modeId: "f0008888-0003-4000-8000-000000000000" }), 404, "NOT_FOUND");
+  }, { needs: ["clock"] });
+
+  test("Сервер не запускает правило, которое выключает действующий режим: статус off с modeId, запуска нет; «Обычная работа» — запускает", async () => {
+    const env = await makeEnv();
+    const M = await env.ok("GET", "/modes"), service = M.items.find((m) => m.builtin);
+    const r = await env.ok("POST", "/rules", sensorRule());
+    const sensor = sensorOf();
+    const fire = () => env.call("POST", "/test/events", { type: "io.input", deviceId: sensor.id, value: "active" });
+    const n0 = (await fireList(env, r.id)).length;
+    await env.ok("POST", "/modes/current", { modeId: service.id, until: iso(env.now + 3600e3) });
+    const st = (await env.ok("GET", `/rules/${r.id}`)).status;
+    assert.eq([st.state, st.modeId], ["off", service.id], "в статусе — выключено режимом, с id режима");
+    assert.ok(st.reason.includes(service.name), "причина словами: " + st.reason);
+    assert.status(await fire(), 200);
+    const off = await fireList(env, r.id);
+    assert.ok(off.length === n0 || off.slice(0, off.length - n0).every((f) => f.result === "skip" && f.steps.every((x) => x.state === "skip")), "правило не выполнило действий");
+    // Режим, который выключает только это правило; все остальные работают
+    const mine = { id: "f0009999-0003-4000-8000-000000000000", name: "Только это", scheduleId: null, color: null, off: { all: false, ruleIds: [r.id] } };
+    const added = await env.ok("PUT", "/modes", { items: M.items.concat(mine) }, { "If-Match": `"${M.version}"` });
+    await env.ok("POST", "/modes/current", { modeId: mine.id });
+    assert.eq((await env.ok("GET", `/rules/${r.id}`)).status.modeId, mine.id, "выбранный режим выключает выбранное");
+    const other = await env.ok("POST", "/rules", sensorRule({ name: "Другое" }));
+    assert.ok((await env.ok("GET", `/rules/${other.id}`)).status.state !== "off", "остальные работают");
+    await env.ok("POST", "/modes/current", { modeId: null, until: iso(env.now + 3600e3) });
+    assert.ok((await env.ok("GET", `/rules/${r.id}`)).status.state !== "off", "«Обычная работа» — все правила по своим условиям");
+    const n1 = (await fireList(env, r.id)).length;
+    assert.status(await fire(), 200);
+    assert.eq((await fireList(env, r.id)).length, n1 + 1, "запускает");
+    // Удалённое правило уходит из режима
+    await env.ok("POST", "/objects/delete", { idempotencyKey: ApiTest.key(), items: [{ id: r.id, version: (await env.ok("GET", `/rules/${r.id}`)).version }] });
+    assert.eq((await env.ok("GET", "/modes")).items.find((m) => m.id === mine.id).off.ruleIds, [], "режим не называет удалённое правило");
+    assert.ok(added.version, "версия есть");
+  }, { needs: ["type:sensor", "clock"] });
+
+  test("Устаревшее 0.4.0 работает: /maintenance-windows, условие «Режим объекта», порядок режимов и otherwise", async () => {
+    const env = await makeEnv();
+    const M = await env.ok("GET", "/modes");
+    assert.ok((await env.list("/maintenance-windows")).length === FX.maintenanceWindows.length, "окна читаются");
+    const r = await env.ok("POST", "/rules", blank({ enabled: false, conditions: [{ kind: "mode", modeIds: [M.items[1].id] }] }));
+    assert.eq(r.conditions[0].kind, "mode", "условие «Режим объекта» хранится");
+    const other = M.items[2].id;
+    const put = await env.ok("PUT", "/modes", { items: M.items.slice().reverse(), otherwise: other }, { "If-Match": `"${M.version}"` });
+    assert.eq([put.items[0].id, put.otherwise], [M.items[M.items.length - 1].id, other], "порядок и otherwise записаны");
+  });
+
+
+  test("Запись режима без off (прежний клиент) оставляет прежний off; три минуты пересечения не пропускаются; сутки часов дают события смены", async () => {
+    const env = await makeEnv();
+    const M = await env.ok("GET", "/modes");
+    const work = M.items.find((m) => m.system === "work");
+    assert.ok(work.off.ruleIds.length, "в эталоне режим что-то выключает");
+    const old = M.items.map((m) => { const { off, builtin, ...rest } = m; return rest; });
+    const put = await putModes(env, M, old, { otherwise: null });
+    assert.status(put, 200);
+    assert.eq(put.body.items.find((m) => m.id === work.id).off, work.off, "off остался");
+    // Расписание в три минуты рядом с «Рабочими днями» (08:00–20:00) — пересечение
+    const base = (await env.ok("GET", "/schedules")).items.find((s) => s.name === "Рабочие дни");
+    const { id, version, builtin, ...rest } = base;
+    const sc = await env.ok("POST", "/schedules", Object.assign({}, rest, { name: "Три минуты", overrides: [], week: [0, 1, 2, 3, 4, 5, 6].map(() => [["12:01", "12:04"]]) }));
+    const mine = { id: "f0009998-0003-4000-8000-000000000000", name: "Короткий", scheduleId: sc.id, color: null };
+    const bad = await putModes(env, put.body, put.body.items.concat(mine));
+    assert.status(bad, 409, "SCHEDULE_OVERLAP");
+  });
+
+  test("Удалённый режим убирает условие «Режим объекта», где не осталось режимов; сутки часов шлют события смены режима", async () => {
+    const env = await makeEnv();
+    const M = await env.ok("GET", "/modes");
+    const mine = { id: "f0009997-0003-4000-8000-000000000000", name: "Временный", scheduleId: null, color: null };
+    const add = await env.ok("PUT", "/modes", { items: M.items.concat(mine) }, { "If-Match": `"${M.version}"` });
+    const r = await env.ok("POST", "/rules", blank({ enabled: false, conditions: [{ kind: "mode", modeIds: [mine.id] }] }));
+    await env.ok("PUT", "/modes", { items: M.items }, { "If-Match": `"${add.version}"` });
+    const after = await env.ok("GET", `/rules/${r.id}`);
+    assert.eq(after.conditions, [], "условие без режимов убрано, правило не в ошибке");
+    const seen = [];
+    const stop = ApiTest.subscribeForTest((m) => m.type === "entity.changed" && m.kind === "objectMode" && seen.push(m.payload));
+    await ApiTest.settle();
+    await env.advance(24 * 3600);
+    await ApiTest.settle();
+    stop();
+    assert.ok(seen.filter((p) => p.source === "schedule").length >= 2, "смены по расписанию за сутки: " + JSON.stringify(seen));
+  }, { needs: ["clock"] });
+
+  test("Окно обслуживания (устарело) выключило правило: RuleStatus off с windowId", async () => {
+    const env = await makeEnv();
+    const always = (await env.ok("GET", "/schedules")).items.find((s) => s.kind === "always");
+    const { id, version, builtin, ...rest } = always;
+    const r = await env.ok("POST", "/rules", blank({ enabled: true }));
+    const w = await env.ok("POST", "/maintenance-windows", { name: "Окно", enabled: true, ruleIds: [r.id], schedule: Object.assign({}, rest, { name: "Всегда окна", owner: null }) });
+    const st = (await env.ok("GET", `/rules/${r.id}`)).status;
+    assert.eq([st.state, st.windowId], ["off", w.window.id], "причина — окно");
+    assert.ok(/Окно/.test(st.reason), "причина словами: " + st.reason);
+  });
+
   ApiTest.loaded("api-automation.js");
 })();

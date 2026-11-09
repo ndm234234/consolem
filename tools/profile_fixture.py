@@ -216,6 +216,8 @@ def build(demo):
     for w in fx["maintenanceWindows"]:
         if w["ruleIds"] is not None:
             w["ruleIds"] = [x for x in w["ruleIds"] if x in rids]
+    for m in fx["modes"]["items"]:
+        m["off"]["ruleIds"] = [x for x in m["off"]["ruleIds"] if x in rids]
     for d in fx["devices"]:
         if d.get("disabledByRuleId") and d["disabledByRuleId"] not in rids:
             d["disabledByRuleId"], d["disabledByRuleAt"] = None, None
@@ -411,6 +413,8 @@ def build_large(demo):
     for w in fx["maintenanceWindows"]:
         if w["ruleIds"] is not None:
             w["ruleIds"] = []
+    for m in fx["modes"]["items"]:
+        m["off"]["ruleIds"] = []
     for role in fx["access"]["roles"]:
         role["objectAccess"] = {}
         role["folderAccess"] = {k: v for k, v in role["folderAccess"].items() if k == fx["domains"][0]["id"]}

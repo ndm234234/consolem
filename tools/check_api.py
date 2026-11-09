@@ -425,7 +425,11 @@ def check_fixture(rep, spec, fx, label="Эталонный набор"):
             must(windows, s["owner"]["id"], f"schedule {s['name']}", "окна обслуживания")
     for m in modes.values():
         must(schedules, m["scheduleId"], f"mode {m['name']}", "расписания")
-    must(modes, fx["modes"]["otherwise"], "modes.otherwise", "режима")
+    if fx["modes"]["otherwise"] is not None:
+        must(modes, fx["modes"]["otherwise"], "modes.otherwise", "режима")
+    for m in modes.values():
+        for r in m["off"]["ruleIds"]:
+            must(rules, r, f"mode {m['name']}", "правила")
     if fx.get("modeManual"):
         must(modes, fx["modeManual"]["modeId"], "modeManual", "режима")
     for x in windows.values():

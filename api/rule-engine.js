@@ -13,7 +13,7 @@
    Трасса запуска — кодами: { code, params }. Подписи по кодам собирает интерфейс.
 
    create(world): world — доступ к данным сервера: store() — склад объектов (api/units.js: get, byKind, byFolder,
-   byParent), kinds() — описания видов, rules(), schedules(), dayGroups(), modes() → { items, otherwise },
+   byParent), kinds() — описания видов, rules(), schedules(), dayGroups(), modes() → { items, otherwise }, (в режиме off: { all, ruleIds }; otherwise — устарело, может быть null),
    manualMode() → { modeId, until } | null, windows(), roles(), users(), tz — часовой пояс системы (строка или функция). */
 (() => {
   const RULE_CHAIN_MAX = 5;
@@ -239,9 +239,15 @@
     // Текущий режим: включённый вручную (пока не истёк) или по расписаниям
     function modeNow(ms) {
       const man = world.manualMode();
-      if (man && world.modes().items.some((m) => m.id === man.modeId) && (!man.until || Date.parse(man.until) > ms)) return man.modeId;
+      // modeId null в ручном включении — «Обычная работа» на срок
+      if (man && (man.modeId === null || world.modes().items.some((m) => m.id === man.modeId)) && (!man.until || Date.parse(man.until) > ms)) return man.modeId;
       return modeSched(wall(ms));
     }
+    // Выключает ли режим правило: off.all — все, в том числе созданные потом; иначе — правила из off.ruleIds
+    const modeById = (id) => (id ? world.modes().items.find((m) => m.id === id) || null : null);
+    const modeOffs = (m, r) => !!m && !!m.off && (!!m.off.all || (m.off.ruleIds || []).includes(r.id));
+    // Режим, который сейчас (now) или в стенный момент d выключает правило r, — или null
+    const modeOffAt = (r, d, now) => { const m = modeById(now ? modeNow(fromWall(d)) : modeSched(d)); return modeOffs(m, r) ? m : null; };
 
 
     /* ===== Объекты, виды и цели ===== */
@@ -742,6 +748,8 @@
         const ms = fromWall(o.date), m = muteAt(r, ms);
         if (m) c.push({ code: "muted", params: { until: m.until, by: m.by, reason: m.reason }, ok: false, reason: msg("skipped") });
         world.windows().filter((w) => maintHit(w, r, o.date)).forEach((w) => c.push({ code: "maintenance", params: { windowId: w.id, name: w.name }, ok: false, reason: msg("skipped") }));
+        const md = modeOffAt(r, o.date, o.now);
+        if (md) c.push({ code: "modeOff", params: { modeId: md.id, name: md.name }, ok: false, reason: msg("skipped") });
       }
       if (o.via === "event" || o.via === "sched") {
         if (o.rateHit) c.push({ code: "rateHit", params: { max: r.ratePerMinute }, ok: false, reason: msg("skipped") });
@@ -978,9 +986,15 @@
     }
 
     // Что сервер знает о включённом правиле сейчас (Rule.status). Встроенный сервер сверяет только то, что есть в его записях
-    function status(r, ref) {
+    function status(r, ref, ms) {
       const out = undeclared(r, ref), why = out ? out.issue : crossDomain(r, ref) || issue(r);
       if (why) return { state: "refused", reason: why.code };
+      // Режим, который действует сейчас, выключает правило: сервер его не запускает
+      const off = ms == null ? null : modeOffAt(r, wall(ms), true);
+      if (off) return { state: "off", reason: `выключено режимом «${off.name}»`, modeId: off.id };
+      // Окно обслуживания (устарело) тоже не даёт правилу запускаться
+      const win = ms == null ? null : world.windows().find((w) => maintHit(w, r, wall(ms)));
+      if (win) return { state: "off", reason: `выключено окном обслуживания «${win.name}»`, windowId: win.id };
       const unfit = [], unchecked = [];
       const name = (n) => `«${n.name}»`;
       const down = (n) => n.online === false && unchecked.push(`${name(n)}: нет связи, что умеет устройство, не проверено`);
@@ -998,7 +1012,7 @@
       return unchecked.length ? { state: "unchecked", reason: [...new Set(unchecked)].join("; ") } : { state: "watching", reason: "" };
     }
 
-    return { fire, retry, retryable, outcome, fillText, hears, issue, undeclared, status, forbidden, domainsOf, crossDomain, eventChecks, rightOf, roleAllows: (id, uid, right) => { const n = devById(uid); return !!n && roleAllows(id, n, right); }, schActive: (id, ms) => schActive(id, wall(ms)), modeNow, modeNext, stamp: (ms) => stamp(wall(ms)), clock: (ms) => clock(wall(ms)), wall, fromWall };
+    return { fire, retry, retryable, outcome, fillText, hears, issue, undeclared, status, forbidden, domainsOf, crossDomain, eventChecks, rightOf, roleAllows: (id, uid, right) => { const n = devById(uid); return !!n && roleAllows(id, n, right); }, schActive: (id, ms) => schActive(id, wall(ms)), modeNow, modeNext, modeById, modeOffs, stamp: (ms) => stamp(wall(ms)), clock: (ms) => clock(wall(ms)), wall, fromWall };
   }
 
   // world поверх данных в виде набора (api/fixtures/demo.json): db() отдаёт их текущее состояние. Склад объектов

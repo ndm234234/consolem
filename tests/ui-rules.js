@@ -1,6 +1,6 @@
 /* Сценарии интерфейса: «Автоматизация» через API — правка правила и «Отменить», новое правило, состояние и
    приглушение группой, порядок, удаление с отсчётом, «Запустить», пробный запуск, история версий, режим
-   объекта вручную, расписание, группа особых дней, окно обслуживания. Запуск — tools/check_ui.py. */
+   вручную, расписание, группа особых дней, режим. Запуск — tools/check_ui.py. */
 UiCheck(async ({ ok, until, confirmWith }) => {
   const R1 = "70000001-0000-4000-8000-000000000000";   // «Охрана входа ночью»
   const R2 = "70000002-0000-4000-8000-000000000000";   // «Сирена по двери»
@@ -263,13 +263,18 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   ok(await until(() => !ruleDraft && /Возврат к версии 1/.test(((ruleHist[R1] || []).slice(-1)[0] || {}).note || "")), "версия истории с пометкой: " + ((ruleHist[R1] || []).slice(-1)[0] || {}).note);
   ok(r(R1).name === "Охрана входа", "содержимое версии 1");
 
-  // Режим объекта вручную — POST /modes/current
-  const night = modeByCode("night"), cur0 = objMode;
-  ruleModeSwitch(night === cur0 ? modeByCode("work") : night);
-  ok(await until(() => objModeManual && objMode !== cur0), "режим включён вручную: " + ruleModeName(objMode));
-  ok((await API.get("/modes/current")).manual !== null, "на сервере — вручную");
+  // Режим вручную — POST /modes/current на срок; «Отменить» возвращает режим по расписанию
+  const svc = UMODES.find((m) => m.sys);
+  ruleModeSwitch(svc.id);
+  ok(!!modeSw && modeSw.min === 60, "окно включения открыто, срок по умолчанию — час");
+  modeSwTerm(120);
+  modeSwGo();
+  ok(await until(() => umManNow() && umCur.id === svc.id), "режим включён вручную: " + umName(umCurrent()));
+  const man = await API.get("/modes/current");
+  ok(man.source === "manual" && man.modeId === svc.id && Date.parse(man.until) > Date.now(), "на сервере — вручную, со сроком: " + man.until);
+  ok(document.getElementById("hdMode").classList.contains("manual"), "кнопка в шапке показывает ручной режим");
   undo("rmode").click();
-  ok(await until(() => !objModeManual && objMode === cur0), "«Отменить» — снова по расписаниям");
+  ok(await until(() => !umManNow()), "«Отменить» — снова по расписанию");
 
   // Расписание: сохранить — PUT, «Отменить» — обратный PUT
   const sw = SCHEDS.find((s) => s.name === "Рабочие дни");
@@ -292,15 +297,16 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   undo("grp:").click();
   ok(await until(() => DAY_GROUPS.length === g0), "«Отменить» удалило её");
 
-  // Окно обслуживания — вместе со своим расписанием; удаление с отсчётом
-  const w0 = MAINT_WINDOWS.length, s0 = SCHEDS.length;
-  maintAdd();
-  ok(await until(() => MAINT_WINDOWS.length === w0 + 1 && SCHEDS.length === s0 + 1), "окно и его расписание созданы");
-  const w = MAINT_WINDOWS[MAINT_WINDOWS.length - 1];
-  maintDelAsk(w.id);
+  // Режим: добавить — PUT /modes, «Отменить» — обратный PUT; удаление с отсчётом
+  const m0 = UMODES.length;
+  modeAdd();
+  ok(await until(() => UMODES.length === m0 + 1), "режим добавлен на сервере");
+  const nm = UMODES[UMODES.length - 1];
+  ok((await API.get("/modes")).items.some((m) => m.id === nm.id && m.builtin === false), "на сервере: встроенным он не стал");
+  modeDelAsk(nm.id);
   await confirmWith(1);
-  ok(await until(() => MAINT_WINDOWS.length === w0 && SCHEDS.length === s0, 40000), "после отсчёта удалено — и его расписание");
-  ok((await API.get("/maintenance-windows")).items.length === w0, "на сервере");
+  ok(await until(() => UMODES.length === m0, 40000), "после отсчёта режим удалён");
+  ok((await API.get("/modes")).items.length === m0, "на сервере");
   ok(mv === autoVer.get(R2), "версия приглушённого правила не менялась сама");
 
   // Новые «Спросить оператора» и «Эскалация» — с ролями охраны, как в макете
