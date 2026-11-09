@@ -664,6 +664,124 @@
     assert.eq(await failedOf(env, newCam({ configMode: "template" })), [["VALIDATION_FAILED", P("templateId")]], "нет источника");
   }, { needs: ["createUnits", "patchUnit", "kind:camera"] });
 
+  /* ----- Источник событий (vms.pos/1, контракт 0.5.0): камеры титров, вид титров, разбор чека, приём данных, строки от кассы ----- */
+
+  const posTest = (name, fn, more) => test(name, fn, { needs: ["kind:eventsrc", "implements:vms.pos/1", "patchUnit", "createUnits"].concat(more || []) });
+  const area = (x, y, w, h) => ({ x, y, w, h });
+  const posCams = async (env) => (await env.list("/units?kind=camera&limit=1000")).filter((u) => !u.parentId).slice(0, 3);
+  const posSrc = (env) => ofKind(env, "eventsrc");
+
+  posTest("Источник событий: несколько камер титров, cameraId (устарело) — первая камера списка", async () => {
+    const env = await makeEnv();
+    const [a, b, c] = await posCams(env);
+    const kind = await env.ok("GET", "/kinds/eventsrc");
+    assert.ok(kind.schema.properties.cameraId.deprecated === true && /overlays/.test(kind.schema.properties.cameraId.description), "cameraId помечен устаревшим, описание называет overlays");
+    let src = await posSrc(env);
+    const list = [{ cameraId: a.uid, area: area(0.1, 0.2, 0.5, 0.4) }, { cameraId: b.uid, area: area(0, 0, 1, 0.3) }];
+    src = await env.ok("PATCH", U(src.uid), { properties: { overlays: list } }, v(src));
+    assert.eq([src.properties.overlays, src.properties.cameraId], [list, a.uid], "список принят, cameraId — первая камера");
+    src = await env.ok("PATCH", U(src.uid), { properties: { cameraId: c.uid } }, v(src));
+    assert.eq(src.properties.overlays.map((o) => o.cameraId), [c.uid, b.uid], "cameraId заменил первую камеру, вторая осталась");
+    assert.eq(src.properties.overlays[0].area, list[0].area, "камера берёт зону прежней первой");
+    src = await env.ok("PATCH", U(src.uid), { properties: { cameraId: b.uid } }, v(src));
+    assert.eq(src.properties.overlays.map((o) => o.cameraId), [b.uid], "камера, что уже была в списке, встала первой без повтора");
+    assert.eq(src.properties.overlays[0].area, list[0].area, "и взяла зону прежней первой, а не свою");
+    field(await props(env, src, { cameraId: src.uid }), "VALIDATION_FAILED", P("cameraId"), "cameraId не камеры");
+    src = await env.ok("PATCH", U(src.uid), { properties: { cameraId: a.uid, overlays: [{ cameraId: c.uid, area: area(0, 0, 0.5, 0.5) }] } }, v(src));
+    assert.eq([src.properties.overlays.map((o) => o.cameraId), src.properties.cameraId], [[c.uid], c.uid], "оба поля в правке — действует overlays");
+    src = await env.ok("PATCH", U(src.uid), { properties: { cameraId: null } }, v(src));
+    assert.eq([src.properties.overlays, src.properties.cameraId], [[], null], "cameraId: null очищает список");
+    const bad = (properties, msg) => patch(env, src, { properties }).then((res) => field(res, "VALIDATION_FAILED", P("overlays"), msg));
+    await bad({ overlays: [list[0], list[0]] }, "камера дважды");
+    await bad({ overlays: [{ cameraId: a.uid, area: area(0.6, 0, 0.5, 0.5) }] }, "зона за кадром по x");
+    await bad({ overlays: [{ cameraId: a.uid, area: area(0, 0.9, 0.5, 0.2) }] }, "зона за кадром по y");
+    await bad({ overlays: [{ cameraId: src.uid, area: area(0, 0, 0.5, 0.5) }] }, "не камера");
+    assert.status(await props(env, src, { overlays: [{ cameraId: a.uid, area: area(0, 0, 0, 0.5) }] }), 422, "VALIDATION_FAILED", "ширина 0");
+    assert.status(await props(env, src, { overlays: [{ cameraId: a.uid }] }), 422, "VALIDATION_FAILED", "нет зоны");
+    const [fresh] = await made(env, newCam({}));
+    src = await env.ok("PATCH", U(src.uid), { properties: { overlays: [{ cameraId: fresh.uid, area: area(0, 0, 0.5, 0.5) }, list[0]] } }, v(src));
+    const about = async (cam) => (await env.ok("GET", `/journal?deviceId=${cam}&limit=100`)).items.filter((e) => e.deviceId === src.uid).map((e) => e.text);
+    await env.ok("POST", "/test/events", { type: "journal.event", deviceId: src.uid, event: { text: "Чек 1", kind: "text", source: "pos" } });
+    assert.eq([(await about(fresh.uid)).includes("Чек 1"), (await about(a.uid)).includes("Чек 1")], [true, true], "событие источника видно по каждой камере списка");
+    await env.ok("DELETE", U(fresh.uid), undefined, v(fresh));
+    await env.ok("POST", "/test/events", { type: "journal.event", deviceId: src.uid, event: { text: "Чек 2", kind: "text", source: "pos" } });
+    assert.eq(((await env.ok("GET", "/journal?limit=200")).items.find((e) => e.text === "Чек 2") || {}).cameraId, a.uid, "после удаления первой камеры событие несёт следующую");
+    src = await get(env, src.uid);
+    assert.eq([src.properties.overlays.map((o) => o.cameraId), src.properties.cameraId], [[a.uid], a.uid], "удалённая камера снята из списка, cameraId — следующая");
+    const [created] = await made(env, { kind: "eventsrc", name: "POS — тест", domainId: d1.id, properties: { ip: "10.9.9.10", port: 2600, cameraId: a.uid } });
+    assert.eq(created.properties.overlays.map((o) => o.cameraId), [a.uid], "создан со старым cameraId — список из одной камеры");
+  });
+
+  posTest("Источник событий: вид титров, разбор чека, флажки слов — хранятся, границы значений", async () => {
+    const env = await makeEnv();
+    let src = await posSrc(env);
+    const set = { overlayFont: "Consolas", overlayFontSize: 14, overlayColor: "#ffee00", overlayBg: "#001122", overlayBgTransparency: 60,
+      receiptStartWords: ["ЧЕК"], receiptEndWords: ["ИТОГО", "СПАСИБО"], receiptSplit: "none", ignoreCase: false, billsOnly: true, eraseOnEnd: true,
+      overlayDurationSec: 0, words: [{ msg: "ОТМЕНА", color: "#ff4444", bg: "#000000", caseSensitive: true, wholeLine: true, bgEnabled: false }] };
+    src = await env.ok("PATCH", U(src.uid), { properties: set }, v(src));
+    assert.eq(Object.keys(set).map((k) => src.properties[k]), Object.values(set), "всё сохранено и читается как записано");
+    const cases = [["overlayFontSize", 5], ["overlayFontSize", 73], ["overlayColor", "red"], ["overlayBg", "#12345"], ["overlayBgTransparency", 101], ["overlayBgTransparency", -1],
+      ["receiptSplit", "both"], ["receiptStartWords", [""]], ["receiptStartWords", [1]], ["ignoreCase", "yes"], ["overlayDurationSec", -1],
+      ["words", [{ msg: "A", wholeLine: "да" }]], ["words", [{ msg: "A", other: 1 }]]];
+    for (const [name, value] of cases) field(await props(env, src, { [name]: value }), "VALIDATION_FAILED", name === "words" ? P("words/0/" + Object.keys(value[0]).find((k) => k !== "msg")) : name === "receiptStartWords" ? P("receiptStartWords/0") : P(name), `${name} = ${JSON.stringify(value)}`);
+    assert.status(await props(env, src, { receiptStartWords: Array.from({ length: 33 }, (_, i) => `w${i}`) }), 422, "VALIDATION_FAILED", "больше 32 слов");
+    src = await env.ok("PATCH", U(src.uid), { properties: { overlayDurationSec: null, receiptEndWords: null } }, v(src));
+    assert.eq([src.properties.overlayDurationSec, src.properties.receiptEndWords], [undefined, undefined], "null снимает значение");
+  });
+
+  posTest("Источник событий: приём данных — RS-232 требует порт и скорость, чужие поля в той же правке — 422, при смене протокола прежние поля снимаются", async () => {
+    const env = await makeEnv();
+    let src = await posSrc(env);
+    assert.status(await props(env, src, { protocol: "rs232" }), 422, "VALIDATION_FAILED", "rs232 без comPort и baudRate");
+    assert.status(await props(env, src, { protocol: "rs232", comPort: "COM3" }), 422, "VALIDATION_FAILED", "rs232 без baudRate");
+    src = await env.ok("PATCH", U(src.uid), { properties: { protocol: "rs232", comPort: "COM3", baudRate: 19200, parity: "even", encoding: "dos2win" } }, v(src));
+    assert.eq([src.properties.comPort, src.properties.baudRate, src.properties.parity, src.properties.encoding], ["COM3", 19200, "even", "dos2win"], "RS-232 сохранён");
+    src = await env.ok("PATCH", U(src.uid), { properties: { protocol: "tcp" } }, v(src));
+    assert.eq(["comPort", "baudRate", "parity"].map((k) => src.properties[k]), [undefined, undefined, undefined], "при смене протокола поля RS-232 сняты");
+    field(await props(env, src, { comPort: "COM1" }), "VALIDATION_FAILED", P("comPort"), "comPort у tcp");
+    field(await props(env, src, { protocol: "udp", parity: "odd" }), "VALIDATION_FAILED", P("parity"), "parity у udp");
+    field(await props(env, src, { udpMaxPacket: 1024 }), "VALIDATION_FAILED", P("udpMaxPacket"), "udpMaxPacket у tcp");
+    src = await env.ok("PATCH", U(src.uid), { properties: { protocol: "udp", udpMaxPacket: 1024 } }, v(src));
+    assert.eq(src.properties.udpMaxPacket, 1024, "udpMaxPacket у udp");
+    src = await env.ok("PATCH", U(src.uid), { properties: { protocol: "tcp" } }, v(src));
+    assert.eq(src.properties.udpMaxPacket, undefined, "udpMaxPacket снят вместе с udp");
+    for (const [name, value] of [["protocol", "serial"], ["baudRate", 1234], ["encoding", "koi8"], ["udpMaxPacket", 0], ["parserFile", "шаблон.xml"], ["processing", "xml"], ["timeoutMs", 5], ["timeoutMs", 3001], ["timeOffsetMs", 5001], ["retalix", 1]])
+      field(await props(env, src, { [name]: value }), "VALIDATION_FAILED", P(name), `${name} = ${JSON.stringify(value)}`);
+    const ok = { terminalType: "XML PROTOCOL", parserFile: "pos_kassa3.prl", processing: "event", timeoutMs: 250, timeOffsetMs: -300, retalix: true };
+    src = await env.ok("PATCH", U(src.uid), { properties: ok }, v(src));
+    assert.eq(Object.keys(ok).map((k) => src.properties[k]), Object.values(ok), "разбор данных хранится как записан");
+    const [made1] = await made(env, { kind: "eventsrc", name: "POS — RS-232", domainId: d1.id, properties: { vendor: "POSLegacy", protocol: "rs232", comPort: "COM1", baudRate: 9600 } });
+    assert.eq(made1.properties.protocol, "rs232", "создан с RS-232");
+    assert.eq(await failedOf(env, { kind: "eventsrc", name: "POS — без порта", domainId: d1.id, properties: { vendor: "POSLegacy", protocol: "rs232" } }).then((x) => x[0][0]), "VALIDATION_FAILED", "создание rs232 без comPort");
+  });
+
+  posTest("Источник событий: последние сырые строки кассы — порядок, limit, кладёт POST /test/events", async () => {
+    const env = await makeEnv();
+    const src = await posSrc(env);
+    const raw = (q) => env.ok("GET", `${U(src.uid)}/pos/raw${q || ""}`);
+    const first = (await raw()).items;
+    assert.ok(first.length > 0 && first.every((x) => typeof x.text === "string" && !Number.isNaN(Date.parse(x.at))), "у каждой строки at и text");
+    assert.ok(first.every((x, i) => !i || Date.parse(x.at) >= Date.parse(first[i - 1].at)), "от старых к новым");
+    assert.eq((await raw("?limit=3")).items, first.slice(-3), "limit — последние строки");
+    await env.ok("POST", "/test/events", { type: "pos.raw", deviceId: src.uid, text: "ЧЕК 777  ИТОГО 10,00" });
+    const last = (await raw("?limit=1")).items[0];
+    assert.eq(last.text, "ЧЕК 777  ИТОГО 10,00", "подложенная строка — последняя");
+    await env.ok("POST", "/test/events", { type: "pos.raw", deviceId: src.uid, text: "Старая", at: "2020-01-01T00:00:00Z" });
+    const ord = (await raw("?limit=200")).items;
+    assert.eq([ord[0].text, ord.at(-1).text, ord.length], ["Старая", "ЧЕК 777  ИТОГО 10,00", 2], "первая подложенная строка начала список с пустого (пример чека не хранится); строка со старым at — в начало");
+    await env.ok("POST", "/test/events", { type: "pos.raw", deviceId: src.uid, clear: true });
+    assert.eq((await raw()).items, [], "clear: true — строк нет, примера чека нет");
+    for (let i = 0; i < 210; i++) await env.ok("POST", "/test/events", { type: "pos.raw", deviceId: src.uid, text: `строка ${i}` });
+    const kept = (await raw("?limit=200")).items;
+    assert.eq([kept.length, kept[0].text, kept[199].text], [200, "строка 10", "строка 209"], "сервер хранит последние 200 строк");
+    for (const q of ["?limit=0", "?limit=201", "?limit=abc"]) field(await env.call("GET", `${U(src.uid)}/pos/raw${q}`), "VALIDATION_FAILED", "/limit", `limit${q}`);
+    field(await env.call("POST", "/test/events", { type: "pos.raw", deviceId: src.uid, text: "" }), "VALIDATION_FAILED", "text", "пустая строка");
+    const [camera] = await posCams(env);
+    field(await env.call("GET", `${U(camera.uid)}/pos/raw`), "NOT_SUPPORTED", "/kind", "камера не источник событий");
+    field(await env.call("POST", "/test/events", { type: "pos.raw", deviceId: camera.uid, text: "x" }), "NOT_SUPPORTED", "/kind", "строку камере не подложить");
+    assert.status(await env.call("GET", `${U("30009999-0000-4000-8000-000000000000")}/pos/raw`), 404, "NOT_FOUND", "нет объекта");
+  }, ["listUnitPosRaw"]);
+
   test("Метки, тревожные виды, строка записи: хранятся; состояние только чтение", async () => {
     const env = await makeEnv();
     const c = (await env.pages("/units?kind=camera&limit=1000")).find((u) => u.properties.archiveId);

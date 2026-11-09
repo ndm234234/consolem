@@ -4086,7 +4086,9 @@
     null
    ],
    "createParents": [],
-   "implements": [],
+   "implements": [
+    "vms.pos/1"
+   ],
    "capabilities": [
     "rename",
     "enable",
@@ -4111,6 +4113,31 @@
     "type": "object",
     "additionalProperties": false,
     "properties": {
+     "baudRate": {
+      "type": "integer",
+      "enum": [
+       300,
+       600,
+       1200,
+       2400,
+       4800,
+       9600,
+       14400,
+       19200,
+       38400,
+       56000,
+       57600,
+       115200,
+       128000
+      ],
+      "default": 9600,
+      "description": "RS-232: скорость, бит/с. Только при protocol = rs232"
+     },
+     "billsOnly": {
+      "type": "boolean",
+      "default": false,
+      "description": "Показывать в титрах только строки между словами начала и конца чека"
+     },
      "cameraId": {
       "x-label": {
        "key": "field.cameraId",
@@ -4122,13 +4149,20 @@
        "null"
       ],
       "format": "uuid",
-      "description": "eventsrc: камера титров. Здесь только настройка: титры рисует клиент просмотра поверх живого видео и архива",
+      "description": "Устарело, вместо него overlays. Первая камера титров: сервер держит её равной overlays[0].cameraId. Правка cameraId без overlays ставит камеру первой с зоной прежней первой камеры (камера не из vms.camera/1 — 422, field /properties/cameraId), null очищает overlays. Правка с обоими полями — действует overlays. Здесь только настройка: титры рисует клиент просмотра поверх живого видео и архива",
       "x-ref": {
        "implements": [
         "vms.camera/1"
        ]
       },
-      "x-ui-widget": "ref"
+      "x-ui-widget": "ref",
+      "deprecated": true
+     },
+     "comPort": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "RS-232: COM-порт (COM1, /dev/ttyS0). Только при protocol = rs232"
      },
      "enabled": {
       "x-label": {
@@ -4137,6 +4171,21 @@
        "lang": "ru"
       },
       "type": "boolean"
+     },
+     "encoding": {
+      "type": "string",
+      "enum": [
+       "auto",
+       "utf8",
+       "dos2win"
+      ],
+      "default": "auto",
+      "description": "Кодировка данных кассы: auto — Windows-1251, utf8, dos2win — DOS (CP866)"
+     },
+     "eraseOnEnd": {
+      "type": "boolean",
+      "default": false,
+      "description": "Убирать строки с экрана после конца чека"
      },
      "identifier": {
       "x-label": {
@@ -4147,6 +4196,11 @@
       "type": "string",
       "description": "Номер устройства в системе («16», «3/1» у канала регистратора)",
       "x-search": true
+     },
+     "ignoreCase": {
+      "type": "boolean",
+      "default": true,
+      "description": "Не учитывать регистр слов начала и конца чека"
      },
      "ip": {
       "x-label": {
@@ -4176,6 +4230,26 @@
       "description": "Модель. У единицы СКУД — шаблон из unitOptions: задаётся при создании, правка — 422 NOT_SUPPORTED, field: model",
       "x-search": true
      },
+     "overlayBg": {
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{6}$",
+      "default": "#000000",
+      "description": "Вид титров: цвет фона, #rrggbb"
+     },
+     "overlayBgTransparency": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100,
+      "default": 40,
+      "x-ui-unit": "%",
+      "description": "Вид титров: прозрачность фона, % (0 — сплошной фон, 100 — без фона)"
+     },
+     "overlayColor": {
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{6}$",
+      "default": "#ffffff",
+      "description": "Вид титров: цвет текста, #rrggbb"
+     },
      "overlayDelayMs": {
       "type": "integer",
       "description": "Титры источника событий: задержка показа, мс",
@@ -4183,8 +4257,100 @@
      },
      "overlayDurationSec": {
       "type": "integer",
-      "description": "Титры источника событий: сколько держать на экране, с",
+      "description": "Титры источника событий: сколько держать чек на экране после последней строки, с. 0 (и поле без значения) — держать до следующей строки; если касса молчала больше 10 секунд, новая строка начинает экран заново (как Display duration = 0 в Axxon One)",
       "minimum": 0
+     },
+     "overlayFont": {
+      "type": "string",
+      "maxLength": 64,
+      "default": "Courier New",
+      "description": "Вид титров: имя шрифта"
+     },
+     "overlayFontSize": {
+      "type": "integer",
+      "minimum": 6,
+      "maximum": 72,
+      "default": 12,
+      "x-ui-unit": "pt",
+      "description": "Вид титров: размер шрифта, пункты"
+     },
+     "overlays": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "cameraId",
+        "area"
+       ],
+       "properties": {
+        "cameraId": {
+         "type": "string",
+         "format": "uuid",
+         "x-ref": {
+          "implements": [
+           "vms.camera/1"
+          ]
+         },
+         "description": "Камера, на которой клиент просмотра рисует титры"
+        },
+        "area": {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "x",
+          "y",
+          "w",
+          "h"
+         ],
+         "properties": {
+          "x": {
+           "type": "number",
+           "minimum": 0,
+           "maximum": 1,
+           "description": "Слева, доля ширины кадра"
+          },
+          "y": {
+           "type": "number",
+           "minimum": 0,
+           "maximum": 1,
+           "description": "Сверху, доля высоты кадра"
+          },
+          "w": {
+           "type": "number",
+           "exclusiveMinimum": 0,
+           "maximum": 1,
+           "description": "Ширина, доля ширины кадра"
+          },
+          "h": {
+           "type": "number",
+           "exclusiveMinimum": 0,
+           "maximum": 1,
+           "description": "Высота, доля высоты кадра"
+          }
+         },
+         "description": "Зона титров на кадре камеры: x + w ≤ 1 и y + h ≤ 1, иначе 422 VALIDATION_FAILED, field /properties/overlays"
+        }
+       }
+      },
+      "description": "Камеры титров и зона на каждой (не больше 16). Камера в списке один раз: повтор — 422 VALIDATION_FAILED, field /properties/overlays; камера — объект с vms.camera/1. Список заменяется целиком (JSON Merge Patch). Первая камера списка — cameraId (устарело). Удаление камеры снимает её из списка. Здесь только настройка: титры рисует клиент просмотра поверх живого видео и архива"
+     },
+     "parity": {
+      "type": "string",
+      "enum": [
+       "none",
+       "even",
+       "odd"
+      ],
+      "default": "none",
+      "description": "RS-232: чётность. Только при protocol = rs232"
+     },
+     "parserFile": {
+      "type": "string",
+      "maxLength": 260,
+      "pattern": "^.+\\.(txt|prl)$",
+      "description": "Файл шаблона разбора данных на сервере: .txt — парсер XML, .prl — парсер POS. На стенде — заглушка: имя хранится, файл не читается и данные им не разбираются"
      },
      "password": {
       "x-label": {
@@ -4204,6 +4370,60 @@
        "lang": "ru"
       },
       "type": "integer"
+     },
+     "processing": {
+      "type": "string",
+      "enum": [
+       "line",
+       "event",
+       "json"
+      ],
+      "default": "line",
+      "description": "Разбор данных: построчно, по событию или JSON. На стенде — заглушка: значение хранится, данные не разбираются"
+     },
+     "protocol": {
+      "type": "string",
+      "enum": [
+       "tcp",
+       "udp",
+       "rs232"
+      ],
+      "default": "tcp",
+      "description": "Приём данных: протокол. rs232 требует comPort и baudRate; comPort, baudRate, parity и udpMaxPacket в одной правке с другим протоколом — 422 VALIDATION_FAILED. Когда правка меняет протокол и не называет эти поля, сервер сам снимает поля прежнего протокола (RS-232 или UDP). ip и port нужны tcp и udp"
+     },
+     "receiptEndWords": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+       "type": "string",
+       "minLength": 1,
+       "maxLength": 128
+      },
+      "description": "Слова конца чека: строка со словом заканчивает чек. При receiptSplit = none сервер их не проверяет"
+     },
+     "receiptSplit": {
+      "type": "string",
+      "enum": [
+       "skip",
+       "none"
+      ],
+      "default": "skip",
+      "description": "Как делить строки на чеки (Repeats processing в Axxon One): skip — по словам начала и конца; none — только по словам начала, слова конца сервер не проверяет"
+     },
+     "receiptStartWords": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+       "type": "string",
+       "minLength": 1,
+       "maxLength": 128
+      },
+      "description": "Слова начала чека: строка со словом начинает чек. Сравнение посимвольно, регистр — по ignoreCase. Без слов начала и конца сервер не делит строки на чеки и поиск по чекам в архиве не работает"
+     },
+     "retalix": {
+      "type": "boolean",
+      "default": false,
+      "description": "Касса Retalix (драйвер POSLegacy)"
      },
      "serverId": {
       "x-label": {
@@ -4231,6 +4451,33 @@
       "description": "Номер для показа в дереве («3.3.1»)",
       "x-search": true
      },
+     "terminalType": {
+      "type": "string",
+      "maxLength": 64,
+      "description": "Тип терминала из списка драйвера (POSLegacy): XML PROTOCOL, SUPERMAG UKM, ALOHA… Список зависит от vendor; на стенде значение хранится без проверки по списку драйвера"
+     },
+     "timeOffsetMs": {
+      "type": "integer",
+      "minimum": -5000,
+      "maximum": 5000,
+      "default": 0,
+      "description": "Разбор данных: сдвиг времени титров, мс (отрицательный — раньше)"
+     },
+     "timeoutMs": {
+      "type": "integer",
+      "minimum": 10,
+      "maximum": 3000,
+      "default": 100,
+      "description": "Разбор данных: таймаут, мс"
+     },
+     "udpMaxPacket": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535,
+      "default": 4096,
+      "x-ui-unit": "байт",
+      "description": "UDP: наибольший пакет, байт. Только при protocol = udp"
+     },
      "vendor": {
       "x-label": {
        "key": "field.vendor",
@@ -4256,12 +4503,43 @@
         },
         "bg": {
          "type": "string"
+        },
+        "caseSensitive": {
+         "type": "boolean",
+         "default": false,
+         "description": "Различать заглавные и строчные буквы при поиске слова в строке"
+        },
+        "wholeLine": {
+         "type": "boolean",
+         "default": false,
+         "description": "Выделить цветом всю строку чека, в которой есть слово, а не только слово"
+        },
+        "bgEnabled": {
+         "type": "boolean",
+         "default": true,
+         "description": "Менять фон слова на bg; false — фон строки не меняется"
         }
        },
        "additionalProperties": false
       },
       "description": "Слова источника событий (POS) и их цвета"
      }
+    },
+    "if": {
+     "required": [
+      "protocol"
+     ],
+     "properties": {
+      "protocol": {
+       "const": "rs232"
+      }
+     }
+    },
+    "then": {
+     "required": [
+      "comPort",
+      "baudRate"
+     ]
     }
    },
    "events": [
@@ -5516,6 +5794,47 @@
     "holds",
     "bookmarks",
     "archive-fetch"
+   ]
+  },
+  {
+   "id": "vms.pos/1",
+   "label": {
+    "key": "profile.vms.pos/1",
+    "text": "Источник событий (касса)",
+    "lang": "ru"
+   },
+   "properties": [
+    "overlays",
+    "cameraId",
+    "overlayDelayMs",
+    "overlayDurationSec",
+    "overlayFont",
+    "overlayFontSize",
+    "overlayColor",
+    "overlayBg",
+    "overlayBgTransparency",
+    "receiptStartWords",
+    "receiptEndWords",
+    "receiptSplit",
+    "ignoreCase",
+    "billsOnly",
+    "eraseOnEnd",
+    "words",
+    "protocol",
+    "comPort",
+    "baudRate",
+    "parity",
+    "udpMaxPacket",
+    "encoding",
+    "terminalType",
+    "parserFile",
+    "processing",
+    "timeoutMs",
+    "timeOffsetMs",
+    "retalix"
+   ],
+   "apis": [
+    "pos/raw"
    ]
   }
  ],
@@ -26328,6 +26647,7 @@
     "deleteUnitPreset",
     "putUnitRecordingTarget",
     "getUnitRecordingDays",
+    "listUnitPosRaw",
     "checkExport",
     "listExports",
     "createExport",

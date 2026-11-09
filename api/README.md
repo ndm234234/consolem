@@ -1,6 +1,6 @@
 # API конфигуратора
 
-Прототип API — это основной макет `index.html` (Pages: `https://ndm234234.github.io/consolem/index.html`) с **универсальной моделью объектов**: ядро `/kinds` + `/units` и профили вместо путей по видам. Он задаёт поведение и служит эталоном для проверки; в продукт его код не переносят ([FRONTEND.md](FRONTEND.md)). Своих данных у интерфейса нет: всё, что в продукте хранит бэкенд, интерфейс читает и меняет запросами контракта [`openapi.json`](openapi.json). Контракт — версия `0.4.0` (к `0.2.0` только добавлено, см. «[Что добавлено в 0.3.0](#что-добавлено-в-030)» и «[Что добавлено в 0.4.0](#что-добавлено-в-040)»), несовместимая с контрактом старого макета (`0.1.0`, пути по видам `/devices`, `/servers`…): что снято и чем заменено — «[Ломающие изменения против контракта старого макета (до 0.2.0, коммит 47d1310)](#ломающие-изменения-против-контракта-старого-макета-до-020-коммит-47d1310)». Старый макет и его контракт остались только в истории git: `git show 47d1310:api/openapi.json`. Решение целиком — [`docs/superpowers/specs/2026-11-03-generic-model-design.md`](../docs/superpowers/specs/2026-11-03-generic-model-design.md); запрос и ответ о модели — [`requests/2026-11-03-065231Z-mockup-generic-model-*.md`](requests/2026-11-03-065231Z-mockup-generic-model-request.md).
+Прототип API — это основной макет `index.html` (Pages: `https://ndm234234.github.io/consolem/index.html`) с **универсальной моделью объектов**: ядро `/kinds` + `/units` и профили вместо путей по видам. Он задаёт поведение и служит эталоном для проверки; в продукт его код не переносят ([FRONTEND.md](FRONTEND.md)). Своих данных у интерфейса нет: всё, что в продукте хранит бэкенд, интерфейс читает и меняет запросами контракта [`openapi.json`](openapi.json). Контракт — версия `0.5.0` (к `0.2.0` только добавлено, см. «[Что добавлено в 0.3.0](#что-добавлено-в-030)», «[Что добавлено в 0.4.0](#что-добавлено-в-040)» и «[Что добавлено в 0.5.0](#что-добавлено-в-050)»), несовместимая с контрактом старого макета (`0.1.0`, пути по видам `/devices`, `/servers`…): что снято и чем заменено — «[Ломающие изменения против контракта старого макета (до 0.2.0, коммит 47d1310)](#ломающие-изменения-против-контракта-старого-макета-до-020-коммит-47d1310)». Старый макет и его контракт остались только в истории git: `git show 47d1310:api/openapi.json`. Решение целиком — [`docs/superpowers/specs/2026-11-03-generic-model-design.md`](../docs/superpowers/specs/2026-11-03-generic-model-design.md); запрос и ответ о модели — [`requests/2026-11-03-065231Z-mockup-generic-model-*.md`](requests/2026-11-03-065231Z-mockup-generic-model-request.md).
 
 Зачем: виды объектов расширяемых VMS (плагины psim в NGP, подсистемы w2c) появляются после выпуска WebUI. Сервер отдаёт описания видов, интерфейс строит дерево, мастер, фильтры, подписи и форму по ним; у известных видов остаются ручные экраны, привязанные к **профилю** (`vms.camera/1`…), а не к виду. Объект незнакомого вида показывается, создаётся, правится, удаляется, получает команды, участвует в правилах и правах без кода интерфейса под вид.
 
@@ -59,7 +59,7 @@
 | `TESTS.md` | Какие тесты и проверки есть, что каждая проверяет и как запустить; что делает `?selftest` |
 | `requests/` | Запросы к API от команд VMS и ответы на них; запрос на эту модель — `2026-11-03-065231Z-mockup-generic-model-*.md` |
 
-## Карта API — 121 операция и 5 служебных
+## Карта API — 122 операции и 5 служебных
 
 Путей по видам старого контракта нет: домены, серверы, устройства, папки, хранилища, тома и потоки камер — объекты `/units` своих видов. Адрес предметных API — по `uid`, доступность — профилем. Что чем заменено — «[Ломающие изменения](#ломающие-изменения-против-контракта-старого-макета-до-020-коммит-47d1310)».
 
@@ -68,7 +68,7 @@
 | `session`, `reference` | `GET /me` — кто вошёл, часы и часовой пояс сервера; `GET /reference` — справочники кодами и `capabilities` |
 | `units` — ядро | `GET /kinds` (описания видов, ETag, `If-None-Match` → 304), `GET /kinds/{kind}`, `POST /kinds/{kind}/actions/{action}` (команда вида без объекта: опрос адреса, проверка NAS); `GET /units` (отборы `kind`, `parentId`, `domainId`, `implements`, `ref`, `folderId`, `ids`, `q`, `fields`, `noFolder`, `noRecord`, `noDetector`, `status`, страницы); `POST /units` (группой, `idempotencyKey`, вложенные дети, частичный успех `done`/`failed`); `GET`, `PATCH` (JSON Merge Patch, `If-Match`), `DELETE /units/{uid}`; `POST /units/{uid}/move` (в другого родителя, домен, сервер); `POST /units/{uid}/actions/{action}`; `GET /units/{uid}/creatable` (что можно завести под объектом); `GET /units/{uid}/schema` (схема конкретного объекта); `POST /units/validate` (проверить без записи) |
 | `hardware` — дерево, папки, ретрансляторы | `GET /tree/children` (дети узла, страницами; раскладки `folders`, `servers`, `archives`, `detectors`); `GET /tree/paths` (цепочки от корня до объектов); `POST /objects/delete` (групповое удаление объектов любых видов по `uid`); `GET /domains/{id}/relays`, `GET /domains/{id}/relays/{name}` |
-| `hardware` — предметные API по `uid` | живое видео `POST`, `PUT /units/{uid}/live`; разговор `POST /units/{uid}/talk`; архив `GET /units/{uid}/timeline`, `/playback`, `POST /units/{uid}/archive-fetch`; удержания `GET`, `POST /units/{uid}/holds`, `DELETE /holds/{id}`, `POST /holds/{id}/verify`; закладки `GET`, `POST /units/{uid}/bookmarks` (момент или отрезок: `type`, `to`); PTZ `PUT`, `DELETE /units/{uid}/ptz`, `PUT`, `DELETE /units/{uid}/presets/{n}`; `PUT /units/{uid}/recording-target` |
+| `hardware` — предметные API по `uid` | живое видео `POST`, `PUT /units/{uid}/live`; разговор `POST /units/{uid}/talk`; архив `GET /units/{uid}/timeline`, `/playback`, `POST /units/{uid}/archive-fetch`; удержания `GET`, `POST /units/{uid}/holds`, `DELETE /holds/{id}`, `POST /holds/{id}/verify`; закладки `GET`, `POST /units/{uid}/bookmarks` (момент или отрезок: `type`, `to`); PTZ `PUT`, `DELETE /units/{uid}/ptz`, `PUT`, `DELETE /units/{uid}/presets/{n}`; `PUT /units/{uid}/recording-target`; сырые строки кассы источника событий `GET /units/{uid}/pos/raw?limit=` (профиль `vms.pos/1`) |
 | `export` — выгрузка (ADR-0117) | `GET /me/export?ids=<uid,…>` — что можно человеку и по камерам; `GET /units/{uid}/recording-days` — сутки с записью для календаря (профиль `vms.camera/1`); `POST /exports/check` — проверить заказ без запуска; `POST /exports` (202) — задание: части камера × запись, ход `export.progress`, итог `export.finished`; `GET /exports`; `GET`, `DELETE /exports/{id}`; `…/cancel`, `…/retry-failed`; `POST …/files/{fileId}/link` — ссылка на файл со сроком. Камеры заказа — по `uid` (`ExportCamera.uid`), ошибки — `field` JSON Pointer по телу (`/cameras/0/area`, `/periods/1/to`); справочник — `reference.export`, необязательное — `export*` в `capabilities.features` |
 | `storage` — обход и скан | `GET`, `POST /archive-watches`; `PATCH`, `DELETE /archive-watches/{id}`; `GET`, `POST /archive-scans`; `DELETE /archive-scans/{id}` |
 | `operations` | `GET`, `POST /operations`; `GET /operations/{id}`; `…/pause`, `…/resume`, `…/cancel`, `…/retry-failed`, `…/revert`, `…/redo`. Шаг (`OperationItemRequest`) — `uid` и ровно одно из: `patch` (правка, как `PATCH /units/{uid}`), `folders` (папки объекта), `createUnit` (дочерний объект), `move` (+`params`: перенос к родителю), `action` (+`params`: команда вида), `delete: true`. Отказ шага — `code`, указатель — `params.field` (JSON Pointer в теле шага), слово схемы — `params.keyword` |
@@ -192,6 +192,7 @@
 | `vms.acs/1` | подключение, `identifier`, `short`, `path`, `model`, `operations` (команды единицы), `properties` (настройки единицы СКУД — свойство с таким именем), `unitOptions`, `enabled` | `fault` |
 | `vms.live/1`, `vms.timeline/1` | — | возможность предметных API: живое видео; шкала и записи |
 | `vms.ptz/1`, `vms.talk/1` | `ptz`, `presets`, `presetMax`; `channel`, `enabled`, `short` | возможность предметных API: PTZ; разговор |
+| `vms.pos/1` | `overlays`, `cameraId` (устарело), `overlayDelayMs`, `overlayDurationSec`, вид титров, разбор чека, `words`, приём и разбор данных | возможность предметного API: сырые строки от кассы |
 
 ### Виды набора
 
@@ -219,6 +220,23 @@
 - **Сервер не запускает правило, которое выключает действующий режим.** Проверка запуска `modeOff` с `{modeId, name}` (запуск пропущен, действия не выполнены); `RuleStatus.state = off` и `RuleStatus.modeId` — в чтении правила.
 
 Устарело в 0.4.0 (`deprecated: true`, работает как раньше): `/maintenance-windows` и схемы окон — окно обслуживания это режим (расписание окна — `scheduleId`, `ruleIds` — `off`); условие правила `mode` и `modeIds` — связь правила с режимом задаёт режим; `Modes.otherwise` (теперь может быть `null`) и порядок `Modes.items` — приоритета нет; `ObjectMode.system` и `ModeCurrent.manual`. Интерфейс 0.4.0 пользуется только новым; окна из `/maintenance-windows` сервер по-прежнему учитывает при запуске правил (проверка `maintenance`), но интерфейс их не показывает. Как окно и режим связаны на сервере — `BACKEND.md`, «Режимы».
+
+## Что добавлено в 0.5.0
+
+Запрос команды mockup о карточке POS-устройства (`requests/2026-11-08-180100Z-mockup-pos-overlay-parser-request.md`). Владелец контракта велел **ничего не снимать и не переименовывать**: новое добавлено рядом, старое помечено `deprecated: true` и работает как раньше. Всё необязательно, умолчание — прежнее поведение.
+
+- **Профиль `vms.pos/1`** у вида `eventsrc` (источник событий): свойства POS и предметный путь сырых строк.
+- **Несколько камер титров** (п. 1): `overlays: [{cameraId, area: {x, y, w, h}}]`, зона — доли кадра. `cameraId` устарел и всегда равен первой камере списка; сервер держит оба поля согласованными (правка одного `cameraId` заменяет первую камеру, при обоих полях действует `overlays`), поэтому клиенты 0.4.0 работают без изменений.
+- **Вид титров** (п. 2): `overlayFont`, `overlayFontSize`, `overlayColor`, `overlayBg`, `overlayBgTransparency`.
+- **Разбор чека** (п. 3): `receiptStartWords`, `receiptEndWords`, `receiptSplit` (`skip`, `none`), `ignoreCase`, `billsOnly`, `eraseOnEnd`.
+- **Длительность 0** (п. 4): смысл записан в описании `overlayDurationSec`; значение не менялось.
+- **Флажки слов** (п. 5): `words[].caseSensitive`, `wholeLine`, `bgEnabled`.
+- **Приём данных** (п. 6): `protocol` (`tcp`, `udp`, `rs232`), `comPort` и `baudRate` (обязательны при `rs232`), `parity`, `udpMaxPacket`, `encoding` (`auto`, `utf8`, `dos2win`), `terminalType`. Схемы возможностей драйвера нет: список типов терминала хранится как строка.
+- **Разбор данных** (п. 7): `parserFile` (`.txt` или `.prl`), `processing`, `timeoutMs`, `timeOffsetMs`, `retalix`. На стенде — заглушка: значения хранятся и проверяются, файлы не читаются, данные не разбираются.
+- **Строки от кассы** (п. 8): `listUnitPosRaw` `GET /units/{uid}/pos/raw?limit=`; на стенде строку подкладывает `POST /test/events {type: "pos.raw", deviceId, text}`.
+- Аннотация схемы `deprecated` вошла в подмножество JSON Schema видов (`JsonSchema`).
+
+Устарело в 0.5.0 (`deprecated: true`, работает как раньше): `eventsrc.cameraId` — вместо него `overlays`.
 
 ## Ломающие изменения против контракта старого макета (до 0.2.0, коммит 47d1310)
 

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Конфигуратор — API",
-    "version": "0.4.0",
+    "version": "0.5.0",
     "description": "Контракт конфигуратора: всё, что интерфейс читает и меняет. Источник истины: встроенный сервер прототипа (api/server.js) и бэкенд отвечают по нему. Договорённости — api/README.md: версии записей (ETag / If-Match, 428, 412), ошибки application/problem+json с машинным code, групповые операции с частичным успехом и idempotencyKey, поток событий SSE. Система может поддерживать не весь контракт: что она умеет — GET /reference → capabilities; остальные операции отвечают 404 NO_ROUTE, неподдержанные виды устройств и настройки — 422 NOT_SUPPORTED. Операции с тегом test-support есть только на тестовом стенде. Форма работает с одним адресом входа, другой — только если этот недоступен. Список операций, откат и память idempotencyKey у каждого адреса свои: после 5xx и смены адреса запись сперва перечитывается. Версия одной записи на разных адресах может отличаться: 412 и перечитывание. У изменений чужого кластера at — время, когда их увидели.",
     "license": {
       "name": "Внутренний документ",
@@ -6466,6 +6466,63 @@
         }
       }
     },
+    "/units/{uid}/pos/raw": {
+      "get": {
+        "operationId": "listUnitPosRaw",
+        "tags": [
+          "units"
+        ],
+        "summary": "Последние строки от кассы",
+        "description": "Предметный API объекта по uid (профиль vms.pos/1): ответ — схема ниже. Нет объекта — 404; вид объекта не реализует vms.pos/1 — 422 NOT_SUPPORTED, field /kind. У этого GET тела нет: field отказа — JSON Pointer на параметр запроса (/limit).\n\nСырые строки, как касса их передала: до разбора, без слов начала, конца и подсветки. Администратор настраивает слова по живым строкам. Строки идут от старых к новым, берутся последние limit (умолчание 50, от 1 до 200); сервер хранит последние 200 строк источника. Нет строк — items: []. limit вне границ — 422 VALIDATION_FAILED, field: /limit.\n\nНа тестовом стенде строку подкладывает POST /test/events с type pos.raw (строки идут по at, от старых к новым). Пока источнику ничего не подкладывали и не очищали (clear: true), стенд вместо строк отдаёт пример чека (заглушка): он нигде не хранится, первая подложенная строка начинает список с пустого, после clear: true — items: []. Настоящий бэкенд отдаёт строки, которые получил от кассы.",
+        "parameters": [
+          {
+            "name": "uid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "uid объекта"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            },
+            "description": "Сколько последних строк вернуть"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Готово",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PosRawLines"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
     "/exports/check": {
       "post": {
         "operationId": "checkExport",
@@ -9681,7 +9738,7 @@
         "properties": {
           "type": {
             "type": "string",
-            "description": "device.signal — пропало или вернулось соединение с устройством (online), device.fault — причина без связи, device.found — устройство назвало новую запись под deviceId (found), device.lost — запись deviceId пропала, device.parent — у записи сменился родитель (parentId), io.input — сигнал входа deviceId (value): active запускает включённые правила по этому событию, normal кончает событие: эскалация с stop: reset останавливается, journal.event — новая запись журнала об устройстве deviceId (event): уходит в поток, unit.event — событие объекта deviceId из описания его вида (eventId, match): запускает включённые правила по этому событию, их шаги unitAction выполняются",
+            "description": "device.signal — пропало или вернулось соединение с устройством (online), device.fault — причина без связи, device.found — устройство назвало новую запись под deviceId (found), device.lost — запись deviceId пропала, device.parent — у записи сменился родитель (parentId), io.input — сигнал входа deviceId (value): active запускает включённые правила по этому событию, normal кончает событие: эскалация с stop: reset останавливается, journal.event — новая запись журнала об устройстве deviceId (event): уходит в поток, unit.event — событие объекта deviceId из описания его вида (eventId, match): запускает включённые правила по этому событию, их шаги unitAction выполняются, pos.raw — касса источника событий deviceId передала сырую строку (text, необязательно at): сервер добавляет её к последним строкам, их отдаёт GET /units/{uid}/pos/raw; вид без vms.pos/1 — 422 NOT_SUPPORTED, clear: true очищает список; пустой text или длиннее 1000 символов — 422 VALIDATION_FAILED, field: text",
             "enum": [
               "device.signal",
               "device.fault",
@@ -9692,7 +9749,8 @@
               "scenario.outcome",
               "domain.link",
               "journal.event",
-              "unit.event"
+              "unit.event",
+              "pos.raw"
             ]
           },
           "deviceId": {
@@ -9778,6 +9836,19 @@
             "additionalProperties": true,
             "properties": {},
             "description": "unit.event: поля события"
+          },
+          "text": {
+            "type": "string",
+            "description": "pos.raw: строка от кассы"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "pos.raw: когда строка пришла; нет — по часам сервера"
+          },
+          "clear": {
+            "type": "boolean",
+            "description": "pos.raw: true — очистить строки источника (text не нужен): пример чека больше не возвращается, items: []"
           }
         },
         "additionalProperties": false,
@@ -16663,7 +16734,7 @@
         "type": "object",
         "properties": {},
         "additionalProperties": true,
-        "description": "JSON Schema 2020-12 (подмножество): type, enum, const, minimum/maximum, exclusiveMinimum, minLength/maxLength, pattern, items, minItems/maxItems, required, default, readOnly, writeOnly (секрет), if/then/else, dependentSchemas, description, title. Расширения: x-search (поле участвует в поиске q), x-immutable (нельзя менять после создания), x-inherit {merge} (значение наследуется: объект → домен → умолчание), x-unique (уникально среди объектов; судит только сервер), x-ref {kinds, implements, scope, onDelete: clear | keep} (ссылка на объект: uid или массив uid; onDelete — что с ней, когда цель удалили: clear, по умолчанию, — ссылка снимается, keep — остаётся висеть, её состояние считает профиль), x-bound-to (смена этого поля требует заново задать указанный секрет), x-rights {scope: group | cluster} (правка требует прав шире объекта), x-enum-labels {значение: Text}, x-label (Text), x-ui-group, x-ui-tab, x-ui-order, x-ui-unit, x-ui-widget (text, textarea, number, switch, select, multiselect, ref, password, file, polygon, line, mask, point, schedule), x-ui-filter, x-ui-advanced. Ещё у поля: x-transient (только проверка и разовый выбор: значение идёт в запросе, сервер его судит, но не хранит и не отдаёт — confirmShrinkBytes тома, configMode и templateId камеры при добавлении; без него поле хранилось бы как обычное), x-template (строка — шаблон с подстановками {…} события правила: интерфейс предлагает подстановки; без него — простая строка). Незнакомое ключевое слово или x-* клиент пропускает; поле незнакомого типа показывает только для чтения"
+        "description": "JSON Schema 2020-12 (подмножество): type, enum, const, minimum/maximum, exclusiveMinimum, minLength/maxLength, pattern, items, minItems/maxItems, required, default, readOnly, writeOnly (секрет), if/then/else, dependentSchemas, description, title, deprecated (аннотация: поле устарело, в описании — чем заменить; сервер принимает его как раньше). Расширения: x-search (поле участвует в поиске q), x-immutable (нельзя менять после создания), x-inherit {merge} (значение наследуется: объект → домен → умолчание), x-unique (уникально среди объектов; судит только сервер), x-ref {kinds, implements, scope, onDelete: clear | keep} (ссылка на объект: uid или массив uid; onDelete — что с ней, когда цель удалили: clear, по умолчанию, — ссылка снимается, keep — остаётся висеть, её состояние считает профиль), x-bound-to (смена этого поля требует заново задать указанный секрет), x-rights {scope: group | cluster} (правка требует прав шире объекта), x-enum-labels {значение: Text}, x-label (Text), x-ui-group, x-ui-tab, x-ui-order, x-ui-unit, x-ui-widget (text, textarea, number, switch, select, multiselect, ref, password, file, polygon, line, mask, point, schedule), x-ui-filter, x-ui-advanced. Ещё у поля: x-transient (только проверка и разовый выбор: значение идёт в запросе, сервер его судит, но не хранит и не отдаёт — confirmShrinkBytes тома, configMode и templateId камеры при добавлении; без него поле хранилось бы как обычное), x-template (строка — шаблон с подстановками {…} события правила: интерфейс предлагает подстановки; без него — простая строка). Незнакомое ключевое слово или x-* клиент пропускает; поле незнакомого типа показывает только для чтения"
       },
       "AccessClass": {
         "type": "object",
@@ -17930,6 +18001,41 @@
           "control"
         ],
         "description": "Прервать выполнение: шаги после этого, в том числе в охватывающих ветках, не выполняются. Запуск идёт к концу, итог по выполненным шагам"
+      },
+      "PosRawLines": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PosRawLine"
+            }
+          }
+        },
+        "description": "Последние сырые строки источника событий, от старых к новым"
+      },
+      "PosRawLine": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "at",
+          "text"
+        ],
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Когда сервер получил строку"
+          },
+          "text": {
+            "type": "string",
+            "description": "Строка как есть, без перевода строки в конце"
+          }
+        }
       }
     }
   }

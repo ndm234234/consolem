@@ -1512,10 +1512,102 @@
     },
   };
 
+  /* ===== vms.pos/1 — источник событий (касса): камеры титров, вид титров, разбор чека, приём данных, сырые строки ===== */
+
+  // Зона титров, пока администратор её не задал: слева вверху, как пресет формы
+  const POS_AREA = { x: 0.02, y: 0.04, w: 0.52, h: 0.74 };
+  const POS_RAW_KEEP = 200;
+  const POS_RAW_SAMPLE = [["КАССА 3   СМЕНА 128", 20], ["ЧЕК 004512   08.11.2026 10:42", 18], ["Молоко 3,2% 1 л          89,90", 16], ["Хлеб бородинский         54,00", 15],
+    ["Пиво светлое 0,5 л      129,00", 13], ["Отмена позиции: Пиво    -129,00", 11], ["СКИДКА 10%               -14,39", 10], ["ИТОГО                   129,51", 9],
+    ["Оплата: карта ****1234", 8], ["СПАСИБО ЗА ПОКУПКУ", 8], ["КАССА 3   ОЖИДАНИЕ", 1]];
+  const rawOf = (ctx) => ctx.state.posRaw || (ctx.state.posRaw = new Map());
+  const RS232_ONLY = ["comPort", "baudRate", "parity"];
+  // Правка (или новый объект) приводится к согласованному виду: cameraId (устарело) — первая камера overlays; поля RS-232 и UDP
+  // — только у своего протокола. set — свойства правки (JSON Merge Patch; хук дополняет её), old — свойства объекта сейчас
+  function posNorm(set, old, ctx) {
+    const bad = (m) => ctx.problem(422, "VALIDATION_FAILED", m, { field: "overlays" });
+    const oldList = Array.isArray(old.overlays) ? old.overlays : [];
+    if ("overlays" in set) {
+      const list = set.overlays || [];
+      set.overlays = list;
+      if (list.length) set.cameraId = list[0].cameraId;
+      else if (old.cameraId != null || set.cameraId != null) set.cameraId = null;
+      else delete set.cameraId;
+    } else if ("cameraId" in set) {
+      const c = set.cameraId;
+      if (c == null) {
+        if (oldList.length) set.overlays = [];
+      } else {
+        const cam = ctx.byId("devices", c);
+        if (!cam || !ctx.kinds.profileOf(cam.type, "vms.camera/1")) return ctx.problem(422, "VALIDATION_FAILED", `Нет камеры ${c}`, { field: "cameraId" });
+        // Камера встаёт первой и берёт зону прежней первой; остальные остаются, повтор снимается
+        const next = oldList.length && oldList[0].cameraId === c ? oldList : [{ cameraId: c, area: clone((oldList[0] || {}).area || POS_AREA) }].concat(oldList.slice(1).filter((o) => o.cameraId !== c));
+        if (JSON.stringify(next) !== JSON.stringify(oldList)) set.overlays = next;
+      }
+    }
+    for (const o of set.overlays || []) {
+      const cam = ctx.byId("devices", o.cameraId);
+      if (!cam || !ctx.kinds.profileOf(cam.type, "vms.camera/1")) return bad(`Нет камеры ${o.cameraId}`);
+      if (o.area.x + o.area.w > 1 + 1e-9 || o.area.y + o.area.h > 1 + 1e-9) return bad("Зона выходит за кадр: x + w и y + h не больше 1");
+    }
+    if (new Set((set.overlays || []).map((o) => o.cameraId)).size !== (set.overlays || []).length) return bad("Камера в списке титров одна");
+    const final = Object.assign({}, old, set);
+    const proto = final.protocol || "tcp";
+    const stray = (names, want) => {
+      if (proto === want) return null;
+      const name = names.find((k) => set[k] != null);
+      if (name) return ctx.problem(422, "VALIDATION_FAILED", `Поле ${name} — только при protocol = ${want}`, { field: name });
+      names.forEach((k) => old[k] != null && !(k in set) && (set[k] = null));
+      return null;
+    };
+    return stray(RS232_ONLY, "rs232") || stray(["udpMaxPacket"], "udp");
+  }
+  const pos = {
+    // cameraId — копия первой камеры overlays: камеры, снятые удалением, не оставляют в нём чужого значения
+    view(out) {
+      const p = out.properties, list = p && p.overlays;
+      if (Array.isArray(list)) p.cameraId = list.length ? list[0].cameraId : null;
+    },
+    beforeCreate(u, parent, ctx) {
+      const set = props(u), bad = posNorm(set, {}, ctx);
+      Object.keys(set).forEach((k) => set[k] === null && delete set[k]);
+      return bad;
+    },
+    beforeSet(u, patch, whole, ctx) {
+      return patch.properties ? posNorm(patch.properties, props(u), ctx) : null;
+    },
+    // Сырые строки: от старых к новым, последние limit. Пока источнику ничего не подкладывали (и не очищали), вместо строк —
+    // пример чека (заглушка стенда): он не хранится, первая подложенная строка начинает список с []
+    raw(rec, q, ctx) {
+      const n = q.limit === undefined ? 50 : Number(q.limit);
+      if (!Number.isInteger(n) || n < 1 || n > 200) return ctx.problem(422, "VALIDATION_FAILED", "limit от 1 до 200", { field: "/limit" });
+      const list = rawOf(ctx).get(rec.id) || POS_RAW_SAMPLE.map(([text, ago]) => ({ at: ctx.iso(ctx.now() - ago * 1000), text }));
+      return { status: 200, body: { items: clone(list.slice(-n)) } };
+    },
+    // Строка от кассы по at (позже всех — в конец); clear: true очищает список, пример чека больше не возвращается
+    push(rec, body, ctx) {
+      const all = rawOf(ctx);
+      if (body.clear === true) {
+        all.set(rec.id, []);
+        return { status: 200, body: { applied: true } };
+      }
+      const text = body.text;
+      if (typeof text !== "string" || !text || text.length > 1000) return ctx.problem(422, "VALIDATION_FAILED", "text: строка до 1000 символов", { field: "text" });
+      const at = body.at === undefined ? ctx.iso(ctx.now()) : body.at;
+      if (Number.isNaN(Date.parse(at))) return ctx.problem(422, "VALIDATION_FAILED", "at: дата и время", { field: "at" });
+      const list = all.get(rec.id) || [];
+      let i = list.length;
+      while (i > 0 && Date.parse(list[i - 1].at) > Date.parse(at)) i--;
+      list.splice(i, 0, { at, text });
+      all.set(rec.id, list.slice(-POS_RAW_KEEP));
+      return { status: 200, body: { applied: true } };
+    },
+  };
+
   const HOOKS = {
     "vms.domain/1": domain, "vms.server/1": server, "vms.folder/1": folder, "vms.archive/1": archive, "vms.volume/1": volume,
     "vms.camera/1": camera, "vms.stream/1": stream, "vms.detector/1": detector, "vms.acs/1": acs,
-    "vms.live/1": live, "vms.ptz/1": ptz, "vms.talk/1": talk, "vms.timeline/1": timeline,
+    "vms.live/1": live, "vms.ptz/1": ptz, "vms.talk/1": talk, "vms.timeline/1": timeline, "vms.pos/1": pos,
   };
 
   // DEVICE — хуки всех видов таблицы devices: сервер зовёт их первыми, затем хуки профилей вида

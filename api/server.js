@@ -488,7 +488,7 @@
     const HOOKS = Profiles.HOOKS;
     const hFolder = HOOKS["vms.folder/1"];
     const hDevice = Profiles.DEVICE, hCamera = HOOKS["vms.camera/1"], hStream = HOOKS["vms.stream/1"], hDetector = HOOKS["vms.detector/1"], hAcs = HOOKS["vms.acs/1"];
-    const hLive = HOOKS["vms.live/1"], hPtz = HOOKS["vms.ptz/1"], hTalk = HOOKS["vms.talk/1"], hTimeline = HOOKS["vms.timeline/1"];
+    const hLive = HOOKS["vms.live/1"], hPtz = HOOKS["vms.ptz/1"], hTalk = HOOKS["vms.talk/1"], hTimeline = HOOKS["vms.timeline/1"], hPos = HOOKS["vms.pos/1"];
     const pctx = {
       get units() { return store; },
       get kinds() { return kinds; },
@@ -658,7 +658,7 @@
     const journalAbout = (e, id) => {
       if (e.deviceId === id) return true;
       const rec = e.deviceId && byId("devices", e.deviceId);
-      return !!rec && (rec.parentId === id || rec.cameraId === id);
+      return !!rec && (rec.parentId === id || rec.cameraId === id || (rec.overlays || []).some((o) => o.cameraId === id));
     };
     const can = (feature) => caps().features.includes(feature);
 
@@ -691,7 +691,7 @@
       }
       if (message.type === "journal.event") {
         const rec = byId("devices", message.entityId);
-        Object.defineProperty(message, "near", { value: [message.entityId, rec && rec.parentId, rec && rec.cameraId].filter(Boolean), enumerable: false });
+        Object.defineProperty(message, "near", { value: [message.entityId, rec && rec.parentId, rec && rec.cameraId].concat(rec && Array.isArray(rec.overlays) ? rec.overlays.map((o) => o.cameraId) : []).filter(Boolean), enumerable: false });
       }
       history.push(message);
       if (history.length > STREAM_DEPTH) history.shift();
@@ -2959,6 +2959,15 @@
           if (v === undefined) delete u.properties[n];
           else u.properties[n] = v;
         });
+        // Источник событий: cameraId — всегда первая камера overlays (снятая из списка камера не оставляет прежнего значения)
+        const ov = props(u).overlays;
+        if (Array.isArray(ov) && names.length) {
+          const want = ov.length ? ov[0].cameraId : null;
+          if ((props(u).cameraId == null ? null : props(u).cameraId) !== want) {
+            if (!("cameraId" in before)) before.cameraId = props(u).cameraId === undefined ? null : clone(props(u).cameraId);
+            u.properties.cameraId = want;
+          }
+        }
         if (!Object.keys(before).length) return;
         store.reindex(u.uid);
         bump(u);
@@ -3885,6 +3894,8 @@
       ["DELETE", "/units/{uid}/presets/{n}", (p) => subject(p.uid, "vms.ptz/1", (rec) => presetsDone(rec, hPtz.drop(rec, Number(p.n), pctx)))],
       ["PUT", "/units/{uid}/recording-target", (p, q, body) => subject(p.uid, "vms.camera/1", (rec) => hCamera.setTarget(rec, body, pctx) || one(unitView(store.get(rec.id))))],
       // Сутки с записью для календаря окна выгрузки: камера — профилем vms.camera/1, сутки — по шкале хука vms.timeline/1
+      // Сырые строки от кассы (vms.pos/1): настройка слов начала, конца и подсветки по живым данным
+      ["GET", "/units/{uid}/pos/raw", (p, q) => subject(p.uid, "vms.pos/1", (rec) => hPos.raw(rec, q, pctx))],
       ["GET", "/units/{uid}/recording-days", (p, q) => subject(p.uid, "vms.camera/1", (rec) => hTimeline.days(rec, q, pctx))],
       /* ----- Выгрузка: камеры заказа — по uid ----- */
       [
@@ -4917,11 +4928,18 @@
           }
           if (body.type === "journal.event") {
             if (!byId("devices", body.deviceId)) return notFound("Устройство");
-            const dev = byId("devices", body.deviceId), at = iso(now()), cameraId = dev.type === "camera" ? dev.id : dev.cameraId || dev.parentId;
+            const dev = byId("devices", body.deviceId), at = iso(now()), cameraId = dev.type === "camera" ? dev.id : (Array.isArray(dev.overlays) && dev.overlays.length ? dev.overlays[0].cameraId : dev.cameraId) || dev.parentId;
             const e = Object.assign({ id: uuid("journal"), at, occurredAt: at, category: "info", text: "", deviceId: body.deviceId }, cameraId ? { cameraId } : {}, clone(body.event || {}), { deviceId: body.deviceId });
             db.journal.unshift(e);
             send("journal.event", { entityId: e.deviceId, payload: clone(e) });
             return { status: 200, body: { applied: true } };
+          }
+          // Касса передала сырую строку: к последним строкам источника (GET /units/{uid}/pos/raw)
+          if (body.type === "pos.raw") {
+            const u = store.get(body.deviceId);
+            if (!u) return notFound("Объект");
+            if (!kinds.profileOf(u.kind, "vms.pos/1")) return problem(422, "NOT_SUPPORTED", `Вид ${u.kind} не реализует vms.pos/1`, { field: "/kind", params: { kind: u.kind, profile: "vms.pos/1" } });
+            return hPos.push(legacy.view(u), body, pctx);
           }
           if (body.type === "scenario.outcome") {
             if (!byId("domains", body.domainId)) return notFound("Домен");

@@ -495,7 +495,7 @@ def check_fixture(rep, spec, fx, label="Эталонный набор"):
 # Незнакомый x-* клиент пропускает, поэтому он не ошибка; незнакомое ключевое слово без x- — ошибка
 KIND_KEYWORDS = {"type", "enum", "const", "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "minLength", "maxLength", "pattern", "format",
                  "items", "minItems", "maxItems", "required", "default", "readOnly", "writeOnly", "if", "then", "else", "dependentSchemas",
-                 "description", "title", "properties", "additionalProperties"}
+                 "description", "title", "properties", "additionalProperties", "deprecated"}
 KIND_TYPES = {"string", "integer", "number", "boolean", "array", "object", "null"}
 KIND_FLAGS = ("x-search", "x-immutable", "x-unique", "x-ui-filter", "x-ui-advanced")
 UUID_ANY = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-4000-8000-[0-9a-f]{12}")
