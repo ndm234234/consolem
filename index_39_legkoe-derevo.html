@@ -145,14 +145,14 @@ aside,main{min-height:0;overflow:hidden}aside{background:var(--one-canvas);borde
 /* Прототип 39: вторая строка шапки — статус слева, раскрытие дерева справа */
 .ph-row.ph-row-st{flex-wrap:nowrap}
 .ph-st{display:inline-flex;align-items:center;gap:2px;min-width:0;flex:1 1 auto}
-.ph-stc-list{display:inline-flex;align-items:center;gap:2px;min-width:0}
-.ph .ph-choice.ph-stc{gap:3px;padding:0 6px 0 3px;color:var(--one-fg)}
-.ph-stc .st-dot{margin:0 2px}
-.ph-stc-n{font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
-.ph .ph-choice.ph-stc.zero{opacity:.4;cursor:default}
-.ph-stc-n:empty{display:none}
-.ph .ph-choice.ph-stc.zero:hover{background:transparent;border-color:transparent}
 .ph-row-st .ph-tools{margin-left:auto;flex:none}
+/* Прототип 39: окно у значка статуса */
+.st-tip{display:none;position:fixed;z-index:60;max-width:280px;padding:8px 10px;border:1px solid var(--ln);border-radius:6px;background:var(--p);color:var(--tx);box-shadow:0 8px 24px #0008;font-size:12px;line-height:1.4}
+.st-tip.open{display:block}
+.st-tip-h{display:flex;align-items:center;gap:6px;margin-bottom:2px}
+.st-tip-fix{margin-top:4px;color:var(--mu)}
+[data-st]{cursor:help}
+
 .ph-cnt{flex:none;min-width:18px;padding:1px 5px;border-radius:99px;background:var(--one-control-bg);color:var(--one-fg-muted);font-size:10px;font-weight:600;line-height:1.4;font-variant-numeric:tabular-nums}
 .ph-choice.on .ph-cnt{background:var(--one-selected-neutral);color:var(--one-fg)}
 /* Число среза: нет числа — нет и места; у оценки («Камеры», «Оборудование») место под «≈оценку» есть всегда — невидимый двойник */
@@ -2410,8 +2410,10 @@ html[data-theme="light"] .ts-banner{background:var(--one-control-hover);color:va
 .n-err.n-err-t{font-size:10px;line-height:1.2;white-space:nowrap;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .n-err.e-auth{color:var(--one-warning-icon)}.n-err.e-conn{color:var(--one-danger)}.n-err.e-drv{color:var(--one-palette-purple)}
 .n:not(:hover):not(.on) .n-err-t{opacity:.85}
-/* Прототип 39: число объектов — только у свёрнутой ветки. Место колонки остаётся: соседи не сдвигаются */
-#tree .n:has(> .tw > .tw-chev:not(.shut)) .n-cnt{visibility:hidden}
+/* Прототип 39: строка дерева «Оборудования» числа объектов не показывает. Дерево читает ветки по раскрытию, число
+   ветки известно не всегда, и в строках оно было то есть, то нет. Число — в подсказке строки (treeRowTip), когда оно
+   известно, и в карточке объекта */
+.gear-body #tree .n-meta>.n-cnt{display:none}
 .dev-err-nt{display:flex;gap:8px;align-items:flex-start}
 .dev-err-nt .n-err{margin-top:2px}
 .filt-pop .mi.mi-sub{padding-left:26px}
@@ -6639,11 +6641,11 @@ function treeIconHtml(n){
   // Сервер/домен без сигнала — та же иконка + красный крестик (сетка не плывёт)
   if((n.type==="server"||n.type==="domain")&&hasNoSignal(n)){
     const tip=infraNoSignalLabel(n);
-    return`<span class="ici ici-${n.type} ici-stmark ici-nosig" title="${tip}" aria-label="${tip}">${IC[n.type]||"•"}<span class="ici-overlay" aria-hidden="true">${IC_NOSIG_BADGE}</span></span>`;
+    return`<span class="ici ici-${n.type} ici-stmark ici-nosig" data-st="infra" data-st-id="${n.id}" aria-label="${tip}">${IC[n.type]||"•"}<span class="ici-overlay" aria-hidden="true">${IC_NOSIG_BADGE}</span></span>`;
   }
   if(n.type==="camera"&&n.ruleOff){
     const rt=ruleTmpTitle();
-    return`<span class="ici ici-camera ici-stmark ici-ruletmp" title="${rt}" aria-label="${rt}">${IC.camera||"•"}<span class="ici-overlay" aria-hidden="true">${IC_RULETMP_BADGE}</span></span>`;
+    return`<span class="ici ici-camera ici-stmark ici-ruletmp" data-st="ruletmp" data-st-id="${n.id}" aria-label="${rt}">${IC.camera||"•"}<span class="ici-overlay" aria-hidden="true">${IC_RULETMP_BADGE}</span></span>`;
   }
   return ic(n.type);
 }
@@ -6694,12 +6696,52 @@ function deviceStatusDotHtml(n,tag="i",cls="d"){
   if(!kind)return"";
   const titles={bad:i18n("Нет сигнала"),warn:i18n("Лицензия превышена"),mute:ruleTmpTitle()};
   const tip=titles[kind];
-  return `<${tag} class="${cls} ${kind}" title="${tip}" aria-label="${tip}"></${tag}>`;
+  const st={bad:"conn",warn:"license",mute:"ruletmp"}[kind];
+  return `<${tag} class="${cls} ${kind}" data-st="${st}" data-st-id="${n.id}" aria-label="${tip}"></${tag}>`;
 }
+// Прототип 39: всплывающее окно у значка статуса — что значит статус и что сделать. Окно появляется при наведении
+// через 250 мс, остаётся, пока курсор на значке или на окне, закрывается по Esc и прокрутке (WCAG 1.4.13).
+function stTipParts(kind,n){
+  const err=k=>[`${i18n("Нет сигнала")}: ${i18n(DEV_ERR[k].t).toLowerCase()}`,i18n({auth:"Устройство не принимает логин или пароль консоли.",conn:"Устройство не отвечает по сети.",drv:"Драйвер устройства перестал работать."}[k]),i18n(DEV_ERR[k].fix)];
+  if(DEV_ERR[kind])return err(kind);
+  if(kind==="license")return[i18n("Лицензия превышена"),i18n("Камера недоступна, пока лицензия не освободится."),i18n("Освободить лицензию или добавить лицензии в разделе «Опции».")];
+  if(kind==="ruletmp"){
+    const rr=n&&typeof n.ruleOff==="string"?rules.find(x=>x.id===n.ruleOff):null;
+    return[i18n("Выключена правилом"),rr?`${i18n("Правило")} «${rr.name}» ${i18n("временно выключило камеру.")}`:i18n("Правило временно выключило камеру."),i18n("Камеру включит правило. Правила настраивают в разделе «Автоматизация».")];
+  }
+  if(kind==="infra")return[infraNoSignalLabel(n),i18n(n?.type==="domain"?"Консоль не получает данные от домена и показывает только свои данные.":"Консоль не получает данные от сервера."),""];
+  return null;
+}
+let stTipT=null,stTipFor=null;
+function stTipEl(){
+  let el=document.getElementById("stTip");
+  if(!el){el=document.createElement("div");el.id="stTip";el.className="st-tip";el.setAttribute("role","tooltip");document.body.appendChild(el)}
+  return el;
+}
+function stTipShow(t){
+  const parts=stTipParts(t.dataset.st,find(t.dataset.stId)?.n);if(!parts)return;
+  const[head,what,fix]=parts,el=stTipEl();
+  const mark=DEV_ERR[t.dataset.st]?`<span class="n-err e-${t.dataset.st}">${devErrIc(t.dataset.st)}</span>`:"";
+  el.innerHTML=`<div class="st-tip-h">${mark}<b>${escHtml(head)}</b></div><div>${escHtml(what)}</div>${fix?`<div class="st-tip-fix">${escHtml(fix)}</div>`:""}`;
+  el.classList.add("open");stTipFor=t;
+  const r=t.getBoundingClientRect(),w=el.offsetWidth,h=el.offsetHeight;
+  let left=Math.min(Math.max(8,r.left+r.width/2-w/2),window.innerWidth-w-8),top=r.bottom+6;
+  if(top+h>window.innerHeight-8)top=r.top-h-6;
+  el.style.left=Math.round(left)+"px";el.style.top=Math.round(top)+"px";
+}
+function stTipHide(){clearTimeout(stTipT);stTipT=null;stTipFor=null;document.getElementById("stTip")?.classList.remove("open")}
+document.addEventListener("mouseover",e=>{
+  const t=e.target.closest?.("[data-st]");
+  if(t){clearTimeout(stTipT);if(t!==stTipFor)stTipT=setTimeout(()=>stTipShow(t),stTipFor?0:250);return}
+  if(e.target.closest?.("#stTip")){clearTimeout(stTipT);return}
+  if(stTipFor||stTipT){clearTimeout(stTipT);stTipT=setTimeout(stTipHide,200)}
+});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&stTipFor)stTipHide()},true);
+document.addEventListener("scroll",()=>{if(stTipFor)stTipHide()},true);
 function statusMarkHtml(n){
   const e=devErr(n);
   if(e){const tip=`${i18n("Нет сигнала")}: ${i18n(DEV_ERR[e].t)}`;
-    return`<span class="n-tail n-err e-${e}" title="${tip}" aria-label="${tip}">${devErrIc(e)}</span>`}
+    return`<span class="n-tail n-err e-${e}" data-st="${e}" data-st-id="${n.id}" aria-label="${tip}">${devErrIc(e)}</span>`}
   const dot=deviceStatusDotHtml(n);
   return dot?`<span class="n-tail">${dot}</span>`:"";
 }
@@ -7944,7 +7986,6 @@ function filtChromePaint(){
     const dot=btn.querySelector(".st-dot");if(dot)dot.className=`st-dot st-${(st||"all").split(":")[0]}`;
     const label=btn.querySelector(".ph-status-label");if(label)label.textContent=statusLabel(st);
   }
-  statusCountersPaint();
   sliceCntsPaint([...document.querySelectorAll("#aside .ph-choice[data-slice]")]);
   syncGoInput();
   if(tags)tags.innerHTML=tagsHtml();
@@ -8211,41 +8252,13 @@ function asideAdd(){return{
 function treeCntHtml(n){
   return`<span class="n-cnt">${n||""}</span>`;
 }
-// Прототип 39: счётчики проблем рядом с «Все статусы» — всегда три, всегда в этом порядке, чтобы ряд не менялся.
-// Число — то же, что в меню (statusCount): объекты среза с учётом поиска и типа. Консоль читает устройства частями,
-// поэтому счётчики перерисовываются после каждой перерисовки дерева (statusCountersPaint), а не только при смене фильтра.
-// Счётчик горит, только когда выбран ровно этот статус: причина («Нет сигнала: нет связи») — выбор из меню, не счётчик.
-// Щелчок включает статус, щелчок по горящему счётчику снимает фильтр. Счётчик с нулём бледный и не нажимается.
-const STATUS_COUNTERS=["nosignal","off","license"];
-function statusCountsAll(ids){
-  const q=qval(),out=Object.fromEntries(ids.map(id=>[id,0]));
-  walkSliceObjects((x,p)=>{
-    if(!((slice==="det"?detSliceHit(x,p,q):inSlice(x)&&matchesSearch(x,q))&&matchesType(x)&&(slice!=="arch"||x.type==="archive")))return;
-    for(const id of ids)if(statusIs(x,id))out[id]++;
-  });
-  return out;
-}
-// Число статуса полное, когда консоль прочитала срез целиком, поиск по срезу дошёл до конца или сервер нашёл все
+// Прототип 39: число статуса в меню полное, когда консоль прочитала срез целиком, поиск по срезу дошёл до конца или сервер нашёл все
 // объекты именно этого статуса (выбран он). Иначе — «N+», как у кнопок срезов: консоль прочитала пока часть устройств.
 function statusCntFull(id){
   if(sliceAllRead(slice)||sliceFoundAll(slice))return true;
   return!!fs&&!fs.pick&&fs.done&&!fs.failed&&!typeFilts.size&&curStatus()===id;
 }
 function statusCntText(id,n){return statusCntFull(id)?sliceNum(n):n?`${sliceNum(n)}+`:""}
-function statusCountersHtml(){
-  const st=curStatus(),cnt=statusCountsAll(STATUS_COUNTERS);
-  return STATUS_COUNTERS.map(id=>{
-    const n=cnt[id],on=st===id,full=statusCntFull(id),zero=full&&!n&&!on;
-    const what=full?`${statusLabel(id)}: ${sliceNum(n)}.`:n?`${statusLabel(id)}: ${i18n("консоль нашла пока")} ${sliceNum(n)}. ${i18n("Их может быть больше.")}`:`${statusLabel(id)}: ${i18n("консоль прочитала ещё не все устройства.")}`;
-    const tip=zero?what:`${what} ${i18n(on?"Показать все статусы":"Показать только их")}`;
-    return`<button type="button" class="ph-choice ph-stc ${on?"on":""} ${zero?"zero":""}" data-stc="${id}" aria-pressed="${on}" ${zero?"disabled":""} title="${escHtml(tip)}" aria-label="${escHtml(tip)}" ${onEv("click",["statusCounterPick",`${id}`])}><span class="st-dot st-${id}" aria-hidden="true"></span><span class="ph-stc-n">${statusCntText(id,n)||""}</span></button>`;
-  }).join("");
-}
-function statusCountersPaint(){
-  const el=document.getElementById("phStc");if(!el)return;
-  const h=statusCountersHtml();if(el.innerHTML!==h)el.innerHTML=h;
-}
-function statusCounterPick(id){pickStatus(curStatus()===id?"":id)}
 function filtPopHtml(){
   const st=curStatus();
   return`<div class="filt-pop status-pop ${filtPop?"open":""}" id="filtPop" role="menu" aria-label="${i18n("Статус")}" ${onEv("click",onEv.stop)} ${onEv("keydown",["statusMenuKey",onEv.event])}>
@@ -8706,7 +8719,6 @@ function renderTree(){
     if(!q.chrome)treeSoonClear();
   }
   treePaint();
-  if(app==="hw")statusCountersPaint();
   after.forEach(f=>f());
 }
 // Моргание строки дерева (acc-flash: переход по ссылке, treeReveal) переживает перерисовку: новая строка той же
@@ -9560,7 +9572,6 @@ function panelHeadHtmlRun(){
   </span></span></div><div class="ph-row ph-row-st">
     <span class="ph-st" role="group" aria-label="${i18n("Статус")}">
     <button type="button" class="ph-choice ph-status ${filtPop||st?"on":""}" id="filtBtn" aria-haspopup="menu" aria-controls="filtPop" aria-expanded="${filtPop}" title="${statusLabel(st)}" ${onEv("click",["toggleFiltPop",onEv.event])}><span class="st-dot st-${(st||"all").split(":")[0]}" aria-hidden="true"></span><span class="ph-status-label">${statusLabel(st)}</span><span class="ph-chevron" aria-hidden="true"><svg class="btn-chev" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5.5 7.75 4.5 4.5 4.5-4.5"/></svg></span></button>
-    <span class="ph-stc-list" id="phStc">${statusCountersHtml()}</span>
     </span>
     <span class="ph-tools" role="group" aria-label="${i18n("Раскрытие дерева")}">
       <button type="button" class="ph-tool" id="treeCollapseBtn" title="${i18n("Свернуть всё")}" aria-label="${i18n("Свернуть всё")}" ${onEv("click",["treeCollapseAll"])}>${TREE_IC.shut}</button>
