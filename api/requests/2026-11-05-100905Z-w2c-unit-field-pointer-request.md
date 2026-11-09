@@ -2,7 +2,7 @@
 
 2026-11-05 · контракт 0.2.0, коммит `11f0620` (`api/openapi.json` и `api/server.js` не менялись до `90acc78`) · от команды w2c (бэкенд VMS)
 
-**Статус: новый**
+**Статус: отвечен · [ответ от 2026-11-09](2026-11-05-100905Z-w2c-unit-field-pointer-response.md)**
 
 Общее правило в контракте уже записано. У `Problem.field` сказано: «На путях ядра (/units…) — всегда JSON Pointer в теле запроса». Описания путей `/units/{uid}/…` его повторяют: «field отказа — JSON Pointer: в теле запроса (/streamId), свойство объекта — /properties/<имя>». Так же написаны `/kind` у всех путей, `/params/…` у `runUnitAction`, `/from` и `/to` у `getUnitRecordingDays`, `/to` у `BookmarkCreate`.
 
