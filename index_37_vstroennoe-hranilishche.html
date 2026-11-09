@@ -2327,7 +2327,9 @@ html[data-theme="light"] .cp-step{background:var(--one-control-hover);color:var(
 .er-bulk.on{border-color:var(--bl);background:var(--one-selected-neutral)}
 .er-bulk-n{flex:none;min-width:120px;white-space:nowrap}
 .er-rules-nt{margin:0 0 10px}.er-rules td .btn{white-space:nowrap}
-.er-rules-add{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:10px}
+.er-rules-add{margin-top:12px}.er-rules-add>.sub{display:block;margin-bottom:8px}
+.er-t-rule:hover{border-color:var(--bl)}.er-t-go{display:flex;align-items:center;gap:5px;color:var(--x-link);font-size:12px}
+.er-pull{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px 10px;align-items:center;margin-top:10px}.er-pull label{margin:0}.er-pull input{width:100%;min-width:0;box-sizing:border-box}
 /* Прототип 37: общий вид встроенных хранилищ и история репликации */
 .eo-wrap{overflow-x:auto}.eo-tbl{min-width:620px}.eo-tbl td{padding-top:7px;padding-bottom:7px}
 .eo-sub{display:block;color:var(--mu);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -13286,9 +13288,11 @@ function wzResume(id){
   delete wzMem[id];d.set?.(s);d.show(s);wzDock();
 }
 function wzCancel(id){
-  const d=WZD[id],s=d.get()||wzPeek(id),stop=()=>{d.clear?.();wzDrop(id);d.hide()};
+  // Прототип 37: мастер правила открыт со страницы встроенного хранилища — отмена возвращает на эту страницу
+  const back=id==="rule"?(WZD.rule.get()||wzPeek(id))?.back:null;
+  const d=WZD[id],s=d.get()||wzPeek(id),stop=()=>{d.clear?.();wzDrop(id);d.hide();if(back)ruleNewReturn(back)};
   if(d.busy?.()){toast("Консоль ещё применяет план. Подождать конца");return}
-  if(!s||!d.work(s)){stop();return}
+  if(!s||!d.work(s)||back){stop();return}   // с хранилища выбран только шаблон: та же кнопка вернёт его, спрашивать не о чем
   askConfirm(i18n("Отменить создание?"),i18n(d.lost),"",i18n(d.drop||"Удалить черновик"),stop,{cancelLabel:i18n("Остаться")});
 }
 function wzCancelQuiet(id){const d=WZD[id];d.clear?.();wzDrop(id);d.hide()}
@@ -16934,7 +16938,7 @@ function ruleNewOpen(preset){
   // Без готового события — продолжаем незавершённое; с ним — спрашиваем: это другое правило
   wzStart("rule",()=>{
     const tpl=(preset&&preset.tpl)||"";
-    rnw={step:tpl?1:0,start:(preset&&preset.start)||ruleNewStartDef(),tpl,reveal:!!tpl,preset:preset&&(preset.when||preset.then)?preset:null};
+    rnw={step:tpl?1:0,start:(preset&&preset.start)||ruleNewStartDef(),tpl,reveal:!!tpl,back:(preset&&preset.back)||null,preset:preset&&(preset.when||preset.then)?preset:null};
     ruleNewRender();
   },()=>!preset);
 }
@@ -16971,11 +16975,12 @@ function ruleNewRender(){
     st.k==="start"?`${pre}<div class="rl-opts" data-rnw>${starts}</div>`
       :`${pre}${tplCount>=CBX_MIN?`<input type="text" class="rl-tpl-q" placeholder="${i18n("Найти шаблон…")}" aria-label="${i18n("Найти шаблон")}" autocomplete="off" value="${escHtml(rnw.q||"")}" ${onEv("input",["ruleTplType",onEv.value])}>`:""}<div class="rl-opts rl-opts-2" data-rnw>${tpls}<p class="sub rl-tpl-none" hidden>${i18n("Ничего не найдено")}</p></div>
      <p class="sub">${i18n("Консоль создаёт правило выключенным. Правило появится в списке после «Применить». Чтобы включить правило, открыть его карточку.")}</p>`,
-    wzFootHtml({cancel:["wzCancel","rule"],sum:[i18n(startName),rnw.step?i18n(tplName):""].filter(Boolean).join(" · "),back:rnw.step?["ruleNewGo",0]:null,next:{label:i18n(last?"Создать правило":"Далее"),on:last?["ruleNewCreate"]:["ruleNewGo",1]}}));
+    wzFootHtml({cancel:["wzCancel","rule"],sum:[i18n(startName),rnw.step?i18n(tplName):""].filter(Boolean).join(" · "),back:rnw.step?(rnw.back?["wzCancel","rule"]:["ruleNewGo",0]):null,next:{label:i18n(last?"Создать правило":"Далее"),on:last?["ruleNewCreate"]:["ruleNewGo",1]}}));
   if(rnw.q&&st.k==="tpl"&&tplCount>=CBX_MIN)ruleTplFilter(rnw.q);
   // Прототип 37: мастер открыт с готовым шаблоном — прокрутить к нему, иначе выбор скрыт под прокруткой
-  if(rnw.reveal&&st.k==="tpl"){rnw.reveal=false;setTimeout(()=>document.querySelector("#bmBody .rl-opt.on")?.scrollIntoView({block:"center"}),320)}
+  if(rnw.reveal&&st.k==="tpl"){rnw.reveal=false;setTimeout(()=>document.querySelector("#bmBody .rl-opt.on")?.scrollIntoView({block:"center",behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"}),320)}
 }
+function ruleNewReturn(b){if(!find(b.id))return;setApp("hw");hwJumpFlash=true;pick(b.id,{tab:b.tab});hwJumpFlash=false}
 const RULE_NEW_STEPS=[{k:"start",t:"Как запускается"},{k:"tpl",t:"С чего начать"}];
 function ruleNewGo(i){rnw.step=+i;ruleNewRender()}
 // Монотонный счётчик: номер правила не переиспользуется, даже если прежнее удалено
@@ -25141,10 +25146,20 @@ const EDGE_TYPES=[
     fit:"Канал слабый: сеть нагружается равномерно, архив отстаёт на минуты.",ax:"Axxon One: режим репликации «Always»",strip:"PPPPPPPPPPPPPPPPPPPPPPPP"}
 ];
 // Шаблоны правил репликации (RULE_TPL): что делает правило и как подставить в него камеры хранилища
+// Карточка шаблона — как прежние типы репликации: полоса за сутки, когда выбрать, аналог в Axxon One; нажатие создаёт правило
 const EDGE_RULE_TPL=[
-  {tpl:"rgap",name:"Заполнять пропуски",sub:"После обрыва потока сервер забирает пропущенные минуты.",slot:"when"},
-  {tpl:"rsch",name:"По расписанию",sub:"Сервер забирает записи в заданное время, например ночью.",slot:"then"},
-  {tpl:"revt",name:"Только события",sub:"Сервер забирает фрагменты вокруг движения.",slot:"when"}];
+  {tpl:"rgap",name:"Заполнять пропуски",sub:"После обрыва потока сервер забирает пропущенные минуты.",slot:"when",
+    cam:"Камера передаёт видео на сервер. Когда связь пропадает, камера пишет на карту. После восстановления связи сервер забирает с карты только пропущенные минуты.",
+    nvr:"Регистратор передаёт видео на сервер. Когда связь пропадает, регистратор пишет на свой диск. После восстановления связи сервер забирает только пропущенные минуты.",
+    fit:"Связь с устройством иногда пропадает.",ax:"Axxon One: макрос «Offline periods» по событию «Signal restored»",strip:"LLLLLLLLLPPLLLLLLLLLLLLL"},
+  {tpl:"rsch",name:"По расписанию",sub:"Сервер забирает записи в заданное время, например ночью.",slot:"then",
+    cam:"Камера пишет на карту. Сервер забирает записи только в заданное время, например ночью.",
+    nvr:"Регистратор пишет на диск. Сервер забирает записи только в заданное время, например ночью.",
+    fit:"Днём канал нужен для живого видео.",ax:"Axxon One: «On demand» и макрос «Time schedule»",strip:"PPPPPPCCCCCCCCCCCCCCCCPP"},
+  {tpl:"revt",name:"Только события",sub:"Сервер забирает фрагменты вокруг движения.",slot:"when",
+    cam:"Камера пишет на карту. Сервер забирает только фрагменты вокруг событий: движения, тревоги.",
+    nvr:"Регистратор пишет на диск. Сервер забирает только фрагменты вокруг событий: движения, тревоги.",
+    fit:"Нужно сберечь канал и место в архиве.",ax:"Axxon One: «On demand» и макрос по событию",strip:"CCCPCCCCPPCCCCCPCCCCCCCC"}];
 function edgeType(id){return EDGE_TYPES.find(t=>t.id===id)||EDGE_TYPES[0]}
 function edgeHash(s){let h=0;for(const c of String(s))h=(h*31+c.charCodeAt(0))>>>0;return h}
 function edgeOwner(st){return find(st.id)?.p||null}
@@ -25233,7 +25248,8 @@ function edgeRuleNew(id,tpl){
   const ref=refMake(edgeCams(st).map(c=>c.id),[]),b=t.make();
   const it=ruleClone((d.slot==="when"?b.when:b.then)[0]);it.ref=ref;
   ruleQuiet=true;setApp("rules");ruleQuiet=false;
-  ruleNewOpen(ref?{start:t.start,tpl,[d.slot]:[it],note:"Консоль подставила камеры встроенного хранилища."}:{start:t.start,tpl});
+  const back={id,tab:"rep"};
+  ruleNewOpen(ref?{start:t.start,tpl,back,[d.slot]:[it],note:"Консоль подставила камеры встроенного хранилища."}:{start:t.start,tpl,back});
 }
 function edgeRulesGo(){const tpl=EDGE_RULE_TPL.map(d=>d.tpl).find(edgeTplOk);ruleQuiet=true;setApp("rules");ruleQuiet=false;ruleNewOpen(tpl?{start:RULE_TPL.find(x=>x.id===tpl).start,tpl}:null)}
 // Демо: одно правило «Заполнять пропуски» на половину камер с картой, чтобы у хранилищ был список правил. Заглушка
@@ -25261,7 +25277,9 @@ function edgeRulesHtml(st){
       const cams=new Set(edgeCams(st).map(c=>c.id)),a=edgeRepActs(r.then).find(x=>edgeActHits(r,x,cams))||{},per=(actionKind(a).fields||[]).find(f=>f.id==="period")?.opts?.find(o=>o[0]===a.period);
       return`<tr><td class="er-ell" title="${escHtml(r.name)}">${lu("zap",14)} ${escHtml(r.name)}</td><td class="er-ell">${escHtml(per?i18n(per[1]):"—")}</td><td><span class="er-st ${r.on?"ok":"off"}">${i18n(r.on?"работает":"выключено")}</span></td><td><button type="button" class="btn s" ${onEv("click",["ruleGoRule",r.id])}>${i18n("Открыть правило")}</button></td></tr>`}).join("")}</tbody></table>`
     :`<p class="sub">${i18n("Правил, которые забирают записи")} ${w.from}, ${i18n("нет.")}</p>`;
-  const add=can("createRule")&&EDGE_RULE_TPL.some(d=>edgeTplOk(d.tpl))?`<div class="er-rules-add"><span class="sub">${i18n("Создать правило для этого хранилища:")}</span>${EDGE_RULE_TPL.filter(d=>edgeTplOk(d.tpl)).map(d=>`<button type="button" class="btn s" title="${escHtml(i18n(d.sub))}" ${onEv("click",["edgeRuleNew",id,d.tpl])}>${i18n(d.name)}</button>`).join("")}</div>`:"";
+  const nvr=edgeIsNvr(st);
+  const add=can("createRule")&&EDGE_RULE_TPL.some(d=>edgeTplOk(d.tpl))?`<div class="er-rules-add"><span class="sub">${i18n("Создать правило для этого хранилища. Консоль откроет мастер правила с выбранным шаблоном и камерами хранилища.")}</span><div class="er-types">${EDGE_RULE_TPL.filter(d=>edgeTplOk(d.tpl)).map(d=>`<button type="button" class="er-t er-t-rule" ${onEv("click",["edgeRuleNew",id,d.tpl])}>
+      <b>${i18n(d.name)}</b>${edgeStripHtml(d.strip)}<small>${i18n(nvr?d.nvr:d.cam)}</small><small class="er-fit">${i18n("Когда выбрать:")} ${i18n(d.fit)}</small><small class="er-ax">${escHtml(d.ax)}</small><span class="er-t-go">${lu("zap",13)} ${i18n("Создать правило…")}</span></button>`).join("")}</div>${edgeLegendHtml()}</div>`:"";
   return card("Репликация по правилам",note+rows+add,`<span class="sub" style="font-weight:400">${list.length}</span>`);
 }
 // Редактор репликации одного встроенного хранилища
@@ -25300,7 +25318,7 @@ function edgeExclToggle(id,camId){const st=find(id)?.n;if(!st)return;const p=edg
 function edgePullAsk(id){
   const st=find(id)?.n;if(!st)return;const w=edgeWord(st);
   askConfirm("Забрать период",`<p>${i18n("Сервер заберёт записи")} ${w.from} ${i18n("за выбранный период, даже если тип репликации их не берёт.")}</p>
-    <div class="g"><div><label>${i18n("С")}</label><input id="erPullFrom" type="datetime-local" value="2026-11-08T08:00"></div><div><label>${i18n("До")}</label><input id="erPullTo" type="datetime-local" value="2026-11-08T09:00"></div></div>`,
+    <div class="er-pull"><label for="erPullFrom">${i18n("С")}</label><input id="erPullFrom" type="datetime-local" value="2026-11-08T08:00"><label for="erPullTo">${i18n("До")}</label><input id="erPullTo" type="datetime-local" value="2026-11-08T09:00"></div>`,
     "","Забрать",()=>toast(i18n("Сервер забирает период. Заглушка: сервер ничего не забирает.")),{html:true});
 }
 function edgeStatusHtml(st){
