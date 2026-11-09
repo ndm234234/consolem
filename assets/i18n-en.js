@@ -2160,4 +2160,13 @@ window.I18N_EN={
 "с после последней строки":"s after the last line",
 "Держать до следующей строки":"Keep until the next line",
 "Чек остаётся на экране, пока касса не пришлёт новую строку.":"The receipt stays on the screen until the cash desk sends a new line.",
+// Выбор камер: «Папки» — области или дерево устройств; «Периферия» — стандартный фильтр
+"Показать дерево устройств":"Show the device tree",
+"Показать папки":"Show folders",
+"Серверы и устройства":"Servers and devices",
+"Вне дерева":"Outside the tree",
+"исключено":"excluded",
+"Выбрать все показанные":"Select all shown",
+"выключен":"off",
+"Отметить строки, чтобы включить или выключить сразу несколько объектов.":"Select rows to turn several objects on or off at once.",
 };
