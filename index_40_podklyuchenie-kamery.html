@@ -860,6 +860,9 @@ table.gtbl-cams td.gtbl-na{color:var(--mu);text-align:left}
 html[data-theme="light"] .cp.done{border-color:var(--one-success-icon);color:var(--one-success-icon)}
 .it .cp{min-width:126px;justify-content:space-between}
 .lst-sq{margin-bottom:10px}
+.lst-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}.lst-bar .lst-sq{flex:1 1 220px;margin-bottom:0}
+.lst-bar .lst-add{flex:0 0 auto;width:auto;field-sizing:content;max-width:100%}
+.cam-conn .cam-conn-full{grid-column:1/-1}
 /* Поиск лежит на светлой карточке, а общий вид .sq рассчитан на тёмный фон:
    вдавленное тёмное поле на белом читалось бы как чужеродная плашка. */
 html[data-theme="light"] .lst-sq{background:var(--p2);border-color:var(--ln);box-shadow:none}
@@ -6354,7 +6357,7 @@ const CARD_PROP={recordScheduleId:"Расписание записи",retentionD
   days:"Глубина, дней",enc:"Шифрование",storage:"Тип хранения",vols:"Тома",kind:"Тип",sens:"Чувствительность",license:"Лицензия",
   codec:"Кодек",res:"Разрешение",fps:"к/с",stream:"Поток",lat:"Широта",lon:"Долгота",azimuth:"Азимут",user:"Имя пользователя",pass:"Пароль"};
 // Поле карточки → свойство объекта, куда его запишет «Применить».
-const CARD_FLD_PROP={"Имя":"name","Короткое имя":"short","IP":"ip","Порт":"port","Производитель":"vendor","Модель":"model",
+const CARD_FLD_PROP={"Имя пользователя":"user","Пароль":"pass","Имя":"name","Короткое имя":"short","IP":"ip","Порт":"port","Производитель":"vendor","Модель":"model",
   "Широта":"lat","Долгота":"lon","Азимут":"azimuth","MAC":"mac","Адрес кассы или сервера":"ip","Адрес":"path","Номер канала":"ch","Роль":"role",
   "Канал":"ch","Номер":"ch","Папка":"path","Формат":"format","Режим":"mode","SMTP сервер":"smtp","От кого":"from","Получатели":"to","Шлюз / API":"gateway"};
 function cardFmt(k,v){
@@ -11340,9 +11343,10 @@ function listSearchHtml(key,ph,how){
 // Пустому списку инструменты не нужны: искать в нём нечего, листать тоже, и
 // строка поиска над «здесь ничего нет» только сбивала бы с толку.
 function listBodyHtml(o){
-  if(!o.items.length)return`<p class="sub">${i18n(o.empty||"Список пуст")}</p>`+(o.extra||"");
+  if(!o.items.length)return(o.tools?`<div class="lst-bar">${o.tools}</div>`:"")+`<p class="sub">${i18n(o.empty||"Список пуст")}</p>`+(o.extra||"");
   const found=listFound(o),rows=pageSlice(o.key,found).map(o.row).join("");
-  return listSearchHtml(o.key,o.ph,o.how)
+  // tools — действие над списком (добавить): в одной строке с поиском, а не под списком, где его не видно
+  return (o.tools?`<div class="lst-bar">${listSearchHtml(o.key,o.ph,o.how)}${o.tools}</div>`:listSearchHtml(o.key,o.ph,o.how))
     +(o.mid?o.mid(found):"")
     +`<div class="pg-rows">${rows?(o.wrap?o.wrap(rows):rows):`<p class="sub">${i18n("Ничего не найдено")}</p>`}</div>`
     +(o.extra||"")
@@ -12402,6 +12406,43 @@ function removeDeviceFromFolder(fid,id){
 }
 // Выбор папки в списке: добавить и сбросить список к подсказке
 function addDeviceToFolderPick(el,id){addDeviceToFolder(el.value,id);el.value=""}
+// Подключение камеры — как в окне «Добавить устройства → По адресу»: производитель, модель, затем адрес.
+// У производителя RTSP адрес — одно поле потока вместо IP и порта.
+function camConnVal(n,l,v){return cardFldVal(l,cardFldOrig(l,v))}
+function camConnHtml(n){
+  const vendor=camConnVal(n,"Производитель",n.vendor||""),model=camConnVal(n,"Модель",n.model||""),rtsp=isRtspVendor(vendor);
+  return `<div class="g cam-conn">
+    <div><label>${i18n("Производитель")}</label>${comboVendorHtml(vendor,["camConnSet",`${n.id}`,"Производитель"],{inline:false})}</div>
+    <div><label>${i18n("Модель")}</label><div class="inline-field">${comboModelHtml(vendor,model,["camConnSet",`${n.id}`,"Модель"],{inline:false,ph:rtsp?i18n("Необязательно"):""})}${rtsp?"":`<button type="button" class="btn s" title="${i18n("Определить модель по данным подключения")}" ${onEv("click",["camConnDetect",`${n.id}`])}>${ic("search")} ${i18n("Определить")}</button>`}</div></div>
+    ${rtsp?`<div class="cam-conn-full">${fldLbl("RTSP","RTSP",cardFldOrig("RTSP",""),"rtsp://адрес:554/поток")}</div>`
+      :`${fldLbl("IP","IP-адрес",n.ip||"","192.168.1.100")}${fldLbl("Порт","Порт",n.port||80,"","number")}`}
+    ${fldLbl("Имя пользователя","Имя пользователя",n.user||"","Авто")}
+    <div><label>${i18n("Пароль")}</label><div class="dev-pass-wrap"><input class="dev-pass-input" type="password" value="${escHtml(cardFldVal("Пароль",n.pass||"")??"")}" placeholder="****" data-df="Пароль" data-orig="${escHtml(n.pass||"")}" ${onEv("input",["cardFld",onEv.el])}>${devPassToggleBtn(false)}</div></div>
+    ${fldRo("MAC",n.mac||"—")}
+  </div>`;
+}
+// Поле карточки с подписью, которая отличается от ключа черновика (ключ «IP», подпись «IP-адрес»)
+function fldLbl(k,l,v,ph,tp="text"){v=cardFldOrig(k,v);const d=cardFldVal(k,v);return `<div><label>${i18n(l)}</label><input type="${tp}" value="${escHtml(d??"")}" ${ph?`placeholder="${escHtml(ph)}"`:""} data-df="${escHtml(k)}" data-orig="${escHtml(v??"")}" ${onEv("input",["cardFld",onEv.el])}></div>`}
+function camConnSet(id,l,v){
+  const n=find(id)?.n;if(!n)return;
+  const orig=l==="Производитель"?n.vendor||"":l==="Модель"?n.model||"":"";
+  setD(true);if(!cardDraft)return;
+  if(String(v)===String(orig))delete cardDraft.fields[l];else cardDraft.fields[l]={from:orig,to:v};
+  // Новый производитель — модель из его списка, как в окне добавления
+  if(l==="Производитель"){const ms=manualModels(v),cur=camConnVal(n,"Модель",n.model||"");
+    if(!ms.includes(cur)){const m=ms[0]||"";if(m===(n.model||""))delete cardDraft.fields["Модель"];else cardDraft.fields["Модель"]={from:n.model||"",to:m}}}
+  gear();
+}
+function camConnDetect(id){
+  const n=find(id)?.n;if(!n)return;
+  const ip=camConnVal(n,"IP",n.ip||""),port=camConnVal(n,"Порт",n.port||80),vendor=camConnVal(n,"Производитель",n.vendor||"");
+  if(!ip||!vendor){toast("Указать IP-адрес и производителя");return}
+  if(!kindActionOn("camera","probe")){toast("Система не может определить модель. Выбрать модель вручную");return}
+  kindAction("camera","probe",{ip,port:+port||80,vendor}).then(r=>{
+    if(!r.model){toast("Модель не определена. Указать логин и пароль");return}
+    camConnSet(id,"Модель",r.model);toast("Модель устройства определена");
+  }).catch(e=>toast(problemText(e)));
+}
 function deviceFoldersCardHtml(n){
   if(!inFolders(n))return"";
   const sv=srv(n.id);
@@ -12418,8 +12459,8 @@ function deviceFoldersCardHtml(n){
     empty:"Не входит ни в одну папку",
     ph:"Имя или путь папки…",
     unit:"папка|папки|папок",
-    extra:`<div class="g" style="margin-top:10px"><div><label>${i18n("Добавить в папку")}</label><select ${onEv("change",["addDeviceToFolderPick",onEv.el,n.id])}>${folderOptions("")}</select></div></div>
-     <p class="sub">${sv?i18n("Запись ведётся на сервер:")+` <b>${escHtml(locName(sv))}</b>`:i18n("Запись не настроена, поэтому объекту не нужен сервер.")}</p>`
+    tools:`<select class="lst-add" aria-label="${i18n("Добавить в папку")}" ${onEv("change",["addDeviceToFolderPick",onEv.el,n.id])}><option value="" hidden selected>${i18n("+ Добавить в папку…")}</option>${folderOptionGroups("")}</select>`,
+    extra:`<p class="sub">${sv?i18n("Запись ведётся на сервер:")+` <b>${escHtml(locName(sv))}</b>`:i18n("Запись не настроена, поэтому объекту не нужен сервер.")}</p>`
   });
 }
 // Итог прошлого поиска читается только в окне поиска, страницами
@@ -16448,7 +16489,7 @@ function formBase(n){
     return card("Идентификация объекта",`${bdg(n)}${enabledToggleHtml(n)}<div class="g" style="margin-top:10px">${fld("Имя",n.name)}${fld("Короткое имя",n.short??"")}${camIdFld}${vchFld}</div>`)
       +(underIpsrv&&!n.ip?card("Подключение",`<div class="g">${fldRo("Регистратор",locName(ips))}${fldRo("IP регистратора",ips.ip||"—")}${fldRo("RTSP",cardFldOrig("RTSP","")||"—")}</div>
         <p class="sub">${i18n("У камеры регистратора нет своего IP. Сервер берёт её видео через регистратор по номеру канала. Адрес и учётные данные есть в карточке")} <button class="lk" ${onEv("click",["pick",`${ips.id}`])}>${escHtml(locName(ips))}</button>.</p>`)
-        :card("Подключение",`<div class="g">${fld("IP",n.ip)}${fld("Производитель",n.vendor||"")}${fld("Модель",n.model||"")}${fld("RTSP","")}${fldRo("MAC",n.mac||"—")}</div>`))+deviceFoldersCardHtml(n)+placeCardHtml(n)+periphSummaryHtml(n)}
+        :card("Подключение",camConnHtml(n)))+deviceFoldersCardHtml(n)+placeCardHtml(n)+periphSummaryHtml(n)}
   if(n.type==="det"){
     const cam=find(n.id)?.p;
     return detBackHtml(cam)+detZoneCardHtml(cam,n)+card("Параметры",`${detFieldsHtml(cam,n,"Имя")}
