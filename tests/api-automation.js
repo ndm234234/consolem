@@ -559,5 +559,300 @@
     assert.eq(home.body.field, "serverId", "цели в другом домене");
   }, { needs: ["cap:domain:create"] });
 
+  /* ----- Цепочка правила: «или», проверка, ожидание, прерывание, интервал, новые события и команды ----- */
+
+  const cams = FX.devices.filter((d) => d.type === "camera" && d.online && d.enabled);
+  const [camA, camB] = cams;
+  const trig = (event, id, match) => ({ source: "unit", kinds: ["camera"], event, target: dev(id), match: match || {} });
+  const onEvent = (over) => blank(Object.assign({ start: "event", runMode: "always" }, over));
+  const fireList = (env, id) => env.list(`/rules/${id}/fires`);
+  const check = (what, target, yes, no, over) => Object.assign({ control: "check", what, target, yes: yes || [], no: no || [] }, over || {});
+  const recB = () => act("record", dev(camB.id), { duration: "min", minutes: 3 });
+  const unitEvent = (env, deviceId, eventId, match) => env.call("POST", "/test/events", { type: "unit.event", deviceId, eventId, match: match || {} });
+
+  test("«Или» между событиями: whenLogic any — любое событие запускает правило, окна нет; без any нужно окно", async () => {
+    const env = await makeEnv();
+    const t2 = [trig("motion", camA.id), trig("linecross", camA.id)];
+    const noWin = await env.call("POST", "/rules", onEvent({ triggers: t2 }));
+    assert.status(noWin, 422, "RULE_INVALID");
+    assert.eq(issue(noWin), "rule.noWindow", "all без окна");
+    const win = await env.call("POST", "/rules", onEvent({ triggers: t2, whenLogic: "any", windowSec: 30 }));
+    assert.status(win, 422, "RULE_INVALID");
+    assert.eq(issue(win), "rule.extraWindow", "any с окном");
+    assert.status(await env.call("POST", "/rules", onEvent({ triggers: t2, whenLogic: "some" })), 422, "VALIDATION_FAILED", "значение вне any и all");
+    const made = await env.ok("POST", "/rules", onEvent({ triggers: t2, whenLogic: "any" }));
+    assert.eq([made.whenLogic, made.windowSec], ["any", 0], "сохранено");
+    const n = (await fireList(env, made.id)).length;
+    assert.status(await unitEvent(env, camA.id, "linecross"), 200);
+    let fires = await fireList(env, made.id);
+    const last = (l) => l[l.length - 1];
+    assert.eq([fires.length, last(fires).by, last(fires).events.map((e) => e.event)], [n + 1, "event", ["linecross"]], "второе событие запустило само");
+    assert.status(await unitEvent(env, camA.id, "motion"), 200);
+    fires = await fireList(env, made.id);
+    assert.eq([fires.length, last(fires).events.map((e) => e.event)], [n + 2, ["motion"]], "первое событие тоже");
+    assert.status(await unitEvent(env, camA.id, "silent"), 200);
+    assert.eq((await fireList(env, made.id)).length, n + 2, "чужое событие правило не слышит");
+    const one = { source: "unit", event: "motion", match: {}, deviceId: camA.id };
+    const test = (rule) => env.ok("POST", "/rules/test", { ruleId: null, rule, events: [one], at: null, branches: {}, log: false });
+    const any = await test(onEvent({ triggers: t2, whenLogic: "any" }));
+    assert.ok(any.checks.length > 0 && any.checks.every((c) => c.ok) && any.checks.some((c) => c.code === "event.came"), "пробный запуск: одного события хватает");
+    const second = await env.ok("POST", "/rules/test", { ruleId: null, rule: onEvent({ triggers: t2, whenLogic: "any" }), events: [{ source: "unit", event: "linecross", match: {}, deviceId: camA.id }], at: null, branches: {}, log: false });
+    assert.ok(second.checks.every((c) => c.ok) && second.checks.some((c) => c.code === "event.came" && c.params.trigger.event === "linecross") && !second.checks.some((c) => c.code === "event.other"), "пробный запуск any: подошло событие второго триггера");
+    const all = await test(onEvent({ triggers: t2, windowSec: 30 }));
+    assert.ok(all.checks.some((c) => c.code === "event.missing" && !c.ok), "пробный запуск all: второго события нет");
+  }, { needs: ["kind:camera"] });
+
+  test("«Или» между условиями: condLogic any — достаточно одного, all — нужны все; ни одно не выполнено — запуск пропущен", async () => {
+    const env = await makeEnv();
+    const armed = (value) => ({ kind: "armed", target: dev(camA.id), value });
+    const mk = (over) => env.ok("POST", "/rules", blank(over));
+    const run = (r) => env.ok("POST", `/rules/${r.id}/run`, { idempotencyKey: ApiTest.key() });
+    const all = await mk({ conditions: [armed(true), armed(false)] });
+    assert.eq(all.condLogic === undefined || all.condLogic === "all", true, "умолчание — all");
+    let f = await run(all);
+    assert.eq([f.result, f.checks.filter((c) => !c.ok).length], ["skip", 1], "all: одно из двух условий не выполнено — запуск пропущен");
+    const any = await mk({ conditions: [armed(true), armed(false)], condLogic: "any" });
+    f = await run(any);
+    assert.eq([any.condLogic, f.result, f.steps.map((s) => s.state)], ["any", "ok", ["ok"]], "any: одно из двух выполнено — запуск идёт");
+    assert.ok(f.checks.length > 0 && f.checks.every((c) => c.ok), "в проверках — выполненное");
+    const state = await env.ok("GET", `/units/${camA.id}`);
+    const isArmed = !!((state.status && state.status.observed) || {}).armed || !!(state.properties || {}).armed;
+    const none = await mk({ conditions: [armed(!isArmed), armed(!isArmed)], condLogic: "any" });
+    f = await run(none);
+    assert.eq([f.result, f.checks.filter((c) => !c.ok).length, f.steps.every((s) => s.state === "skip")], ["skip", 2, true], "any: оба условия не выполнены — запуск пропущен");
+    assert.status(await env.call("POST", "/rules", blank({ conditions: [armed(true)], condLogic: "both" })), 422, "VALIDATION_FAILED", "значение вне any и all");
+  }, { needs: ["kind:camera"] });
+
+  test("Шаг check: проверка по состоянию сервера — ветка yes или no, исход видно в трассе; пробный запуск задаёт исход сам", async () => {
+    const env = await makeEnv();
+    const made = await env.ok("POST", "/rules", blank({ steps: [check("online", dev(camA.id), [recB()], [act("record", dev(camB.id), { duration: "min", minutes: 7 })], { depthSec: 60 })] }));
+    const run = () => env.ok("POST", `/rules/${made.id}/run`, { idempotencyKey: ApiTest.key() });
+    let f = await run();
+    assert.eq(f.steps[0].label.code, "ctl.check", "подпись шага");
+    assert.eq(f.steps[0].note.code, "check.yes", "камера на связи — да");
+    assert.eq(f.steps.filter((s) => !s.control).map((s) => [s.path, s.state]), [["0.yes.0", "ok"]], "выполнилась ветка yes");
+    assert.ok(f.steps.some((s) => s.path === "0.no" && s.skip), "ветка no пропущена");
+    assert.status(await env.call("POST", "/test/events", { type: "device.signal", deviceId: camA.id, online: false }), 200);
+    f = await run();
+    assert.eq([f.steps[0].note.code, f.steps.filter((s) => !s.control).map((s) => s.path)], ["check.no", ["0.no.0"]], "камеры нет на связи — ветка no");
+    const t = await env.ok("POST", "/rules/test", { ruleId: made.id, rule: body(made), events: [], at: null, branches: { 0: "yes" }, log: false });
+    assert.ok(t.steps.some((s) => s.path === "0.yes.0"), "в пробном запуске исход задан в branches");
+    const rec = cams.find((c) => c.archiveId && c.recordMode && c.recordMode !== "none" && (c.recordState === undefined || c.recordState === "running"));
+    const wait = FX.devices.find((c) => c.type === "camera" && c.archiveId && c.recordMode && c.recordMode !== "none" && c.recordState === "waiting");
+    if (wait) {
+      const r3 = await env.ok("POST", "/rules", blank({ steps: [check("record", dev(wait.id), [recB()], [], { depthSec: 3600 })] }));
+      f = await env.ok("POST", `/rules/${r3.id}/run`, { idempotencyKey: ApiTest.key() });
+      assert.eq(f.steps[0].note.code, "check.no", "запись настроена, но ждёт (recordState: waiting) — не пишет сейчас");
+    }
+    if (rec) {
+      const r2 = await env.ok("POST", "/rules", blank({ steps: [check("record", dev(rec.id), [recB()], [], { depthSec: 3600 })] }));
+      f = await env.ok("POST", `/rules/${r2.id}/run`, { idempotencyKey: ApiTest.key() });
+      assert.eq(f.steps[0].note.code, "check.yes", "камера пишет — проверка record проходит");
+    }
+  }, { needs: ["kind:camera", "clock"] });
+
+  test("Шаг check: цель, вид и глубина проверяются — 422 RULE_INVALID у включённого, выключенное хранится", async () => {
+    const env = await makeEnv();
+    const bad = async (s, code, why) => {
+      const res = await env.call("POST", "/rules", blank({ steps: [step, s] }));
+      assert.status(res, 422, "RULE_INVALID", why);
+      assert.eq(issue(res), code, why);
+    };
+    await bad(check("online", null), "control.noTarget", "нет цели");
+    await bad(check("record", dev(camA.id)), "control.depth", "record без глубины");
+    await bad(check("record", dev(camA.id), [], [], { depthSec: 0 }), "control.depth", "глубина 0");
+    const tooDeep = await env.call("POST", "/rules", blank({ steps: [step, check("safe", dev(camA.id), [], [], { depthSec: 86401 })] }));
+    assert.status(tooDeep, 422, "VALIDATION_FAILED", "глубина больше суток — граница схемы");
+    await bad(check("armed", { include: [], exclude: [], gone: [], fromEvent: true }), "control.noEventDevice", "объекта из события нет");
+    assert.status(await env.call("POST", "/rules", blank({ steps: [check("fresh", dev(camA.id))] })), 422, "VALIDATION_FAILED", "вид проверки вне перечня");
+    assert.status(await env.call("POST", "/rules", blank({ steps: [step, check("armed", dev(camA.id))] })), 201, null, "armed без глубины");
+    assert.status(await env.call("POST", "/rules", blank({ enabled: false, steps: [check("record", null)] })), 201, null, "выключенное хранится");
+    const noCtl = makeEnv({ fixturePatch: { reference: { ruleControls: ref.ruleControls.filter((c) => c.control !== "check") } } });
+    const res = await (await noCtl).call("POST", "/rules", blank({ steps: [check("armed", dev(camA.id))] }));
+    assert.status(res, 422, "NOT_SUPPORTED");
+    assert.eq([res.body.field, issue(res)], ["steps", "control.notDeclared"], "система не объявила check");
+  }, { needs: ["kind:camera"] });
+
+  test("Шаг after: ждёт конца предыдущего шага, не дольше sec; запись в трассе между шагами; sec вне 1…3600 — 422", async () => {
+    const env = await makeEnv();
+    const made = await env.ok("POST", "/rules", blank({ steps: [step, { control: "after", sec: 30 }, recB()] }));
+    const f = await env.ok("POST", `/rules/${made.id}/run`, { idempotencyKey: ApiTest.key() });
+    assert.eq(f.steps.map((s) => [s.path, s.control, s.state]), [["0", false, "ok"], ["1", true, "ok"], ["2", false, "ok"]], "шаги идут по порядку");
+    assert.eq([f.steps[1].label.code, f.steps[1].label.params.sec], ["ctl.after", 30], "подпись");
+    assert.status(await env.call("POST", "/rules", blank({ steps: [step, { control: "after", sec: 0 }] })), 422, "VALIDATION_FAILED", "sec от 1");
+    assert.status(await env.call("POST", "/rules", blank({ steps: [step, { control: "after", sec: 3601 }] })), 422, "VALIDATION_FAILED", "sec до 3600");
+  }, { needs: ["kind:camera"] });
+
+  test("Шаг abort: прерывает выполнение — шагов после него, в том числе вне ветки, нет; без abort шаги идут", async () => {
+    const env = await makeEnv();
+    const steps = [check("online", dev(camA.id), [{ control: "abort" }], [], { depthSec: 60 }), recB()];
+    const made = await env.ok("POST", "/rules", blank({ steps }));
+    const run = () => env.ok("POST", `/rules/${made.id}/run`, { idempotencyKey: ApiTest.key() });
+    let f = await run();
+    assert.eq(f.steps.filter((s) => !s.control).length, 0, "камера на связи — yes, abort: запись не началась");
+    assert.eq([f.steps.some((s) => s.label && s.label.code === "ctl.abort"), f.result], [true, "ok"], "прерывание в трассе, итог по выполненному");
+    assert.status(await env.call("POST", "/test/events", { type: "device.signal", deviceId: camA.id, online: false }), 200);
+    f = await run();
+    assert.eq(f.steps.filter((s) => !s.control).map((s) => s.path), ["1"], "камеры нет на связи — ветка no пуста, шаг 1 идёт");
+    const only = await env.ok("POST", "/rules", blank({ steps: [{ control: "abort" }, recB()] }));
+    assert.status(await env.call("POST", "/rules", blank({ steps: [{ control: "abort" }] })), 422, "RULE_INVALID", "в правиле должно быть действие");
+    f = await env.ok("POST", `/rules/${only.id}/run`, { idempotencyKey: ApiTest.key() });
+    assert.eq(f.steps.length, 1, "после abort в списке верхнего уровня — ничего");
+  }, { needs: ["kind:camera", "clock"] });
+
+  test("Расписание с интервалом: runAt.everyMin запускает правило по часам, randomShift сдвигает запуск в своём интервале", async () => {
+    const env = await makeEnv();
+    const runAt = (over) => Object.assign({ days: [1, 2, 3, 4, 5, 6, 7], time: "00:00" }, over);
+    const sched = (over) => blank(Object.assign({ start: "schedule", runMode: "always", runAt: runAt({ everyMin: 60 }) }, over));
+    const noEvery = await env.call("POST", "/rules", sched({ runAt: runAt({ randomShift: true }) }));
+    assert.status(noEvery, 422, "RULE_INVALID");
+    assert.eq(issue(noEvery), "rule.noEvery", "сдвиг без интервала");
+    assert.status(await env.call("POST", "/rules", sched({ runAt: runAt({ everyMin: 0 }) })), 422, "VALIDATION_FAILED", "интервал от 1");
+    assert.status(await env.call("POST", "/rules", sched({ runAt: runAt({ everyMin: 10081 }) })), 422, "VALIDATION_FAILED", "интервал до недели");
+    const plain = await env.ok("POST", "/rules", sched());
+    const shifted = await env.ok("POST", "/rules", sched({ runAt: runAt({ everyMin: 60, randomShift: true }) }));
+    const once = await env.ok("POST", "/rules", sched({ runAt: runAt() }));
+    assert.eq([plain.runAt.everyMin, shifted.runAt.randomShift], [60, true], "поля сохранены");
+    const n = async (r) => (await fireList(env, r.id)).length;
+    const was = [await n(plain), await n(shifted), await n(once)];
+    await env.advance(3 * 3600);
+    const got = [await n(plain), await n(shifted), await n(once)];
+    const d = got.map((v, i) => v - was[i]);
+    assert.eq([d[0], d[2]], [3, 0], "за 3 часа — по запуску в каждый час; без everyMin часы не запускают");
+    assert.ok(d[1] >= 2 && d[1] <= 4, "со сдвигом — по запуску в своём часу, последний мог выйти за границу: " + d[1]);
+    const fires = await fireList(env, shifted.id);
+    assert.eq([fires[fires.length - 1].by, new Set(fires.map((f) => f.at)).size - new Set(fires.slice(0, fires.length - d[1]).map((f) => f.at)).size], ["sched", d[1]], "запуски по расписанию в разные моменты");
+    await env.advance(30 * 60);
+    assert.eq((await n(plain)) - got[0] <= 1, true, "дальше — не чаще интервала");
+  }, { needs: ["kind:camera", "clock"] });
+
+  test("Новые события видов: объявлены в описаниях, принимаются /test/events, запускают правило; уточнение presence — строго", async () => {
+    const env = await makeEnv();
+    const camera = await env.ok("GET", "/kinds/camera");
+    const ids = camera.events.map((e) => e.id);
+    ["device.lost", "device.restored", "tamper", "fire", "smoke", "face.list", "plate.list", "alarm.closed", "alarm.confirmed", "rec.lost", "arm.off", "ptz.failed"]
+      .forEach((id) => assert.ok(ids.includes(id), `у камеры есть событие ${id}`));
+    const lost = camera.events.find((e) => e.id === "device.lost");
+    assert.eq(lost.params.properties.thresholdSec.enum, ["10", "30", "60", "300"], "уточнение порога обрыва");
+    const plate = camera.events.find((e) => e.id === "plate.list");
+    assert.eq([plate.params.properties.presence.enum, camera.events.find((e) => e.id === "fire").ends], [["yes", "no"], true], "presence yes и no, огонь имеет конец");
+    const made = await env.ok("POST", "/rules", onEvent({ triggers: [trig("plate.list", camA.id, { presence: "yes" })] }));
+    const n = async () => (await fireList(env, made.id)).length;
+    const was = await n();
+    assert.status(await unitEvent(env, camA.id, "plate.list", { presence: "no" }), 200);
+    assert.eq(await n(), was, "нет в списке — правило не слышит");
+    assert.status(await unitEvent(env, camA.id, "plate.list", { presence: "yes" }), 200);
+    assert.eq(await n(), was + 1, "есть в списке — запуск");
+    assert.status(await unitEvent(env, camA.id, "tamper"), 200, null, "tamper принят");
+    // События других видов: объявлены и принимаются, пока в наборе есть объект такого вида
+    const byKind = { relay: ["output.on"], server: ["server.down", "server.up", "license.lost", "load.high", "sched.edge"], volume: ["volume.error", "volume.ok"] };
+    for (const [kind, list] of Object.entries(byKind)) {
+      const u = (FX.units || []).find((x) => x.kind === kind);
+      const desc = await env.call("GET", `/kinds/${kind}`);
+      if (!u || desc.status !== 200) continue;
+      list.forEach((id) => assert.ok(desc.body.events.some((e) => e.id === id), `у вида ${kind} есть событие ${id}`));
+      for (const id of list) assert.status(await unitEvent(env, u.uid, id), 200, null, `${kind}: ${id} принято`);
+    }
+    const vol = (FX.units || []).find((x) => x.kind === "volume");
+    if (vol) {
+      const r = await env.ok("POST", "/rules", onEvent({ triggers: [{ source: "unit", kinds: ["volume"], event: "volume.error", target: dev(vol.uid), match: {} }] }));
+      const w = (await fireList(env, r.id)).length;
+      assert.status(await unitEvent(env, vol.uid, "volume.error"), 200);
+      assert.eq((await fireList(env, r.id)).length, w + 1, "ошибка тома запускает правило на томе");
+    }
+  }, { needs: ["kind:camera"] });
+
+  test("Новые команды и действия: export, replicate, ptz.tour, program, service, play, push, client.* — объявлены, проверяются, пишутся в журнал запуска", async () => {
+    const env = await makeEnv();
+    const kindsAct = async (kind) => { const r = await env.call("GET", `/kinds/${kind}`); return r.status === 200 ? r.body.actions || [] : []; };
+    const camera = await kindsAct("camera");
+    ["export", "replicate", "ptz.tour"].forEach((id) => assert.ok(camera.some((a) => a.id === id && a.ruleAction && a.ruleOnly), `у камеры команда ${id}`));
+    const props = (id) => ((camera.find((a) => a.id === id) || {}).params || {}).properties || null;
+    const fields = { record: ["preSec", "fps"], alarm: ["mode", "comment"], alarmclose: ["resolution"], preset: ["speed", "holdSec"] };
+    Object.entries(fields).forEach(([id, list]) => props(id) && assert.ok(list.every((f) => f in props(id)), `новые поля команды ${id}: ${list}`));
+    assert.ok(props("record") && props("preset"), "record и preset есть у любой системы с камерами");
+    const steps = [act("export", dev(camA.id), { mode: "clip", beforeSec: 10, afterSec: 20 }), act("replicate", dev(camA.id), { period: "event" }), act("ptz.tour", dev(camA.id), { command: "start", tour: "1" }),
+      act("record", dev(camA.id), { duration: "min", minutes: 5, preSec: 5, fps: 12 }), act("preset", dev(camA.id), { preset: 1, speed: 50, holdSec: 10 })];
+    const made = await env.ok("POST", "/rules", blank({ steps }));
+    let f = await env.ok("POST", `/rules/${made.id}/run`, { idempotencyKey: ApiTest.key() });
+    assert.eq(f.steps.map((s) => [s.action.action, s.state]), steps.map((s) => [s.action, "ok"]), "команды камеры в журнале запуска");
+    assert.status(await env.call("POST", "/rules", blank({ steps: [act("record", dev(camA.id), { duration: "min", minutes: 5, fps: 500 })] })), 422, "RULE_INVALID", "fps вне предела");
+    const srv = (FX.units || []).find((u) => u.kind === "server");
+    if (srv && (await kindsAct("server")).some((a) => a.id === "program")) {
+      const s2 = [act("program", dev(srv.uid), { path: "/usr/bin/true", args: "-q" }), act("service", dev(srv.uid), { state: "off", service: "ntp" })];
+      const r2 = await env.ok("POST", "/rules", blank({ steps: s2 }));
+      f = await env.ok("POST", `/rules/${r2.id}/run`, { idempotencyKey: ApiTest.key() });
+      assert.eq(f.steps.map((s) => [s.action.action, s.state]), [["program", "ok"], ["service", "ok"]], "команды сервера");
+    }
+    const spk = (FX.units || []).find((u) => u.kind === "spk");
+    if (spk && (await kindsAct("spk")).some((a) => a.id === "play")) {
+      const r3 = await env.ok("POST", "/rules", blank({ steps: [act("play", dev(spk.uid), { file: "siren.wav" })] }));
+      f = await env.ok("POST", `/rules/${r3.id}/run`, { idempotencyKey: ApiTest.key() });
+      assert.eq(f.steps.map((s) => [s.action.action, s.state]), [["play", "ok"]], "звук на динамике");
+    }
+    // Действия системы: справочник объявляет, поля с перечнем проверяются
+    const have = (s, a) => ref.ruleActions.find((x) => x.source === s && x.action === a);
+    if (!have("ntf", "push")) return;
+    const role = FX.access.roles[0].id;
+    const sys = [{ source: "ntf", action: "push", to: "ops", subject: "{камера}", attach: "snapshot" }, { source: "client", action: "sound", file: "a.wav", roleId: role }, { source: "client", action: "voice", roleId: role },
+      { source: "client", action: "view", view: "map", roleId: role }, { source: "client", action: "program", path: "/bin/true", roleId: role }, { source: "net", action: "http", method: "PUT", url: "http://x.test/a", auth: "bearer", headers: "X: 1", body: "{}" }];
+    const r4 = await env.ok("POST", "/rules", blank({ steps: [step, ...sys.filter((x) => have(x.source, x.action))] }));
+    f = await env.ok("POST", `/rules/${r4.id}/run`, { idempotencyKey: ApiTest.key() });
+    assert.ok(f.steps.length > 1 && f.steps.every((s) => s.state === "ok"), "действия системы пишутся в журнал запуска");
+    const badAttach = await env.call("POST", "/rules", blank({ steps: [{ source: "ntf", action: "push", to: "ops", subject: "x", attach: "audio" }] }));
+    assert.status(badAttach, 422, "VALIDATION_FAILED", "attach вне перечня");
+    const noSubj = await env.call("POST", "/rules", blank({ steps: [{ source: "ntf", action: "push", to: "ops" }] }));
+    assert.status(noSubj, 422, "RULE_INVALID", "тема обязательна");
+  }, { needs: ["kind:camera"] });
+
+  test("Шаг check до вопроса: при возобновлении исход проверки тот же, что был при остановке запуска", async () => {
+    const env = await envWith({ steps: [check("online", dev(cam.id), [rec(cam.id)], []), ask({ yes: [], no: [] })] });
+    const f = await run(env);
+    assert.eq(f.steps[0].note.code, "check.yes", "камера на связи — yes");
+    assert.status(await env.call("POST", "/test/events", { type: "device.signal", deviceId: cam.id, online: false }), 200);
+    const [p] = await env.list("/rule-prompts");
+    assert.status(await env.call("POST", `/rule-prompts/${p.id}/answer`, { answer: "yes" }), 202);
+    const now = await fireOf(env, f.id);
+    assert.eq([now.steps[0].note.code, now.steps.filter((s) => s.action).map((s) => s.path)], ["check.yes", ["0.yes.0"]], "запись запуска сохранила прежнюю ветку, хотя камера уже без связи");
+  }, { needs: [...PROMPTS, "clock"] });
+
+  test("Расписание с интервалом: выключенное правило не догоняет пропущенное, /test/reset очищает память", async () => {
+    const env = await makeEnv();
+    const mk = (over) => blank(Object.assign({ start: "schedule", runMode: "always", runAt: { days: [1, 2, 3, 4, 5, 6, 7], time: "00:00", everyMin: 60 } }, over));
+    const r = await env.ok("POST", "/rules", mk());
+    await env.list(`/rules/${r.id}/fires`);
+    const off = (await env.ok("POST", "/rules/update", { idempotencyKey: ApiTest.key(), items: [{ ruleId: r.id, version: r.version, set: { enabled: false } }] })).done[0];
+    await env.advance(5 * 3600);
+    const n = (await fireList(env, r.id)).length;
+    await env.ok("POST", "/rules/update", { idempotencyKey: ApiTest.key(), items: [{ ruleId: r.id, version: off.version, set: { enabled: true } }] });
+    assert.eq((await fireList(env, r.id)).length, n, "включили — пропущенные за 5 часов запуски не выполнены");
+    await env.advance(2 * 3600);
+    assert.ok((await fireList(env, r.id)).length - n >= 1 && (await fireList(env, r.id)).length - n <= 2, "дальше правило идёт по часам");
+  }, { needs: ["kind:camera", "clock"] });
+
+  test("Что система не объявила в reference.ruleFeatures, того включённое правило не получает: 422 NOT_SUPPORTED", async () => {
+    const t2 = [trig("motion", camA.id), trig("linecross", camA.id)];
+    const run0 = await makeEnv();
+    assert.ok((await run0.ok("GET", "/reference")).ruleFeatures.join() === "whenAny,condAny,every", "эталонный набор объявляет все три");
+    const env = await makeEnv({ fixturePatch: { reference: { ruleFeatures: [] } } });
+    const expect = async (rule, field, feature, why) => {
+      const res = await env.call("POST", "/rules", rule);
+      assert.status(res, 422, "NOT_SUPPORTED", why);
+      assert.eq([res.body.field, issue(res), res.body.params.issue.params.feature], [field, "rule.featureNotDeclared", feature], why);
+    };
+    await expect(onEvent({ triggers: t2, whenLogic: "any" }), "triggers", "whenAny", "whenLogic: any");
+    await expect(blank({ conditions: [{ kind: "armed", target: dev(camA.id), value: true }], condLogic: "any" }), "conditions", "condAny", "condLogic: any");
+    await expect(blank({ start: "schedule", runMode: "always", runAt: { days: [1], time: "10:00", everyMin: 30 } }), "start", "every", "everyMin");
+    assert.status(await env.call("POST", "/rules", onEvent({ triggers: t2, whenLogic: "all", windowSec: 30 })), 201, null, "all — как всегда");
+    assert.status(await env.call("POST", "/rules", onEvent({ enabled: false, triggers: t2, whenLogic: "any" })), 201, null, "выключенное хранится");
+  }, { needs: ["kind:camera"] });
+
+  test("Шаг check без цели в пробном запуске — 422 RULE_INVALID control.noTarget, а не сбой сервера", async () => {
+    const env = await makeEnv();
+    const res = await env.call("POST", "/rules/test", { ruleId: null, rule: blank({ enabled: false, steps: [step, check("armed", null)] }), events: [], at: null, branches: {}, log: false });
+    assert.status(res, 422, "RULE_INVALID");
+    assert.eq(issue(res), "control.noTarget", "причина");
+  }, { needs: ["kind:camera"] });
+
   ApiTest.loaded("api-automation.js");
 })();

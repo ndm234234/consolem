@@ -36,6 +36,11 @@
     { source: "client", action: "layout", fields: ["layoutId", "roleId"] },
     { source: "ntf", action: "email", fields: ["to", "subject"], tpl: ["subject", "body"], via: "email" },
     { source: "ntf", action: "tg", fields: ["chat", "text"], tpl: ["text"] },
+    { source: "ntf", action: "push", fields: ["to", "subject"], tpl: ["subject", "body"] },
+    { source: "client", action: "sound", fields: ["file", "roleId"] },
+    { source: "client", action: "voice", fields: ["roleId"] },
+    { source: "client", action: "view", fields: ["view", "roleId"] },
+    { source: "client", action: "program", fields: ["path", "roleId"] },
     { source: "net", action: "http", fields: ["url"], tpl: ["url"] },
     { source: "rule", action: "runrule", fields: ["ruleId"] },
   ];
@@ -44,7 +49,12 @@
     { control: "waitEvent", branches: ["yes", "no"] },
     { control: "ask", branches: ["yes", "no"] },
     { control: "escalate", branches: [] },
+    { control: "check", branches: ["yes", "no"] },
+    { control: "after", branches: [] },
+    { control: "abort", branches: [] },
   ];
+  // Что проверяет шаг check
+  const CHECKS = ["record", "safe", "armed", "online"];
   const UNIT_ACTION = "unitAction";
   const isUnitAction = (a) => !!a && a.type === UNIT_ACTION;
   const condKind = (c) => CONDITIONS.find((k) => k.kind === c.kind) || CONDITIONS[0];
@@ -262,6 +272,8 @@
     // Виды действия на объекте: у кого действие правила с этим кодом
     const actKinds = (a) => (isUnitAction(a) ? [...kindsNow().keys()].filter((k) => !!actDesc(k, a.action)) : []);
     const condKinds = (c) => (condKind(c).implements ? implementers(condKind(c).implements) : ruleKinds());
+    // Виды шага check: запись, защита и охрана — у камер, связь — у любого объекта правил
+    const checkKinds = (c) => (c.what === "online" ? ruleKinds() : implementers(["vms.camera/1"]));
 
     // Запись объекта для движка: свойства и наблюдаемое состояние — полями, как в записи устройства
     function recOf(u) {
@@ -363,6 +375,13 @@
       return n.enabled === false ? msg("device.disabled", { deviceId: n.id }) : null;
     }
     const recording = (n) => !!n.archiveId && !!n.recordMode && n.recordMode !== "none";
+    // Защищённая запись на встроенном сервере: архив камеры зашифрован (другой метки защиты у склада нет)
+    // Камера пишет сейчас: по настройкам и по наблюдаемому состоянию (recordState: running; нет поля — не опровергнуто)
+    const recordsNow = (n) => n.recordState === undefined || n.recordState === "running";
+    const archiveSafe = (n) => {
+      const a = n.archiveId ? store().get(n.archiveId) : null;
+      return !!a && !!(a.properties || {}).encrypted;
+    };
     // Есть ли что проверять: у камеры есть запись, если названо хранилище — в нём
     const hasRecord = (n, archive) => (archive ? [n.archiveId, ...(n.extraArchives || []).map((x) => x.archiveId)].includes(archive) : !!n.archiveId || !!(n.extraArchives || []).length);
     const paramsOf = (a) => (isUnitAction(a) ? a.params || {} : a);
@@ -511,13 +530,17 @@
     function issue(r) {
       if (r.start === "event") {
         if (!r.triggers.length) return msg("rule.noTrigger");
-        if (r.triggers.length > 1 && !r.windowSec) return msg("rule.noWindow");
-        if (r.triggers.length === 1 && r.windowSec) return msg("rule.extraWindow");
+        const any = r.whenLogic === "any";
+        if (r.triggers.length > 1 && !any && !r.windowSec) return msg("rule.noWindow");
+        if ((r.triggers.length === 1 || any) && r.windowSec) return msg("rule.extraWindow");
         for (const t of r.triggers) {
           if (!t.target) return msg("trigger.noTarget", { event: t.event });
           if (isGroup(t.target) && !broken(t.target) && !nodes(t.target, trigKinds(t)).length) return msg("trigger.areaEmpty", { event: t.event });
         }
-      } else if (r.start === "schedule" && (!r.runAt || !r.runAt.days.length || !/^\d\d:\d\d$/.test(r.runAt.time || ""))) return msg("rule.noRunAt");
+      } else if (r.start === "schedule") {
+        if (!r.runAt || !r.runAt.days.length || !/^\d\d:\d\d$/.test(r.runAt.time || "")) return msg("rule.noRunAt");
+        if (r.runAt.randomShift && !r.runAt.everyMin) return msg("rule.noEvery");
+      }
       for (const c of r.conditions) {
         const k = condKind(c);
         if (c.kind === "mode" && !(c.modeIds || []).length) return msg("cond.noMode");
@@ -572,7 +595,17 @@
     }
     function controlIssue(c, r) {
       const sec = (x) => x.sec >= 1 && x.sec <= 3600;
-      if (c.control === "wait") return sec(c) ? null : msg("control.sec", { control: c.control });
+      if (c.control === "wait" || c.control === "after") return sec(c) ? null : msg("control.sec", { control: c.control });
+      if (c.control === "abort") return null;
+      if (c.control === "check") {
+        if (!CHECKS.includes(c.what)) return msg("control.noWhat", { control: c.control });
+        if (!c.target) return msg("control.noTarget", { control: c.control });
+        const kinds = checkKinds(c);
+        if (c.target.fromEvent && !srcOk(r, kinds)) return msg("control.noEventDevice", { control: c.control });
+        if (isGroup(c.target) && !broken(c.target) && !nodes(c.target, kinds).length) return msg("control.areaEmpty", { control: c.control });
+        if ((c.what === "record" || c.what === "safe") && !(c.depthSec >= 1 && c.depthSec <= 86400)) return msg("control.depth", { control: c.control });
+        return null;
+      }
       if (c.control === "waitEvent") {
         if (!c.event.target) return msg("control.noTarget", { control: c.control });
         if (isGroup(c.event.target) && !broken(c.event.target) && !nodes(c.event.target, trigKinds(c.event)).length) return msg("control.areaEmpty", { control: c.control });
@@ -599,7 +632,7 @@
     /* ===== Каталог: что объявила система ===== */
 
     // Необязательные поля действия без объекта: нет в справочнике — у действия их нет (reference.ruleActions)
-    const FIELDS_OPTIONAL = ["method", "body"];
+    const FIELDS_OPTIONAL = ["method", "body", "attach", "auth", "headers"];
     // Правило вне каталога: { field — раздел, issue } или null. ref — справочник системы; события и действия объектов —
     // описания видов
     function undeclared(r, ref) {
@@ -621,7 +654,7 @@
       const stepBad = (a) => {
         if (a.control) {
           if (!ref.ruleControls.some((k) => k.control === a.control)) return bad("steps", "control.notDeclared", { control: a.control });
-          return a.event ? eventBad(a.event, "steps") : null;
+          return a.event ? eventBad(a.event, "steps") : a.control === "check" ? targetBad(a.target, "steps") : null;
         }
         if (isUnitAction(a)) {
           const kinds = actKinds(a);
@@ -646,6 +679,11 @@
         return null;
       };
       if (ref.ruleStarts && !ref.ruleStarts.includes(r.start)) return bad("start", "rule.startNotDeclared", { start: r.start });
+      // Логика и интервал правила: что система не объявила в reference.ruleFeatures, она не исполняет
+      const feat = (name) => (ref.ruleFeatures || []).includes(name);
+      if (r.whenLogic === "any" && !feat("whenAny")) return bad("triggers", "rule.featureNotDeclared", { feature: "whenAny" });
+      if (r.condLogic === "any" && !feat("condAny")) return bad("conditions", "rule.featureNotDeclared", { feature: "condAny" });
+      if (r.runAt && (r.runAt.everyMin || r.runAt.randomShift) && !feat("every")) return bad("start", "rule.featureNotDeclared", { feature: "every" });
       for (const t of r.triggers) {
         const p = eventBad(t, "triggers");
         if (p) return p;
@@ -695,8 +733,10 @@
     }
     function checksFor(r, o) {
       const c = [...(o.pre || [])];
-      r.conditions.forEach((cd) => c.push(condCheck(cd, o)));
-      if (o.via === "event" && r.triggers.length > 1 && (o.pre || []).every((x) => x.ok)) c.push({ code: "window", params: { sec: r.windowSec }, ok: true, reason: null });
+      // any: достаточно одного выполненного условия — в проверки идут выполненные, а если их нет, то все невыполненные
+      const cc = r.conditions.map((cd) => condCheck(cd, o));
+      c.push(...(r.condLogic === "any" && cc.some((x) => x.ok) ? cc.filter((x) => x.ok) : cc));
+      if (o.via === "event" && r.triggers.length > 1 && r.whenLogic !== "any" && (o.pre || []).every((x) => x.ok)) c.push({ code: "window", params: { sec: r.windowSec }, ok: true, reason: null });
       // Тишина: приглушение и окна обслуживания гасят запуск по событию и расписанию; запуск вручную — нет
       if (o.via !== "manual") {
         const ms = fromWall(o.date), m = muteAt(r, ms);
@@ -716,9 +756,20 @@
     // Проверки пробного запуска по событиям, которые выбрал администратор
     function eventChecks(r, evs) {
       const used = new Set(), out = [];
+      const any = r.whenLogic === "any" && r.triggers.length > 1;
+      const fits = (tk, e) => e.source === tk.source && e.event === tk.event && covers(tk.target, e.deviceId, trigKinds(tk)) &&
+        Object.entries(tk.match || {}).every(([m, v]) => v === "" || v == null || (e.match || {})[m] === undefined || (e.match || {})[m] === v);
+      // any: каждое событие примеряется ко всем событиям правила; подошло любое — проверка пройдена, прочие события не лишние
+      if (any) {
+        const done = [];
+        r.triggers.forEach((tk) => {
+          const e = evs.find((x) => fits(tk, x));
+          if (e) done.push({ code: "event.came", params: { trigger: tk, deviceId: e.deviceId }, ok: true, reason: null });
+        });
+        if (done.length) return done;
+      }
       r.triggers.forEach((tk, j) => {
-        const hit = evs.findIndex((e, x) => !used.has(x) && e.source === tk.source && e.event === tk.event && covers(tk.target, e.deviceId, trigKinds(tk)) &&
-          Object.entries(tk.match || {}).every(([m, v]) => v === "" || v == null || (e.match || {})[m] === undefined || (e.match || {})[m] === v));
+        const hit = evs.findIndex((e, x) => !used.has(x) && fits(tk, e));
         if (hit >= 0) {
           used.add(hit);
           out.push({ code: "event.came", params: { trigger: tk, deviceId: evs[hit].deviceId }, ok: true, reason: null });
@@ -731,13 +782,28 @@
           out.push({ code: "event.other", params: { event: { source: e.source, event: e.event, match: e.match || {} }, deviceId: e.deviceId }, ok: false, reason: msg("event.expected", { trigger: tk }) });
           return;
         }
-        out.push({ code: "event.missing", params: { trigger: tk }, ok: false, reason: j > 0 ? msg("event.notInWindow", { sec: r.windowSec }) : msg("event.none") });
+        out.push({ code: "event.missing", params: { trigger: tk }, ok: false, reason: j > 0 && !any ? msg("event.notInWindow", { sec: r.windowSec }) : msg("event.none") });
       });
+      // any: запускает любое одно событие. Пришедшее — проверка пройдена; ни одно не пришло — остаются отказы
+      if (any && out.some((x) => x.ok)) return out.filter((x) => x.ok);
       return out;
     }
     function controlRun(c, o) {
       const i = o.i || 0;
       if (c.control === "wait") return { label: msg("ctl.wait", { sec: c.sec }) };
+      if (c.control === "after") return { label: msg("ctl.after", { sec: c.sec }), note: msg("after.ended") };
+      if (c.control === "abort") return { label: msg("ctl.abort"), abort: true, note: msg("abort.stop") };
+      if (c.control === "check") {
+        const kinds = checkKinds(c);
+        const ns = c.target && c.target.fromEvent ? (o.src || []).map(devById).filter((n) => n && kinds.includes(n.type)) : c.target && !broken(c.target) ? nodes(c.target, kinds) : [];
+        const good = (n) => (c.what === "record" ? recording(n) && recordsNow(n) : c.what === "safe" ? recording(n) && recordsNow(n) && archiveSafe(n) : c.what === "armed" ? !!n.armed : !devDown(n, true));
+        const bad = ns.filter((n) => !good(n));
+        const pick = (o.br && o.br[o.key]) || (ns.length && !bad.length ? "yes" : "no");
+        // Запуск, который встанет на вопросе, при возобновлении не пересудит проверку: исход запоминается в br
+        if (o.live && o.br && !o.br[o.key]) o.br[o.key] = pick;
+        return { label: msg("ctl.check", { what: c.what, depthSec: c.depthSec == null ? null : c.depthSec, target: c.target }), deviceId: (bad[0] || ns[0] || {}).id || null, pick,
+          note: msg(pick === "yes" ? "check.yes" : ns.length ? "check.no" : "check.none", { what: c.what, items: bad.slice(0, 2).map((n) => n.id), more: Math.max(0, bad.length - 2) }) };
+      }
       if (c.control === "waitEvent") {
         const pick = (o.br && o.br[o.key]) || (!o.test && i % 3 === 2 ? "no" : "yes");
         const n = eventDevices(c.event, i)[0], s = Math.max(1, Math.min((c.sec || 1) - 1, 5 + ((i * 7) % 20)));
@@ -785,13 +851,18 @@
       return [single(a.target)].filter(Boolean);
     }
     function stepsFor(r, o) {
-      const out = [];
+      const out = [], stop = { abort: false };
       const walk = (list, pre, depth) => list.forEach((a, i) => {
-        if (o.halt && o.halt.at) return;
+        if ((o.halt && o.halt.at) || stop.abort) return;
         const path = [...pre, i], key = path.join(".");
         if (a.control) {
           const res = controlRun(a, Object.assign({}, o, { key })), st = res.pause ? "waiting" : o.watch ? "would" : "ok";
           out.push({ path: key, deviceId: res.deviceId || null, action: null, label: res.label, control: true, skip: false, state: st, reason: null, note: res.note || null, depth });
+          // abort: запуск идёт к концу, шаги после него не выполняются
+          if (res.abort) {
+            stop.abort = true;
+            return;
+          }
           // Запуск встал на вопросе: дальше — когда ответят или выйдет срок
           if (res.pause) {
             o.halt.at = { key, control: a };
@@ -856,7 +927,11 @@
       let ev = o.events;
       if (!ev) {
         ev = [];
-        if (via === "event")
+        if (via === "event" && r.whenLogic === "any" && r.triggers.length > 1) {
+          // any: правило запустило одно событие — по номеру запуска
+          const tk = r.triggers[i % r.triggers.length], n = eventDevices(tk, i)[0];
+          ev.push({ source: tk.source, event: tk.event, match: tk.match || {}, deviceId: n ? n.id : null, at: instant(d) });
+        } else if (via === "event")
           r.triggers.forEach((tk, j) => {
             const n = eventDevices(tk, i)[0];
             ev.push({ source: tk.source, event: tk.event, match: tk.match || {}, deviceId: n ? n.id : null,

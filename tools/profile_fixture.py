@@ -67,7 +67,10 @@ MISSING = ["startTalk", "listArchiveWatches", "createArchiveWatch", "patchArchiv
 # Выгрузка первой генерации VMS (ADR-0117 § 8, доп. (1) п. 3): треки, маска, плеер, облако, титры событий — позже
 FEATURES = ["exportVideo", "exportFrame", "exportLiveFrame", "exportArea", "exportMultiCamera", "exportMultiPeriod", "exportSingleFile", "exportTranscode", "exportTitles", "exportAudio", "exportPassword"]
 # «Автоматизация» по части каталога, как у w2c: этих действий система не исполняет, запись — только на минуты
-ACTIONS_OFF = ["alarmclose", "layout", "wall", "email", "tg", "http"]
+# Команды видов (UnitKind.actions, ruleOnly), которых в профиле нет; действия системы (reference.ruleActions) — ACTIONS_OFF: к ним
+# добавлены ntf.push и client.*, которых у профиля нет, но команды видов с теми же кодами (program сервера) остаются
+KIND_ACTIONS_OFF = ["alarmclose", "layout", "wall", "email", "tg", "http"]
+ACTIONS_OFF = KIND_ACTIONS_OFF + ["push", "sound", "voice", "view", "program"]
 # Правило, сохранённое раньше и теперь вне каталога: остаётся выключенным, форма его показывает
 OUT_OF_CATALOG = "Вход на видеостене по движению"
 
@@ -157,7 +160,7 @@ def build(demo):
         out = []
         for a in lst:
             a = dict(a)
-            if a.get("action") in ACTIONS_OFF:
+            if a.get("action") in (KIND_ACTIONS_OFF if a.get("type") == "unitAction" else ACTIONS_OFF):
                 continue
             if a.get("action") == "record":
                 # Поля действия на объекте (unitAction) — в params
@@ -376,7 +379,7 @@ def kinds_access(kinds, levels):
             if not k["apiRights"]:
                 del k["apiRights"]
         if "actions" in k:
-            k["actions"] = [a for a in k["actions"] if not (a.get("ruleOnly") and a["id"] in ACTIONS_OFF)]
+            k["actions"] = [a for a in k["actions"] if not (a.get("ruleOnly") and a["id"] in KIND_ACTIONS_OFF)]
             for a in k["actions"]:
                 for key in ("right", "ruleRight"):
                     if not cls_ok(a.get(key)):

@@ -38,6 +38,13 @@ UiCheck(async ({ ok, until }) => {
 
   // Шаблоны: сервер объявил событие — шаблон появился, настоящей сборкой каталога из описаний видов
   const tpl = (id) => RULE_TPL.find((t) => t.id === id);
+  // Эталонный набор объявляет события цепочки правила сам; чтобы проверить, как шаблон зависит от описания, они снимаются, а в конце возвращаются
+  const CHAIN = ["device.lost", "device.restored", "device.auth", "device.enabled", "device.disabled", "tamper", "fire", "smoke", "face.list", "plate.list", "alarm.raised", "alarm.taken", "alarm.closed",
+    "alarm.confirmed", "alarm.suspicious", "alarm.false", "alarm.missed", "rec.started", "rec.stopped", "rec.lost", "rec.back", "arm.on", "arm.private", "arm.off", "ptz.moved", "ptz.manual", "ptz.failed",
+    "output.on", "server.down", "server.up", "license.lost", "load.high", "sched.edge", "volume.error", "volume.ok"];
+  const allKinds = [...KINDS.values()], fullEvents = allKinds.map((k) => k.events);
+  allKinds.forEach((k) => { if (k.events) k.events = k.events.filter((e) => !CHAIN.includes(e.id)); });
+  ruleCatFromKinds();
   ok(!ruleTplDeclared(tpl("tamp")), "событие не объявлено — шаблона нет");
   ok(ruleTplDeclared(tpl("line")), "шаблон на объявленном событии виден");
   ok(ruleTplDeclared(tpl("lost")), "прежний шаблон на месте");
@@ -66,6 +73,9 @@ UiCheck(async ({ ok, until }) => {
   cam.events = was;
   ruleCatFromKinds();
   ok(!ruleTplDeclared(tpl("tamp")), "описание вернулось — шаблон снова скрыт");
+  allKinds.forEach((k, i) => { k.events = fullEvents[i]; });
+  ruleCatFromKinds();
+  ok(["plate", "aclose", "aconf", "off", "tamp", "vol", "srv"].every((id) => ruleTplDeclared(tpl(id))), "описания набора вернулись — шаблоны на объявленных событиях видны");
 
   // Группы в списке событий: регистр кода не важен
   ok(trigGroup({ sub: "unit", kind: "ALARM" }) === "Тревоги", "группа по коду события без учёта регистра");

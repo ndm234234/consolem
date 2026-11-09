@@ -935,7 +935,8 @@
   test("EventDescriptor.rule и alarm: по умолчанию true; abandoned, disappeared, crowd — не триггеры; other и segment.lost — не тревоги", async () => {
     const env = await makeEnv();
     const events = (await env.ok("GET", "/kinds/camera")).events;
-    assert.eq(events.map((e) => e.id), ["motion", "linecross", "abandoned", "disappeared", "crowd", "lpr", "silent", "other", "segment.lost"], "порядок событий камеры");
+    assert.eq(events.slice(0, 9).map((e) => e.id), ["motion", "linecross", "abandoned", "disappeared", "crowd", "lpr", "silent", "other", "segment.lost"], "порядок событий камеры: прежние первыми");
+    assert.ok(["device.lost", "tamper", "plate.list", "alarm.closed", "rec.lost", "arm.off", "ptz.failed"].every((id) => events.some((e) => e.id === id)), "события цепочки правила объявлены");
     const flags = (e) => [e.rule !== false, e.alarm !== false];
     events.forEach((e) => assert.eq(flags(e), [!["abandoned", "disappeared", "crowd"].includes(e.id), !["other", "segment.lost"].includes(e.id)], `флаги ${e.id}`));
     const s = await env.ok("GET", "/settings");

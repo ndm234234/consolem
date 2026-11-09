@@ -1006,6 +1006,7 @@ select:not([multiple]){white-space:nowrap;overflow:hidden}:root select:not([mult
 .rl-foot{display:flex;align-items:center;gap:10px;margin:10px 0 6px;flex-wrap:wrap}
 .rl-win{color:var(--mu);font-size:12px;display:inline-flex;align-items:center;gap:6px}
 .rl-win input{width:72px}
+.rl-chips.rl-logic{margin:0;display:inline-flex}
 .n .rl-chk:focus-visible{opacity:1}
 .n.rl-idle .nm,.n.rl-idle .ici{color:var(--one-fg-subtle)}
 .rl-idle-h{margin-left:8px;font-size:12px;font-weight:400;color:var(--mu)}
@@ -5268,7 +5269,7 @@ function ruleActs(r){return ruleItems(r).filter(x=>x.it.action)}
 // Пункты со ссылкой на устройство: события, условия, действия и события ожидания.
 function ruleRefItems(r){
   const out=[...r.when,...(r.cond||[])];
-  ruleItems(r).forEach(({it})=>{if(it.action)out.push(it);if(it.ev)out.push(it.ev)});
+  ruleItems(r).forEach(({it})=>{if(it.action||it.ctl==="check")out.push(it);if(it.ev)out.push(it.ev)});
   return out;
 }
 function ruleStepDevices(it,src){
@@ -5435,7 +5436,7 @@ function autoRef(ref){
   refRuleCross=ref.ruleCrossDomainActions||null;
   refScenKinds=ref.scenarioKinds||null;
   // События и команды объектов — из описаний видов (ruleCatFromKinds), справочник — только действия системы (ruleActions)
-  Object.assign(RULE_REF,{starts:ref.ruleStarts||null,actions:ref.ruleActions||null,conds:ref.ruleConditions||null,ctls:ref.ruleControls||null,targets:ref.ruleTargets||null});
+  Object.assign(RULE_REF,{starts:ref.ruleStarts||null,actions:ref.ruleActions||null,conds:ref.ruleConditions||null,ctls:ref.ruleControls||null,targets:ref.ruleTargets||null,features:ref.ruleFeatures||[]});
   (ref.ruleActions||[]).forEach(a=>{
     const k=actionKind({sub:a.source,action:a.action});
     if(k.stray){k.devTypes=a.deviceTypes;k.fields=a.fields.map(f=>({id:f.id==="target"?"ref":ACT_IN[f.id]||f.id,label:f.id==="target"?"Устройство":f.id,...(f.optional?{req:false}:{}),...(f.options?.length?{opts:f.options}:{})}))}
@@ -5494,11 +5495,13 @@ function condBody(c){
 }
 const ACT_IN={source:"sub",target:"ref",preset:"n",duration:"dur",afterSec:"after",priority:"prio",layoutId:"layout",monitorId:"mon",subject:"subj",pulseMs:"pulse_ms",ruleId:"rule"};
 const ACT_OUT=Object.fromEntries(Object.entries(ACT_IN).map(([k,v])=>[v,k]));
-const CTL_IN={wait:"wait",waitEvent:"waitev",ask:"ask",escalate:"escalate"},CTL_OUT={wait:"wait",waitev:"waitEvent",ask:"ask",escalate:"escalate"};
+const CTL_IN={wait:"wait",waitEvent:"waitev",ask:"ask",escalate:"escalate",check:"check",after:"after",abort:"abort"},CTL_OUT=Object.fromEntries(Object.entries(CTL_IN).map(([k,v])=>[v,k]));
 function stepNode(a){
   if(a.control){
     const c=CTL_IN[a.control];
-    if(c==="wait")return{ctl:c,sec:a.sec};
+    if(c==="wait"||c==="after")return{ctl:c,sec:a.sec};
+    if(c==="abort")return{ctl:c};
+    if(c==="check")return{ctl:c,what:a.what,ref:refOf(a.target),depth:a.depthSec,yes:a.yes.map(stepNode),no:a.no.map(stepNode)};
     if(c==="waitev")return{ctl:c,ev:trigNode(a.event),sec:a.sec,yes:a.yes.map(stepNode),no:a.no.map(stepNode)};
     if(c==="ask")return{ctl:c,text:a.text,to:a.roleId||"",sec:a.sec,def:a.default,yes:a.yes.map(stepNode),no:a.no.map(stepNode)};
     return{ctl:c,levels:a.levels.map(l=>({to:l.roleId||"",via:l.via,wait:l.waitMin})),stop:a.stop};
@@ -5506,7 +5509,7 @@ function stepNode(a){
   if(a.type==="unitAction")return stepUnitNode(a);
   const n={};
   Object.entries(a).forEach(([k,v])=>{
-    if(k==="roleId"&&a.action==="layout"){n.to=v||"";return}
+    if(k==="roleId"&&a.source==="client"){n.to=v||"";return}
     const f=ACT_IN[k]||k;
     n[f]=k==="target"?refOf(v):k==="layoutId"?REF_LAYOUT.get(v)||"":k==="monitorId"?REF_MONITOR.get(v)||"":v;
   });
@@ -5515,7 +5518,9 @@ function stepNode(a){
 function stepBody(a){
   if(a.ctl){
     const c=CTL_OUT[a.ctl],sec=+a.sec||0;
-    if(c==="wait")return{control:c,sec};
+    if(c==="wait"||c==="after")return{control:c,sec};
+    if(c==="abort")return{control:c};
+    if(c==="check")return{control:c,what:a.what,target:targetOf(a.ref),...(a.what==="record"||a.what==="safe"?{depthSec:+a.depth||0}:a.depth!=null&&a.depth!==""?{depthSec:+a.depth}:{}),yes:(a.yes||[]).map(stepBody),no:(a.no||[]).map(stepBody)};
     if(c==="waitEvent")return{control:c,event:trigBody(a.ev),sec,yes:(a.yes||[]).map(stepBody),no:(a.no||[]).map(stepBody)};
     if(c==="ask")return{control:c,text:a.text||"",roleId:a.to||null,sec,default:a.def==="yes"?"yes":"no",yes:(a.yes||[]).map(stepBody),no:(a.no||[]).map(stepBody)};
     return{control:c,levels:(a.levels||[]).map(l=>({roleId:l.to||null,via:l.via||"client",waitMin:+l.wait||0})),stop:a.stop==="reset"?"reset":"ack"};
@@ -5523,18 +5528,18 @@ function stepBody(a){
   if(actionKind(a).unit||a.sub==="unit")return stepUnitBody(a);
   const o={};
   Object.entries(a).forEach(([k,v])=>{
-    if(k==="to"&&a.action==="layout"){if(v)o.roleId=v;return}
+    if(k==="to"&&a.sub==="client"){if(v)o.roleId=v;return}
     const f=ACT_OUT[k]||k;
     if(f==="target"){o.target=targetOf(v);return}
     if(v===""||v==null)return;
-    o[f]=f==="layoutId"?REF_LAYOUT.get(v)||v:f==="monitorId"?REF_MONITOR.get(v)||v:["preset","port","minutes","afterSec","beforeSec","pulseMs"].includes(f)?autoNum(v):v;
+    o[f]=f==="layoutId"?REF_LAYOUT.get(v)||v:f==="monitorId"?REF_MONITOR.get(v)||v:ACT_NUM.includes(f)?autoNum(v):v;
   });
   return o;
 }
 // Команда объекта в правиле {type:"unitAction", action, target, params} ↔ пункт раздела. У известных команд (ручной
 // пункт каталога) параметры — полями пункта, как их читает редактор (preset → n, duration → dur…); у команд из описаний
 // видов и незнакомых — как есть, в args: их поля — форма по ActionDescriptor.params. Реле: state булев ↔ pulse/on/off
-const ACT_NUM=["preset","port","minutes","afterSec","beforeSec","pulseMs"];
+const ACT_NUM=["preset","port","minutes","afterSec","beforeSec","pulseMs","preSec","fps","speed","holdSec"];
 function stepUnitNode(a){
   const k=ACTION_KINDS.find(x=>x.unit&&!x.stray&&x.action===a.action),p=a.params||{};
   const n={sub:k?k.sub:"unit",action:a.action,ref:refOf(a.target)};
@@ -5561,7 +5566,8 @@ function stepUnitBody(a){
 // Правило: запись API → правило раздела (поля, как их читает редактор) и обратно — содержимое (RuleContent)
 function ruleContentNode(r,id){
   const n={id,name:r.name,on:r.enabled,start:r.start==="schedule"?"sched":r.start,run:{mode:r.runMode,modes:[]},menu:r.operatorMenu,rate:r.ratePerMinute,within:r.windowSec,
-    sched:r.runAt?{days:r.runAt.days.slice(),at:r.runAt.time}:null,repeat:r.repeat,
+    sched:r.runAt?{days:r.runAt.days.slice(),at:r.runAt.time,...(r.runAt.everyMin?{every:r.runAt.everyMin}:{}),...(r.runAt.randomShift?{rnd:true}:{})}:null,repeat:r.repeat,
+    whenAny:r.whenLogic==="any",condAny:r.condLogic==="any",whenLogic:r.whenLogic,condLogic:r.condLogic,
     when:r.triggers.map(trigNode),cond:r.conditions.map(condNode),then:r.steps.map(stepNode),
     owner:r.owner,purpose:r.purpose,server:r.serverId||"",runAs:r.runAsRoleId||"system",watch:r.logOnly,chain:r.allowChain,labels:r.labels||[],validFor:r.validForSec??30};
   if(r.logOnlySince)n.watchSince=r.logOnlySince;
@@ -5575,7 +5581,9 @@ function ruleNode(r){
 }
 function ruleBody(n){
   return{name:n.name,enabled:!!n.on,logOnly:!!n.watch,logOnlySince:n.watchSince||null,start:n.start==="sched"?"schedule":n.start,runMode:n.run&&n.run.mode==="manual"?"manual":"always",
-    operatorMenu:!!n.menu,ratePerMinute:+n.rate||0,windowSec:+n.within||0,runAt:n.start==="sched"&&n.sched?{days:(n.sched.days||[]).slice(),time:n.sched.at||""}:null,
+    operatorMenu:!!n.menu,ratePerMinute:+n.rate||0,windowSec:n.whenAny&&(n.when||[]).length>1?0:+n.within||0,
+    ...(n.whenAny&&(n.when||[]).length>1?{whenLogic:"any"}:n.whenLogic==="all"?{whenLogic:"all"}:{}),...(n.condAny&&(n.cond||[]).length>1?{condLogic:"any"}:n.condLogic==="all"?{condLogic:"all"}:{}),
+    runAt:n.start==="sched"&&n.sched?{days:(n.sched.days||[]).slice(),time:n.sched.at||"",...(n.sched.every?{everyMin:+n.sched.every}:{}),...(n.sched.rnd?{randomShift:true}:{})}:null,
     repeat:n.repeat||"skip",triggers:(n.when||[]).map(trigBody),conditions:(n.cond||[]).map(condBody),steps:(n.then||[]).map(stepBody),
     owner:n.owner||"",purpose:n.purpose||"",serverId:n.server||null,runAsRoleId:n.runAs&&n.runAs!=="system"?n.runAs:null,allowChain:n.chain!==false,validForSec:+n.validFor||30,...(n.labels?.length?{labels:n.labels}:{})};
 }
@@ -5672,6 +5680,9 @@ const ESC_VIA_TXT=v=>RULE_ESC_VIA[v]||RULE_ESC_VIA.client;
 function fireLabel(m,ctx){
   const p=m.params||{},ck=t=>clockText(t,true);
   if(m.code==="ctl.wait")return`${i18n("Ждать")} ${p.sec} ${i18n("с")}`;
+  if(m.code==="ctl.after")return`${i18n("Дождаться конца предыдущего шага")}, ${i18n("не дольше")} ${p.sec} ${i18n("с")}`;
+  if(m.code==="ctl.abort")return i18n("Прервать выполнение");
+  if(m.code==="ctl.check")return`${i18n("Проверить")}: ${i18n(CHECK_WHAT[p.what]||"")}${p.depthSec&&(p.what==="record"||p.what==="safe")?` ${i18n("за")} ${p.depthSec} ${i18n("с")}`:""}`;
   if(m.code==="ctl.waitEvent")return`${i18n("Ждать событие")} «${triggerBare({sub:p.event.source,kind:p.event.kind,match:p.event.match})}»`;
   if(m.code==="ctl.ask")return`${i18n("Спросить оператора")} «${ruleTplFill(p.text,ctx.vars)}» · ${ruleRoleName(p.roleId)}`;
   if(m.code==="ctl.escalate")return`${i18n("Эскалация")}: ${p.roleIds.map(ruleRoleName).join(" → ")}`;
@@ -5689,6 +5700,11 @@ function fireNote(m){
   const p=m.params||{},ck=t=>clockText(t,true);
   if(m.code==="record.untilEnd")return`${i18n("до окончания")} ${i18n(p.trigger?triggerKind({sub:p.trigger.source,kind:p.trigger.kind}).endsOf:"события")} ${i18n("в")} ${ck(p.at)}${p.afterSec?` (+${p.afterSec} ${i18n("с")})`:""}`;
   if(m.code==="chain.level")return`${i18n("уровень цепочки")} ${p.level} (${i18n("максимум")} ${p.max})`;
+  if(m.code==="after.ended")return i18n("предыдущий шаг закончился");
+  if(m.code==="abort.stop")return i18n("следующие шаги не выполняются");
+  if(m.code==="check.yes")return i18n("проверка пройдена");
+  if(m.code==="check.none")return i18n("нет устройств для проверки");
+  if(m.code==="check.no")return`${i18n("проверка не пройдена")}${p.items&&p.items.length?`: ${p.items.map(id=>refName(id)).join(", ")}${p.more?` ${i18n("и ещё")} ${p.more}`:""}`:""}`;
   if(m.code==="waitEvent.came")return`${i18n("пришло через")} ${p.sec} ${i18n("с")}`;
   if(m.code==="waitEvent.timeout")return`${i18n("не пришло за")} ${p.sec} ${i18n("с")}`;
   if(m.code==="ask.answer")return`${i18n(p.answer==="yes"?"подтвердил":"отклонил")} ${p.login} ${i18n("в")} ${ck(p.at)}`;
@@ -16585,7 +16601,9 @@ const STEP_GROUPS=["Камера","Детектор","Тревога","Опер�
 // Что объявила система: события и команды объектов — описания видов (UnitKind.events, actions с ruleAction), остальное —
 // справочник (reference.rule*). null — справочник об этом молчит, предлагается всё; описаний видов нет — так же.
 // Сохранённое раньше и уже вне каталога остаётся в правиле: показывается с пометкой, включить его нельзя
-const RULE_REF={starts:null,actions:null,conds:null,ctls:null,targets:null};
+const RULE_REF={starts:null,actions:null,conds:null,ctls:null,targets:null,features:[]};
+// Логика и интервал правила (reference.ruleFeatures): whenAny, condAny, every. Чего система не объявила, форма не предлагает
+function ruleFeat(n){return(RULE_REF.features||[]).includes(n)}
 const RULE_OFF="нет в этой системе";
 function trigDeclared(k){return!KINDS.size||!!k.kinds?.length}
 function actDeclared(k){return k.unit?!KINDS.size||!!k.kinds?.length:!RULE_REF.actions||RULE_REF.actions.some(x=>x.source===k.sub&&x.action===k.action)}
@@ -16632,6 +16650,9 @@ function ruleOutOfCat(r){
     return t?off(ruleAreaName(t)):"";
   };
   if(!startDeclared(r.start))return off(RULE_START_NAME[r.start]);
+  if(r.whenAny&&r.when.length>1&&!ruleFeat("whenAny"))return off("Любое из событий");
+  if(r.condAny&&(r.cond||[]).length>1&&!ruleFeat("condAny"))return off("Любое из условий");
+  if(r.start==="sched"&&r.sched&&(r.sched.every||r.sched.rnd)&&!ruleFeat("every"))return off("Повторять с интервалом");
   for(const t of r.when||[]){const k=triggerKind(t);if(!trigDeclared(k))return off(k.label);const p=tgt(t.ref);if(p)return p}
   for(const c of r.cond||[]){const k=condKind(c);if(!condDeclared(k))return off(k.label);const p=c.ref?tgt(c.ref):"";if(p)return p}
   for(const{it:a}of ruleItems(r)){
@@ -16652,10 +16673,11 @@ const ACTION_KINDS=[
   {grp:"Камера",sub:"vms",action:"arm",unit:true,label:"Поставить на охрану",short:"На охрану",devTypes:["camera"],fields:[{id:"ref",label:"Камера"}]},
   {grp:"Камера",sub:"vms",action:"disarm",unit:true,label:"Снять с охраны",devTypes:["camera"],fields:[{id:"ref",label:"Камера"}]},
   {grp:"Камера",sub:"vms",action:"preset",unit:true,label:"Встать в пресет",devTypes:["camera"],
-   fields:[{id:"ref",label:"Камера"},{id:"n",label:"Пресет №",dyn:rulePresetOpts}]},
+   fields:[{id:"ref",label:"Камера"},{id:"n",label:"Пресет №",dyn:rulePresetOpts},{id:"speed",label:"Скорость",req:false},{id:"holdSec",label:"Удерживать, с",req:false}]},
   {grp:"Камера",sub:"rec",action:"record",unit:true,label:"Записывать",devTypes:["camera"],def:{dur:"min"},
    fields:[{id:"ref",label:"Камера"},{id:"dur",label:"Сколько",req:false,opts:[["min","на заданное число минут"],["event","пока идёт событие"]]},
            {id:"minutes",label:"Минут",on:a=>a.dur!=="event"},{id:"after",label:"Ещё после конца, с",req:false,on:a=>a.dur==="event"},
+           {id:"preSec",label:"Секунд до начала",req:false},{id:"fps",label:"Кадров в секунду",req:false},
            {id:"archive",label:"Архив (необязательно)",dyn:ruleArchOpts}]},
   // short — как действие подписано в строках и журнале: «Выключить камеру · Запасной вход · 60 мин».
   {grp:"Камера",sub:"vms",action:"disable",unit:true,label:"Выключить камеру на время",short:"Выключить камеру",devTypes:["camera"],
@@ -16666,23 +16688,40 @@ const ACTION_KINDS=[
    fields:[{id:"ref",label:"Камера"},{id:"detectorKind",label:"Вид детектора",dyn:ruleDetKindOpts},{id:"beforeSec",label:"Секунд до события",req:false},{id:"after",label:"Секунд после события",req:false},
            {id:"archive",label:"Хранилище",req:false,dyn:ruleScanArchOpts},{id:"params",label:"Настройки детектора",req:false}]},
   {grp:"Тревога",sub:"alarm",action:"alarm",unit:true,label:"Поднять тревогу",short:"Тревога",devTypes:["camera"],def:{prio:"normal"},
-   fields:[{id:"ref",label:"Камера"},{id:"prio",label:"Приоритет",req:false,opts:[["normal","обычная"],["high","высокая"]]},{id:"text",label:"Текст тревоги (необязательно)",tpl:true}]},
-  {grp:"Тревога",sub:"alarm",action:"alarmclose",unit:true,label:"Закрыть тревогу",devTypes:["camera"],fields:[{id:"ref",label:"Камера"}]},
+   fields:[{id:"ref",label:"Камера"},{id:"prio",label:"Приоритет",req:false,opts:[["normal","обычная"],["high","высокая"]]},
+           {id:"mode",label:"Когда создавать тревогу",req:false,opts:[["always","всегда"],["armed","если камера на охране"],["noactive","если нет активной тревоги"]]},
+           {id:"comment",label:"Комментарий оператора",req:false,opts:[["none","необязателен"],["required","обязателен"]]},{id:"text",label:"Текст тревоги (необязательно)",tpl:true}]},
+  {grp:"Тревога",sub:"alarm",action:"alarmclose",unit:true,label:"Закрыть тревогу",devTypes:["camera"],
+   fields:[{id:"ref",label:"Камера"},{id:"resolution",label:"Как закрыть",req:false,opts:[["none","без оценки"],["false","ложная"],["suspicious","подозрительная"],["confirmed","подтверждена"]]}]},
   {grp:"Оператор",sub:"client",action:"layout",label:"Открыть раскладку",short:"Раскладка",devTypes:[],
    lab:a=>`${i18n("Раскладка")} «${a.layout||"—"}»`,fields:[{id:"layout",label:"Раскладка",sel:"layout"},{id:"to",label:"Роль",sel:"role"}]},
   {grp:"Оператор",sub:"client",action:"wall",unit:true,label:"Показать на видеостене",short:"На видеостену",devTypes:["camera"],def:{mon:"Монитор 1"},
    fields:[{id:"ref",label:"Камера"},{id:"mon",label:"Монитор",req:false,opts:RULE_MONS}]},
   {grp:"Уведомления",sub:"ntf",action:"email",label:"Отправить письмо",short:"Письмо",devTypes:[],
    get via(){return servers.flatMap(x=>x.devices||[]).find(d=>d.type==="email")?.id||""},   // оповещатель — первый из загруженных
-   fields:[{id:"to",label:"Кому"},{id:"subj",label:"Тема",tpl:true},{id:"body",label:"Текст письма (необязательно)",tpl:true}]},
+   fields:[{id:"to",label:"Кому"},{id:"subj",label:"Тема",tpl:true},{id:"body",label:"Текст письма (необязательно)",tpl:true},
+           {id:"attach",label:"Вложение",req:false,opts:[["none","без вложения"],["snapshot","кадр"],["video","видео"]]}]},
+  {grp:"Уведомления",sub:"ntf",action:"push",label:"Push-уведомление",short:"Push",devTypes:[],
+   fields:[{id:"to",label:"Кому"},{id:"subj",label:"Заголовок",tpl:true},{id:"body",label:"Текст (необязательно)",tpl:true},
+           {id:"attach",label:"Вложение",req:false,opts:[["none","без вложения"],["snapshot","кадр"],["video","видео"]]}]},
+  {grp:"Уведомления",sub:"client",action:"sound",label:"Воспроизвести звук у оператора",short:"Звук",devTypes:[],
+   fields:[{id:"file",label:"Звуковой файл"},{id:"to",label:"Роль",sel:"role"}]},
+  {grp:"Уведомления",sub:"client",action:"voice",label:"Голосовое сообщение от оператора",short:"Голос",devTypes:[],
+   fields:[{id:"to",label:"Роль",sel:"role"}]},
+  {grp:"Оператор",sub:"client",action:"view",label:"Команда экрану оператора",short:"Экран",devTypes:[],def:{view:"select"},
+   fields:[{id:"view",label:"Что сделать",opts:[["select","выбрать камеру"],["map","показать карту"],["archive","открыть архив"],["mark","пометить камеру"],["slideshow","начать слайд-шоу"],["restore","вернуть раскладку"]]},{id:"to",label:"Роль",sel:"role"}]},
+  {grp:"Другое",sub:"client",action:"program",label:"Запустить программу у оператора",short:"Программа",devTypes:[],
+   fields:[{id:"path",label:"Путь к программе"},{id:"to",label:"Роль",sel:"role"}]},
   {grp:"Уведомления",sub:"ntf",action:"tg",label:"Сообщение в Telegram",short:"Telegram",devTypes:[],
    fields:[{id:"chat",label:"Чат"},{id:"text",label:"Текст сообщения",tpl:true}]},
   {grp:"Другое",sub:"vms",action:"unit",unit:true,label:"Команда единицы СКУД",short:"Команда",devTypes:["acfa_lock","acfa_sensor","acfa_fence","relay"],fields:[{id:"ref",label:"Единица"},{id:"operation",label:"Команда",dyn:ruleUnitOps}]},
-  {grp:"Другое",sub:"vms",action:"output",unit:true,label:"Щёлкнуть реле",devTypes:["relay"],def:{state:"pulse",pulse_ms:1000},
-   fields:[{id:"ref",label:"Устройство"},
-           {id:"pulse_ms",label:"Импульс, мс"}]},
+  {grp:"Другое",sub:"vms",action:"output",unit:true,label:"Управлять реле",short:"Реле",devTypes:["relay"],def:{state:"pulse",pulse_ms:1000},
+   fields:[{id:"ref",label:"Устройство"},{id:"state",label:"Что сделать",req:false,opts:[["pulse","импульс"],["on","включить"],["off","выключить"]]},
+           {id:"pulse_ms",label:"Импульс, мс",on:a=>a.state==="pulse"||!a.state}]},
   {grp:"Другое",sub:"net",action:"http",label:"Веб-запрос",devTypes:[],def:{method:"GET"},
-   fields:[{id:"method",label:"Метод",req:false,opts:["GET","POST"]},{id:"url",label:"Адрес (URL)",tpl:true}]},
+   fields:[{id:"method",label:"Метод",req:false,opts:["GET","POST","PUT","DELETE"]},{id:"url",label:"Адрес (URL)",tpl:true},
+     {id:"auth",label:"Авторизация",req:false,opts:[["none","без авторизации"],["basic","Basic"],["digest","Digest"],["bearer","Bearer"]]},
+     {id:"headers",label:"Заголовки (необязательно)"},{id:"body",label:"Тело запроса (необязательно)",tpl:true}]},
   {grp:"Другое",sub:"rule",action:"runrule",label:"Запустить правило",devTypes:[],
    lab:a=>`${i18n("Запустить правило")} «${(rules.find(x=>x.id===a.rule)||{}).name||"—"}»`,fields:[{id:"rule",label:"Правило",sel:"rule"}]}];
 const ACT_DEFAULT=ACTION_KINDS.find(k=>k.action==="output");
@@ -16714,6 +16753,7 @@ const RULE_DEPTH=2;   // вложенность веток — не глубже
 function ctlSecHtml(c,ps){
   return`<div class="rl-f rl-sec"><input type="number" min="1" max="3600" value="${escHtml(c.sec??"")}" aria-label="${i18n("Секунд")}" ${onEv("change",["setCtlField",`${ps}`,"sec",onEv.value])}> ${i18n("с")}</div>`;
 }
+const CHECK_WHAT={record:"Есть запись в архиве",safe:"Есть защищённая запись в архиве",armed:"Камера на охране",online:"Устройство на связи"};
 const CTL_KINDS=[
   {ctl:"wait",label:"Ждать",grp:"Ход выполнения",br:[],
    make:()=>({ctl:"wait",sec:10}),
@@ -16770,8 +16810,31 @@ const CTL_KINDS=[
        ${j<a.length-1?`<div class="rl-f rl-dflt">${i18n("ждать")} <input type="number" min="1" max="120" value="${escHtml(l.wait??"")}" aria-label="${i18n("Минут до следующего уровня")}" ${onEv("change",["escSet",`${ps}`,j,"wait",onEv.value])}> ${i18n("мин")}</div>`:""}
        <button type="button" class="btn s btn-icon" title="${i18n("Убрать уровень")}" aria-label="${i18n("Убрать уровень")}" ${onEv("click",["escDel",`${ps}`,j])}>${lu("x")}</button></div>`).join("")}
      <div class="rl-lvr"><button type="button" class="btn s" ${onEv("click",["escAdd",`${ps}`])}>${i18n("Добавить уровень")}</button>
-       <div class="rl-f rl-dflt">${selHtml([["ack","пока тревогу не квитируют"],["reset","пока не закончится событие"]],c.stop==="reset"?"reset":"ack",`setCtlField('${ps}','stop',this.value)`,"Остановить, когда")}</div></div></div>`}];
+       <div class="rl-f rl-dflt">${selHtml([["ack","пока тревогу не квитируют"],["reset","пока не закончится событие"]],c.stop==="reset"?"reset":"ack",`setCtlField('${ps}','stop',this.value)`,"Остановить, когда")}</div></div></div>`},
+  // «Проверить и разветвить»: сервер проверяет состояние в момент шага и идёт по ветке «если да» или «если нет».
+  // Запись и защита записи — у камер, охрана — у камер, связь — у любого устройства правил.
+  {ctl:"check",label:"Проверить и разветвить",grp:"Ход выполнения",br:[["yes","если да"],["no","если нет"]],
+   make:()=>({ctl:"check",what:"record",ref:"$src",depth:120,yes:[],no:[]}),
+   text:c=>`${i18n("Проверить")}: ${i18n(CHECK_WHAT[c.what]||"")}${c.what==="record"||c.what==="safe"?` ${i18n("за")} ${c.depth||0} ${i18n("с")}`:""}`,
+   check:(c,r)=>{
+     const t=`«${i18n("Проверить и разветвить")}»`;
+     if(!c.ref)return`${t}: ${i18n("не выбрано устройство")}`;
+     if(c.ref==="$src"&&!ruleSrcOk(r,ruleSlotKind("then",c).devTypes))return`${t}: «${i18n("Устройство из события")}» ${i18n("можно выбрать, только если в «Если» есть событие от устройства этого типа")}`;
+     if(refIsGroup(c.ref)&&!refBroken(c.ref)&&!refNodes(c.ref,ruleSlotKind("then",c).devTypes).length)return`${t}: ${i18n("в выбранной области нет подходящих устройств")}`;
+     if((c.what==="record"||c.what==="safe")&&!(+c.depth>=1&&+c.depth<=86400))return`${t}. ${i18n("Глубина проверки может быть от 1 до 86400 секунд.")}`;
+     return"";
+   },
+   fieldsHtml:(c,ps)=>`<div class="rl-f">${selHtml(Object.entries(CHECK_WHAT),c.what,`setCtlField('${ps}','what',this.value)`,"Что проверить")}</div>${refFieldHtml("then",ps,c.ref)}
+     ${c.what==="record"||c.what==="safe"?`<div class="rl-f rl-dflt">${i18n("за последние")} <input type="number" min="1" max="86400" value="${escHtml(c.depth??"")}" aria-label="${i18n("Секунд")}" ${onEv("change",["setCtlField",`${ps}`,"depth",onEv.value])}> ${i18n("с")}</div>`:""}`},
+  {ctl:"after",label:"Дождаться конца предыдущего шага",grp:"Ход выполнения",br:[],
+   make:()=>({ctl:"after",sec:60}),
+   text:c=>`${i18n("Дождаться конца предыдущего шага")}, ${i18n("не дольше")} ${c.sec||0} ${i18n("с")}`,
+   check:c=>c.sec>=1&&c.sec<=3600?"":`«${i18n("Дождаться конца предыдущего шага")}»: ${i18n("от 1 до 3600 секунд")}`,
+   fieldsHtml:(c,ps)=>`<div class="rl-f rl-dflt">${i18n("не дольше")}</div>${ctlSecHtml(c,ps)}`},
+  {ctl:"abort",label:"Прервать выполнение",grp:"Ход выполнения",br:[],
+   make:()=>({ctl:"abort"}),text:()=>i18n("Прервать выполнение"),check:()=>"",fieldsHtml:()=>""}];
 const RULE_ESC_MAX=5;
+const RULE_NUM_RANGE={preSec:[0,3600],fps:[1,120],speed:[1,100],holdSec:[0,86400]};
 const RULE_ESC_VIA={client:"в клиенте",tg:"в Telegram",email:"письмом"};
 function ruleRoleName(id){const r=id&&accRoles().find(x=>x.id===id);return r?r.n:(id||"—")}
 // Кто в демо ответил от имени роли: у встроенных ролей — их пользователи, у остальных — первый пользователь роли.
@@ -16944,6 +17007,8 @@ function ruleIdxGet(){
   if(!ruleIdx){
     const byId=new Map();
     walkAll((n,p)=>{if(!byId.has(n.id))byId.set(n.id,{n,p})});
+    // Хранилища и тома лежат вне дерева устройств: у тома свои события (ошибка тома), он выбирается в правиле, а предок — хранилище и его сервер
+    arch.forEach(a=>{if(byId.has(a.id))return;byId.set(a.id,{n:a,p:archOwner(a)});archVols(a).forEach(v=>byId.set(v.id,{n:v,p:a}))});
     ruleIdx={byId,dom:new Map(),srv:new Map()};
   }
   return ruleIdx;
@@ -16983,6 +17048,7 @@ function ruleUniverse(dt){
     ruleTypesNeed(dt);
     const seen=new Set(),out=[];
     walkAll(n=>{if(dt.includes(n.type)&&!seen.has(n.id)){seen.add(n.id);out.push(n)}});
+    if(dt.includes("vol"))arch.forEach(a=>archVols(a).forEach(v=>{if(!seen.has(v.id)){seen.add(v.id);out.push(v)}}));
     return out;
   });
 }
@@ -17252,17 +17318,20 @@ function ruleDaysText(days){
   if(d.join()==="1,2,3,4,5")return`${i18n("пн")}–${i18n("пт")}`;
   return d.map(x=>i18n(RULE_DAYS[x-1])).join(", ");
 }
-function ruleSchedText(s){return s?`${ruleDaysText(s.days)} ${i18n("в")} ${s.at||"—"}`:"—"}
+function ruleSchedText(s){
+  if(s&&s.every)return`${ruleDaysText(s.days)} ${i18n("в")} ${s.at||"—"}, ${i18n("потом каждые")} ${s.every} ${i18n("мин")}${s.rnd?` (${i18n("в случайный момент")})`:""}`;
+  return s?`${ruleDaysText(s.days)} ${i18n("в")} ${s.at||"—"}`:"—";
+}
 // Строка списка говорит то же, что карточка, одним предложением: что запускает
 // и что из этого выйдет. Иначе выбор в списке — угадывание.
 function ruleSummary(r,bare,full){
   const a=r.then.map(x=>itemText(x,{r,full})).join(", ")||`(${i18n("действие не выбрано")})`,
-    cn=(r.cond||[]).length?` · ${i18n("при условии")}: ${r.cond.map(c=>condLabel(c,true)).join("; ")}`:"";
+    cn=(r.cond||[]).length?` · ${i18n("при условии")}: ${r.cond.map(c=>condLabel(c,true)).join(r.condAny&&r.cond.length>1?` ${i18n("или")} `:"; ")}`:"";
   if(r.start==="sched")return`${i18n("По расписанию")}: ${ruleSchedText(r.sched)}${cn} → ${a}`;
   if(r.start==="manual")return`${i18n("Вручную")}${cn} → ${a}`;
-  let w=r.when.map(triggerLabel).join(` ${i18n("и")} `)||`(${i18n("событие не выбрано")})`;
+  let w=r.when.map(triggerLabel).join(` ${i18n(r.whenAny?"или":"и")} `)||`(${i18n("событие не выбрано")})`;
   if(!bare&&r.when.length)w=w.charAt(0).toLowerCase()+w.slice(1);   // после «Если» вид события с маленькой буквы
-  return`${bare?"":i18n("Если")+" "}${w}${r.within&&r.when.length>1?` (${i18n("в пределах")} ${r.within} ${i18n("с")})`:""}${cn} → ${a}`;
+  return`${bare?"":i18n("Если")+" "}${w}${r.within&&r.when.length>1&&!r.whenAny?` (${i18n("в пределах")} ${r.within} ${i18n("с")})`:""}${cn} → ${a}`;
 }
 // Имя для правила «с нуля» берётся из первого события и первого действия, пока
 // человек не придумал своё: коротко, без чисел — «Главный вход: движение → запись».
@@ -17300,7 +17369,7 @@ function ruleProblem(r){
   if(refRuleCross&&doms.size>1){const x=ruleItems(r).find(({it})=>!refRuleCross.includes(it.action));if(x)return`«${i18n(x.it.ctl?ctlKind(x.it).label:actionKind(x.it).label)}»: ${i18n("не выполняется, если цели правила взяты из нескольких доменов")}`}
   if(r.start==="event"){
     if(!r.when.length)return"Нужно минимум одно событие. Без события в «Если» правило не запустится";
-    if(r.when.length>1&&!r.within)return"Для двух событий нужно окно. Окно задаёт, за сколько секунд должны произойти оба события";
+    if(r.when.length>1&&!r.whenAny&&!r.within)return"Для двух событий нужно окно. Окно задаёт, за сколько секунд должны произойти оба события";
     if(r.when.length===1&&r.within)return"Окно — это время между событиями. Для одного события окно не нужно";
     for(const t of r.when){
       if(!t.ref)return`«${i18n(triggerKind(t).label)}»: не выбрано устройство`;
@@ -17308,6 +17377,7 @@ function ruleProblem(r){
     }
   }else if(r.start==="sched"&&(!r.sched||!r.sched.days.length||!/^\d\d:\d\d$/.test(r.sched.at||"")))
     return"Задать в расписании дни недели и время запуска";
+  if(r.start==="sched"&&r.sched.every&&!(+r.sched.every>=1&&+r.sched.every<=10080))return"Интервал повтора может быть от 1 до 10080 минут.";
   for(const c of(r.cond||[])){
     const k=condKind(c);
     if(c.kind==="mode"&&!(c.modes||[]).length)return"Выбрать минимум один режим объекта. Без режима правило никогда не действует";
@@ -17330,6 +17400,8 @@ function ruleProblem(r){
     const need=k.fields.filter(f=>!/необязательно/.test(f.label)&&f.req!==false&&(!f.on||f.on(a))).map(f=>f.id);
     const miss=need.find(id=>!String(a[id]??"").trim());
     if(miss)return`«${i18n(k.label)}»: ${miss==="ref"?"не выбрано устройство":`не заполнено поле «${i18n((k.fields.find(f=>f.id===miss)||{}).label||miss)}»`}`;
+    const outN=Object.keys(RULE_NUM_RANGE).find(f=>k.fields.some(x=>x.id===f)&&String(a[f]??"").trim()!==""&&!(+a[f]>=RULE_NUM_RANGE[f][0]&&+a[f]<=RULE_NUM_RANGE[f][1]));
+    if(outN)return i18n("«{step}»: значение поля «{field}» может быть от {min} до {max}.").replace("{step}",i18n(k.label)).replace("{field}",i18n(k.fields.find(x=>x.id===outN).label)).replace("{min}",RULE_NUM_RANGE[outN][0]).replace("{max}",RULE_NUM_RANGE[outN][1]);
     if(refIsGroup(a.ref)&&!refBroken(a.ref)&&!refNodes(a.ref,k.devTypes).length)return`«${i18n(k.label)}»: в выбранной области нет подходящих устройств`;
     if(a.ref==="$src"&&!ruleSrcOk(r,k.devTypes))return`«${i18n(k.label)}»: «${i18n("Устройство из события")}» можно выбрать, только если в «Если» есть событие от устройства этого типа`;
     if(k.via&&!find(k.via))return`${i18n("нет оповещателя для")} «${i18n(k.short||k.label)}»`;
@@ -17452,6 +17524,8 @@ function ruleDiffOf(a,b,isNew){
   add("Не больше запусков в минуту",s.rate,r.rate);
   add("Событие во время выполнения",i18n(RULE_REPEAT_NAME[s.repeat||"skip"]),i18n(RULE_REPEAT_NAME[r.repeat||"skip"]));
   add("Окно, с",s.within||"—",r.within||"—");
+  add("События",i18n(s.whenAny?"любое":"все"),i18n(r.whenAny?"любое":"все"));
+  add("Условия",i18n(s.condAny?"любое":"все"),i18n(r.condAny?"любое":"все"));
   add("События запускают правило",yn(s.run.mode!=="manual"),yn(r.run.mode!=="manual"),(s.run.mode==="manual")===(r.run.mode==="manual"));
   add("В меню оператора",yn(s.menu),yn(r.menu),!s.menu===!r.menu);
   add("Может запускаться другими правилами",yn(s.chain!==false),yn(r.chain!==false),(s.chain!==false)===(r.chain!==false));
@@ -17633,6 +17707,8 @@ const RULE_STARTS=[
 // Шаблоны на событиях, которых нет в системе, скрыты (ruleTplDeclared): появляются, когда сервер их объявит в /kinds
 // Ночные шаблоны: условие «Время» по расписанию «Ночь»; нет такого — без расписания, карточка попросит его выбрать
 function tplNightCond(){const n=SCHEDS.find(x=>!x.builtin&&!x.own&&x.name==="Ночь");return{kind:"time",sched:n?n.id:""}}
+// Вложение «кадр» — если система объявила поле attach у письма
+const tplAttach=()=>ruleRefField(actionKind({sub:"ntf",action:"email"}),"attach")===null?{}:{attach:"snapshot"};
 const RULE_TPL=[
   // Охрана
   {id:"mrec",start:"event",grp:"Охрана и реагирование",name:"Движение — запись",sub:"Камера записывает видео, пока есть движение, и ещё 10 секунд после движения",
@@ -17650,7 +17726,7 @@ const RULE_TPL=[
   {id:"aclose",start:"event",grp:"Охрана и реагирование",name:"Тревога обработана — камера в исходный пресет",sub:"Оператор обработал тревогу. Поворотная камера возвращается в пресет",
    make:()=>({when:[{sub:"unit",kind:"alarm.closed",ref:"",match:{}}],then:[{sub:"vms",action:"preset",ref:"$src",n:""}]})},
   {id:"aconf",start:"event",grp:"Охрана и реагирование",name:"Тревога подтверждена — письмо",sub:"Оператор подтвердил тревогу. Сервер отправляет письмо с кадром ответственному сотруднику",
-   make:()=>({when:[{sub:"unit",kind:"alarm.confirmed",ref:"",match:{}}],then:[{sub:"ntf",action:"email",to:"",subj:"Подтверждена тревога: {камера}"}]})},
+   make:()=>({when:[{sub:"unit",kind:"alarm.confirmed",ref:"",match:{}}],then:[{sub:"ntf",action:"email",to:"",subj:"Подтверждена тревога: {камера}",...tplAttach()}]})},
   // Состояние системы
   {id:"lost",start:"event",grp:"Состояние системы",name:"Обрыв потока — писать соседнюю",sub:"Если поток одной камеры оборвался, другая камера записывает видео 15 минут",
    make:()=>({when:[{sub:"vms",kind:"silent",ref:"",match:{}}],
@@ -17658,11 +17734,13 @@ const RULE_TPL=[
   {id:"off",start:"event",grp:"Состояние системы",name:"Камера не на связи — письмо",sub:"Если связь не вернулась за 5 минут, сервер отправляет письмо администратору",
    make:()=>({when:[{sub:"unit",kind:"device.lost",ref:"",match:{}}],then:[{ctl:"waitev",ev:{sub:"unit",kind:"device.restored",ref:"$src",match:{}},sec:300,yes:[],no:[{sub:"ntf",action:"email",to:"",subj:"Нет связи с камерой: {камера}"}]}]})},
   {id:"tamp",start:"event",grp:"Состояние системы",name:"Камеру закрыли или сдвинули — письмо",sub:"Сервер отправляет письмо администратору",
-   make:()=>({when:[{sub:"unit",kind:"tamper",ref:"",match:{}}],then:[{sub:"ntf",action:"email",to:"",subj:"Камера закрыта или сдвинута: {камера}"}]})},
+   make:()=>({when:[{sub:"unit",kind:"tamper",ref:"",match:{}}],then:[{sub:"ntf",action:"email",to:"",subj:"Камера закрыта или сдвинута: {камера}",...tplAttach()}]})},
   {id:"vol",start:"event",grp:"Состояние системы",name:"Ошибка архива — письмо",sub:"У тома архива ошибка. Сервер отправляет письмо администратору",
    make:()=>({when:[{sub:"unit",kind:"volume.error",ref:"",match:{}}],then:[{sub:"ntf",action:"email",to:"",subj:"Ошибка тома архива"}]})},
   {id:"srv",start:"event",grp:"Состояние системы",name:"Сервер не на связи — письмо",sub:"Сервер отправляет письмо администратору",
    make:()=>({when:[{sub:"unit",kind:"server.down",ref:"",match:{}}],then:[{sub:"ntf",action:"email",to:"",subj:"Нет связи с сервером"}]})},
+  {id:"norec",start:"sched",name:"Нет записи: письмо",sub:"Каждый час сервер проверяет архив камеры. Если записи нет, сервер отправляет письмо",
+   make:()=>({sched:{days:[1,2,3,4,5,6,7],at:"10:00",every:60},then:[{ctl:"check",what:"record",ref:"",depth:3600,yes:[{ctl:"abort"}],no:[{sub:"ntf",action:"email",to:"",subj:"Нет записи: {камера}"}]}]})},
   {id:"test",start:"sched",name:"Проверка реле раз в неделю",sub:"Каждый понедельник в 10:00 реле срабатывает на 1 секунду",
    make:()=>({sched:{days:[1],at:"10:00"},then:[{sub:"vms",action:"output",ref:"",state:"pulse",pulse_ms:1000}]})},
   {id:"gate",start:"manual",name:"Открыть шлагбаум",sub:"Кнопка в меню оператора включает реле на 3 секунды",
@@ -17670,6 +17748,7 @@ const RULE_TPL=[
 // Шаблон с тем, чего система не объявила, не предлагается
 function ruleTplDeclared(t){
   const b=t.make();
+  if(b.sched&&b.sched.every&&!ruleFeat("every"))return false;
   // Поиск без triggerKind: тот заводит незнакомому виду запись. У вида из описания шаблон не задаёт уточнений, которых вид не объявил
   const trig=x=>{const k=TRIGGER_KINDS.find(y=>y.sub===x.sub&&y.kind===x.kind);
     return!!k&&trigDeclared(k)&&(!k.gen||Object.keys(x.match||{}).every(f=>k.match.some(m=>m.id===f)))&&(x.ref!=="$src"||srcDeclared())};
@@ -17808,7 +17887,7 @@ function ruleSlotItemOf(r,slot,i){
   return slot==="then"?ruleThenAt(r,i):slot==="wev"?(ruleThenAt(r,i)||{}).ev:(slot==="cond"?r.cond||[]:r.when)[+i];
 }
 function ruleSlotItem(slot,i){const r=curRule();return r?ruleSlotItemOf(r,slot,i)||null:null}
-function ruleSlotKind(slot,it){return slot==="when"||slot==="wev"?triggerKind(it):slot==="cond"?condKind(it):actionKind(it)}
+function ruleSlotKind(slot,it){if(it&&it.ctl==="check")return{devTypes:it.what==="online"?["camera","sensor","acfa_sensor","relay"]:["camera"]};return slot==="when"||slot==="wev"?triggerKind(it):slot==="cond"?condKind(it):actionKind(it)}
 // Что выбирают в поле: камеру, датчик или реле — подпись говорит об этом прямо.
 function ruleRefNoun(devTypes){
   return devTypes.includes("camera")?"камеру":devTypes.includes("relay")?"реле":devTypes.some(t=>/sensor/.test(t))?"датчик":"устройство";
@@ -18182,8 +18261,16 @@ function setTriggerKind(i,v){
     r.when[i]={sub:k.sub,kind:k.kind,ref:refFits(old.ref,k.devTypes,"when")?old.ref:"",match:{}}});
 }
 function setTriggerField(i,f,v){ruleEdit(r=>{const t=r.when[i];t.match=t.match||{};if(v)t.match[f]=v;else delete t.match[f]})}
-function addTrigger(){ruleEdit(r=>{const k=ruleTrigAdd();r.when.push({sub:k.sub,kind:k.kind,ref:"",match:{}});if(r.when.length>1&&!r.within)r.within=30})}
-function delTrigger(i){ruleEdit(r=>{r.when.splice(i,1);if(r.when.length<2)r.within=0})}
+function addTrigger(){ruleEdit(r=>{const k=ruleTrigAdd();r.when.push({sub:k.sub,kind:k.kind,ref:"",match:{}});if(r.when.length>1&&!r.within&&!r.whenAny){if(ruleFeat("whenAny"))r.whenAny=true;else r.within=30}})}
+function delTrigger(i){ruleEdit(r=>{r.when.splice(i,1);if(r.when.length<2){r.within=0;r.whenAny=false}})}
+// «Или» и «и» между событиями и между условиями: связка одна на весь блок
+function setWhenLogic(v){ruleEdit(r=>{delete r.whenLogic;r.whenAny=v==="any";r.within=r.whenAny?0:(r.within||30)})}
+function setCondLogic(v){ruleEdit(r=>{delete r.condLogic;r.condAny=v==="any"})}
+function ruleLogicChips(cur,on,a,b){const c=(v,l)=>`<button type="button" class="stchip ${cur===v?"on":""}" aria-pressed="${cur===v}" ${onEv("click",[on,v])}><span class="stchip-lab">${i18n(l)}</span></button>`;return`<span class="rl-chips rl-logic" role="group">${c("any",a)}${c("all",b)}</span>`}
+// Расписание с интервалом: повтор каждые N минут от времени запуска, сдвиг запуска в случайный момент интервала
+function ruleEveryOn(v){ruleEdit(r=>{r.sched=r.sched||{days:[1],at:"10:00"};r.sched.every=v?(r.sched.every||60):0;if(!v)r.sched.rnd=false})}
+function ruleEverySet(v){ruleEdit(r=>{r.sched.every=Math.min(10080,Math.max(1,parseInt(v,10)||1))})}
+function ruleEveryRnd(v){ruleEdit(r=>{r.sched.rnd=!!v})}
 // «То» адресуется путём пункта строкой («2.yes.0»); lp — путь списка («» — верхний, «2.yes» — ветка шага 2).
 function ruleLastIdx(path){path=ruleParsePath(path);return path[path.length-1]}
 // Вложенные в шаг пункты (все ветки, на любой глубине).
@@ -18207,12 +18294,14 @@ function setStepKind(ps,v){
 function setActionField(ps,f,v){
   ruleEdit(r=>{
     const a=ruleThenAt(r,ps);if(!a)return;
-    const o=a[f],num=(typeof o==="number"||f==="after"||f==="minutes")&&String(v).trim()!==""&&!isNaN(+v);
+    const o=a[f],num=(typeof o==="number"||f==="after"||f==="minutes"||f in RULE_NUM_RANGE)&&String(v).trim()!==""&&!isNaN(+v);
     a[f]=num?+v:v;
     if(f==="dur"&&v==="event"&&a.after===undefined)a.after=0;
   });
 }
-function setCtlField(ps,f,v){ruleEdit(r=>{const c=ruleThenAt(r,ps);if(c)c[f]=f==="sec"?(parseInt(v,10)||0):v})}
+function setCtlField(ps,f,v){ruleEdit(r=>{const c=ruleThenAt(r,ps);if(!c)return;c[f]=f==="sec"||f==="depth"?(parseInt(v,10)||0):v;
+  // Глубина есть только у проверки записи: у «охраны» и «на связи» её нет, при возврате к записи — снова 120 с.
+  if(c.ctl==="check"&&f==="what"){if(v==="record"||v==="safe"){if(!c.depth)c.depth=120}else delete c.depth}})}
 function setWevKind(ps,v){
   ruleEdit(r=>{const c=ruleThenAt(r,ps);if(!c||!c.ev)return;const k=TRIGGER_KINDS[+v],old=c.ev;
     c.ev={sub:k.sub,kind:k.kind,ref:refFits(old.ref,k.devTypes,"when")?old.ref:"",match:{}}});
@@ -18337,7 +18426,7 @@ function condRowHtml(c,i){
     body=refFieldHtml("cond",i,c.ref);
     if(c.kind==="armed")body+=`<div class="rl-f">${selHtml([["true","на охране"],["false","снята с охраны"]],c.val===false?"false":"true",`condSet(${i},'val',this.value)`,`${i18n("Состояние охраны")} ${i+1}`)}</div>`;
   }
-  return`<div class="rl-row"><div class="rl-n">${i+1}</div><div class="rl-f">${selHtml(kindOpts(COND_KINDS,condDeclared,k,x=>x.kind),k.kind,`condKindSet(${i},this.value)`,`${i18n("Вид условия")} ${i+1}`)}</div>${body}
+  return`<div class="rl-row"><div class="rl-n">${i18n(i===0?"Если":curRule()&&curRule().condAny?"или":"и")}</div><div class="rl-f">${selHtml(kindOpts(COND_KINDS,condDeclared,k,x=>x.kind),k.kind,`condKindSet(${i},this.value)`,`${i18n("Вид условия")} ${i+1}`)}</div>${body}
     <button type="button" class="btn s btn-icon" title="${i18n("Убрать")}" aria-label="${i18n("Убрать")}" ${onEv("click",["delCond",i])}>${lu("x")}</button></div>`;
 }
 // ── «То»: дерево действий и шагов ──
@@ -18500,18 +18589,20 @@ function rulesUI(){
   const r=curRule();
   const why=ruleIssues(r);
   const fires=ruleFires[r.id]||[];
-  const whenBody=`${r.when.map((t,i)=>triggerRowHtml(t,i,i===0?i18n("Если"):i18n("и"))).join("")}
+  const whenBody=`${r.when.map((t,i)=>triggerRowHtml(t,i,i===0?"Если":r.whenAny?"или":"и")).join("")}
     <div class="rl-foot">
       <button type="button" class="btn s" ${onEv("click",["addTrigger"])}>${i18n("Добавить событие")}</button>
-      ${r.when.length>1?`<span class="rl-win">${i18n("в пределах")}
+      ${r.when.length>1&&(ruleFeat("whenAny")||r.whenAny)?`${ruleLogicChips(r.whenAny?"any":"all","setWhenLogic","Правило запускается, если пришло любое событие","Правило запускается, если пришли все события")}`:""}
+      ${r.when.length>1&&!r.whenAny?`<span class="rl-win">${i18n("в пределах")}
         <input type="number" min="1" max="3600" value="${r.within||30}" ${onEv("change",["setRuleField","within",onEv.value])}> ${i18n("с")}</span>`:""}
     </div>
-    <p class="sub">${i18n("Правило сравнивает у событий подсистему, вид события, устройство и уточнения. Все они должны совпасть точно. Поле «в пределах» появляется, когда в правиле два события или больше.")}</p>
+    <p class="sub">${i18n("Правило сравнивает у событий подсистему, вид события, устройство и уточнения. Все они должны совпасть точно.")}${r.when.length>1?` ${i18n(r.whenAny?"Правило запускается при каждом из этих событий.":"Правило запускается, только если все события произошли в пределах окна.")}`:""}</p>
     <label class="rl-flag"><input type="checkbox" ${r.run&&r.run.mode==="manual"?"checked":""} ${onEv("change",["ruleSetManual",onEv.checked])}> ${i18n("Запускать только вручную, не по событиям")}</label>
     ${ruleOrderHtml(r)}`;
   const condBody=`${(r.cond||[]).map(condRowHtml).join("")||`<p class="sub">${i18n("Условий нет. Правило выполняет действия при каждом запуске")}</p>`}
-    <div class="rl-foot"><button type="button" class="btn s" ${onEv("click",["addCond"])}>${i18n("Добавить условие")}</button></div>
-    <p class="sub">${i18n("Правило проверяет условия в момент запуска. Должны выполниться все условия. Если хотя бы одно условие не выполнено, правило пропускает запуск и записывает это в журнал.")} ${i18n("Условие «Время» берёт расписание из раздела «Расписания». Это расписание учитывает праздники и особые дни. Чтобы задать время только для этого правила, выбрать «Задать только здесь…».")}</p>`;
+    <div class="rl-foot"><button type="button" class="btn s" ${onEv("click",["addCond"])}>${i18n("Добавить условие")}</button>
+      ${(r.cond||[]).length>1&&(ruleFeat("condAny")||r.condAny)?ruleLogicChips(r.condAny?"any":"all","setCondLogic","Правило выполняется, если верно любое условие","Правило выполняется, если верны все условия"):""}</div>
+    <p class="sub">${i18n((r.cond||[]).length>1&&r.condAny?"Правило проверяет условия в момент запуска. Достаточно одного выполненного условия. Если не выполнено ни одно условие, правило пропускает запуск и записывает это в журнал.":"Правило проверяет условия в момент запуска. Должны выполниться все условия. Если хотя бы одно условие не выполнено, правило пропускает запуск и записывает это в журнал.")} ${i18n("Условие «Время» берёт расписание из раздела «Расписания». Это расписание учитывает праздники и особые дни. Чтобы задать время только для этого правила, выбрать «Задать только здесь…».")}</p>`;
   const startBody=r.start==="sched"?ruleSchedBody(r):`<p>${i18n("Правило запускается только вручную. Оператор запускает его кнопкой в своём меню, пользователь консоли — кнопкой «Запустить сейчас»")}</p>`;
   const thenBody=`${thenListHtml(r.then,"","",0)}${addBarHtml("")}
     <p class="sub">${i18n("Правило не управляет устройством само. Правило отправляет заявку, и заявку выполняет сервер, к которому подключено устройство. Поэтому в списке только те действия, которые этот сервер умеет выполнять.")}</p>`;
@@ -18759,7 +18850,7 @@ function ruleCheckRender(){
     const cands=rck.cands.map((c,i)=>`<label class="rl-pk rl-cand"><input type="radio" name="rckPick" ${rck.pick===i?"checked":""} ${onEv("change",["ruleCheckSet","pick",i])}><span>${escHtml(c.text?`${c.t} · ${c.text}`:`${c.t} · ${c.evs.map(ruleEvText).join(" + ")}`)}</span><small>${escHtml(c.from)}</small></label>`).join("");
     const rows=r.when.map((t,j)=>{
       const w=rck.rows[j],kd=TRIGGER_KINDS[w.kind];
-      return`<div class="rl-row"><div class="rl-n">${j?i18n("и"):i18n("Если")}</div>
+      return`<div class="rl-row"><div class="rl-n">${j?i18n(r.whenAny?"или":"и"):i18n("Если")}</div>
         <div class="rl-f">${selHtml(kindOpts(TRIGGER_KINDS,trigDeclared,TRIGGER_KINDS[w.kind]),w.kind,`ruleCheckRow(${j},'kind',this.value)`)}</div>
         <div class="rl-f">${ruleCheckDevSel(t,kd,w.ref,j)}</div></div>`}).join("");
     h+=`<div class="rl-h">${i18n("Источник события")}</div><div class="rl-opts">
@@ -20387,7 +20478,10 @@ function ruleSchedBody(r){
   const s=r.sched||{days:[],at:""};
   return`<div class="rl-chips">${RULE_DAYS.map((d,i)=>`<button type="button" class="stchip ${s.days.includes(i+1)?"on":""}" aria-pressed="${s.days.includes(i+1)}" ${onEv("click",["ruleSchedDay",i+1])}><span class="stchip-lab">${i18n(d)}</span></button>`).join("")}</div>
     <div class="g" style="margin-top:8px"><div><label>${i18n("Время запуска")}</label><input type="time" value="${escHtml(s.at||"")}" ${onEv("change",["ruleSchedAt",onEv.value])}></div></div>
-    <p class="sub">${i18n("Событий нет. Правило запускается по дням недели и времени.")}</p>`;
+    ${ruleFeat("every")||s.every?`<label class="rl-flag"><input type="checkbox" ${s.every?"checked":""} ${onEv("change",["ruleEveryOn",onEv.checked])}> ${i18n("Повторять с интервалом")}</label>`:""}
+    ${s.every?`<div class="rl-foot"><span class="rl-win">${i18n("каждые")} <input type="number" min="1" max="10080" value="${s.every}" aria-label="${i18n("Минут")}" ${onEv("change",["ruleEverySet",onEv.value])}> ${i18n("мин")}</span>
+      <label class="rl-flag"><input type="checkbox" ${s.rnd?"checked":""} ${onEv("change",["ruleEveryRnd",onEv.checked])}> ${i18n("в случайный момент интервала")}</label></div>`:""}
+    <p class="sub">${i18n(s.every?"Событий нет. Правило запускается в указанное время в выбранные дни и потом каждые N минут.":"Событий нет. Правило запускается по дням недели и времени.")}</p>`;
 }
 function ruleToggleMenu(){ruleEdit(r=>{r.menu=!r.menu})}
 function ruleSchedDay(d){

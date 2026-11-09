@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Конфигуратор — API",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "description": "Контракт конфигуратора: всё, что интерфейс читает и меняет. Источник истины: встроенный сервер прототипа (api/server.js) и бэкенд отвечают по нему. Договорённости — api/README.md: версии записей (ETag / If-Match, 428, 412), ошибки application/problem+json с машинным code, групповые операции с частичным успехом и idempotencyKey, поток событий SSE. Система может поддерживать не весь контракт: что она умеет — GET /reference → capabilities; остальные операции отвечают 404 NO_ROUTE, неподдержанные виды устройств и настройки — 422 NOT_SUPPORTED. Операции с тегом test-support есть только на тестовом стенде. Форма работает с одним адресом входа, другой — только если этот недоступен. Список операций, откат и память idempotencyKey у каждого адреса свои: после 5xx и смены адреса запись сперва перечитывается. Версия одной записи на разных адресах может отличаться: 412 и перечитывание. У изменений чужого кластера at — время, когда их увидели.",
     "license": {
       "name": "Внутренний документ",
@@ -7261,7 +7261,7 @@
         "description": "Событие, по которому запускается правило: событие объекта из описания его вида (UnitKind.events)"
       },
       "RuleAction": {
-        "description": "Действие правила. Действие объекта — {type: unitAction, action, target, params}: команда из UnitKind.actions с ruleAction, params — по её схеме params; камера: record, disable, alarm, wall, preset, arm, disarm, detect (включить детектор на minutes минут: повтор продлевает срок, свой включённый детектор этого вида второго не заводит), scan (проверить архив детектором за окно вокруг события: beforeSec до, afterSec после; одно окно — одна задача). Настраиваются только здесь, другой консоли нет. Действие системы (не объекта) — {source, action, …}: поля по справочнику ruleActions",
+        "description": "Действие правила. Действие объекта — {type: unitAction, action, target, params}: команда из UnitKind.actions с ruleAction, params — по её схеме params; камера: record, disable, alarm, wall, preset, arm, disarm, detect (включить детектор на minutes минут: повтор продлевает срок, свой включённый детектор этого вида второго не заводит), scan (проверить архив детектором за окно вокруг события: beforeSec до, afterSec после; одно окно — одна задача). Настраиваются только здесь, другой консоли нет. Действие системы (не объекта) — {source, action, …}: поля по справочнику ruleActions. Новые в 0.3.0: ntf.push (to, subject, body, attach), client.sound (file, roleId), client.voice (roleId), client.view (view, roleId), client.program (path, roleId); у ntf.email — attach; у net.http — методы PUT и DELETE, auth, headers, body. Встроенный сервер эти действия объявляет и пишет в журнал запуска, но не исполняет (заглушка стенда: у него нет клиента оператора и push-канала). Новые команды видов (UnitKind.actions с ruleAction): камера — export, replicate, ptz.tour; сервер — program, service; динамик — play; у камеры новые поля: record — preSec, fps; alarm — mode, comment; alarmclose — resolution; preset — speed, holdSec. Их встроенный сервер тоже только пишет в журнал и отмечает в status.observed объекта",
         "anyOf": [
           {
             "type": "object",
@@ -7350,13 +7350,15 @@
               },
               "to": {
                 "type": "string",
-                "description": "email: адрес"
+                "description": "email, push: адрес или получатель"
               },
               "subject": {
-                "type": "string"
+                "type": "string",
+                "description": "email: тема. push: заголовок. Шаблон, как text у tg"
               },
               "body": {
-                "type": "string"
+                "type": "string",
+                "description": "email, push: текст. http: тело запроса. Шаблон"
               },
               "chat": {
                 "type": "string"
@@ -7365,7 +7367,9 @@
                 "type": "string",
                 "enum": [
                   "GET",
-                  "POST"
+                  "POST",
+                  "PUT",
+                  "DELETE"
                 ]
               },
               "url": {
@@ -7374,6 +7378,49 @@
               "ruleId": {
                 "type": "string",
                 "format": "uuid"
+              },
+              "attach": {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "snapshot",
+                  "video"
+                ],
+                "description": "email, push: вложение — кадр или видео события"
+              },
+              "auth": {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "basic",
+                  "digest",
+                  "bearer"
+                ],
+                "description": "http: способ авторизации"
+              },
+              "headers": {
+                "type": "string",
+                "description": "http: заголовки, по строке «Имя: значение»"
+              },
+              "file": {
+                "type": "string",
+                "description": "client.sound: звуковой файл"
+              },
+              "view": {
+                "type": "string",
+                "enum": [
+                  "select",
+                  "map",
+                  "archive",
+                  "mark",
+                  "slideshow",
+                  "restore"
+                ],
+                "description": "client.view: что сделать с экраном оператора — выбрать камеру, показать карту, открыть архив, пометить камеру, начать слайд-шоу, вернуть раскладку"
+              },
+              "path": {
+                "type": "string",
+                "description": "client.program: путь к программе на компьютере оператора"
               }
             }
           }
@@ -7434,7 +7481,23 @@
           "windowSec": {
             "type": "integer",
             "minimum": 0,
-            "description": "Окно, в которое должны прийти все события; 0 — одно событие"
+            "description": "Окно, в которое должны прийти все события (whenLogic: all); 0 — одно событие или whenLogic: any"
+          },
+          "whenLogic": {
+            "type": "string",
+            "enum": [
+              "any",
+              "all"
+            ],
+            "description": "Как события triggers запускают правило. any — любое из событий: каждое запускает правило само, окна нет (windowSec — 0). all — нужны все события в пределах windowSec. Нет поля — all. Одно событие: поле ни на что не влияет. Без reference.ruleFeatures: whenAny — 422 NOT_SUPPORTED, field: triggers, rule.featureNotDeclared"
+          },
+          "condLogic": {
+            "type": "string",
+            "enum": [
+              "any",
+              "all"
+            ],
+            "description": "Как соединены conditions. all — должны выполниться все (и). any — достаточно одного (или); если не выполнено ни одно, запуск пропущен. Нет поля — all. Группировку «A и (B или C)» поле не выражает: связка одна на весь блок. Без reference.ruleFeatures: condAny поле any — 422 NOT_SUPPORTED, field: conditions, rule.featureNotDeclared"
           },
           "runAt": {
             "anyOf": [
@@ -7454,6 +7517,16 @@
                     "type": "string",
                     "pattern": "^([01][0-9]|2[0-4]):[0-5][0-9]$",
                     "description": "Время суток ЧЧ:ММ в часовом поясе системы"
+                  },
+                  "everyMin": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10080,
+                    "description": "Повторять запуск каждые everyMin минут: от time до конца суток в выбранные дни. Нет поля — один запуск в time. Встроенный сервер запускает такие правила по своим часам (/test/clock); запуск правил без everyMin по часам — как раньше, только вручную. Без reference.ruleFeatures: every — 422 NOT_SUPPORTED, field: start, rule.featureNotDeclared"
+                  },
+                  "randomShift": {
+                    "type": "boolean",
+                    "description": "Сдвигать каждый запуск на случайное число минут внутри интервала everyMin (0…everyMin−1). Только вместе с everyMin, иначе 422 RULE_INVALID, rule.noEvery. Без reference.ruleFeatures: every — так же"
                   }
                 },
                 "additionalProperties": false,
@@ -8862,7 +8935,7 @@
                 "fields"
               ]
             },
-            "description": "Каталог «Автоматизации» — то, что система исполняет: вместе с командами и событиями видов (UnitKind.actions с ruleAction, UnitKind.events), ruleConditions, ruleControls, ruleStarts, ruleTargets объявляет, что она умеет. Здесь — действия системы, не объекта: раскладка, почта, Telegram, HTTP, другое правило. Форма предлагает только объявленное. Включённое правило вне каталога — 422 NOT_SUPPORTED, field — раздел (start, triggers, conditions, steps), params.issue — что именно: {code, params}, коды rule.startNotDeclared, trigger.notDeclared, cond.notDeclared, action.notDeclared, action.fieldNotDeclared, control.notDeclared, target.notDeclared. В /rules/update — элемент failed с этим кодом. Запуск такого правила — 409 NOT_RUNNABLE. Выключенное правило хранится как есть: такое правило форма показывает, а не теряет. fields — поля действия: у поля options — его значения"
+            "description": "Каталог «Автоматизации» — то, что система исполняет: вместе с командами и событиями видов (UnitKind.actions с ruleAction, UnitKind.events), ruleConditions, ruleControls, ruleStarts, ruleTargets объявляет, что она умеет. Здесь — действия системы, не объекта: раскладка, почта, Telegram, HTTP, другое правило. Форма предлагает только объявленное. Включённое правило вне каталога — 422 NOT_SUPPORTED, field — раздел (start, triggers, conditions, steps), params.issue — что именно: {code, params}, коды rule.startNotDeclared, trigger.notDeclared, cond.notDeclared, action.notDeclared, action.fieldNotDeclared, control.notDeclared, target.notDeclared. В /rules/update — элемент failed с этим кодом. Запуск такого правила — 409 NOT_RUNNABLE. Выключенное правило хранится как есть: такое правило форма показывает, а не теряет. fields — поля действия: у поля options — его значения. С 0.3.0: ntf.push, client.sound, client.voice, client.view, client.program; поля attach (email, push), auth, headers, body (http)"
           },
           "access": {
             "type": "object",
@@ -9158,7 +9231,19 @@
                 "branches"
               ]
             },
-            "description": "Шаги хода выполнения, которые исполняет система. Что не объявлено, форма не предлагает; как судится — описание ruleActions"
+            "description": "Шаги хода выполнения, которые исполняет система. Что не объявлено, форма не предлагает; как судится — описание ruleActions. check (ветки yes, no), after и abort (веток нет) — с 0.3.0: система, которая их не объявила, не получает их от формы, включённое правило с ними — 422 NOT_SUPPORTED, control.notDeclared"
+          },
+          "ruleFeatures": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "whenAny",
+                "condAny",
+                "every"
+              ]
+            },
+            "description": "Что из логики и расписания правила исполняет система: whenAny — Rule.whenLogic: any, condAny — Rule.condLogic: any, every — Rule.runAt.everyMin и randomShift. Чего нет в списке, того форма не предлагает; включённое правило с этим — 422 NOT_SUPPORTED, params.issue.code rule.featureNotDeclared, params.issue.params.feature. Нет поля — ничего из перечисленного не исполняется"
           },
           "layouts": {
             "type": "array",
@@ -10193,7 +10278,23 @@
           "windowSec": {
             "type": "integer",
             "minimum": 0,
-            "description": "Окно, в которое должны прийти все события; 0 — одно событие"
+            "description": "Окно, в которое должны прийти все события (whenLogic: all); 0 — одно событие или whenLogic: any"
+          },
+          "whenLogic": {
+            "type": "string",
+            "enum": [
+              "any",
+              "all"
+            ],
+            "description": "Как события triggers запускают правило. any — любое из событий: каждое запускает правило само, окна нет (windowSec — 0). all — нужны все события в пределах windowSec. Нет поля — all. Одно событие: поле ни на что не влияет. Без reference.ruleFeatures: whenAny — 422 NOT_SUPPORTED, field: triggers, rule.featureNotDeclared"
+          },
+          "condLogic": {
+            "type": "string",
+            "enum": [
+              "any",
+              "all"
+            ],
+            "description": "Как соединены conditions. all — должны выполниться все (и). any — достаточно одного (или); если не выполнено ни одно, запуск пропущен. Нет поля — all. Группировку «A и (B или C)» поле не выражает: связка одна на весь блок. Без reference.ruleFeatures: condAny поле any — 422 NOT_SUPPORTED, field: conditions, rule.featureNotDeclared"
           },
           "runAt": {
             "anyOf": [
@@ -10213,6 +10314,16 @@
                     "type": "string",
                     "pattern": "^([01][0-9]|2[0-4]):[0-5][0-9]$",
                     "description": "Время суток ЧЧ:ММ в часовом поясе системы"
+                  },
+                  "everyMin": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10080,
+                    "description": "Повторять запуск каждые everyMin минут: от time до конца суток в выбранные дни. Нет поля — один запуск в time. Встроенный сервер запускает такие правила по своим часам (/test/clock); запуск правил без everyMin по часам — как раньше, только вручную. Без reference.ruleFeatures: every — 422 NOT_SUPPORTED, field: start, rule.featureNotDeclared"
+                  },
+                  "randomShift": {
+                    "type": "boolean",
+                    "description": "Сдвигать каждый запуск на случайное число минут внутри интервала everyMin (0…everyMin−1). Только вместе с everyMin, иначе 422 RULE_INVALID, rule.noEvery. Без reference.ruleFeatures: every — так же"
                   }
                 },
                 "additionalProperties": false,
@@ -10938,9 +11049,18 @@
           },
           {
             "$ref": "#/components/schemas/RuleEscalate"
+          },
+          {
+            "$ref": "#/components/schemas/RuleCheck"
+          },
+          {
+            "$ref": "#/components/schemas/RuleAfter"
+          },
+          {
+            "$ref": "#/components/schemas/RuleAbort"
           }
         ],
-        "description": "Шаг «Тогда»: действие (action) или шаг хода выполнения (control)"
+        "description": "Шаг «Тогда»: действие (action) или шаг хода выполнения (control: wait, waitEvent, ask, escalate, check, after, abort)"
       },
       "RuleContent": {
         "type": "object",
@@ -10993,7 +11113,23 @@
           "windowSec": {
             "type": "integer",
             "minimum": 0,
-            "description": "Окно, в которое должны прийти все события; 0 — одно событие"
+            "description": "Окно, в которое должны прийти все события (whenLogic: all); 0 — одно событие или whenLogic: any"
+          },
+          "whenLogic": {
+            "type": "string",
+            "enum": [
+              "any",
+              "all"
+            ],
+            "description": "Как события triggers запускают правило. any — любое из событий: каждое запускает правило само, окна нет (windowSec — 0). all — нужны все события в пределах windowSec. Нет поля — all. Одно событие: поле ни на что не влияет. Без reference.ruleFeatures: whenAny — 422 NOT_SUPPORTED, field: triggers, rule.featureNotDeclared"
+          },
+          "condLogic": {
+            "type": "string",
+            "enum": [
+              "any",
+              "all"
+            ],
+            "description": "Как соединены conditions. all — должны выполниться все (и). any — достаточно одного (или); если не выполнено ни одно, запуск пропущен. Нет поля — all. Группировку «A и (B или C)» поле не выражает: связка одна на весь блок. Без reference.ruleFeatures: condAny поле any — 422 NOT_SUPPORTED, field: conditions, rule.featureNotDeclared"
           },
           "runAt": {
             "anyOf": [
@@ -11013,6 +11149,16 @@
                     "type": "string",
                     "pattern": "^([01][0-9]|2[0-4]):[0-5][0-9]$",
                     "description": "Время суток ЧЧ:ММ в часовом поясе системы"
+                  },
+                  "everyMin": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10080,
+                    "description": "Повторять запуск каждые everyMin минут: от time до конца суток в выбранные дни. Нет поля — один запуск в time. Встроенный сервер запускает такие правила по своим часам (/test/clock); запуск правил без everyMin по часам — как раньше, только вручную. Без reference.ruleFeatures: every — 422 NOT_SUPPORTED, field: start, rule.featureNotDeclared"
+                  },
+                  "randomShift": {
+                    "type": "boolean",
+                    "description": "Сдвигать каждый запуск на случайное число минут внутри интервала everyMin (0…everyMin−1). Только вместе с everyMin, иначе 422 RULE_INVALID, rule.noEvery. Без reference.ruleFeatures: every — так же"
                   }
                 },
                 "additionalProperties": false,
@@ -11196,7 +11342,23 @@
           "windowSec": {
             "type": "integer",
             "minimum": 0,
-            "description": "Окно, в которое должны прийти все события; 0 — одно событие"
+            "description": "Окно, в которое должны прийти все события (whenLogic: all); 0 — одно событие или whenLogic: any"
+          },
+          "whenLogic": {
+            "type": "string",
+            "enum": [
+              "any",
+              "all"
+            ],
+            "description": "Как события triggers запускают правило. any — любое из событий: каждое запускает правило само, окна нет (windowSec — 0). all — нужны все события в пределах windowSec. Нет поля — all. Одно событие: поле ни на что не влияет. Без reference.ruleFeatures: whenAny — 422 NOT_SUPPORTED, field: triggers, rule.featureNotDeclared"
+          },
+          "condLogic": {
+            "type": "string",
+            "enum": [
+              "any",
+              "all"
+            ],
+            "description": "Как соединены conditions. all — должны выполниться все (и). any — достаточно одного (или); если не выполнено ни одно, запуск пропущен. Нет поля — all. Группировку «A и (B или C)» поле не выражает: связка одна на весь блок. Без reference.ruleFeatures: condAny поле any — 422 NOT_SUPPORTED, field: conditions, rule.featureNotDeclared"
           },
           "runAt": {
             "anyOf": [
@@ -11216,6 +11378,16 @@
                     "type": "string",
                     "pattern": "^([01][0-9]|2[0-4]):[0-5][0-9]$",
                     "description": "Время суток ЧЧ:ММ в часовом поясе системы"
+                  },
+                  "everyMin": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10080,
+                    "description": "Повторять запуск каждые everyMin минут: от time до конца суток в выбранные дни. Нет поля — один запуск в time. Встроенный сервер запускает такие правила по своим часам (/test/clock); запуск правил без everyMin по часам — как раньше, только вручную. Без reference.ruleFeatures: every — 422 NOT_SUPPORTED, field: start, rule.featureNotDeclared"
+                  },
+                  "randomShift": {
+                    "type": "boolean",
+                    "description": "Сдвигать каждый запуск на случайное число минут внутри интервала everyMin (0…everyMin−1). Только вместе с everyMin, иначе 422 RULE_INVALID, rule.noEvery. Без reference.ruleFeatures: every — так же"
                   }
                 },
                 "additionalProperties": false,
@@ -17557,6 +17729,104 @@
             "description": "Итог по ActionDescriptor.result"
           }
         }
+      },
+      "RuleCheck": {
+        "type": "object",
+        "properties": {
+          "control": {
+            "type": "string",
+            "enum": [
+              "check"
+            ]
+          },
+          "what": {
+            "type": "string",
+            "enum": [
+              "record",
+              "safe",
+              "armed",
+              "online"
+            ],
+            "description": "Что проверить: record — камера пишет в архив, safe — запись защищена, armed — камера на охране, online — устройство на связи"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RuleTarget"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Что проверять. Область — должны пройти все объекты. fromEvent — объект из события, запустившего правило"
+          },
+          "depthSec": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 86400,
+            "description": "record, safe: за сколько последних секунд, 1…86400 (у включённого правила 0 — 422 RULE_INVALID, control.depth). armed, online: поля нет"
+          },
+          "yes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RuleStep"
+            }
+          },
+          "no": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RuleStep"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "control",
+          "what",
+          "target",
+          "yes",
+          "no"
+        ],
+        "description": "Проверить состояние и пойти по ветке: yes — проверка прошла у всех объектов цели, no — нет (в том числе цели нет в живых). Сервер судит по своим данным на момент шага, ничего не ждёт. Встроенный сервер глубину depthSec не применяет: у него нет шкалы архива, record — камера пишет в архив сейчас, safe — ещё и архив зашифрован. В пробном запуске исход можно задать в branches по пути шага"
+      },
+      "RuleAfter": {
+        "type": "object",
+        "properties": {
+          "control": {
+            "type": "string",
+            "enum": [
+              "after"
+            ]
+          },
+          "sec": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3600,
+            "description": "Секунд ждать конца предыдущего шага, 1…3600"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "control",
+          "sec"
+        ],
+        "description": "Дождаться конца предыдущего шага, но не дольше sec секунд. Первый шаг списка ждать нечего. Встроенный сервер выполняет шаги сразу, поэтому ждать ему нечего: шаг только пишется в журнал запуска"
+      },
+      "RuleAbort": {
+        "type": "object",
+        "properties": {
+          "control": {
+            "type": "string",
+            "enum": [
+              "abort"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "control"
+        ],
+        "description": "Прервать выполнение: шаги после этого, в том числе в охватывающих ветках, не выполняются. Запуск идёт к концу, итог по выполненным шагам"
       }
     }
   }

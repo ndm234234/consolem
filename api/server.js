@@ -65,7 +65,7 @@
   // Хуки профилей vms.* (api/profiles.js): смысл известных видов — общий код старых путей и путей ядра
   const Profiles = typeof window !== "undefined" && window.ConsolemProfiles ? window.ConsolemProfiles : require("./profiles.js");
   // Содержимое правила: то, что правит администратор и что хранят версии истории
-  const RULE_CONTENT = ["name", "enabled", "logOnly", "logOnlySince", "start", "runMode", "operatorMenu", "ratePerMinute", "windowSec", "runAt", "repeat",
+  const RULE_CONTENT = ["name", "enabled", "logOnly", "logOnlySince", "start", "runMode", "operatorMenu", "ratePerMinute", "windowSec", "whenLogic", "condLogic", "runAt", "repeat",
     "triggers", "conditions", "steps", "owner", "purpose", "serverId", "runAsRoleId", "allowChain", "labels", "validForSec"];
   const STREAM_DEPTH = 500;
   // Запусков одного правила на строке хода: идущий и очередь (repeat: queue), сверх — как skip
@@ -481,6 +481,8 @@
     let kinds = null, store = null, legacy = null, kindList = null;
     // Состояние хуков профилей (итоги круга домена…): сбрасывается в load()
     let profileState = {};
+    // Расписание с интервалом: с какого момента правило видит сервер (/test/reset очищает)
+    const schedSeen = new Map();
     /* Хуки профилей (profiles.js) и то, что они видят у сервера: склад, описания видов, старые таблицы и общие помощники старых
        путей. Помощники — обёртки: сами функции объявлены ниже, хук зовёт их, когда сервер уже собран */
     const HOOKS = Profiles.HOOKS;
@@ -580,6 +582,7 @@
       formatting = new Map();
       applying = new Map();
       profileState = {};
+      schedSeen.clear();
       scanning = new Map();
       db.archiveWatches = db.archiveWatches || [];
       db.archiveScans = db.archiveScans || [];
@@ -1254,10 +1257,11 @@
       const over = rp === "queue" && busy.length >= RUNS_MAX, queued = !!busy.length && rp === "queue" && !over;
       if (busy.length && rp === "restart") busy.forEach(runStop);
       const rule = clone(r), at = now();
-      const f = engine.fire(rule, Object.assign({ at, now: true, i: 0, live: true, busy: !!busy.length, busyAs: over ? "skip" : undefined, queued }, o));
+      const br = {};   // исходы шагов запуска: ответы людей и проверки check, судимые один раз
+      const f = engine.fire(rule, Object.assign({ at, now: true, i: 0, live: true, br, busy: !!busy.length, busyAs: over ? "skip" : undefined, queued }, o));
       const rec = storeFire(f);
       if (!queued && !f.pause) return rec;
-      const run = { ruleId: r.id, fireId: rec.id, rule, via: o.via, at, events: rec.events, src: rec.sourceDeviceIds, br: {}, who: {}, pause: null, queued };
+      const run = { ruleId: r.id, fireId: rec.id, rule, via: o.via, at, events: rec.events, src: rec.sourceDeviceIds, br, who: {}, pause: null, queued };
       ruleRuns.push(run);
       if (f.pause) runPause(run, f.pause);
       return rec;
@@ -1281,6 +1285,64 @@
       send("entity.created", { kind: "ruleFire", entityId: rec.id, payload: { ruleId: rec.ruleId } });
       return rec;
     }
+    // Событие запускает правило: включённое, по событию, не «только вручную», с одним событием или whenLogic: any (любое из
+    // событий запускает само). Несколько событий в окне (all) встроенный сервер не собирает: они проверяются пробным запуском
+    const ruleHears = (r, fits) => r.enabled && r.start === "event" && r.runMode !== "manual" && (r.triggers.length === 1 || r.whenLogic === "any") && r.triggers.some(fits);
+
+    /* ----- Расписание с интервалом: runAt.everyMin, randomShift -----
+       Встроенный сервер запускает по часам только правила с everyMin (/test/clock двигает часы, запрос тоже). Правило без everyMin
+       запускают вручную и по истории набора, как раньше. Запуск — не раньше, чем правило увидел сервер: прошлое не догоняется.
+       Сдвиг randomShift случаен, но постоянен для (правило, день, номер запуска): повтор прогона даёт те же минуты */
+    const schedHash = (s) => {
+      let h = 2166136261;
+      for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+      return h >>> 0;
+    };
+    const schedOn = (r) => r.enabled && r.start === "schedule" && r.runMode !== "manual" && r.runAt && r.runAt.everyMin > 0;
+    // Первый запуск правила позже момента after (мс) или null
+    function schedNext(r, after) {
+      const ra = r.runAt, step = ra.everyMin, [h, m] = ra.time.split(":").map(Number), from = h * 60 + m;
+      const day0 = engine.wall(after);
+      for (let k = 0; k < 9; k++) {
+        const day = new Date(Date.UTC(day0.getUTCFullYear(), day0.getUTCMonth(), day0.getUTCDate() + k));
+        if (!ra.days.includes(day.getUTCDay() || 7)) continue;
+        for (let n = 0; from + n * step < 1440; n++) {
+          const shift = ra.randomShift ? schedHash(`${r.id}|${day.toISOString().slice(0, 10)}|${n}`) % step : 0;
+          const at = engine.fromWall(new Date(day.getTime() + Math.min(from + n * step + shift, 1439) * 60000));
+          if (at > after) return at;
+        }
+      }
+      return null;
+    }
+    // Ближайший запуск по расписанию с интервалом — часам /test/clock: дойти до него и запустить
+    // Правило вышло из расписания с интервалом (выключено, ручное, без everyMin) — прошлое не догоняется, когда вернётся
+    const schedSync = () => db.rules.forEach((r) => schedOn(r) || schedSeen.delete(r.id));
+    function schedDue() {
+      schedSync();
+      const out = [];
+      db.rules.filter(schedOn).forEach((r) => {
+        const key = JSON.stringify([r.enabled, r.runMode, r.runAt]);
+        let s = schedSeen.get(r.id);
+        if (!s || s.key !== key) schedSeen.set(r.id, (s = { key, from: now() }));
+        const at = schedNext(r, s.from);
+        if (at != null) out.push(at);
+      });
+      return out;
+    }
+    function schedTick() {
+      schedSync();
+      db.rules.filter(schedOn).forEach((r) => {
+        const key = JSON.stringify([r.enabled, r.runMode, r.runAt]);
+        let s = schedSeen.get(r.id);
+        if (!s || s.key !== key) schedSeen.set(r.id, (s = { key, from: now() }));
+        for (let at = schedNext(r, s.from), n = 0; at != null && at <= now() && n < 100; at = schedNext(r, s.from), n++) {
+          s.from = at;
+          fireDo(ruleStart(r, { via: "sched" }));
+        }
+        s.from = Math.max(s.from, now());
+      });
+    }
+
     // Владелец расписания — существующее окно обслуживания или правило
     const ownerProblem = (o) =>
       o && !byId(o.kind === "rule" ? "rules" : "maintenanceWindows", o.id) ? problem(422, "VALIDATION_FAILED", `Владельца расписания ${o.id} нет`, { field: "owner" }) : null;
@@ -1823,6 +1885,7 @@
       tickDiscovery(fired);
       applyTick(fired);
       runTick();
+      schedTick();
       modeTick();
       exportTick();
       formatting.forEach((at, id) => {
@@ -4165,6 +4228,8 @@
           if (body.ruleId && !saved) return notFound("Правило");
           if (body.log && !saved) return problem(422, "VALIDATION_FAILED", "Записать в журнал можно проверку сохранённого правила", { field: "log" });
           const r = Object.assign({ id: body.ruleId || null, mute: saved ? saved.mute : null, order: saved ? saved.order : 0 }, clone(body.rule));
+          const noTarget = (l) => l.some((a) => (a.control === "check" && !a.target) || noTarget(a.yes || []) || noTarget(a.no || []));
+          if (noTarget(r.steps || [])) return problem(422, "RULE_INVALID", "У шага «Проверить» не выбрана цель", { params: { issue: { code: "control.noTarget", params: { control: "check" } } } });
           const at = body.at ? Date.parse(body.at) : now();
           const pre = r.enabled ? [] : [{ code: "testOff", params: {}, ok: true, reason: null }];
           let events;
@@ -4753,7 +4818,7 @@
           const fired = [];
           const target = now() + ms;
           for (let t = now(); ; ) {
-            const due = Math.min(target, ...[...ops.values()].filter((o) => o.state === "running").map((o) => o.nextAt), ...formatting.values(), ...[...searches.values()].map((s) => s.nextAt), ...[...syncing.values()].map((s) => s.at), ...applying.values(), ...runDue());
+            const due = Math.min(target, ...[...ops.values()].filter((o) => o.state === "running").map((o) => o.nextAt), ...formatting.values(), ...[...searches.values()].map((s) => s.nextAt), ...[...syncing.values()].map((s) => s.at), ...applying.values(), ...runDue(), ...schedDue());
             if (clock.frozenAt != null) clock.frozenAt = Math.max(t, due);
             else clock.offset += Math.max(t, due) - now();
             fired.push(...tick());
@@ -4799,7 +4864,7 @@
             if (!((kinds.get(u.kind) || {}).events || []).some((e) => e.id === body.eventId)) return problem(422, "VALIDATION_FAILED", `У вида ${u.kind} нет события ${body.eventId}`, { field: "eventId" });
             const match = clone(body.match || {}), ev = { source: "unit", event: body.eventId, match, deviceId: u.uid, at: iso(now()) };
             const fits = (t) => Object.entries(t.match || {}).every(([k, v]) => k in match && JSON.stringify(match[k]) === JSON.stringify(v));
-            db.rules.filter((r) => r.enabled && r.start === "event" && r.runMode !== "manual" && r.triggers.length === 1 && engine.hears(r.triggers[0], body.eventId, u.uid) && fits(r.triggers[0]))
+            db.rules.filter((r) => ruleHears(r, (t) => engine.hears(t, body.eventId, u.uid) && fits(t)))
               .forEach((r) => fireDo(ruleStart(r, { via: "event", events: [ev], src: [u.uid] })));
             return { status: 200, body: { applied: true } };
           }
@@ -4822,7 +4887,7 @@
             const at = iso(now());
             if (body.value === "active") {
               const ev = { source: "unit", event: "io.input", match: { value: "active" }, deviceId: dev.id, at };
-              db.rules.filter((r) => r.enabled && r.start === "event" && r.runMode !== "manual" && r.triggers.length === 1 && (r.triggers[0].match.value || "active") === "active" && engine.hears(r.triggers[0], "io.input", dev.id))
+              db.rules.filter((r) => ruleHears(r, (t) => (t.match.value || "active") === "active" && engine.hears(t, "io.input", dev.id)))
                 .forEach((r) => ruleStart(r, { via: "event", events: [ev], src: [dev.id] }));
             } else
               ruleRuns.filter((x) => x.pause && x.pause.control.stop === "reset" && x.events.some((e) => e.event === "io.input" && e.deviceId === dev.id)).forEach((x) => {
