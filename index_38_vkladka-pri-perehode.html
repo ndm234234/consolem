@@ -6990,7 +6990,7 @@ function openNode(id,opts={}){
   if(app==="rules"&&(opts.app||app)!=="rules"&&typeof ruleGuard==="function"&&ruleGuard(()=>openNode(id,opts)))return;
   selCtx=null;
   app=opts.app||app||"hw";
-  tab=opts.tab||archSliceTab(f.n)||"gen";
+  tab=opts.tab||archSliceTab(f.n)||tabKeep(f.n);
   if(opts.view)tview=opts.view;
   else if(f.n.type!=="server"&&f.n.type!=="domain"&&f.n.type!=="unalloc")tview=treeKind(f.n)||tview;
   clearGearFilters();filtPop=false;treeKeepQ(id);expandTo(id);archSliceOpen(f.n);sel=id;pushRecent(id);
@@ -7122,7 +7122,7 @@ function jumpToNode(n){
   if(n.type==="folder"&&group()!=="folder"&&sliceGroups().includes("folder"))setGroupAll("folder");
   treeKeepQ(n.id);treeMatchCache.clear();searchMatchCache.clear();
   treeOpenFollow();
-  sel=n.id;selCtx=null;tab=archSliceTab(n)||"gen";setD(false);expandTo(n.id);archSliceOpen(n);
+  sel=n.id;selCtx=null;tab=archSliceTab(n)||tabKeep(n);setD(false);expandTo(n.id);archSliceOpen(n);
   // Найденный контейнер раскрывается со всем содержимым: искали его целиком.
   expandSubtree(n);
   pushRecent(n.id);
@@ -8299,7 +8299,7 @@ function isFav(id){return favIndex(id)>=0}
 function favAddr(id,ctx){
   const n=find(id)?.n;
   return{id,slice,group:group(),ctx:ctx||null,
-    tab:id===sel?(tab||"gen"):"gen",
+    tab:id===sel?(tab||"gen"):null,
     name:n?locName(n):String(id),type:n?n.type:null};
 }
 function favAdd(id,ctx){
@@ -8455,9 +8455,9 @@ function goFav(i){
     toast(i18n("Консоль сбросила фильтры, чтобы показать результаты поиска"));
   }
   // Место из ярлыка — только в той раскладке, где его сохранили: раскладку ярлык не меняет
-  pick(f.id,{ctx:f.group===group()&&f.ctx||null});
+  // Вкладка, сохранённая в ярлыке, важнее запомненной; ярлык без вкладки открывает запомненную
   const n=find(f.id)?.n;
-  if(f.tab&&f.tab!=="gen"&&n&&tabsFor(n).some(([id])=>id===f.tab)){tab=f.tab;gear()}
+  pick(f.id,{ctx:f.group===group()&&f.ctx||null,tab:f.tab&&n&&tabsFor(n).some(([id])=>id===f.tab)?f.tab:undefined});
 }
 // Перерисовка — дело служебное: человек сам прокрутил список и сам поставил
 // курсор в поле, и терять это из-за того, что обновилась соседняя строка,
@@ -9704,7 +9704,7 @@ function pick(id,opts){
   if(selCtx&&selCtx.startsWith("f:"))selFolder=selCtx.slice(2);
   if(f.n.type==="folder")selFolder=id;
   else{const own=foldersOfDevice(path(id)[0].id);if(own.length&&!own.some(x=>x.id===selFolder))selFolder=own[0].id}
-  const flTab=flDomainTab(f.n);pushRecent(id);sel=id;detHostRow=null;tab=opts?.tab||archCtxTab(f.n,selCtx)||archSliceTab(f.n)||flTab||(slice==="det"&&f.n.type==="camera"?"det":"gen");setD(false);editClear();expandTo(id,selCtx);archSliceOpen(f.n);if(opts?.archKind)archTbl.kind=opts.archKind;
+  const flTab=flDomainTab(f.n);pushRecent(id);sel=id;detHostRow=null;tab=opts?.tab||archCtxTab(f.n,selCtx)||archSliceTab(f.n)||flTab||(slice==="det"&&f.n.type==="camera"?"det":tabKeep(f.n));setD(false);editClear();expandTo(id,selCtx);archSliceOpen(f.n);if(opts?.archKind)archTbl.kind=opts.archKind;
   if(multi&&canMultiPick(f.n)){
     bulkPeek=false;
     // Ctrl/Shift-выбор включает режим галочек: выборка должна быть видна.
@@ -10126,7 +10126,7 @@ function openTreeCtx(n,xy){
   else if(multi){
     const k=bulkSelNodes().length;
     groups.push([
-      tctxItem(`${i18n("Изменить выбранные")} (${k})`,`closeTreeCtx();tabGo('gen')`,`<span class="tctx-ic">${SEL_IC}</span>`),
+      tctxItem(`${i18n("Изменить выбранные")} (${k})`,`closeTreeCtx();tabFirst()`,`<span class="tctx-ic">${SEL_IC}</span>`),
       tctxItem(`${i18n("Включить")} (${k})`,`closeTreeCtx();bulkQuick('on')`),
       tctxItem(`${i18n("Выключить")} (${k})`,`closeTreeCtx();bulkQuick('off')`)]);
     groups.push([
@@ -11089,8 +11089,28 @@ function tabsForHand(n){
   if(n.type==="sms")return[["gen","Шлюз"]];
   return[["gen","Основные"]];
 }
-// Вкладка карточки
-function tabGo(id){tab=id;gear()}
+// Вкладка карточки. Вкладку, которую пользователь выбрал щелчком, консоль запоминает
+// и открывает у следующего объекта, если у него есть вкладка с тем же ключом
+// («Архив» камеры и IP-сервера — "rec"). Вкладки формы по схеме ("sf1"…) пронумерованы
+// по порядку, поэтому их сравниваем по подписи. Иначе открывается первая вкладка.
+let tabMem={id:"gen",label:null};
+function tabGo(id){
+  tab=id;
+  const n=find(sel)?.n,t=n&&tabsFor(n).find(([k])=>k===id);
+  tabMem={id,label:t?t[1]:null};
+  gear();
+}
+// Первая вкладка без смены запомненной (пункт «Изменить выбранные» в меню дерева)
+function tabFirst(){tab="gen";gear()}
+function tabKeep(n){
+  if(!n)return"gen";
+  const sf=/^sf\d+$/.test(tabMem.id);
+  // Строка перечня ещё без полной записи: вкладки известны после загрузки, gear() поправит
+  if(n._row)return sf?"gen":tabMem.id;
+  const tabs=tabsFor(n);
+  const t=sf?tabs.find(([,l])=>l===tabMem.label):tabs.find(([k])=>k===tabMem.id);
+  return t?t[0]:"gen";
+}
 function gear(){
   ruleIdxDrop();
   if(bulkActive()&&!bulkPeek){paintMain(bulkCardHtml());return}

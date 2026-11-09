@@ -20,7 +20,7 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   const ctrl = ctrls.find((u) => (u.folders || []).length) || ctrls[0];
   const ctrl2 = ctrls.find((u) => u.uid !== ctrl.uid);
   const open = async (uid, t) => {
-    pick(uid, { force: true });
+    pick(uid, { force: true, tab: "gen" });
     if (t) goTab(t);
     return until(() => sel === uid && !find(uid)?.n._row && !!main().querySelector("[data-schema-card]"));
   };

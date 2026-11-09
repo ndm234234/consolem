@@ -14,7 +14,7 @@ UiCheck(async ({ ok, until, sleep, confirmWith }) => {
   const second = cams.find((n) => n.online !== false && n !== cam);
   const off = cams.find((n) => n.online === false);
   const open = async (n, t) => {
-    pick(n.id, { force: true });
+    pick(n.id, { force: true, tab: "gen" });
     await until(() => !n._row && sel === n.id);
     goTab(t);
   };
