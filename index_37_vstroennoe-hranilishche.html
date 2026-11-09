@@ -2330,10 +2330,9 @@ html[data-theme="light"] .cp-step{background:var(--one-control-hover);color:var(
 .er-rules-add{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:10px}
 /* Прототип 37: общий вид встроенных хранилищ и история репликации */
 .eo-wrap{overflow-x:auto}.eo-tbl{min-width:620px}.eo-tbl td{padding-top:7px;padding-bottom:7px}
-.eo-row.bad td:first-child{box-shadow:inset 3px 0 0 var(--one-danger-text)}
 .eo-sub{display:block;color:var(--mu);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.eo-wr{white-space:normal;overflow-wrap:anywhere}.eo-wr .eo-sub{display:inline;white-space:normal}.eo-wr .eo-sub .lk{white-space:normal}
-.eo-tbl td{vertical-align:top}.eo-tbl .er-st{white-space:normal;text-align:center;max-width:100%;box-sizing:border-box}.eo-tbl .er-nm small{white-space:normal;overflow-wrap:anywhere}
+.eo-wr{white-space:normal;overflow-wrap:anywhere}.eo-wr .eo-sub{display:inline;white-space:normal}.eo-wr .eo-rl{display:block}.eo-wr,.eo-wr .lk{text-align:left}.eo-wr .eo-sub .lk{white-space:normal;display:block;padding:0}
+.eo-tbl td{vertical-align:top}.eo-tbl .er-st{white-space:nowrap}.eo-tbl .er-nm small{white-space:normal;overflow-wrap:anywhere}
 .eo-legend{margin:0 0 10px;font-size:13px}.eo-legend summary{cursor:pointer;color:var(--x-link)}.eo-legend dl{display:grid;gap:6px;margin:8px 0 0}.eo-legend dl>div{display:grid;grid-template-columns:130px 1fr;gap:10px;align-items:start}.eo-legend dd{margin:0;color:var(--mu)}
 .eo-bad{color:var(--one-danger-text)}
 
@@ -10120,13 +10119,15 @@ function rcSliceItems(n){
       cam?[tctxDanger(`${i18n("Удалить")}…`,["rcRun","deleteDetector",cam.id,id])]:[]];
   }
   if(slice==="det"&&n.type==="camera")return[rcGoItems(id),[tctxItem(i18n("Добавить детекторы…"),["rcRun","detCreateOpen",id],tctxPlusIcon())]];
+  // Прототип 37: кнопки «Исключить из домена» внизу страницы нет — пункт есть в «Ещё» на всех срезах с карточкой сервера
+  const exclDom=n.type==="server"&&!isUnallocated(id)&&domainOf(id)?[tctxDanger(i18n("Исключить из домена"),["rcRun","excludeFromDomain",id])]:[];
   if(slice==="det"&&["domain","server","folder","nofolder","unalloc"].includes(n.type))
     return[rcGoItems(id),[tctxItem(i18n("Добавить детекторы…"),["rcRun","detCreateOpen"],tctxPlusIcon())]];
   if(slice==="arch"&&(n.type==="domain"||n.type==="server")){
     const own=n.type==="server"?serverArchives(id):[];
     return[rcGoItems(id),
       canCreateKind("archive")?[tctxItem(i18n("Создать хранилище…"),["rcRun","addArchive",id],tctxPlusIcon())]:[],
-      own.length===1?[tctxDanger(`${i18n("Удалить хранилище")} «${escHtml(locName(own[0]))}»…`,["rcRun","deleteArchive",own[0].id])]:[]];
+      [...(own.length===1?[tctxDanger(`${i18n("Удалить хранилище")} «${escHtml(locName(own[0]))}»…`,["rcRun","deleteArchive",own[0].id])]:[]),...exclDom]];
   }
   return null;
 }
@@ -11014,7 +11015,9 @@ function gear(){
   if(n.type==="found")renderDeviceWizard();  // панель живёт в разметке, которую только что вставили
   if(tab==="topo"&&(n.type==="domain"||n.type==="server"))g7Start(n);else if(G7.raf)g7Stop();
 }
+// Прототип 37: «Исключить из домена» — в меню «Ещё» шапки карточки (то же меню, что по правой кнопке), кнопки внизу нет
 function domainActionsHtml(n){
+  return"";
   if(app!=="hw"||n.type!=="server"||!domainOf(n.id))return"";
   return`<div class="main-actions" id="domAct"><button type="button" class="btn s" ${onEv("click",["excludeFromDomain",`${n.id}`])}>${i18n("Исключить из домена")}</button></div>`;
 }
@@ -16931,7 +16934,7 @@ function ruleNewOpen(preset){
   // Без готового события — продолжаем незавершённое; с ним — спрашиваем: это другое правило
   wzStart("rule",()=>{
     const tpl=(preset&&preset.tpl)||"";
-    rnw={step:tpl?1:0,start:(preset&&preset.start)||ruleNewStartDef(),tpl,preset:preset&&(preset.when||preset.then)?preset:null};
+    rnw={step:tpl?1:0,start:(preset&&preset.start)||ruleNewStartDef(),tpl,reveal:!!tpl,preset:preset&&(preset.when||preset.then)?preset:null};
     ruleNewRender();
   },()=>!preset);
 }
@@ -16970,6 +16973,8 @@ function ruleNewRender(){
      <p class="sub">${i18n("Консоль создаёт правило выключенным. Правило появится в списке после «Применить». Чтобы включить правило, открыть его карточку.")}</p>`,
     wzFootHtml({cancel:["wzCancel","rule"],sum:[i18n(startName),rnw.step?i18n(tplName):""].filter(Boolean).join(" · "),back:rnw.step?["ruleNewGo",0]:null,next:{label:i18n(last?"Создать правило":"Далее"),on:last?["ruleNewCreate"]:["ruleNewGo",1]}}));
   if(rnw.q&&st.k==="tpl"&&tplCount>=CBX_MIN)ruleTplFilter(rnw.q);
+  // Прототип 37: мастер открыт с готовым шаблоном — прокрутить к нему, иначе выбор скрыт под прокруткой
+  if(rnw.reveal&&st.k==="tpl"){rnw.reveal=false;setTimeout(()=>document.querySelector("#bmBody .rl-opt.on")?.scrollIntoView({block:"center"}),320)}
 }
 const RULE_NEW_STEPS=[{k:"start",t:"Как запускается"},{k:"tpl",t:"С чего начать"}];
 function ruleNewGo(i){rnw.step=+i;ruleNewRender()}
@@ -25448,7 +25453,7 @@ function eoState(x){
 function eoRules(x){return edgeRulesFor(x.st,x.nvr?x.cam.id:undefined)}
 function eoRepWord(x){const p=edgeRep(x.st);return p.type==="all"&&!(x.nvr&&p.excl.has(x.cam.id))?"Забирать всё":eoRules(x).length?"По правилам":"Выключена"}
 function eoSrv(x){const s=cameraTreeServer(x.cam.id);return s?ruleSrvShort(s):i18n("без сервера")}
-const EO_DIMS=[["state","состояние",x=>EO_STATE[eoState(x)].t,i18n],["rep","репликация",x=>eoRepWord(x),i18n],["where","где записи",x=>x.nvr?"Диск регистратора":"Карта камеры",i18n],["srv","серверы",x=>eoSrv(x)]];
+const EO_DIMS=[["state","состояние",x=>EO_STATE[eoState(x)].t,i18n],["rep","репликация",x=>eoRepWord(x),i18n],["srv","серверы",x=>eoSrv(x)]];
 function eoFilt(n){if(eoSel.key!==n.id){eoSel.key=n.id;eoSel.f={};eoSel.more=new Set()}return eoSel.f}
 function eoFacet(d,v){const f=eoSel.f;if(f[d]===v)delete f[d];else f[d]=v;gear()}
 function eoFacetClear(){eoSel.f={};gear()}
@@ -25483,12 +25488,12 @@ function eoHtml(n){
     const k=eoState(x),p=edgeRep(x.st),rl=eoRules(x),a=archById(p.arch),w=eoRepWord(x);
     const name=`${ic("camera")}<span class="er-nm"><b>${escHtml(locName(x.cam))}</b><small>${escHtml(eoSrv(x))} · ${x.nvr?`${i18n("диск регистратора")} «${escHtml(locName(x.nvr))}»`:`${i18n("карта")}${x.st.size?` ${escHtml(x.st.size)}`:""}`}</small></span>`;
     const repl=w==="Забирать всё"?`${i18n("Забирать всё")}<span class="eo-sub">${i18n("в")} «${escHtml(a?locName(a):"—")}»</span>`
-      :rl.length?`${i18n("По правилам:")} ${rl.length}<span class="eo-sub">${rl.map(r=>`<button type="button" class="lk" ${onEv("click",["ruleGoRule",r.id])}>${escHtml(r.name)}</button>`).join(", ")}</span>`
+      :rl.length?`${i18n("По правилам:")} ${rl.length}<span class="eo-sub eo-rl">${rl.map(r=>`<button type="button" class="lk" ${onEv("click",["ruleGoRule",r.id])}>${escHtml(r.name)}</button>`).join("")}</span>`
       :`<span class="sub">${i18n("Выключена")}</span>`;
     const chip=`<span class="er-st ${EO_STATE[k].cls}" title="${escHtml(i18n(EO_STATE[k].d))}">${i18n(EO_STATE[k].t)}</span>`;
     return`<tr class="eo-row ${k==="lost"||k==="wait"?"bad":""}"><td><button type="button" class="er-dev er-go" title="${i18n("Открыть встроенное хранилище и настроить репликацию")}" ${onEv("click",["pick",x.st.id,{tab:"rep"}])}>${name}</button></td><td class="eo-wr">${repl}</td><td>${chip}</td><td class="eo-wr">${eoDetail(x,k)}</td></tr>`;
   };
-  const tbl=shown.length?`<div class="eo-wrap"><table class="er-tbl eo-tbl"><colgroup><col style="width:28%"><col style="width:24%"><col style="width:136px"><col></colgroup>
+  const tbl=shown.length?`<div class="eo-wrap"><table class="er-tbl eo-tbl"><colgroup><col style="width:28%"><col style="width:24%"><col style="width:150px"><col></colgroup>
     <thead><tr><th>${i18n("Камера")}</th><th>${i18n("Репликация")}</th><th>${i18n("Сейчас")}</th><th>${i18n("Подробности")}</th></tr></thead>
     <tbody>${shown.map(row).join("")}</tbody></table></div>`:`<p class="sub">${i18n("Ничего не найдено")}</p>`;
   const foot=`<p class="sub" style="margin-top:10px">${i18n("Чтобы изменить репликацию, нажать на камеру: откроется её встроенное хранилище. У камер регистратора хранилище одно — диск регистратора.")}</p>`;
