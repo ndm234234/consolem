@@ -863,6 +863,28 @@ html[data-theme="light"] .cp.done{border-color:var(--one-success-icon);color:var
 .lst-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}.lst-bar .lst-sq{flex:1 1 220px;margin-bottom:0}
 .lst-bar .lst-add{flex:0 0 auto;width:auto;field-sizing:content;max-width:100%}
 .cam-conn .cam-conn-full{grid-column:1/-1}
+.cs-cq{container-type:inline-size}
+.cs-tocw{display:grid;grid-template-columns:200px minmax(0,1fr);gap:14px;align-items:start}
+.cs-toc{position:sticky;top:0;display:flex;flex-direction:column;gap:2px;padding:8px;border:1px solid var(--ln);border-radius:8px;background:var(--p)}
+.cs-toc-h{font-size:12px;color:var(--mu);padding:4px 8px}
+.cs-toc-i{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;min-width:0;padding:6px 8px;border:0;border-radius:6px;background:none;font:inherit;font-size:13px;color:inherit;text-align:left;cursor:pointer}
+.cs-toc-i:hover{background:var(--p2)}
+.cs-toc-i small{max-width:100%;color:var(--mu);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cs-toc-acts{display:flex;flex-wrap:wrap;gap:4px 12px;padding:8px 8px 2px;border-top:1px solid var(--ln);margin-top:4px;font-size:12px}
+.cs-h{justify-content:flex-start;flex-wrap:nowrap;cursor:pointer;user-select:none}
+.cs-h:focus-visible{outline:2px solid var(--bl);outline-offset:-2px}
+.cs-chev{display:inline-flex;flex:none;transform:rotate(90deg);transition:transform .2s ease}.cs-chev svg{width:16px;height:16px}
+.cs-sec.closed .cs-chev{transform:none}
+.cs-ht{flex:none}
+.cs-hv{flex:1 1 auto;min-width:0;text-align:right;color:var(--mu);font-weight:400;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:opacity .2s ease}
+.cs-sec:not(.closed) .cs-hv{opacity:0}
+.cs-sec.closed>.ch{border-bottom-color:transparent}
+.cs-body{display:grid;grid-template-rows:1fr;transition:grid-template-rows .2s ease}
+.cs-body>.cb{min-height:0;overflow:hidden;transition:padding .2s ease}
+.cs-sec.closed .cs-body{grid-template-rows:0fr}
+.cs-sec.closed .cs-body>.cb{padding-top:0;padding-bottom:0}
+@media (prefers-reduced-motion:reduce){.cs-body,.cs-body>.cb,.cs-chev,.cs-hv{transition:none}}
+@container (max-width:760px){.cs-tocw{grid-template-columns:minmax(0,1fr)}.cs-toc{display:none}}
 /* Поиск лежит на светлой карточке, а общий вид .sq рассчитан на тёмный фон:
    вдавленное тёмное поле на белом читалось бы как чужеродная плашка. */
 html[data-theme="light"] .lst-sq{background:var(--p2);border-color:var(--ln);box-shadow:none}
@@ -12443,6 +12465,52 @@ function camConnDetect(id){
     camConnSet(id,"Модель",r.model);toast("Модель устройства определена");
   }).catch(e=>toast(problemText(e)));
 }
+
+// Вкладка «Подключение» камеры: карточки собирает formBase, раскладывает camGenLayout (у каждого варианта — своя)
+// Вариант «Разделы с оглавлением»: слева — список блоков с кратким значением, блоки сворачиваются.
+// По умолчанию всё раскрыто: блоков мало, и их читают целиком
+const csClosed=new Set();
+function csSecHtml(k,html,sum){
+  if(!html)return"";
+  const closed=csClosed.has(k);
+  let s=html.replace(/^<div class="card"><div class="ch">([\s\S]*?)<\/div>/,(m,title)=>
+    `<div class="card cs-sec${closed?" closed":""}" data-sec="${k}"><div class="ch cs-h" role="button" tabindex="0" aria-expanded="${!closed}" ${onEv("click",["csSecToggle",`${k}`,onEv.el])} ${onEv("keydown",["csSecKey",`${k}`,onEv.event])}><span class="cs-chev">${lu("chevron-right")}</span><span class="cs-ht">${title}</span><small class="cs-hv" title="${escHtml(sum)}">${escHtml(sum)}</small></div>`);
+  s=s.replace('<div class="cb">','<div class="cs-body"><div class="cb">');
+  return s.slice(0,-6)+"</div></div>";
+}
+function camGenLayout(n,p,ips){
+  const v=csSum(n,ips),pl=(n.labels||[]).length,al=(n.alarmKinds||[]).length;
+  const secs=[["ident","Идентификация объекта",[locName(n),n.short?`${i18n("короткое имя")} ${n.short}`:""].filter(Boolean).join(" · ")],
+    ["conn","Подключение",`${v.addr} · ${v.dev}`],
+    ["folders","Расположение",v.fs.length?v.fs.map(f=>locName(f)).join(", "):i18n("без папки")],
+    ["place","Размещение и тревоги",`${i18n("метки")}: ${pl} · ${i18n("тревоги")}: ${al}`],
+    ["periph","Периферия",`${v.per.length}`],
+    ["rules","Правила автоматизации",v.rules.length?v.rules.map(x=>x.r.name).join(", "):i18n("не используется")]].filter(s=>p[s[0]]);
+  const toc=`<nav class="cs-toc" aria-label="${i18n("На этой странице")}"><div class="cs-toc-h">${i18n("На этой странице")}</div>
+    ${secs.map(([k,l,s])=>`<button type="button" class="cs-toc-i" ${onEv("click",["csGo",`${k}`])}><span>${i18n(l)}</span><small title="${escHtml(s)}">${escHtml(s)}</small></button>`).join("")}
+    <div class="cs-toc-acts"><button type="button" class="lk" ${onEv("click",["csAll",true])}>${i18n("Развернуть всё")}</button><button type="button" class="lk" ${onEv("click",["csAll",false])}>${i18n("Свернуть всё")}</button></div></nav>`;
+  return `<div class="cs-tocw">${toc}<div class="cs-secs">${secs.map(([k,l,s])=>csSecHtml(k,p[k],s)).join("")}</div></div>`;
+}
+function csSecSet(c,open){
+  const k=c.dataset.sec;c.classList.toggle("closed",!open);
+  if(open)csClosed.delete(k);else csClosed.add(k);
+  c.querySelector(".cs-h")?.setAttribute("aria-expanded",String(open));
+}
+function csSecToggle(k,el){const c=el.closest(".cs-sec");if(c)csSecSet(c,c.classList.contains("closed"))}
+function csSecKey(k,e){if(e.key==="Enter"||e.key===" "){e.preventDefault();csSecToggle(k,e.currentTarget)}}
+function csAll(open){document.querySelectorAll("#main .cs-sec").forEach(c=>csSecSet(c,open))}
+function csGo(k){const c=document.querySelector(`#main .cs-sec[data-sec="${k}"]`);if(c)csSecSet(c,true);csJump(k)}
+function csWrap(k,html){return html?html.replace('<div class="card">',`<div class="card" data-sec="${k}">`):""}
+// Переход к блоку внутри вкладки: прокрутка и вспышка заголовка блока
+function csJump(k){accFlash(()=>[...document.querySelectorAll(`#main [data-sec="${k}"] > .ch`)])}
+function csSum(n,ips){
+  const rtsp=isRtspVendor(n.vendor),url=cardFldOrig("RTSP","");
+  const addr=ips&&!n.ip?`${i18n("через")} ${locName(ips)}`:rtsp?(url||"—"):n.ip?`${n.ip}:${n.port||80}`:"—";
+  const dev=[n.vendor,n.model].filter(Boolean).join(" ")||"—";
+  const s=srv(n.id),a=n.arch?archById(n.arch):null;
+  return{addr,dev,s,a,rec:isRecording(n)?i18n(recordModeLabel(n.rec)):i18n("не пишет"),
+    fs:foldersOfDevice(n.id),rules:ruleUsersOfId(n.id),dets:camDetectors(n),per:periphItems(n)};
+}
 function deviceFoldersCardHtml(n){
   if(!inFolders(n))return"";
   const sv=srv(n.id);
@@ -16203,7 +16271,7 @@ function lanTabOpen(n){
   return n.type==="server"&&!isUnallocated(n.id)&&tab==="cams";
 }
 // Карточки устройства плюс «Правила автоматизации»: где оно используется, видно, не заходя в раздел правил.
-function form(n){return tab==="topo"&&(n.type==="domain"||n.type==="server")?g7Html(n):formBase(n)+ruleUsesFor(n)}
+function form(n){return tab==="topo"&&(n.type==="domain"||n.type==="server")?g7Html(n):formBase(n)+(n.type==="camera"&&tab==="gen"?"":ruleUsesFor(n))}
 // Переключатель карточки: вид меняется сразу, значение уходит с «Применить»
 function swToggle(el){el.classList.toggle("on");setD(true)}
 function storageSet(id,k,v){const n=find(id)?.n;if(!n)return;n[k]=k==="size"?gbStr(v):v;setD(true);if(k!=="size")gear()}
@@ -16486,10 +16554,11 @@ function formBase(n){
     const underIpsrv=!!ips;
     const camIdFld=fldRo("ID",deviceIdentifierValue(n)||"—");
     const vchFld=underIpsrv?fldRo("Номер видеоканала",ipsrvCameraVideoChannel(n,ips)):"";
-    return card("Идентификация объекта",`${bdg(n)}${enabledToggleHtml(n)}<div class="g" style="margin-top:10px">${fld("Имя",n.name)}${fld("Короткое имя",n.short??"")}${camIdFld}${vchFld}</div>`)
-      +(underIpsrv&&!n.ip?card("Подключение",`<div class="g">${fldRo("Регистратор",locName(ips))}${fldRo("IP регистратора",ips.ip||"—")}${fldRo("RTSP",cardFldOrig("RTSP","")||"—")}</div>
+    const parts={ident:card("Идентификация объекта",`${bdg(n)}${enabledToggleHtml(n)}<div class="g" style="margin-top:10px">${fld("Имя",n.name)}${fld("Короткое имя",n.short??"")}${camIdFld}${vchFld}</div>`)
+      ,conn:(underIpsrv&&!n.ip?card("Подключение",`<div class="g">${fldRo("Регистратор",locName(ips))}${fldRo("IP регистратора",ips.ip||"—")}${fldRo("RTSP",cardFldOrig("RTSP","")||"—")}</div>
         <p class="sub">${i18n("У камеры регистратора нет своего IP. Сервер берёт её видео через регистратор по номеру канала. Адрес и учётные данные есть в карточке")} <button class="lk" ${onEv("click",["pick",`${ips.id}`])}>${escHtml(locName(ips))}</button>.</p>`)
-        :card("Подключение",camConnHtml(n)))+deviceFoldersCardHtml(n)+placeCardHtml(n)+periphSummaryHtml(n)}
+        :card("Подключение",camConnHtml(n))),folders:deviceFoldersCardHtml(n),place:placeCardHtml(n),periph:periphSummaryHtml(n),rules:ruleUsesFor(n)};
+    return `<div class="cs-cq">${camGenLayout(n,parts,ips)}</div>`}
   if(n.type==="det"){
     const cam=find(n.id)?.p;
     return detBackHtml(cam)+detZoneCardHtml(cam,n)+card("Параметры",`${detFieldsHtml(cam,n,"Имя")}

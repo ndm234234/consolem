@@ -863,6 +863,16 @@ html[data-theme="light"] .cp.done{border-color:var(--one-success-icon);color:var
 .lst-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}.lst-bar .lst-sq{flex:1 1 220px;margin-bottom:0}
 .lst-bar .lst-add{flex:0 0 auto;width:auto;field-sizing:content;max-width:100%}
 .cam-conn .cam-conn-full{grid-column:1/-1}
+.cs-cq{container-type:inline-size}
+.cs-acts{display:flex;gap:6px;margin-left:auto;font-weight:400}
+.cs-dl{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px 16px;margin:0}
+.cs-dl>div{min-width:0}
+.cs-dl dt{font-size:12px;color:var(--mu);margin-bottom:3px}
+.cs-dl dd{margin:0;font-size:13px;display:flex;flex-wrap:wrap;align-items:center;gap:6px;overflow-wrap:anywhere}
+.cs-empty{color:var(--mu)}
+.cs-chg{font-size:11px;padding:0 6px;border-radius:999px;background:color-mix(in srgb,var(--bl) 22%,transparent);color:var(--tx)}
+.cs-chips{display:flex;flex-wrap:wrap;gap:6px}
+.cs-tag{padding:2px 10px;border:1px solid var(--ln);border-radius:999px;font-size:12px;background:var(--p2)}
 /* Поиск лежит на светлой карточке, а общий вид .sq рассчитан на тёмный фон:
    вдавленное тёмное поле на белом читалось бы как чужеродная плашка. */
 html[data-theme="light"] .lst-sq{background:var(--p2);border-color:var(--ln);box-shadow:none}
@@ -12443,6 +12453,66 @@ function camConnDetect(id){
     camConnSet(id,"Модель",r.model);toast("Модель устройства определена");
   }).catch(e=>toast(problemText(e)));
 }
+
+// Вкладка «Подключение» камеры: карточки собирает formBase, раскладывает camGenLayout (у каждого варианта — своя)
+// Вариант «Просмотр, затем правка»: значения — текстом, поля появляются по «Изменить» у блока.
+// Правка идёт в тот же черновик карточки: «Готово» оставляет её в плане, «Отменить» снимает правки блока
+const csEdit=new Set();
+const CS_SEC_FIELDS={ident:["Имя","Короткое имя"],conn:["Производитель","Модель","IP","Порт","RTSP","Имя пользователя","Пароль"]};
+function csEditOn(id,k){return csEdit.has(id+":"+k)}
+function csEditSet(id,k,on){if(on)csEdit.add(id+":"+k);else csEdit.delete(id+":"+k);gear();if(on)setTimeout(()=>document.querySelector(`#main [data-sec="${k}"] input:not([disabled])`)?.focus(),30)}
+function csEditCancel(id,k){
+  if(cardDraft&&cardDraft.id===id)(CS_SEC_FIELDS[k]||[]).forEach(l=>delete cardDraft.fields[l]);
+  setD(true);csEditSet(id,k,false);
+}
+function csChanged(l){return!!(cardDraft&&cardDraft.id===sel&&cardDraft.fields[l])}
+function csDl(rows){return`<dl class="cs-dl">${rows.map(([l,v,ch])=>`<div><dt>${i18n(l)}</dt><dd>${v}${ch?`<span class="cs-chg">${i18n("изменено")}</span>`:""}</dd></div>`).join("")}</dl>`}
+function csHead(html,act){return html.replace(/^(<div class="card"[^>]*><div class="ch">[\s\S]*?)<\/div>/,(m,h)=>`${h}<span class="cs-acts">${act}</span></div>`)}
+function csEditBtns(n,k){
+  return csEditOn(n.id,k)
+    ?`<button type="button" class="btn s" ${onEv("click",["csEditCancel",`${n.id}`,`${k}`])}>${i18n("Отменить")}</button><button type="button" class="btn pri s" ${onEv("click",["csEditSet",`${n.id}`,`${k}`,false])}>${i18n("Готово")}</button>`
+    :`<button type="button" class="btn s" ${onEv("click",["csEditSet",`${n.id}`,`${k}`,true])}>${i18n("Изменить")}</button>`;
+}
+function camGenLayout(n,p,ips){
+  const val=(l,v)=>camConnVal(n,l,v);
+  const txt=v=>v===""||v==null?`<span class="cs-empty">—</span>`:escHtml(String(v));
+  let ident=p.ident,conn=p.conn,place=p.place;
+  if(!csEditOn(n.id,"ident")){
+    const rows=[["Имя",txt(val("Имя",n.name)),csChanged("Имя")],["Короткое имя",txt(val("Короткое имя",n.short??"")),csChanged("Короткое имя")],["ID",txt(deviceIdentifierValue(n)||"—")]];
+    if(ips)rows.push(["Номер видеоканала",txt(ipsrvCameraVideoChannel(n,ips))]);
+    ident=card("Идентификация объекта",`${bdg(n)}${enabledToggleHtml(n)}<div style="margin-top:10px">${csDl(rows)}</div>`);
+  }
+  ident=csHead(csWrap("ident",ident),csEditBtns(n,"ident"));
+  if(!(ips&&!n.ip)){
+    if(!csEditOn(n.id,"conn")){
+      const vendor=val("Производитель",n.vendor||""),rtsp=isRtspVendor(vendor);
+      const addr=rtsp?txt(cardFldOrig("RTSP","")):txt(val("IP",n.ip||"")?`${val("IP",n.ip||"")}:${val("Порт",n.port||80)}`:"");
+      const pass=val("Пароль",n.pass||"");
+      conn=card("Подключение",csDl([["Производитель",txt(vendor),csChanged("Производитель")],["Модель",txt(val("Модель",n.model||"")),csChanged("Модель")],
+        [rtsp?"RTSP":"IP-адрес и порт",addr,csChanged("IP")||csChanged("Порт")||csChanged("RTSP")],
+        ["Имя пользователя",txt(val("Имя пользователя",n.user||"")||i18n("Авто")),csChanged("Имя пользователя")],
+        ["Пароль",pass?"••••":`<span class="cs-empty">${i18n("не задан")}</span>`,csChanged("Пароль")],["MAC",txt(n.mac||"—")]]));
+    }
+    conn=csHead(csWrap("conn",conn),csEditBtns(n,"conn"));
+  }else conn=csWrap("conn",conn);
+  if(!csEditOn(n.id,"place")){
+    const chips=l=>l&&l.length?`<div class="cs-chips">${l.map(x=>`<span class="cs-tag">${escHtml(i18n(x))}</span>`).join("")}</div>`:`<span class="cs-empty">${i18n("не заданы")}</span>`;
+    place=card("Размещение и тревоги",csDl([["Метки серверов: где работает",chips(n.labels)],["Что считать тревогой",chips(n.alarmKinds)]]));
+  }
+  place=csHead(csWrap("place",place),csEditOn(n.id,"place")?`<button type="button" class="btn pri s" ${onEv("click",["csEditSet",`${n.id}`,"place",false])}>${i18n("Готово")}</button>`:csEditBtns(n,"place"));
+  return ident+conn+csWrap("folders",p.folders)+place+csWrap("periph",p.periph)+csWrap("rules",p.rules);
+}
+function csWrap(k,html){return html?html.replace('<div class="card">',`<div class="card" data-sec="${k}">`):""}
+// Переход к блоку внутри вкладки: прокрутка и вспышка заголовка блока
+function csJump(k){accFlash(()=>[...document.querySelectorAll(`#main [data-sec="${k}"] > .ch`)])}
+function csSum(n,ips){
+  const rtsp=isRtspVendor(n.vendor),url=cardFldOrig("RTSP","");
+  const addr=ips&&!n.ip?`${i18n("через")} ${locName(ips)}`:rtsp?(url||"—"):n.ip?`${n.ip}:${n.port||80}`:"—";
+  const dev=[n.vendor,n.model].filter(Boolean).join(" ")||"—";
+  const s=srv(n.id),a=n.arch?archById(n.arch):null;
+  return{addr,dev,s,a,rec:isRecording(n)?i18n(recordModeLabel(n.rec)):i18n("не пишет"),
+    fs:foldersOfDevice(n.id),rules:ruleUsersOfId(n.id),dets:camDetectors(n),per:periphItems(n)};
+}
 function deviceFoldersCardHtml(n){
   if(!inFolders(n))return"";
   const sv=srv(n.id);
@@ -16203,7 +16273,7 @@ function lanTabOpen(n){
   return n.type==="server"&&!isUnallocated(n.id)&&tab==="cams";
 }
 // Карточки устройства плюс «Правила автоматизации»: где оно используется, видно, не заходя в раздел правил.
-function form(n){return tab==="topo"&&(n.type==="domain"||n.type==="server")?g7Html(n):formBase(n)+ruleUsesFor(n)}
+function form(n){return tab==="topo"&&(n.type==="domain"||n.type==="server")?g7Html(n):formBase(n)+(n.type==="camera"&&tab==="gen"?"":ruleUsesFor(n))}
 // Переключатель карточки: вид меняется сразу, значение уходит с «Применить»
 function swToggle(el){el.classList.toggle("on");setD(true)}
 function storageSet(id,k,v){const n=find(id)?.n;if(!n)return;n[k]=k==="size"?gbStr(v):v;setD(true);if(k!=="size")gear()}
@@ -16486,10 +16556,11 @@ function formBase(n){
     const underIpsrv=!!ips;
     const camIdFld=fldRo("ID",deviceIdentifierValue(n)||"—");
     const vchFld=underIpsrv?fldRo("Номер видеоканала",ipsrvCameraVideoChannel(n,ips)):"";
-    return card("Идентификация объекта",`${bdg(n)}${enabledToggleHtml(n)}<div class="g" style="margin-top:10px">${fld("Имя",n.name)}${fld("Короткое имя",n.short??"")}${camIdFld}${vchFld}</div>`)
-      +(underIpsrv&&!n.ip?card("Подключение",`<div class="g">${fldRo("Регистратор",locName(ips))}${fldRo("IP регистратора",ips.ip||"—")}${fldRo("RTSP",cardFldOrig("RTSP","")||"—")}</div>
+    const parts={ident:card("Идентификация объекта",`${bdg(n)}${enabledToggleHtml(n)}<div class="g" style="margin-top:10px">${fld("Имя",n.name)}${fld("Короткое имя",n.short??"")}${camIdFld}${vchFld}</div>`)
+      ,conn:(underIpsrv&&!n.ip?card("Подключение",`<div class="g">${fldRo("Регистратор",locName(ips))}${fldRo("IP регистратора",ips.ip||"—")}${fldRo("RTSP",cardFldOrig("RTSP","")||"—")}</div>
         <p class="sub">${i18n("У камеры регистратора нет своего IP. Сервер берёт её видео через регистратор по номеру канала. Адрес и учётные данные есть в карточке")} <button class="lk" ${onEv("click",["pick",`${ips.id}`])}>${escHtml(locName(ips))}</button>.</p>`)
-        :card("Подключение",camConnHtml(n)))+deviceFoldersCardHtml(n)+placeCardHtml(n)+periphSummaryHtml(n)}
+        :card("Подключение",camConnHtml(n))),folders:deviceFoldersCardHtml(n),place:placeCardHtml(n),periph:periphSummaryHtml(n),rules:ruleUsesFor(n)};
+    return `<div class="cs-cq">${camGenLayout(n,parts,ips)}</div>`}
   if(n.type==="det"){
     const cam=find(n.id)?.p;
     return detBackHtml(cam)+detZoneCardHtml(cam,n)+card("Параметры",`${detFieldsHtml(cam,n,"Имя")}
