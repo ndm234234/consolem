@@ -2320,8 +2320,8 @@ html[data-theme="light"] .cp-step{background:var(--one-control-hover);color:var(
 .er-bulk{display:flex;align-items:center;gap:10px;flex-wrap:nowrap;height:44px;box-sizing:border-box;padding:0 10px;margin-bottom:10px;border:1px solid var(--ln);border-radius:8px;background:var(--p2);transition:border-color .15s,background-color .15s}
 .er-bulk.on{border-color:var(--bl);background:var(--one-selected-neutral)}
 .er-bulk-n{flex:none;min-width:120px;white-space:nowrap}
-.er-rule{display:flex;flex-direction:column;gap:6px;padding:10px 12px;border:1px solid var(--line,rgba(127,127,127,.3));border-radius:8px}
-.er-rule-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.er-rule-h .btn{margin-left:auto}.er-rule small{color:var(--mut,#8a8f98);display:block}
+.er-rules-nt{margin:0 0 10px}.er-rules td .btn{white-space:nowrap}
+.er-rules-add{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:10px}
 .er-bulk select{field-sizing:content;flex:none;width:auto;min-width:0;max-width:260px}.er-bulk .sub{margin:0;min-width:0}
 @media (prefers-reduced-motion:reduce){.er-bulk{transition:none}}
 </style>
@@ -11200,15 +11200,21 @@ function childListCard(n,o={}){
 // Списком, как вкладка Peripherals у Genetec и Setup у Avigilon: всё сразу
 // видно, включают и выключают пачкой, а в дерево отдают, когда нужна
 // групповая правка. Отметка в списке своя и живёт, пока открыта камера.
-let periphSel={owner:null,ids:new Set()};
+let periphSel={owner:null,ids:new Set(),f:{},more:new Set()};
 // Прототип 37: встроенное хранилище камеры — тоже периферия; строка ведёт на его вкладку «Репликация»
 function periphItems(n){if(n.type==="camera"&&tab==="io")edgeLoadAll();return(n.devices||[]).filter(d=>d.type!=="det")}
 function periphIds(n){
-  if(periphSel.owner!==n.id)periphSel={owner:n.id,ids:new Set()};
-  const items=periphItems(n);
+  if(periphSel.owner!==n.id)periphSel={owner:n.id,ids:new Set(),f:{},more:new Set()};
+  // Отмечены только видимые строки: фильтр скрыл строку — отметка с неё снята, действие её не коснётся
+  const items=periphShown(n);
   [...periphSel.ids].forEach(id=>{if(!items.some(d=>d.id===id))periphSel.ids.delete(id)});
   return periphSel.ids;
 }
+// Фильтр над списком — стандартный блок .bk-scope: «Показать» → «все» → типы и состояние, итог «Показано N из M»
+const PF_DIMS=[["type","типы",d=>markTypeLabel(d.type)],["state","состояние",d=>periphStateWord(d),i18n]];
+function periphStateWord(d){return d.enabled===false?"выключен":d.online===false?"нет сигнала":"работает"}
+function periphFilt(n){if(periphSel.owner!==n.id)periphIds(n);return periphSel.f}
+function periphShown(n){const f=periphSel.owner===n.id?periphSel.f:{};return periphItems(n).filter(d=>facetHit(PF_DIMS,d,f))}
 function periphTypes(items){return[...new Set(items.map(d=>d.type))].sort((a,b)=>markTypeRank(a)-markTypeRank(b))}
 function periphStateHtml(d){
   if(d.enabled===false)return`<span class="pf-st off">${i18n("выключен")}</span>`;
@@ -11216,31 +11222,31 @@ function periphStateHtml(d){
   return`<span class="pf-st ok">${i18n("работает")}</span>`;
 }
 function periphCardHtml(n){
-  const items=periphItems(n),ids=periphIds(n);
+  const items=periphItems(n);
   if(!items.length)return card("Периферия",`<p class="sub">${i18n("У камеры нет датчиков, реле, микрофонов, динамиков и встроенного хранилища.")}</p>`);
-  const chips=periphTypes(items).map(t=>{
-    const of=items.filter(d=>d.type===t),all=of.every(d=>ids.has(d.id));
-    return`<button type="button" class="pf-chip${all?" on":""}" title="${all?i18n("Снять выбор"):i18n("Выбрать все такого типа")}" ${onEv("click",["periphPickType",`${n.id}`,`${t}`])}>${ic(t)}${escHtml(markTypeLabel(t))} <b>${of.length}</b></button>`;
-  }).join("");
-  const k=ids.size,allOn=k===items.length;
+  const f=periphFilt(n),shown=periphShown(n),ids=periphIds(n),on=Object.values(f).some(Boolean);
+  const facets=facetRowsHtml(PF_DIMS,items,f,"periphFacet",periphSel.more,"periphFacetMore");
+  const said=PF_DIMS.filter(([d])=>f[d]).map(([d,,,lab])=>lab?lab(f[d]):f[d]).join(" · ");
+  const scope=facets||on?`<div class="bk-sum bk-scope pf-scope"><div class="bk-scope-h"><span class="bk-scope-l">${i18n("Показать")}</span><button type="button" data-fk="all" class="stchip ${on?"":"on"}" ${onEv("click",["periphFacetClear",`${n.id}`])}><span class="stchip-lab">${i18n("все")}</span><span class="stchip-cnt">${items.length}</span></button>${facets?`<span class="sub bk-scope-or" data-fk="or">${i18n("или уточните")}:</span>`:""}</div>${facets}${on?`<div class="bk-scope-sum on" data-fk="sum">${i18n("Показано")} <b>${shown.length} ${i18n("из")} ${items.length}</b>: ${escHtml(said)}</div>`:""}</div>`:"";
+  const k=ids.size,allOn=!!shown.length&&k===shown.length;
   const bar=k?`<span class="sub">${i18n("Выбрано:")} <b>${k}</b></span>
       <button class="btn s" ${onEv("click",["periphBulkEnable",`${n.id}`,true])}>${i18n("Включить")}</button>
       <button class="btn s" ${onEv("click",["periphBulkEnable",`${n.id}`,false])}>${i18n("Выключить")}</button>
       <button class="btn s" ${onEv("click",["periphToTree",`${n.id}`])}>${i18n("Отметить в дереве")}</button>
       <button class="lk lk-act" ${onEv("click",["periphClear",`${n.id}`])}>${i18n("Снять")}</button>`
-    :`<span class="sub">${i18n("Отметить строки или нажать тип. Если нажать тип, консоль выберет все объекты этого типа.")}</span>`;
-  const rows=items.map(d=>{
+    :`<span class="sub">${i18n("Отметить строки, чтобы включить или выключить сразу несколько объектов.")}</span>`;
+  const rows=shown.map(d=>{
     const on=d.enabled!==false,chk=ids.has(d.id);
     return`<tr class="${chk?"pf-on":""}">
       <td class="pf-c"><input type="checkbox" ${chk?"checked":""} ${onEv("change",["periphToggle",`${n.id}`,`${d.id}`])} aria-label="${escHtml(locName(d))}"></td>
       <td><button type="button" class="pf-nm" ${d.type==="storage"?onEv("click",["pick",`${d.id}`,{tab:"rep"}]):onEv("click",["pick",`${d.id}`])}>${ic(d.type)}<span>${escHtml(locName(d))}</span></button></td>
       <td class="sub">${escHtml(i18n(LB[d.type]||d.type))}</td>
-      <td>${periphStateHtml(d)}${d.type==="storage"&&d.enabled!==false?` <span class="sub">· ${i18n("репликация:")} ${escHtml(i18n(edgeType(edgeRep(d).type).name).toLowerCase())}</span>`:""}</td>
+      <td>${periphStateHtml(d)}${d.type==="storage"&&d.enabled!==false?` <span class="sub">· ${escHtml(edgePeriphText(d))}</span>`:""}</td>
       <td class="pf-c">${canWrite(d,"enabled")?`<div class="sw ${on?"on":""}" role="switch" aria-checked="${on}" title="${on?i18n("Выключить"):i18n("Включить")}" ${onEv("click",["periphEnable",`${d.id}`])}></div>`:""}</td></tr>`;
   }).join("");
-  return card("Периферия",`<div class="pf-chips">${chips}</div>
+  return card("Периферия",`${scope}
     <div class="pf-bar">${bar}</div>
-    <table class="pf-tbl"><tr><th class="pf-c"><input type="checkbox" ${allOn?"checked":""} ${onEv("change",["periphAll",`${n.id}`,onEv.checked])} aria-label="${i18n("Выбрать все")}"></th><th>${i18n("Имя")}</th><th>${i18n("Тип")}</th><th>${i18n("Состояние")}</th><th class="pf-c">${i18n("Вкл.")}</th></tr>${rows}</table>
+    <table class="pf-tbl"><tr><th class="pf-c"><input type="checkbox" ${allOn?"checked":""} ${shown.length?"":"disabled"} ${onEv("change",["periphAll",`${n.id}`,onEv.checked])} aria-label="${i18n(on?"Выбрать все показанные":"Выбрать все")}"></th><th>${i18n("Имя")}</th><th>${i18n("Тип")}</th><th>${i18n("Состояние")}</th><th class="pf-c">${i18n("Вкл.")}</th></tr>${rows}</table>
     <p class="sub" style="margin-top:8px">${i18n("Флажок камеры в дереве не отмечает её периферию. Чтобы изменить её вместе с периферией других камер, нажать «Отметить в дереве».")}</p>`,
     `<span class="sub" style="font-weight:400">${items.length}</span>`);
 }
@@ -11253,15 +11259,12 @@ function periphSummaryHtml(n){
 }
 function periphCam(id){const f=find(id);return f?f.n:null}
 function periphToggle(cid,id){const n=periphCam(cid);if(!n)return;const ids=periphIds(n);ids.has(id)?ids.delete(id):ids.add(id);gear()}
-function periphAll(cid,on){const n=periphCam(cid);if(!n)return;const ids=periphIds(n);ids.clear();if(on)periphItems(n).forEach(d=>ids.add(d.id));gear()}
+function periphAll(cid,on){const n=periphCam(cid);if(!n)return;const ids=periphIds(n);ids.clear();if(on)periphShown(n).forEach(d=>ids.add(d.id));gear()}
 function periphClear(cid){periphAll(cid,false)}
-function periphPickType(cid,t){
-  const n=periphCam(cid);if(!n)return;
-  const ids=periphIds(n),of=periphItems(n).filter(d=>d.type===t);
-  const all=of.every(d=>ids.has(d.id));
-  of.forEach(d=>all?ids.delete(d.id):ids.add(d.id));
-  gear();
-}
+// Чип фильтра: paintMain сам двигает чипы .bk-scope плавно (bulkScopeSnap / bulkScopeFlip)
+function periphFacet(d,v){const f=periphSel.f;if(f[d]===v)delete f[d];else f[d]=v;gear()}
+function periphFacetClear(cid){const n=periphCam(cid);if(!n)return;periphFilt(n);periphSel.f={};gear()}
+function periphFacetMore(d){periphSel.more.add(d);gear()}
 function periphEnable(id){
   const f=find(id);if(!f||!canWrite(f.n,"enabled"))return;
   f.n.enabled=f.n.enabled===false;
@@ -15898,7 +15901,7 @@ const ACT_DEFAULT=ACTION_KINDS.find(k=>k.action==="output");
 function ruleDetKindOpts(a){const rf=ruleRefField(actionKind(a),"detectorKind");return(rf&&rf.options?.length?rf.options:refDetKinds).map(k=>[k,detKindRu(k)])}
 // Хранилища записи камеры действия: проверить можно только их
 // Прототип 37: «Куда» у репликации — по умолчанию архив из настройки встроенного хранилища
-function edgeRuleArchOpts(a){return[["",i18n("как в типе репликации")],...ruleArchOpts(a).slice(1)]}
+function edgeRuleArchOpts(a){return[["",i18n("хранилище записи камеры")],...ruleArchOpts(a).slice(1)]}
 function ruleScanArchOpts(a){
   const n=refNode(a.ref),own=n?camArchs(n).map(x=>x.arch):[];
   return[["","основная запись"],...own.map(id=>[id,locName(archById(id)||{name:id})])];
@@ -16188,11 +16191,18 @@ function ruleDevSrv(n){
   }
   return m.get(n.id);
 }
+// Прототип 37: «@edge» в типах пункта — только камеры со встроенным хранилищем (своим или регистратора).
+// Остальным камерам нечего реплицировать. Метка живёт только в окне выбора (rulePk.dt)
+function ruleDtReal(dt){return dt.filter(t=>t[0]!=="@")}
+function ruleDtHit(n,dt){return dt.includes(n.type)&&(!dt.includes("@edge")||!!recEdge(n))}
+// Окно выбора камер для репликации: действие «Начать репликацию» и событие правила, где репликация берёт «устройство из события»
+function ruleSrcReplicates(r){return!!r&&edgeRepActs(r.then).some(a=>a.ref==="$src")}
+function ruleEdgeOnly(slot,it){return slot==="then"?it.action==="replicate":slot==="when"&&ruleSrcReplicates(curRule())&&triggerKind(it).devTypes.includes("camera")}
 function ruleUniverse(dt){
   return ruleMemo("u|"+dt.join(),()=>{
-    ruleTypesNeed(dt);
+    ruleTypesNeed(ruleDtReal(dt));
     const seen=new Set(),out=[];
-    walkAll(n=>{if(dt.includes(n.type)&&!seen.has(n.id)){seen.add(n.id);out.push(n)}});
+    walkAll(n=>{if(ruleDtHit(n,dt)&&!seen.has(n.id)){seen.add(n.id);out.push(n)}});
     return out;
   });
 }
@@ -16222,7 +16232,7 @@ function refMake(inc,ex){
 function ruleTokNodes(tok,dt){
   return ruleMemo("t|"+tok+"|"+dt.join(),()=>{
     const i=tok.indexOf(":"),k=i<0?"":tok.slice(0,i),v=tok.slice(i+1);
-    if(k==="folder")return[...ruleFolderDevs(v).values()].filter(n=>dt.includes(n.type));
+    if(k==="folder")return[...ruleFolderDevs(v).values()].filter(n=>ruleDtHit(n,dt));
     if(k==="server")return ruleUniverse(dt).filter(n=>ruleDevSrv(n)===v);
     if(k==="domain")return ruleUniverse(dt).filter(n=>ruleDevDom(n)===v);
     if(k==="gone"||tok==="$src"||!tok)return[];
@@ -16269,7 +16279,7 @@ const RULE_NOUNS={camera:["камера","камеры","камер","новые
   sensor:["датчик","датчика","датчиков","новые датчики","датчики","любой"],dev:["устройство","устройства","устройств","новые устройства","устройства","любое"]};
 // RULE_NOUNS[k][3] — «новые камеры»; [4] — «камеры» (заголовок окна выбора); индексы выше сдвинуты, см. ruleNounOf.
 function ruleNounOf(dt){
-  dt=dt||RULE_DEVTYPES;
+  dt=ruleDtReal(dt||RULE_DEVTYPES);
   const k=dt.every(t=>t==="camera")?"camera":dt.every(t=>t==="relay")?"relay":dt.every(t=>/sensor/.test(t))?"sensor":"dev",f=RULE_NOUNS[k];
   return[f[0],f[1],f[2],"",f[3],f[4],f[5],k];                                // [0..2] числа, [4] «новые …», [5] им. мн., [6] род, [7] ключ
 }
@@ -16897,10 +16907,12 @@ let rnw={start:"event",tpl:"",preset:null};
 // preset — {start, when, then}: точки входа из других разделов приносят готовое
 // событие или действие, и шаблон тогда не обязателен.
 function ruleNewStartDef(){return(RULE_STARTS.find(([id])=>startDeclared(id))||RULE_STARTS[0])[0]}
+// preset.tpl — шаблон уже выбран: мастер открывается на шаге шаблонов (прототип 37: «Создать правило репликации»)
 function ruleNewOpen(preset){
   // Без готового события — продолжаем незавершённое; с ним — спрашиваем: это другое правило
   wzStart("rule",()=>{
-    rnw={step:0,start:(preset&&preset.start)||ruleNewStartDef(),tpl:"",preset:preset||null};
+    const tpl=(preset&&preset.tpl)||"";
+    rnw={step:tpl?1:0,start:(preset&&preset.start)||ruleNewStartDef(),tpl,preset:preset&&(preset.when||preset.then)?preset:null};
     ruleNewRender();
   },()=>!preset);
 }
@@ -17054,7 +17066,8 @@ function rulePkAreaInc(tok){
 }
 function rulePickRef(slot,i){
   const it=ruleSlotItem(slot,i);if(!it)return;
-  const dt=ruleSlotKind(slot,it).devTypes,{inc,ex}=refParts(it.ref==="$src"?"":it.ref);
+  const dt0=ruleSlotKind(slot,it).devTypes,edge=ruleEdgeOnly(slot,it),dt=edge?[...dt0,"@edge"]:dt0,{inc,ex}=refParts(it.ref==="$src"?"":it.ref);
+  if(edge){if(edgeLoad?.failed)edgeLoad=null;edgeLoadAll()}       // неудачная загрузка — новая попытка при новом открытии
   const shut=new Set(),doms=rulePkDomains();
   doms.forEach((d,k)=>{if(k>0)shut.add("dom:"+d.id)});                    // раскрыт первый домен, остальные — по клику
   walkFolders(f=>{if((f.folders||[]).length)shut.add("fol:"+f.id)});       // вложенные папки свёрнуты
@@ -17063,6 +17076,7 @@ function rulePickRef(slot,i){
   rulePk={slot,i,dt,src:it.ref==="$src",toks:single?inc.filter(t=>!refTokBroken(t)):inc,ex:new Set(ex),shut,all:false,focus:"",warned:false};
   openBulkModal(`${i18n("Выбрать")}: ${i18n(ruleNounOf(dt)[5])}`,
     `<div class="rl-pkw" ${onEv("keydown",["rulePkWinKey",onEv.event])}>
+      ${edge?`<p class="sub rl-pk-edge" id="rpEdge"></p>`:""}
       <input type="text" id="rpQ" class="rl-pq" placeholder="${i18n("Область, название, тип или сервер…")}" aria-label="${i18n("Поиск областей и устройств")}" autocomplete="off" ${onEv("input",["rulePickType"])}>
       <div id="rpList" class="rl-pl" ${onEv("keydown",["rulePkKey",onEv.event])}></div>
       <div id="rpSum" class="rl-sum"></div>
@@ -17070,6 +17084,13 @@ function rulePickRef(slot,i){
     `<button type="button" class="btn" ${onEv("click",["closeBulkModal"])}>${i18n("Отменить")}</button><button type="button" class="btn pri" id="rpOk" ${onEv("click",["rulePickDone"])}>${i18n("Готово")}</button>`,"bbox-wide bbox-pick");
   rulePickList();
   setTimeout(()=>document.getElementById("rpQ")?.focus(),40);
+}
+// Прототип 37: что показывает окно для репликации. Область в правиле остаётся целой: камеры без хранилища в ней есть,
+// но сервер с них ничего не забирает
+function rulePkEdgeNote(){
+  if(!edgeLoad?.done)return i18n("Консоль загружает встроенные хранилища…");
+  if(edgeLoad.failed)return i18n("Консоль не смогла загрузить встроенные хранилища. Закрыть окно и открыть его снова.");
+  return i18n("Окно показывает только камеры со встроенным хранилищем: с картой памяти или с диском регистратора. Если выбрать область, правило получит все камеры области. Сервер забирает записи только с камер, у которых есть встроенное хранилище.");
 }
 function rulePkWinKey(e){if(e.key==="Escape"){e.stopPropagation();closeBulkModal()}}
 // Устройства, уже входящие в выбранные области (без отдельных и без исключений).
@@ -17215,6 +17236,7 @@ function rulePickList(){
     h+=`<button type="button" role="radio" aria-checked="${pk.src}" class="rl-pk rl-src ${pk.src?"on":""}" data-key="src" ${onEv("click",["rulePkSrc"])}><span class="rl-cb ${pk.src?"on":""}" aria-hidden="true">${pk.src?lu("check"):""}</span><span>${i18n("Устройство из события")}</span><small>${i18n("устройство, которое отправило событие")}</small></button>`;
   if(!pk.src)h+=(q?rulePkSearch(q):`<div class="rl-pk-g">${i18n("Области")}</div><div role="tree" aria-label="${i18n("Области")}">${rulePkTree()}</div>`+rulePkDevices(""))+rulePkTail();
   host.innerHTML=h;
+  const en=document.getElementById("rpEdge");if(en)en.textContent=rulePkEdgeNote();
   document.getElementById("rpSum").innerHTML=rulePkSummary();
   host.scrollTop=st;
   const rows=host.querySelectorAll("[role=treeitem]");
@@ -25012,28 +25034,23 @@ function recEdge(n){return edgeStorage(n)||(n?.type==="camera"?edgeStorage(ipsrv
 // replica со строкой архива камеры (replicaFrom: null — встроенное хранилище): он соответствует типу «Забирать всё».
 const EDGE_REP=new Map();
 const edgeArchSel=new Set();      // отмеченные строки вкладки архива
+// Типы «Заполнять пропуски», «По расписанию» и «Только события» в Axxon One делают макросы, поэтому они живут в
+// «Автоматизации», а не здесь: у хранилища — только постоянная репликация и список правил, которые забирают с него записи
 const EDGE_TYPES=[
   {id:"off",name:"Выключена",
-    cam:"Сервер не забирает записи с карты.",nvr:"Сервер не забирает записи с диска регистратора.",
+    cam:"Сервер сам не забирает записи с карты. Правило автоматизации может забрать записи по событию или по расписанию.",
+    nvr:"Сервер сам не забирает записи с диска регистратора. Правило автоматизации может забрать записи по событию или по расписанию.",
     fit:"",ax:"",strip:"LLLLLLLLLggLLLLLLLLLLLLL"},
-  {id:"gaps",name:"Заполнять пропуски",
-    cam:"Камера передаёт видео на сервер. Когда связь пропадает, камера пишет на карту. После восстановления связи сервер забирает с карты только пропущенные минуты.",
-    nvr:"Регистратор передаёт видео на сервер. Когда связь пропадает, регистратор пишет на свой диск. После восстановления связи сервер забирает только пропущенные минуты.",
-    fit:"Связь с устройством иногда пропадает.",rule:true,ax:"Axxon One: макрос «Offline periods» по событию «Signal restored»",strip:"LLLLLLLLLPPLLLLLLLLLLLLL"},
   {id:"all",name:"Забирать всё",
     cam:"Камера пишет только на карту. Сервер забирает с карты все записи и не держит живой поток.",
     nvr:"Регистратор пишет на свой диск. Сервер забирает с диска все записи и не держит живой поток.",
-    fit:"Канал слабый: сеть нагружается равномерно, архив отстаёт на минуты.",ax:"Axxon One: режим репликации «Always»",strip:"PPPPPPPPPPPPPPPPPPPPPPPP"},
-  {id:"sched",name:"По расписанию",
-    cam:"Камера пишет на карту. Сервер забирает записи только в заданное время, например ночью.",
-    nvr:"Регистратор пишет на диск. Сервер забирает записи только в заданное время, например ночью.",
-    fit:"Днём канал нужен для живого видео.",rule:true,ax:"Axxon One: «On demand» и макрос «Time schedule»",strip:"PPPPPPCCCCCCCCCCCCCCCCPP"},
-  {id:"events",name:"Только события",
-    cam:"Камера пишет на карту. Сервер забирает только фрагменты вокруг событий: движения, тревоги.",
-    nvr:"Регистратор пишет на диск. Сервер забирает только фрагменты вокруг событий: движения, тревоги.",
-    fit:"Нужно сберечь канал и место в архиве.",rule:true,ax:"Axxon One: «On demand» и макрос по событию",strip:"CCCPCCCCPPCCCCCPCCCCCCCC"}
+    fit:"Канал слабый: сеть нагружается равномерно, архив отстаёт на минуты.",ax:"Axxon One: режим репликации «Always»",strip:"PPPPPPPPPPPPPPPPPPPPPPPP"}
 ];
-const EDGE_EVENTS=[["motion","Движение"],["alarm","Тревога камеры"],["input","Тревожный вход"],["analytics","Аналитика"]];
+// Шаблоны правил репликации (RULE_TPL): что делает правило и как подставить в него камеры хранилища
+const EDGE_RULE_TPL=[
+  {tpl:"rgap",name:"Заполнять пропуски",sub:"После обрыва потока сервер забирает пропущенные минуты.",slot:"when"},
+  {tpl:"rsch",name:"По расписанию",sub:"Сервер забирает записи в заданное время, например ночью.",slot:"then"},
+  {tpl:"revt",name:"Только события",sub:"Сервер забирает фрагменты вокруг движения.",slot:"when"}];
 function edgeType(id){return EDGE_TYPES.find(t=>t.id===id)||EDGE_TYPES[0]}
 function edgeHash(s){let h=0;for(const c of String(s))h=(h*31+c.charCodeAt(0))>>>0;return h}
 function edgeOwner(st){return find(st.id)?.p||null}
@@ -25044,16 +25061,14 @@ function edgeTargets(owner){
   // Сначала хранилища своего сервера, потом сетевые
   return arch.filter(a=>archRowOk(a)&&(!s||a.server===s.id||archIsNetwork(a))).sort((x,y)=>(archIsNetwork(x)?1:0)-(archIsNetwork(y)?1:0));
 }
-// Пишут ли камеры устройства живой поток: без него «Заполнять пропуски» заполнять нечего
-function edgeLiveCams(st){const o=edgeOwner(st);if(!o)return[];return(o.type==="ipsrv"?ipsrvCameras(o):[o]).filter(c=>isRecording(c)&&c.rec!=="replica")}
 function edgeRep(st){
   let p=EDGE_REP.get(st.id);if(p)return p;
   const o=edgeOwner(st),nvr=o?.type==="ipsrv",h=edgeHash(st.id);
   const cam0=nvr?ipsrvCameras(o)[0]:o;
   const replica=!nvr&&camArchs(o).some(x=>x.rec==="replica"&&!x.replicaFrom);
-  const type=replica?"all":nvr?"gaps":["gaps","off","events"][h%3];
+  const type=replica?"all":"off";
   const target=(cam0&&cam0.arch)||edgeTargets(o)[0]?.id||null;
-  p={type,arch:target,from:"01:00",to:"06:00",what:"all",ev:["motion","alarm"],before:10,after:30,wait:30,speed:0,excl:new Set()};
+  p={type,arch:target,speed:0,excl:new Set()};
   EDGE_REP.set(st.id,p);return p;
 }
 // Сколько дней помещается на карте: основной поток около 4 Мбит/с, у регистратора — все его камеры
@@ -25065,32 +25080,30 @@ function edgeDays(st){
 function edgeDaysText(d){return d==null?"—":d<1?i18n("меньше суток"):`${i18n("около")} ${d<10?d.toFixed(1).replace(".",","):Math.round(d)} ${i18n("дн.")}`}
 function edgeWord(st){return edgeIsNvr(st)?{from:i18n("с диска регистратора"),on:i18n("на диске регистратора"),what:i18n("диск")}:{from:i18n("с карты"),on:i18n("на карте"),what:i18n("карта")}}
 // Состояние репликации — ЗАГЛУШКА: числа по хешу uid, чтобы экран не менялся от перерисовки
-function edgeStat(st){
-  const p=edgeRep(st);if(p.type==="off")return null;
+function edgeStat(st,camId){
+  const p=edgeRep(st),rl=p.type==="off"?edgeRulesFor(st,camId):[];if(p.type==="off"&&!rl.length)return null;
   const h=edgeHash(st.id+p.type);
   if(st.online===false)return{state:"wait",label:"ждёт связи",lag:"—",left:"—",next:i18n("при связи"),today:"0 ГБ",last:"вчера 23:40",gaps:[["07.11 14:02–14:31","29 мин","в очереди"]]};
   const lag=p.type==="all"?`${2+h%6} ${i18n("мин")}`:"—";
-  const gaps=p.type==="events"?[["08.11 09:14","фрагмент 40 с","сервер забрал"],["08.11 11:02","фрагмент 40 с","сервер забрал"],["08.11 12:47","фрагмент 40 с","в очереди"]]
-    :p.type==="all"?[]:[["06.11 03:12–03:40","28 мин","сервер забрал"],["07.11 10:02–10:05","3 мин","сервер забрал"],...(h%2?[["04.11 22:10–05.11 08:00","10 ч","потерян: карта записала поверх"]]:[])];
-  const state=p.type==="sched"?"plan":gaps.some(g=>g[2]==="в очереди")?"run":"ok";
-  const left=state==="run"?`${3+h%9} ${i18n("мин")}`:p.type==="all"?lag:"—";
-  const next=p.type==="sched"?`${i18n("сегодня")} ${edgeRuleAt()}`:p.type==="gaps"?i18n("при обрыве"):p.type==="events"?i18n("по событию"):i18n("постоянно");
-  return{state,label:{plan:"ждёт "+edgeRuleAt(),run:"забирает",ok:"в норме"}[state],lag,left,next,today:`${((h%40)/10+0.4).toFixed(1)} ГБ`.replace(".",","),last:p.type==="sched"?"сегодня 05:58":"сегодня 12:51",gaps};
+  const gaps=p.type==="all"?[]:[["06.11 03:12–03:40","28 мин","сервер забрал"],["07.11 10:02–10:05","3 мин","сервер забрал"],...(h%2?[["04.11 22:10–05.11 08:00","10 ч","потерян: карта записала поверх"]]:[])];
+  const state=gaps.some(g=>g[2]==="в очереди")?"run":"ok";
+  const left=p.type==="all"?lag:"—";
+  const next=p.type==="all"?i18n("постоянно"):i18n("по правилу");
+  return{state,label:{run:"забирает",ok:"в норме"}[state],lag,left,next,today:`${((h%40)/10+0.4).toFixed(1)} ГБ`.replace(".",","),last:"сегодня 12:51",gaps};
 }
 function edgeStatChip(s){
   if(!s)return`<span class="er-st off">${i18n("выключена")}</span>`;
   return`<span class="er-st ${s.state}">${i18n(s.label)}</span>`;
 }
 // Одна фраза «что произойдёт»: тип, источник, куда, ограничения
-function edgeSummary(st){
+function edgeSummary(st,camId){
   const p=edgeRep(st),w=edgeWord(st),a=archById(p.arch),to=a?`«${escHtml(locName(a))}»`:i18n("хранилище, которое ещё нужно выбрать");
   const d=edgeDays(st),keep=d==null?"":` ${i18n("Хранилище держит записи")} ${edgeDaysText(d)}: ${i18n("если сервер не заберёт их за это время, устройство перезапишет старые минуты.")}`;
   switch(p.type){
-    case"off":return i18n("Сервер не забирает записи. Записи остаются")+` ${w.on}. `+i18n("Устройство записывает новые записи поверх старых.");
-    case"gaps":return`${i18n("Сервер записывает живой поток в")} ${to}. ${i18n("После обрыва потока сервер заберёт")} ${w.from} ${i18n("только пропущенные минуты.")}${keep}`;
+    case"off":{const n=edgeRulesFor(st,camId).length;
+      return n?`${i18n("Сервер сам не забирает записи")} ${w.from}. ${i18n("Правил автоматизации, которые забирают записи:")} ${n}.${keep}`
+        :i18n("Сервер не забирает записи. Записи остаются")+` ${w.on}. `+i18n("Устройство записывает новые записи поверх старых.")}
     case"all":return`${i18n("Сервер забирает")} ${w.from} ${i18n("все записи в")} ${to}. ${i18n("Живого потока нет: архив отстаёт на несколько минут.")}${keep}`;
-    case"sched":{const r=edgeRuleFind("sched"),sc=r?.sched||EDGE_RULE.sched.sched;const dt=ruleDaysText(sc.days);return`${escHtml(dt.charAt(0).toUpperCase()+dt.slice(1))} ${i18n("в")} ${escHtml(sc.at||"—")} ${i18n("сервер забирает")} ${w.from} ${i18n("всё, чего нет в архиве,")} ${i18n("в")} ${to}.${keep}`}
-    case"events":{const e=edgeRuleEvents();return`${i18n("Сервер забирает")} ${w.from} ${i18n("фрагменты вокруг событий")} (${escHtml(e.names.join(", ")||"—")}): ${e.before} ${i18n("с до события и")} ${e.after} ${i18n("с после его конца. Остальное остаётся")} ${w.on}.`}
   }
   return"";
 }
@@ -25100,106 +25113,76 @@ function edgeStripHtml(code){
 function edgeLegendHtml(){
   return`<div class="er-legend"><span><i class="L"></i>${i18n("живой поток в архив")}</span><span><i class="P"></i>${i18n("сервер забрал с устройства")}</span><span><i class="C"></i>${i18n("осталось на устройстве")}</span><span><i class="g"></i>${i18n("пропуск в архиве")}</span><span class="sub">${i18n("полоса — сутки")}</span></div>`;
 }
-// ── Общие правила репликации (заглушка) ──
-// Типы «Заполнять пропуски», «По расписанию» и «Только события» в Axxon One — макросы. Консоль ведёт одно общее
-// правило на тип: выбрал тип у хранилища — камеры попали в правило, выбрал другой — ушли. Камер не осталось —
-// правило выключено. События, время и отступы живут в правиле и общие для всех его камер
-const EDGE_RULE={
-  gaps:{name:"Репликация: заполнять пропуски",start:"event",
-    make:ref=>({when:[{sub:"vms",kind:"silent",ref,match:{}}],then:[{sub:"rec",action:"replicate",ref:"$src",period:"offline"}]})},
-  sched:{name:"Репликация по расписанию",start:"sched",sched:{days:[1,2,3,4,5,6,7],at:"01:00"},
-    make:ref=>({when:[],then:[{sub:"rec",action:"replicate",ref,period:"whole"}]})},
-  events:{name:"Репликация: только события",start:"event",
-    make:ref=>({when:[{sub:"det",kind:"motion",ref,match:{}}],then:[{sub:"rec",action:"replicate",ref:"$src",period:"event",beforeSec:10,after:30}]})}};
-// Текст назначения — ещё и ключ, по которому консоль находит своё правило: без i18n, одинаковый на любом языке
-function edgePurpose(type){return`Репликация со встроенных хранилищ, тип «${edgeType(type).name}». Консоль сама добавляет и убирает камеры этого правила: камеру добавляет выбор этого типа на вкладке «Репликация» встроенного хранилища, другой тип камеру убирает.`}
-function edgeRuleFind(type){const pu=edgePurpose(type);return rules.find(r=>!r._new&&r.purpose===pu)||null}
-// Камеры всех загруженных встроенных хранилищ с этим типом; у регистратора — без исключённых
-function edgeCamsOfType(type){
-  const out=new Set();
-  walkAll(n=>{if(n.type!=="storage")return;const o=edgeOwner(n);if(!o||o.type!=="camera"&&o.type!=="ipsrv")return;
-    const p=edgeRep(n);if(p.type!==type)return;(o.type==="ipsrv"?ipsrvCameras(o).filter(c=>!p.excl.has(c.id)):[o]).forEach(c=>out.add(c.id))});
-  return[...out];
+// ── Правила автоматизации, которые забирают записи с хранилища ──
+// Правило забирает с хранилища, если его действие «Начать репликацию» указывает на камеру хранилища
+// (у регистратора — на любую его камеру; camId — только на эту камеру). «Устройство из события» — это камеры события правила
+function edgeRepActs(x,out=[]){
+  if(Array.isArray(x))x.forEach(v=>edgeRepActs(v,out));
+  else if(x&&typeof x==="object"){if(x.action==="replicate")out.push(x);Object.values(x).forEach(v=>edgeRepActs(v,out))}
+  return out;
 }
-function edgeRuleCams(r){const t=[...r.when,...r.then].map(x=>x.ref).find(x=>x&&x!=="$src");return t?refParts(t).inc:[]}
-function edgeRuleAt(){return(edgeRuleFind("sched")?.sched||EDGE_RULE.sched.sched).at}
-function edgeRuleEvents(){
-  const r=edgeRuleFind("events"),b=r||EDGE_RULE.events.make(""),a=b.then.find(x=>x.action==="replicate")||{};
-  return{names:b.when.map(w=>(triggerKind(w)?.label||w.kind).replace(/^Детектор: /,"").toLowerCase()),before:a.beforeSec??0,after:a.after??0};
-}
-let edgeRuleQ=Promise.resolve(),edgeRulesSeeded=false;
-// Перерисовать, только если на экране то, что показывает правило: иначе перерисовка закроет чужое меню
-function edgeRepaint(){const n=find(sel)?.n;if(app==="hw"&&n&&n.type==="storage"&&tab==="rep")gear()}
-const EDGE_RULE_ERR={};   // тип → текст отказа сервера
+function edgeCams(st){const o=edgeOwner(st);return!o?[]:o.type==="ipsrv"?ipsrvCameras(o):o.type==="camera"?[o]:[]}
 function edgeRulesOn(){return can("listRules")}
-function edgeRuleSync(types,user){
-  if(!edgeRulesOn())return edgeRuleQ;
-  [...new Set(types)].filter(t=>EDGE_RULE[t]).forEach(type=>{edgeRuleQ=edgeRuleQ.then(()=>{delete EDGE_RULE_ERR[type];return edgeRuleSyncOne(type,user)})
-    .catch(e=>{EDGE_RULE_ERR[type]=problemText(e);if(user)toast(EDGE_RULE_ERR[type]);edgeRepaint()})});
-  return edgeRuleQ;
+function edgeActHits(r,a,cams){return(a.ref==="$src"?r.when.map(w=>w.ref):[a.ref]).some(ref=>ref&&refNodes(ref,["camera"]).some(c=>cams.has(c.id)))}
+function edgeRulesFor(st,camId){
+  if(!edgeRulesOn())return[];
+  const cams=new Set(camId?[camId]:edgeCams(st).map(c=>c.id));if(!cams.size)return[];
+  return rules.filter(r=>!r._new&&edgeRepActs(r.then).some(a=>edgeActHits(r,a,cams)));
 }
-async function edgeRuleSyncOne(type,user){
-  const d=EDGE_RULE[type],cams=edgeCamsOfType(type),r=edgeRuleFind(type),ref=cams.length?refMake(cams,[]):"";
-  const open=x=>()=>ruleGoRule(x.id);
-  if(!r){
-    if(!cams.length)return;
-    const now=ruleNow(),b=d.make(ref);
-    const x=await API.post("/rules",ruleBody({name:i18n(d.name),on:true,watch:false,repeat:"skip",start:d.start,run:{mode:"always",modes:[]},cond:[],menu:false,rate:60,within:0,
-      sched:d.sched?ruleClone(d.sched):null,when:b.when,then:b.then,owner:ACC_ME,purpose:edgePurpose(type),created:{by:ACC_ME,at:now},changed:{by:ACC_ME,at:now},
-      server:dcRuleServer(cams),runAs:"system",chain:true}));
-    ruleSet(x);await ruleHistLoad(x.id);
-    if(user)toastAction("edgerule:"+type,`${i18n("Консоль создала правило автоматизации")} «${x.name}». ${i18n("Камер в правиле:")} ${cams.length}`,i18n("Открыть"),open(x),12000);
-    edgeRepaint();return;
-  }
-  const old=edgeRuleCams(r),next=ruleClone(r);
-  // Меняем только ссылки, которые указывают на камеры правила: событие или шаг, добавленные пользователем, остаются
-  const key=JSON.stringify(old.slice().sort()),managed=x=>x!=="$src"&&!refParts(x||"").ex.length&&JSON.stringify(refParts(x||"").inc.slice().sort())===key;
-  next.when.forEach(w=>{if(managed(w.ref))w.ref=ref});
-  next.then.forEach(a=>{if(a.action==="replicate"&&managed(a.ref))a.ref=ref});
-  if(cams.length)next.server=dcRuleServer(cams);
-  if(!cams.length)next.on=false;else if(!old.length)next.on=true;   // правило без камер — выключено, с камерами снова включено
-  if(JSON.stringify(ruleBody(next))===JSON.stringify(ruleBody(r)))return;
-  const y=await API.put(`/rules/${r.id}`,ruleBody(next),autoVer.get(r.id));
-  ruleSet(y);await ruleHistLoad(y.id);
-  if(user){
-    const add=cams.filter(c=>!old.includes(c)).length,del=old.filter(c=>!cams.includes(c)).length;
-    const msg=!cams.length?`${i18n("В правиле")} «${y.name}» ${i18n("не осталось камер. Консоль выключила правило.")}`
-      :add&&!del?`${i18n("Консоль добавила камеры в правило")} «${y.name}»: ${add}`
-      :del&&!add?`${i18n("Консоль убрала камеры из правила")} «${y.name}»: ${del}`
-      :`${i18n("Консоль изменила камеры правила")} «${y.name}». ${i18n("Камер в правиле:")} ${cams.length}`;
-    toastAction("edgerule:"+type,msg,i18n("Открыть"),open(y),12000);
-  }
-  edgeRepaint();
+// Перерисовать, только если на экране то, что показывает правила: иначе перерисовка закроет чужое меню
+function edgeRepaint(){const n=find(sel)?.n;if(app==="hw"&&n&&n.type==="storage"&&tab==="rep")gear()}
+// Шаблоны репликации, которые сервер умеет: событие, действие и способ запуска объявлены
+function edgeTplOk(tpl){const t=RULE_TPL.find(x=>x.id===tpl);return!!t&&startDeclared(t.start)&&ruleTplDeclared(t)}
+// Новое правило из шаблона: камеры хранилища уже подставлены в событие или в действие
+function edgeRuleNew(id,tpl){
+  const st=find(id)?.n,d=EDGE_RULE_TPL.find(x=>x.tpl===tpl),t=RULE_TPL.find(x=>x.id===tpl);if(!st||!d||!t||!edgeTplOk(tpl))return;
+  const ref=refMake(edgeCams(st).map(c=>c.id),[]),b=t.make();
+  const it=ruleClone((d.slot==="when"?b.when:b.then)[0]);it.ref=ref;
+  ruleQuiet=true;setApp("rules");ruleQuiet=false;
+  ruleNewOpen(ref?{start:t.start,tpl,[d.slot]:[it],note:"Консоль подставила камеры встроенного хранилища."}:{start:t.start,tpl});
 }
-// Блок в редакторе: какое правило ведёт этот тип и что в нём общее
-function edgeRuleBlockHtml(st){
-  const p=edgeRep(st),t=edgeType(p.type);if(!t.rule||!edgeRulesOn())return"";
-  const r=edgeRuleFind(p.type),n=edgeCamsOfType(p.type).length;
-  const what={gaps:"событие «Обрыв потока камеры»",sched:"дни и время запуска",events:"события и отступы до и после события"}[p.type];
-  if(!r)return`<div class="er-rule er-wide"><span class="sub">${EDGE_RULE_ERR[p.type]?`${i18n("Консоль не смогла создать правило автоматизации:")} ${escHtml(EDGE_RULE_ERR[p.type])}`:i18n("Консоль создаёт правило автоматизации для этого типа…")}</span></div>`;
-  return`<div class="er-rule er-wide">
-    <div class="er-rule-h">${lu("zap")}<span>${i18n("Правило автоматизации")} <b>«${escHtml(r.name)}»</b></span><span class="er-st ${r.on?"ok":"off"}">${i18n(r.on?"работает":"выключено")}</span>
-      <button type="button" class="btn s" ${onEv("click",["ruleGoRule",r.id])}>${i18n("Открыть правило")}</button></div>
-    <small>${i18n("Правило общее: в нём все камеры, у которых выбран этот тип.")} ${i18n("Камер в правиле:")} ${n}. ${i18n("Консоль добавила камеры этого хранилища в правило. Если выбрать другой тип, консоль уберёт их из правила.")}</small>
-    <small>${i18n("Правило задаёт")} ${i18n(what)}. ${i18n("Чтобы изменить это, открыть правило. Изменение коснётся всех камер правила.")}</small></div>`;
+function edgeRulesGo(){const tpl=EDGE_RULE_TPL.map(d=>d.tpl).find(edgeTplOk);ruleQuiet=true;setApp("rules");ruleQuiet=false;ruleNewOpen(tpl?{start:RULE_TPL.find(x=>x.id===tpl).start,tpl}:null)}
+// Демо: одно правило «Заполнять пропуски» на половину камер с картой, чтобы у хранилищ был список правил. Заглушка
+let edgeRulesSeeded=false;
+async function edgeRuleSeed(){
+  if(edgeRulesSeeded||!edgeRulesOn()||!can("createRule"))return;edgeRulesSeeded=true;
+  if(rules.some(r=>edgeRepActs(r.then).length))return;
+  const cams=[];walkAll(n=>{if(n.type==="storage"){const st=n;edgeCams(st).forEach(c=>{if(edgeRep(st).type==="off"&&edgeHash(c.id)%2===0)cams.push(c.id)})}});
+  if(!cams.length)return;
+  const t=RULE_TPL.find(x=>x.id==="rgap"),b=t.make(),now=ruleNow();b.when[0].ref=refMake([...new Set(cams)],[]);
+  try{
+    const x=await API.post("/rules",ruleBody({name:i18n(t.name),on:true,watch:false,repeat:"skip",start:"event",run:{mode:"always",modes:[]},cond:[],menu:false,rate:60,within:0,
+      sched:null,when:b.when,then:b.then,owner:ACC_ME,purpose:"",created:{by:ACC_ME,at:now},changed:{by:ACC_ME,at:now},server:dcRuleServer(cams),runAs:"system",chain:true}));
+    ruleSet(x);edgeRepaint();
+  }catch(e){}
+}
+// Блок «Репликация по правилам»: сноска, правила этого хранилища и шаблоны
+function edgeRulesHtml(st){
+  const w=edgeWord(st),id=st.id;
+  const note=`<p class="sub er-rules-nt">${i18n("«Заполнять пропуски», «По расписанию» и «Только события» сервер выполняет по правилам автоматизации. Чтобы настроить эти типы, открыть раздел «Автоматизация». В правиле пользователь задаёт события, время и камеры.")}</p>`;
+  if(!edgeRulesOn())return card("Репликация по правилам",note+`<p class="sub">${i18n("Нет права читать правила автоматизации.")}</p>`);
+  const list=edgeRulesFor(st);
+  const rows=list.length?`<table class="er-tbl er-rules"><colgroup><col><col style="width:260px"><col style="width:110px"><col style="width:150px"></colgroup>
+    <thead><tr><th>${i18n("Правило")}</th><th>${i18n("Что забирает")}</th><th>${i18n("Сейчас")}</th><th></th></tr></thead><tbody>${list.map(r=>{
+      const cams=new Set(edgeCams(st).map(c=>c.id)),a=edgeRepActs(r.then).find(x=>edgeActHits(r,x,cams))||{},per=(actionKind(a).fields||[]).find(f=>f.id==="period")?.opts?.find(o=>o[0]===a.period);
+      return`<tr><td class="er-ell" title="${escHtml(r.name)}">${lu("zap",14)} ${escHtml(r.name)}</td><td class="er-ell">${escHtml(per?i18n(per[1]):"—")}</td><td><span class="er-st ${r.on?"ok":"off"}">${i18n(r.on?"работает":"выключено")}</span></td><td><button type="button" class="btn s" ${onEv("click",["ruleGoRule",r.id])}>${i18n("Открыть правило")}</button></td></tr>`}).join("")}</tbody></table>`
+    :`<p class="sub">${i18n("Правил, которые забирают записи")} ${w.from}, ${i18n("нет.")}</p>`;
+  const add=can("createRule")&&EDGE_RULE_TPL.some(d=>edgeTplOk(d.tpl))?`<div class="er-rules-add"><span class="sub">${i18n("Создать правило для этого хранилища:")}</span>${EDGE_RULE_TPL.filter(d=>edgeTplOk(d.tpl)).map(d=>`<button type="button" class="btn s" title="${escHtml(i18n(d.sub))}" ${onEv("click",["edgeRuleNew",id,d.tpl])}>${i18n(d.name)}</button>`).join("")}</div>`:"";
+  return card("Репликация по правилам",note+rows+add,`<span class="sub" style="font-weight:400">${list.length}</span>`);
 }
 // Редактор репликации одного встроенного хранилища
 function edgeRepEditHtml(st){
   const p=edgeRep(st),nvr=edgeIsNvr(st),o=edgeOwner(st),id=st.id;
-  const types=`<div class="er-types" role="radiogroup" aria-label="${i18n("Тип репликации")}">${EDGE_TYPES.map(t=>`<button type="button" role="radio" aria-checked="${p.type===t.id}" class="er-t ${p.type===t.id?"on":""}" ${onEv("click",["edgeSet",id,"type",t.id])}>
+  const types=`<div class="er-types" role="radiogroup" aria-label="${i18n("Постоянная репликация")}">${EDGE_TYPES.map(t=>`<button type="button" role="radio" aria-checked="${p.type===t.id}" class="er-t ${p.type===t.id?"on":""}" ${onEv("click",["edgeSet",id,"type",t.id])}>
       <b>${i18n(t.name)}</b>${edgeStripHtml(t.strip)}<small>${i18n(nvr?t.nvr:t.cam)}</small>${t.fit?`<small class="er-fit">${i18n("Когда выбрать:")} ${i18n(t.fit)}</small>`:""}${t.ax?`<small class="er-ax">${escHtml(t.ax)}</small>`:""}</button>`).join("")}</div>${edgeLegendHtml()}`;
   const targets=edgeTargets(o);
   const archSel=`<div><label>${i18n("Куда забирать")}</label><select ${onEv("change",["edgeSet",id,"arch",onEv.value])}>${targets.map(a=>`<option value="${escHtml(a.id)}" ${a.id===p.arch?"selected":""}>${escHtml(locName(a))}</option>`).join("")}${p.arch&&!targets.some(a=>a.id===p.arch)?`<option value="${escHtml(p.arch)}" selected>${escHtml(locName(archById(p.arch)||{name:p.arch}))}</option>`:""}</select></div>`;
   const num=(l,k,min,max)=>`<div><label>${i18n(l)}</label><input type="number" min="${min}" max="${max}" value="${p[k]}" ${onEv("change",["edgeSet",id,k,onEv.value])}></div>`;
-  const time=(l,k)=>`<div><label>${i18n(l)}</label><input type="time" value="${p[k]}" ${onEv("change",["edgeSet",id,k,onEv.value])}></div>`;
-  const extra=edgeRuleBlockHtml(st);
   const off=p.type==="off";
   const adv=off?"":`<details class="er-adv"><summary>${i18n("Дополнительно")}</summary><div class="g">${num("Предел скорости, Мбит/с","speed",0,1000)}<div class="bk-hint er-wide">${i18n("Значение 0 снимает предел. Предел оставляет канал живому видео других камер.")}</div></div></details>`;
   return`${types}
-    ${off?"":`<div class="g er-g">${archSel}${extra}</div>`}
+    ${off?"":`<div class="g er-g">${archSel}</div>`}
     <div class="nt er-what" data-edge-summary><b>${i18n("Что произойдёт.")}</b> ${edgeSummary(st)}</div>
-    ${p.type!=="off"&&p.type!=="all"&&archById(p.arch)?.storage==="block"?`<div class="nt err" data-edge-block>${i18n("Хранилище «")}${escHtml(locName(archById(p.arch)))}${i18n("» блочное: оно принимает записи только в конец архива. Пропуски в середине сервер туда не впишет. Выбрать объектное хранилище.")}</div>`:""}
-    ${p.type==="gaps"&&!edgeLiveCams(st).length?`<div class="nt err" data-edge-nolive>${i18n(nvr?"Камеры регистратора не пишут живой поток в архив: пропусков нет, заполнять нечего. Выбрать «Забирать всё» или включить запись камер.":"Камера не пишет живой поток в архив: пропусков нет, заполнять нечего. Выбрать «Забирать всё» или включить запись камеры.")}</div>`:""}
     ${adv}${edgeChecksHtml(st)}`;
 }
 // Проверки перед репликацией — ЗАГЛУШКА: по хешу
@@ -25213,16 +25196,12 @@ function edgeChecksHtml(st){
 function edgeSet(id,k,v){
   edgeLoadAll();
   const st=find(id)?.n;if(!st)return;const p=edgeRep(st);
-  if(["wait","before","after","speed"].includes(k))v=Math.max(0,parseInt(v,10)||0);
-  const was=p.type;p[k]=v;
-  if(k==="type"){
-    if(edgeType(was).rule||edgeType(v).rule)edgeRuleSync([was,v],true);
-    else toast(`${i18n("Тип репликации:")} ${i18n(edgeType(v).name)}. ${i18n("Заглушка: настройка живёт в браузере.")}`);
-  }
+  if(k==="speed")v=Math.max(0,parseInt(v,10)||0);
+  p[k]=v;
+  if(k==="type")toast(`${i18n("Постоянная репликация:")} ${i18n(edgeType(v).name).toLowerCase()}. ${i18n("Заглушка: настройка живёт в браузере.")}`);
   gear();
 }
-function edgeEvToggle(id,v){const st=find(id)?.n;if(!st)return;const p=edgeRep(st);p.ev=p.ev.includes(v)?p.ev.filter(x=>x!==v):[...p.ev,v];gear()}
-function edgeExclToggle(id,camId){const st=find(id)?.n;if(!st)return;const p=edgeRep(st);if(p.excl.has(camId))p.excl.delete(camId);else p.excl.add(camId);edgeRuleSync([p.type],true);gear()}
+function edgeExclToggle(id,camId){const st=find(id)?.n;if(!st)return;const p=edgeRep(st);if(p.excl.has(camId))p.excl.delete(camId);else p.excl.add(camId);gear()}
 // Ручной забор периода: отдельное действие, не тип
 function edgePullAsk(id){
   const st=find(id)?.n;if(!st)return;const w=edgeWord(st);
@@ -25232,7 +25211,7 @@ function edgePullAsk(id){
 }
 function edgeStatusHtml(st){
   const s=edgeStat(st),id=st.id;
-  if(!s)return card("Состояние репликации",`<p class="sub">${i18n("Репликация выключена. Чтобы забрать отдельный период, нажать «Забрать период».")}</p><button type="button" class="btn s" ${onEv("click",["edgePullAsk",id])}>${i18n("Забрать период…")}</button>`);
+  if(!s)return card("Состояние репликации",`<p class="sub">${i18n("Репликация выключена, правил репликации нет. Чтобы забрать отдельный период, нажать «Забрать период».")}</p><button type="button" class="btn s" ${onEv("click",["edgePullAsk",id])}>${i18n("Забрать период…")}</button>`);
   return card("Состояние репликации",`<div class="mx">
       <div class="mc"><span>${i18n("Сейчас")}</span><b>${edgeStatChip(s)}</b></div>
       <div class="mc"><span>${i18n("Осталось забрать")}</span><b>${escHtml(s.left)}</b></div>
@@ -25240,14 +25219,14 @@ function edgeStatusHtml(st){
       <div class="mc"><span>${i18n("Последняя репликация")}</span><b>${escHtml(i18n(s.last))}</b></div>
       <div class="mc"><span>${i18n("Следующая репликация")}</span><b>${escHtml(s.next)}</b></div>
     </div>
-    ${s.gaps.length?`<table class="er-gaps"><thead><tr><th>${i18n(edgeRep(st).type==="events"?"Событие":"Пропуск в архиве")}</th><th>${i18n("Длительность")}</th><th>${i18n("Итог")}</th></tr></thead><tbody>${s.gaps.map(g=>`<tr class="${g[2].startsWith("потерян")?"lost":""}"><td>${escHtml(g[0])}</td><td>${escHtml(i18n(g[1]))}</td><td>${escHtml(i18n(g[2]))}</td></tr>`).join("")}</tbody></table>`:`<p class="sub">${i18n("Пропусков за 7 дней нет.")}</p>`}
+    ${s.gaps.length?`<table class="er-gaps"><thead><tr><th>${i18n("Пропуск в архиве")}</th><th>${i18n("Длительность")}</th><th>${i18n("Итог")}</th></tr></thead><tbody>${s.gaps.map(g=>`<tr class="${g[2].startsWith("потерян")?"lost":""}"><td>${escHtml(g[0])}</td><td>${escHtml(i18n(g[1]))}</td><td>${escHtml(i18n(g[2]))}</td></tr>`).join("")}</tbody></table>`:`<p class="sub">${i18n("Пропусков за 7 дней нет.")}</p>`}
     <div class="er-act"><button type="button" class="btn s" ${onEv("click",["edgePullAsk",id])}>${i18n("Забрать период…")}</button><span class="sub">${i18n("Журнал записывает начало и конец каждой репликации.")}</span></div>`,`<span class="er-stub">${i18n("заглушка")}</span>`);
 }
 // Регистратор: одна настройка на все камеры, камеру можно исключить
 function edgeNvrCamsHtml(st){
   const o=edgeOwner(st);if(!o||o.type!=="ipsrv")return"";
   const p=edgeRep(st),cams=ipsrvCameras(o);
-  return card("Камеры регистратора",`<p class="sub">${i18n("Тип репликации один для всех камер регистратора. Если снять флажок, сервер не будет забирать записи этой камеры.")}</p>
+  return card("Камеры регистратора",`<p class="sub">${i18n("Постоянная репликация одна для всех камер регистратора. Если снять флажок, сервер не будет постоянно забирать записи этой камеры. На правила автоматизации флажок не влияет.")}</p>
     <table class="er-cams"><thead><tr><th style="width:40px"></th><th>${i18n("Камера")}</th><th>${i18n("Живой поток в архив")}</th></tr></thead><tbody>${cams.map(c=>`<tr><td><input type="checkbox" ${p.excl.has(c.id)?"":"checked"} ${p.type==="off"?"disabled":""} aria-label="${escHtml(locName(c))}" ${onEv("change",["edgeExclToggle",st.id,c.id])}></td><td><button type="button" class="lk" ${onEv("click",["pick",c.id,{tab:"rec"}])}>${escHtml(locName(c))}</button></td><td>${c.arch?escHtml(locName(archById(c.arch)||{name:"—"})):`<span class="sub">${i18n("нет")}</span>`}</td></tr>`).join("")}</tbody></table>
     <p class="sub">${i18n("Сервер забирает записи камер:")} ${cams.length-[...p.excl].filter(x=>cams.some(c=>c.id===x)).length} ${i18n("из")} ${cams.length}.</p>`);
 }
@@ -25259,26 +25238,36 @@ function edgeRepScreenHtml(st){
       <div class="mc"><span>${i18n("Объём")}</span><b>${escHtml(st.size||"—")}</b></div>
       <div class="mc"><span>${i18n("Хранит")}</span><b>${edgeDaysText(d)}</b></div>
       <div class="mc"><span>${i18n("Связь")}</span><b>${st.online===false?i18n("нет"):i18n("есть")}</b></div>
-      <div class="mc"><span>${i18n("Репликация")}</span><b>${i18n(edgeType(p.type).name)}</b></div>
+      <div class="mc"><span>${i18n("Репликация")}</span><b>${escHtml(edgeRepLabel(st))}</b></div>
     </div>
-    <p class="sub er-intro">${o?.type==="ipsrv"?`${i18n("Диск внутри регистратора")} <button type="button" class="lk" ${onEv("click",["pick",o.id])}>${escHtml(locName(o))}</button>.`:o?`${i18n("Карта памяти камеры")} <button type="button" class="lk" ${onEv("click",["pick",o.id,{tab:"rec"}])}>${escHtml(locName(o))}</button>.`:""} ${i18n("При репликации сервер забирает записи")} ${w.from} ${i18n("в своё хранилище. Тип репликации задаёт, какие записи и когда.")}</p>`;
-  return card("Встроенное хранилище",head)+card("Тип репликации",edgeRepEditHtml(st),`<span class="er-stub">${i18n("заглушка")}</span>`)+edgeNvrCamsHtml(st)+edgeStatusHtml(st);
+    <p class="sub er-intro">${o?.type==="ipsrv"?`${i18n("Диск внутри регистратора")} <button type="button" class="lk" ${onEv("click",["pick",o.id])}>${escHtml(locName(o))}</button>.`:o?`${i18n("Карта памяти камеры")} <button type="button" class="lk" ${onEv("click",["pick",o.id,{tab:"rec"}])}>${escHtml(locName(o))}</button>.`:""} ${i18n("При репликации сервер забирает записи")} ${w.from} ${i18n("в своё хранилище. Постоянная репликация забирает все записи. Правила автоматизации забирают записи по событию или по расписанию.")}</p>`;
+  return card("Встроенное хранилище",head)+card("Постоянная репликация",edgeRepEditHtml(st),`<span class="er-stub">${i18n("заглушка")}</span>`)+edgeRulesHtml(st)+edgeNvrCamsHtml(st)+edgeStatusHtml(st);
+}
+// Короткая подпись в строке «Периферии»
+function edgePeriphText(st){
+  const p=edgeRep(st);if(p.type==="all")return i18n("репликация: забирать всё");
+  const n=edgeRulesFor(st).length;return n?`${i18n("правил репликации:")} ${n}`:i18n("репликация выключена");
+}
+// Подпись репликации в итогах: постоянная, по правилам или выключена
+function edgeRepLabel(st,camId){
+  const p=edgeRep(st);if(p.type==="all")return i18n(edgeType("all").name);
+  const n=edgeRulesFor(st,camId).length;return n?`${i18n("По правилам:")} ${n}`:i18n(edgeType("off").name);
 }
 // Карточка на вкладке «Архив» камеры и регистратора: итог и переход к настройке
 function edgeStorageCardHtml(owner){
   edgeLoadAll();
   const own=edgeStorage(owner),nvrOf=!own&&owner.type==="camera"?ipsrvOwnerNode(owner):null,st=own||edgeStorage(nvrOf);
   if(!st)return"";
-  const p=edgeRep(st),s=edgeStat(st),a=archById(p.arch),excluded=nvrOf&&p.excl.has(owner.id);
-  const where=nvrOf?`${i18n("Записи камеры лежат на диске регистратора")} <button type="button" class="lk" ${onEv("click",["pick",nvrOf.id])}>${escHtml(locName(nvrOf))}</button>. ${i18n("Регистратор задаёт один тип репликации для всех своих камер.")}`
+  const cam=nvrOf?owner.id:undefined,p=edgeRep(st),s=edgeStat(st,cam),a=archById(p.arch),excluded=nvrOf&&p.excl.has(owner.id)&&p.type==="all";
+  const where=nvrOf?`${i18n("Записи камеры лежат на диске регистратора")} <button type="button" class="lk" ${onEv("click",["pick",nvrOf.id])}>${escHtml(locName(nvrOf))}</button>. ${i18n("Регистратор задаёт одну постоянную репликацию для всех своих камер.")}`
     :`${i18n(owner.type==="ipsrv"?"Диск внутри регистратора.":"Карта памяти внутри камеры.")}`;
   return card("Встроенное хранилище",`<div class="mx">
       <div class="mc"><span>${i18n("Объём")}</span><b>${escHtml(st.size||"—")}</b></div>
-      <div class="mc"><span>${i18n("Репликация")}</span><b>${excluded?i18n("камера не входит"):i18n(edgeType(p.type).name)}</b></div>
-      <div class="mc"><span>${i18n("Куда")}</span><b class="er-ell" title="${escHtml(a?locName(a):"—")}">${p.type==="off"||excluded?"—":escHtml(a?locName(a):"—")}</b></div>
+      <div class="mc"><span>${i18n("Репликация")}</span><b>${excluded?i18n("камера не входит"):escHtml(edgeRepLabel(st,cam))}</b></div>
+      <div class="mc"><span>${i18n("Куда")}</span><b class="er-ell" title="${escHtml(a?locName(a):"—")}">${p.type!=="all"||excluded?"—":escHtml(a?locName(a):"—")}</b></div>
       <div class="mc"><span>${i18n("Сейчас")}</span><b>${excluded?edgeStatChip(null):edgeStatChip(s)}</b></div>
     </div>
-    <p class="sub" style="margin-top:10px">${where} ${excluded?"":edgeSummary(st)}</p>
+    <p class="sub" style="margin-top:10px">${where} ${excluded?"":edgeSummary(st,cam)}</p>
     <button type="button" class="btn s" ${onEv("click",["pick",st.id,{tab:"rep"}])}>${i18n("Настроить репликацию")}</button>`,`<span class="er-stub">${i18n("заглушка")}</span>`);
 }
 // ── Вкладка архива «Встроенные хранилища»: устройства его сервера с картой или диском ──
@@ -25292,7 +25281,7 @@ function edgeLoadRepaint(){
 function edgeLoadAll(){
   if(edgeLoad)return;
   edgeLoad={busy:true};
-  unitsAll({kind:"storage"}).then(rows=>hwEnsure(rows.map(r=>r.uid)).then(()=>hwFullAll(rows.map(r=>r.uid)))).then(()=>{edgeLoad={done:true};if(!edgeRulesSeeded){edgeRulesSeeded=true;edgeRuleSync(Object.keys(EDGE_RULE),false)}edgeLoadRepaint()}).catch(()=>{edgeLoad={done:true,failed:true};edgeLoadRepaint()});
+  unitsAll({kind:"storage"}).then(rows=>hwEnsure(rows.map(r=>r.uid)).then(()=>hwFullAll(rows.map(r=>r.uid)))).then(()=>{edgeLoad={done:true};ruleIdxDrop();if(rulePk)rulePickList();edgeRuleSeed();edgeLoadRepaint()}).catch(()=>{edgeLoad={done:true,failed:true};if(rulePk)rulePickList();edgeLoadRepaint()});
 }
 function edgeOfServer(sid){
   const out=[];
@@ -25304,10 +25293,8 @@ function edgeArchPickAll(ids,on){ids.forEach(id=>on?edgeArchSel.add(id):edgeArch
 function edgeArchBulk(aid,type){
   if(!type)return;
   const sv=archServer(archById(aid)),here=new Set(sv?edgeOfServer(sv.id).map(n=>n.id):[]),ids=[...edgeArchSel].filter(id=>here.has(id));
-  const was=new Set([type]);
-  ids.forEach(id=>{const st=find(id)?.n;if(!st)return;const p=edgeRep(st);was.add(p.type);p.type=type;if(type!=="off")p.arch=aid});
-  toast(`${i18n("Консоль задала тип")} «${i18n(edgeType(type).name)}». ${i18n("Встроенных хранилищ:")} ${ids.length}. ${i18n("Заглушка.")}`);
-  edgeRuleSync([...was],true);
+  ids.forEach(id=>{const st=find(id)?.n;if(!st)return;const p=edgeRep(st);p.type=type;if(type!=="off")p.arch=aid});
+  toast(`${i18n("Постоянная репликация:")} ${i18n(edgeType(type).name).toLowerCase()}. ${i18n("Встроенных хранилищ:")} ${ids.length}. ${i18n("Заглушка.")}`);
   ids.forEach(id=>edgeArchSel.delete(id));gear();
 }
 function edgeArchHtml(a){
@@ -25316,26 +25303,27 @@ function edgeArchHtml(a){
   const b=edgeLoad,list=edgeOfServer(sv.id);
   const stub=`<span class="er-stub">${i18n("заглушка")}</span>`;
   if(!b?.done&&!list.length)return card("Встроенные хранилища",`<p class="sub">${i18n("Загрузка…")}</p>`,stub);
-  const here=list.filter(st=>edgeRep(st).arch===a.id&&edgeRep(st).type!=="off").length;
-  const intro=`<p class="sub">${i18n("Камеры и регистраторы сервера")} «${escHtml(locName(sv))}» ${i18n("с картой памяти или диском. Сервер забирает с них записи по типу репликации. Сюда забирают")} ${here} ${i18n("из")} ${list.length}.</p>`;
+  const here=list.filter(st=>edgeRep(st).arch===a.id&&edgeRep(st).type==="all").length;
+  const intro=`<p class="sub">${i18n("Камеры и регистраторы сервера")} «${escHtml(locName(sv))}» ${i18n("с картой памяти или диском. Постоянная репликация забирает сюда все записи с")} ${here} ${i18n("устройств из")} ${list.length}.</p>`;
   if(!list.length)return card("Встроенные хранилища",intro+`<p class="sub">${i18n("У устройств этого сервера нет встроенных хранилищ.")}</p>`,stub);
   const ids=list.map(st=>st.id),allOn=ids.length&&ids.every(id=>edgeArchSel.has(id));
   const row=st=>{
     const o=edgeOwner(st),p=edgeRep(st),s=edgeStat(st),t=archById(p.arch),nvr=o?.type==="ipsrv";
-    const dest=p.type==="off"?"—":t?.id===a.id?i18n("сюда"):escHtml(t?locName(t):"—");
+    const dest=p.type!=="all"?"—":t?.id===a.id?i18n("сюда"):escHtml(t?locName(t):"—");
     const name=`${ic(nvr?"ipsrv":"camera")}<span class="er-nm"><b>${escHtml(locName(o||st))}</b><small>${nvr?`${i18n("диск")} · ${ipsrvCameras(o).length} ${i18n("камер")}`:i18n("карта")} · ${st.size?`${escHtml(st.size)} · ${edgeDaysText(edgeDays(st))}`:i18n("объём неизвестен")}</small></span>`;
     const first=`<td class="er-x"><input type="checkbox" ${edgeArchSel.has(st.id)?"checked":""} aria-label="${escHtml(locName(o||st))}" ${onEv("change",["edgeArchPickToggle",st.id])}></td>`;
     const nameCell=`<td><button type="button" class="er-dev er-go" ${onEv("click",["pick",st.id,{tab:"rep"}])}>${name}</button></td>`;
-    return`<tr class="er-row ${edgeArchSel.has(st.id)?"sel":""}">${first}${nameCell}<td>${i18n(edgeType(p.type).name)}</td><td class="er-ell">${dest}</td><td>${edgeStatChip(s)}</td></tr>`;
+    return`<tr class="er-row ${edgeArchSel.has(st.id)?"sel":""}">${first}${nameCell}<td>${escHtml(edgeRepLabel(st))}</td><td class="er-ell">${dest}</td><td>${edgeStatChip(s)}</td></tr>`;
   };
   // Строка группового действия есть всегда: отметка строк меняет её текст, но не высоту — список не съезжает
   const nSel=ids.filter(id=>edgeArchSel.has(id)).length;
-  const bulk=`<div class="er-bulk ${nSel?"on":""}" data-edge-bulk><b class="er-bulk-n">${nSel?`${i18n("Отмечено")} ${nSel}`:i18n("Ничего не отмечено")}</b><select aria-label="${i18n("Задать тип репликации")}" ${nSel?"":"disabled"} ${onEv("change",["edgeArchBulk",a.id,onEv.value])}><option value="">${i18n("Задать тип репликации…")}</option>${EDGE_TYPES.map(t=>`<option value="${t.id}">${i18n(t.name)}</option>`).join("")}</select><span class="sub er-ell">${nSel?i18n("Сервер положит забранные записи в это хранилище."):i18n("Отметить устройства, чтобы задать тип сразу нескольким.")}</span></div>`;
+  const bulk=`<div class="er-bulk ${nSel?"on":""}" data-edge-bulk><b class="er-bulk-n">${nSel?`${i18n("Отмечено")} ${nSel}`:i18n("Ничего не отмечено")}</b><select aria-label="${i18n("Задать постоянную репликацию")}" ${nSel?"":"disabled"} ${onEv("change",["edgeArchBulk",a.id,onEv.value])}><option value="">${i18n("Постоянная репликация…")}</option>${EDGE_TYPES.map(t=>`<option value="${t.id}">${i18n(t.name)}</option>`).join("")}</select><span class="sub er-ell">${nSel?i18n("Сервер положит забранные записи в это хранилище."):i18n("Отметить устройства, чтобы задать постоянную репликацию сразу нескольким.")}</span></div>`;
   const tbl=`<table class="er-tbl"><colgroup><col style="width:44px"><col><col style="width:170px"><col style="width:180px"><col style="width:130px"></colgroup>
-    <thead><tr><th class="er-x"><input type="checkbox" ${allOn?"checked":""} aria-label="${i18n("Отметить все")}" ${onEv("change",["edgeArchPickAll",ids,onEv.checked])}></th><th>${i18n("Устройство")}</th><th>${i18n("Тип репликации")}</th><th>${i18n("Куда")}</th><th>${i18n("Сейчас")}</th></tr></thead>
+    <thead><tr><th class="er-x"><input type="checkbox" ${allOn?"checked":""} aria-label="${i18n("Отметить все")}" ${onEv("change",["edgeArchPickAll",ids,onEv.checked])}></th><th>${i18n("Устройство")}</th><th>${i18n("Репликация")}</th><th>${i18n("Куда")}</th><th>${i18n("Сейчас")}</th></tr></thead>
     <tbody>${list.map(row).join("")}</tbody></table>`;
   const hint=i18n("Чтобы открыть встроенное хранилище устройства и настроить репликацию, нажать на устройство.");
-  return card("Встроенные хранилища",intro+bulk+tbl+`<p class="sub" style="margin-top:10px">${hint}</p>`,stub);
+  const rl=edgeRulesOn()?`<div class="nt er-rules-nt" style="margin-top:10px">${i18n("«Заполнять пропуски», «По расписанию» и «Только события» сервер выполняет по правилам автоматизации. Чтобы настроить эти типы, открыть раздел «Автоматизация».")} ${can("createRule")?`<button type="button" class="lk lk-act" ${onEv("click",["edgeRulesGo"])}>${i18n("Создать правило репликации")}</button>`:""}</div>`:"";
+  return card("Встроенные хранилища",intro+bulk+tbl+`<p class="sub" style="margin-top:10px">${hint}</p>`+rl,stub);
 }
 function camRecSelectHtml(n){
   const has=replicaSources(n,camArchs(n)[0]||{arch:n.arch}).length>0,cur=n.rec||"none";
