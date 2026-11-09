@@ -15841,7 +15841,7 @@ function cvSummaryHtml(n){
   const c=cvCfgOf(n);
   const rows=camStreams(n).map((s,i)=>{const p=c.streams[s.id],res=cvStreamRes(n,s,i),fps=cvStreamFps(n,s,i);
     return`<li><b>${escHtml(s.name)}</b> ${escHtml((res||"—").replace("x","×"))} · ${fps??"—"} ${i18n("к/с")} · ${escHtml(drvSend(n)?p.codec:s.codec||"—")} · ${escHtml(cvKbpsText(p.kbps))}${s.online===false?` · <span class="pf-st bad">${i18n("нет сигнала")}</span>`:""}</li>`}).join("");
-  return`<div class="cv-sum"><ul>${rows}</ul><button type="button" class="lk" ${onEv("click",["cvToStreams"])}>${i18n("Параметры потоков")} · ${i18n(drvSend(n)?"изменить":"посмотреть")}</button></div>`;
+  return`<div class="cv-sum"><ul>${rows}</ul></div>`;
 }
 function cvToStreams(){const el=document.querySelector("#main [data-cv-streams]");if(!el)return;el.scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth",block:"start"});el.classList.remove("acc-flash");void el.offsetWidth;el.classList.add("acc-flash")}
 function cvStreamSet(id,sid){
@@ -16254,20 +16254,33 @@ function cvPresetGo(id,no){
 }
 
 // ── Параметры потоков ─────────────────────────────────────────────────────
+// «Параметры потоков» — как другие блоки вкладок: значения текстом, «Изменить» открывает поля.
+// Разрешение и к/с до «Готово» ждут в cvPendM и уходят на сервер только по «Готово»; «Отменить» возвращает всё
+const cvPendM=new Map(),cvSnap=new Map();
+function cvPend(id,sid,k,v){const m=cvPendM.get(id)||{};(m[sid]||(m[sid]={}))[k]=k==="fps"?Number(v):String(v).trim();cvPendM.set(id,m);mainSeen.html=null;gear()}
+function cvPendOf(id,sid,k,v){const x=cvPendM.get(id)?.[sid];return x&&k in x?x[k]:v}
+function cvEditStart(id){const n=find(id)?.n;if(!n)return;cvSnap.set(id,cardClone({v:cvCfgOf(n).streams}).v);cvPendM.delete(id);csEditSet(id,"streams",true)}
+function cvEditCancel(id){const n=find(id)?.n;if(n&&cvSnap.has(id))cvCfgOf(n).streams=cvSnap.get(id);cvSnap.delete(id);cvPendM.delete(id);csEditSet(id,"streams",false)}
+function cvEditDone(id){
+  const m=cvPendM.get(id)||{};cvPendM.delete(id);cvSnap.delete(id);csEditSet(id,"streams",false);
+  Object.entries(m).forEach(([sid,o])=>Object.entries(o).forEach(([k,v])=>streamSet(id,sid,k,v)));
+}
 function cvStreamsCardHtml(n){
-  const c=cvCfgOf(n),con=drvSend(n),rtsp=camDriver(n)==="rtsp";
-  const note=con?`<div class="nt cv-push">${lu("triangle-alert",14)}${i18n("После изменения камера может перезапустить поток. Тогда видео и запись прервутся на несколько секунд.")}</div>`
-    :`<p class="sub cv-lock">${lu("lock",13)}${i18n("Консоль показывает параметры так, как их сообщила камера.")} ${rtsp?i18n("У камеры RTSP их меняют в веб-интерфейсе камеры."):`<button type="button" class="lk" ${onEv("click",["drvSendToggle",`${n.id}`])}>${i18n("Включить «Отправлять настройки устройству»")}</button>`}</p>`;
-  const cols=camStreams(n).map((s,i)=>cvStreamColHtml(n,s,i,c,con)).join("");
-  return`<div class="card cv-streams" data-cv-streams><div class="ch">${i18n("Параметры потоков")}<span class="sub" style="font-weight:400">${camStreams(n).length}</span></div><div class="cb">
+  const c=cvCfgOf(n),con=drvSend(n),rtsp=camDriver(n)==="rtsp",ed=con&&csEditOn(n.id,"streams");
+  const acts=!con?"":ed?`<button type="button" class="btn s" ${onEv("click",["cvEditCancel",`${n.id}`])}>${i18n("Отменить")}</button><button type="button" class="btn pri s" ${onEv("click",["cvEditDone",`${n.id}`])}>${i18n("Готово")}</button>`
+    :`<button type="button" class="btn s" ${onEv("click",["cvEditStart",`${n.id}`])}>${i18n("Изменить")}</button>`;
+  const note=ed?`<div class="nt cv-push">${lu("triangle-alert",14)}${i18n("После изменения камера может перезапустить поток. Тогда видео и запись прервутся на несколько секунд.")}</div>`
+    :con?"":`<p class="sub cv-lock">${lu("lock",13)}${i18n("Консоль показывает параметры так, как их сообщила камера.")} ${rtsp?i18n("У камеры RTSP их меняют в веб-интерфейсе камеры."):`<button type="button" class="lk" ${onEv("click",["drvSendToggle",`${n.id}`])}>${i18n("Включить «Отправлять настройки устройству»")}</button>`}</p>`;
+  const cols=camStreams(n).map((s,i)=>cvStreamColHtml(n,s,i,c,ed)).join("");
+  return`<div class="card cv-streams" data-cv-streams data-sec="streams"><div class="ch">${i18n("Параметры потоков")}<span class="sub" style="font-weight:400">${camStreams(n).length}</span><span class="cs-acts">${acts}</span></div><div class="cb">
     ${note}<div class="cv-cols">${cols}</div>
-    ${con?`<div class="ca-foot"><button type="button" class="btn s" ${onEv("click",["streamAdd",`${n.id}`])}>${lu("plus")}${i18n("Поток")}</button></div>`:""}
+    ${ed?`<div class="ca-foot"><button type="button" class="btn s" ${onEv("click",["streamAdd",`${n.id}`])}>${lu("plus")}${i18n("Поток")}</button></div>`:""}
     <p class="sub cv-stub">${i18n("Прототип: «Отправлять настройки устройству», кодек, профиль, битрейт, качество, опорные кадры и «В просмотре» пока живут только в этой странице. Для них нужен запрос к API. Разрешение и к/с консоль записывает на сервер.")}</p>
     <p class="sub">${i18n("Детекторы видеоаналитики — на вкладке")} <button class="lk" ${onEv("click",["goTab","det"])}>${i18n("Детекторы")}</button>.</p>
   </div></div>`;
 }
 function cvStreamColHtml(n,s,i,c,con){
-  const p=c.streams[s.id],res=cvStreamRes(n,s,i),fps=cvStreamFps(n,s,i),sid=s.id,id=n.id;
+  const sid=s.id,id=n.id,p=c.streams[sid],res=con?cvPendOf(id,sid,"res",cvStreamRes(n,s,i)):cvStreamRes(n,s,i),fps=con?cvPendOf(id,sid,"fps",cvStreamFps(n,s,i)):cvStreamFps(n,s,i);
   const set=(k)=>["cvStubSet",`${id}`,`${sid}`,k,onEv.value];
   const ro=(l,v)=>`<div class="cv-f"><label>${i18n(l)}</label><div class="cv-ro">${escHtml(v)}</div></div>`;
   const sel=(l,k,opts,cur)=>`<div class="cv-f"><label>${i18n(l)}</label><select ${onEv("change",set(k))}>${opts.map(o=>{const[v,t]=Array.isArray(o)?o:[o,o];return`<option value="${escHtml(v)}" ${String(v)===String(cur)?"selected":""}>${escHtml(i18n(t))}</option>`}).join("")}</select></div>`;
@@ -16286,8 +16299,8 @@ function cvStreamColHtml(n,s,i,c,con){
     ${con&&i?`<button type="button" class="btn s btn-icon" title="${i18n("Удалить поток")}" aria-label="${i18n("Удалить поток")} ${escHtml(s.name)}" ${onEv("click",["streamDel",`${id}`,`${sid}`])}>${lu("trash",14)}</button>`:""}</div>`;
   if(!con)return`<div class="cv-col" data-stream="${escHtml(sid)}">${head}<div class="cv-g">${ro("Кодек",`${s.codec||p.codec}${p.profile?` · ${p.profile}`:""}`)}${ro("Разрешение",(res||"—").replace("x","×"))}${ro("Кадров в секунду",fps??"—")}${ro("Битрейт",`${p.brc==="cbr"?i18n("постоянный"):i18n("переменный, до")} ${cvKbpsText(p.kbps)}`)}${ro("Опорный кадр",`${i18n("каждые")} ${p.gop} ${i18n("кадров")}`)}${ro("В просмотре",i18n(p.live?"да":"нет"))}</div></div>`;
   const resOpts=s.resOptions||(i?null:n.resOptions);
-  const resF=`<div class="cv-f"><label>${i18n("Разрешение")}</label>${resInput(resOpts,res,["streamSet",`${id}`,`${sid}`,"res",onEv.value]).replace(/^<(select|input) /,`<$1 data-df="Разрешение" `)}</div>`;
-  const fpsF=`<div class="cv-f"><label>${i18n("Кадров в секунду")}</label><span class="cv-num"><input type="number" min="1" value="${escHtml(fps??"")}" ${onEv("change",["streamSet",`${id}`,`${sid}`,"fps",onEv.value])}><small>${i18n("к/с")}</small></span></div>`;
+  const resF=`<div class="cv-f"><label>${i18n("Разрешение")}</label>${resInput(resOpts,res,["cvPend",`${id}`,`${sid}`,"res",onEv.value]).replace(/^<(select|input) /,`<$1 data-df="Разрешение" `)}</div>`;
+  const fpsF=`<div class="cv-f"><label>${i18n("Кадров в секунду")}</label><span class="cv-num"><input type="number" min="1" value="${escHtml(fps??"")}" ${onEv("change",["cvPend",`${id}`,`${sid}`,"fps",onEv.value])}><small>${i18n("к/с")}</small></span></div>`;
   return`<div class="cv-col" data-stream="${escHtml(sid)}">${head}<div class="cv-g">
     ${sel("Кодек","codec",CV_CODECS,p.codec)}${p.codec==="MJPEG"?"":sel("Профиль кодека","profile",CV_PROFILES,p.profile)}
     ${resF}${fpsF}
