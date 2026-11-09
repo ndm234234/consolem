@@ -808,11 +808,15 @@ select:not([multiple]){white-space:nowrap;overflow:hidden}:root select:not([mult
 .rl-opt input{margin-top:3px}
 .rl-opt small{display:block;color:var(--mu);margin-top:2px}
 .rl-pq{width:100%;margin-bottom:8px}
+.rl-pq-row{display:flex;align-items:center;gap:6px;margin-bottom:8px}.rl-pq-row .rl-pq{flex:1 1 auto;min-width:0;margin-bottom:0}.rl-pq-row .ph-choice{height:32px}
 .rl-pl{max-height:50vh;overflow:auto}
 /* Окно выбора областей — колонка: поиск и итог закреплены, прокручивается один средний блок. */
 .bbox-pick .cbody{display:flex;flex-direction:column;overflow:hidden;min-height:0}
 .bbox-pick .rl-pkw{display:flex;flex-direction:column;min-height:0;flex:1}
 .bbox-pick .rl-pq{flex:none}
+.bbox-pick .rl-pq-row{flex:none}.bbox-pick .rl-pq-row .rl-pq{flex:1 1 auto}
+/* Прототип 37: регистратор в дереве устройств — обычная строка без флажка, не заголовок группы */
+.rl-ti.dv{cursor:default}.rl-ti.dv .rl-tn{padding-left:22px}
 .bbox-pick .rl-pl{max-height:none;flex:1 1 auto;min-height:0;overflow:auto}
 .bbox-pick .rl-sum{flex:none}
 .bbox-pick .rl-complist{max-height:none;overflow:visible}
@@ -1336,6 +1340,8 @@ html[data-theme="light"] .confirm-count{background:var(--one-surface-muted);bord
 html[data-theme="light"] .confirm-count label b{color:var(--one-danger)}
 html[data-theme="light"] .confirm-count.ok{background:var(--one-surface-muted);border-color:var(--one-success-icon)}
 .cfoot{padding:12px 16px;border-top:1px solid var(--ln);display:flex;justify-content:flex-end;gap:8px}
+/* Прототип 37: кнопка подвала не переносит текст: сжимается итог слева, у него многоточие */
+.cfoot>.btn{flex:none;white-space:nowrap}
 .jbox{width:min(560px,92vw);background:var(--p);border:1px solid var(--ln);border-radius:12px;overflow:hidden;box-shadow:0 16px 48px #0008}
 .jlist{max-height:360px;overflow:auto}
 .res{display:flex;gap:8px;padding:8px 12px;cursor:pointer;border-left:3px solid transparent}
@@ -17073,11 +17079,11 @@ function rulePickRef(slot,i){
   walkFolders(f=>{if((f.folders||[]).length)shut.add("fol:"+f.id)});       // вложенные папки свёрнуты
   // Одиночная битая ссылка заменяется выбором: битый элемент в окно не берём. В наборе он остаётся чипом.
   const single=!(it.ref||"").startsWith("set:");
-  rulePk={slot,i,dt,src:it.ref==="$src",toks:single?inc.filter(t=>!refTokBroken(t)):inc,ex:new Set(ex),shut,all:false,focus:"",warned:false};
+  rulePk={slot,i,dt,src:it.ref==="$src",toks:single?inc.filter(t=>!refTokBroken(t)):inc,ex:new Set(ex),shut,open:rulePkOpenOf(inc),all:false,focus:"",warned:false};
   openBulkModal(`${i18n("Выбрать")}: ${i18n(ruleNounOf(dt)[5])}`,
     `<div class="rl-pkw" ${onEv("keydown",["rulePkWinKey",onEv.event])}>
       ${edge?`<p class="sub rl-pk-edge" id="rpEdge"></p>`:""}
-      <input type="text" id="rpQ" class="rl-pq" placeholder="${i18n("Область, название, тип или сервер…")}" aria-label="${i18n("Поиск областей и устройств")}" autocomplete="off" ${onEv("input",["rulePickType"])}>
+      <div class="rl-pq-row"><input type="text" id="rpQ" class="rl-pq" placeholder="${i18n("Область, название, тип или сервер…")}" aria-label="${i18n("Поиск областей и устройств")}" autocomplete="off" ${onEv("input",["rulePickType"])}>${rulePkFoldBtn()}</div>
       <div id="rpList" class="rl-pl" ${onEv("keydown",["rulePkKey",onEv.event])}></div>
       <div id="rpSum" class="rl-sum"></div>
     </div>`,
@@ -17101,14 +17107,14 @@ function rulePkAreaCover(){
 }
 // Строка дерева областей. tok — что отмечается ("" — узел-заголовок без галочки).
 function rulePkRow(o){
-  const pk=rulePk,checked=!!o.tok&&pk.toks.includes(o.tok),zero=!!o.tok&&!o.cnt&&!checked;
+  const pk=rulePk,checked=!!o.tok&&pk.toks.includes(o.tok),zero=!!o.tok&&o.cnt!==undefined&&!o.cnt&&!checked;
   const dis=!!o.tok&&!checked&&(o.inc||zero),shown=checked||!!o.inc;
   const cb=o.tok?`<span class="rl-cb ${shown?"on":""}" aria-hidden="true">${shown?lu("check"):""}</span>`:"";
   const tw=o.exp===undefined?`<span class="rl-tw"></span>`
     :`<button type="button" class="rl-tw" tabindex="-1" aria-hidden="true" ${onEv("mousedown",onEv.prevent)} ${onEv("click",onEv.stop,["rulePkFold",`${o.key}`])}>${o.exp?TW_OPEN:TW_SHUT}</button>`;
   const cnt=o.cnt===undefined?"":o.cnt?ruleCnt(o.cnt,pk.dt):`0 ${i18n(ruleNounOf(pk.dt)[2])}`;
-  const small=[cnt,o.inc?i18n("уже входит в область"):""].filter(Boolean).join(" · ");
-  return`<div class="rl-ti ${checked?"on":""} ${dis?"dis":""} ${zero?"zero":""} ${o.tok?"":"hd"}" role="treeitem" aria-level="${o.lvl}" ${o.tok?`aria-checked="${shown}"`:""} ${o.exp===undefined?"":`aria-expanded="${o.exp}"`} ${dis?`aria-disabled="true"`:""} tabindex="${pk.focus===o.key?0:-1}" data-key="${escHtml(o.key)}" data-tok="${escHtml(o.tok||"")}" style="padding-left:${8+(o.lvl-1)*18}px" ${onEv("click",["rulePkClick",onEv.el])}${o.title?` title="${escHtml(o.title)}"`:""}>${tw}${cb}<span class="rl-tn">${escHtml(o.label)}</span><small>${escHtml(small)}</small></div>`;
+  const small=[cnt,o.inc?i18n("уже входит в область"):"",o.note||""].filter(Boolean).join(" · ");
+  return`<div class="rl-ti ${checked?"on":""} ${dis?"dis":""} ${zero?"zero":""} ${o.tok?"":o.plain?"dv":"hd"}" role="treeitem" aria-level="${o.lvl}" ${o.tok?`aria-checked="${shown}"`:""} ${o.exp===undefined?"":`aria-expanded="${o.exp}"`} ${dis?`aria-disabled="true"`:""} tabindex="${pk.focus===o.key?0:-1}" data-key="${escHtml(o.key)}" data-tok="${escHtml(o.tok||"")}" style="padding-left:${8+(o.lvl-1)*18}px" ${onEv("click",["rulePkClick",onEv.el])}${o.title?` title="${escHtml(o.title)}"`:""}>${tw}${cb}<span class="rl-tn">${escHtml(o.label)}</span><small>${escHtml(small)}</small></div>`;
 }
 // Дерево: домен → «Серверы» и «Папки» (с вложенными). Области без подходящих устройств не прячутся,
 // а серые, чтобы дерево не перестраивалось от типа пункта.
@@ -17147,13 +17153,14 @@ function rulePkSearch(q){
     +rulePkDevices(q);
 }
 // Чипы: отдельные устройства, а также битые и скрытые области — их в дереве не отметить и не снять.
-function rulePkChips(){
-  const pk=rulePk,out=pk.toks.filter(t=>!refIsArea(t)||!rulePkShown(t)).map(t=>{
+function rulePkChips(devTree){
+  const pk=rulePk,out=pk.toks.filter(t=>refIsArea(t)?!rulePkShown(t):!devTree||!rulePkDevShown(t)).map(t=>{
     const bad=refTokBroken(t),area=refIsArea(t),n=bad?null:ruleNodeById(t);
     const label=area?(bad?`⚠ ${ruleAreaName(t)}`:`${ruleAreaName(t)} (${i18n("вне показанных доменов")})`):bad?`⚠ ${i18n("удалено")}: «${refGoneName(t)}»`:n?locName(n):t;
     return`<span class="rl-chip2 ${bad?"bad":""}">${escHtml(label)}<button type="button" aria-label="${i18n("Убрать")}: ${escHtml(label)}" title="${i18n("Убрать")}" data-key="chip:${escHtml(t)}" data-tok="${escHtml(t)}" ${onEv("click",["rulePkDrop",onEv.data("tok")])}>${lu("x",12)}</button></span>`;
   });
-  return out.length?`<div class="rl-chips2" role="list" aria-label="${i18n("Выбранные отдельно")}">${out.join("")}</div>`:"";
+  const box=out.length?`<div class="rl-chips2" role="list" aria-label="${i18n("Выбранные отдельно")}">${out.join("")}</div>`:"";
+  return devTree&&box?`<div class="rl-pk-g">${i18n("Вне дерева")}</div>${box}`:box;
 }
 function rulePkDevices(q){
   const pk=rulePk,dt=pk.dt,cover=rulePkAreaCover();
@@ -17234,7 +17241,8 @@ function rulePickList(){
   let h="";
   if(srcOk&&srcDeclared()&&matchesText(q,i18n("Устройство из события")))
     h+=`<button type="button" role="radio" aria-checked="${pk.src}" class="rl-pk rl-src ${pk.src?"on":""}" data-key="src" ${onEv("click",["rulePkSrc"])}><span class="rl-cb ${pk.src?"on":""}" aria-hidden="true">${pk.src?lu("check"):""}</span><span>${i18n("Устройство из события")}</span><small>${i18n("устройство, которое отправило событие")}</small></button>`;
-  if(!pk.src)h+=(q?rulePkSearch(q):`<div class="rl-pk-g">${i18n("Области")}</div><div role="tree" aria-label="${i18n("Области")}">${rulePkTree()}</div>`+rulePkDevices(""))+rulePkTail();
+  if(!pk.src)h+=(q?rulePkSearch(q):rulePkFolders?`<div class="rl-pk-g">${i18n("Области")}</div><div role="tree" aria-label="${i18n("Области")}">${rulePkTree()}</div>`+rulePkDevices("")
+    :`<div class="rl-pk-g">${i18n("Серверы и устройства")}</div><div role="tree" aria-label="${i18n("Серверы и устройства")}">${rulePkDevTree()}</div>`+rulePkChips(true))+rulePkTail();
   host.innerHTML=h;
   const en=document.getElementById("rpEdge");if(en)en.textContent=rulePkEdgeNote();
   document.getElementById("rpSum").innerHTML=rulePkSummary();
@@ -17264,7 +17272,75 @@ function rulePkDrop(tok){const pk=rulePk;if(!pk)return;pk.toks=pk.toks.filter(t=
 function rulePkSrc(){const pk=rulePk;if(!pk)return;pk.src=!pk.src;if(pk.src){pk.toks=[];pk.ex.clear()}pk.focus="src";rulePickList()}
 function rulePkClear(){const pk=rulePk;if(!pk)return;pk.toks=[];pk.ex.clear();pk.src=false;pk.focus="";rulePickList()}
 function rulePkAll(){rulePk.all=!rulePk.all;rulePk.focus="sum:all";rulePickList()}
-function rulePkFold(key){const s=rulePk.shut;if(s.has(key))s.delete(key);else s.add(key);rulePk.focus=key;rulePickList()}
+function rulePkFold(key){const s=key.startsWith("dt:")?rulePk.open:rulePk.shut;if(s.has(key))s.delete(key);else s.add(key);rulePk.focus=key;rulePickList()}
+// Прототип 37: «Папки» в окне выбора — как в дереве «Оборудования». Нажаты — области: серверы и папки домена.
+// Отжаты — дерево устройств: домен → сервер → устройство → канал; отметить можно домен, сервер и само устройство.
+// Положение кнопки общее для всех окон выбора, пока открыта страница.
+let rulePkFolders=true;
+function rulePkFoldBtn(){return`<button type="button" class="ph-choice ${rulePkFolders?"on":""}" id="rpFold" aria-pressed="${rulePkFolders}" title="${i18n(rulePkFolders?"Показать дерево устройств":"Показать папки")}" ${onEv("click",["rulePkFoldersToggle"])}>${IC.folder}<span>${i18n("Папки")}</span></button>`}
+function rulePkFoldersToggle(){
+  if(!rulePk)return;
+  rulePkFolders=!rulePkFolders;rulePk.focus="";
+  const b=document.getElementById("rpFold");if(b)b.outerHTML=rulePkFoldBtn();
+  rulePickList();
+}
+// Путь устройства под сервером: предки без сервера, домена и «Нераспределённых», сверху вниз
+function rulePkPath(n){
+  const out=[];
+  for(const x of ruleAncestors(n)){if(x.type==="server"||x.type==="domain"||x.type==="unalloc")break;out.unshift(x)}
+  return out;
+}
+// Раскрыть ветки до устройств, выбранных отдельно: при открытии окна их видно сразу
+function rulePkOpenOf(toks){
+  const open=new Set();
+  toks.filter(t=>t&&!refIsArea(t)&&!t.startsWith("gone:")&&t!=="$src").forEach(t=>{
+    const n=ruleNodeById(t);if(!n)return;
+    open.add("dt:s:"+(ruleDevSrv(n)||"-"));
+    rulePkPath(n).slice(0,-1).forEach(x=>open.add("dt:"+x.id));
+  });
+  return open;
+}
+// Отдельное устройство видно в дереве: подходит пункту и его домен показан
+function rulePkDevShown(t){
+  const n=ruleNodeById(t);
+  return!!n&&ruleDtHit(n,rulePk.dt)&&rulePkDomains().some(d=>d.id===ruleDevDom(n));
+}
+function rulePkDevTree(){
+  const pk=rulePk,dt=pk.dt,rows=[],has=new Set(pk.toks),cover=rulePkAreaCover(),cnt=t=>ruleTokNodes(t,dt).length;
+  // Устройства пункта раскладываются по серверам, а под сервером — по пути в «Оборудовании»
+  const bySrv=new Map();
+  ruleUniverse(dt).forEach(n=>{
+    const sid=ruleDevSrv(n)||"-",dom=ruleDevDom(n);
+    if(!bySrv.has(sid))bySrv.set(sid,{dom,kids:new Map()});
+    let lvl=bySrv.get(sid).kids;
+    rulePkPath(n).forEach(x=>{if(!lvl.has(x.id))lvl.set(x.id,{n:x,kids:new Map()});lvl=lvl.get(x.id).kids});
+  });
+  const devRows=(kids,lvl,inArea)=>[...kids.values()].sort((a,b)=>locName(a.n).localeCompare(locName(b.n),undefined,{numeric:true})).forEach(e=>{
+    const n=e.n,hit=ruleDtHit(n,dt),key="dt:"+n.id,open=pk.open.has(key),exp=e.kids.size?open:undefined;
+    if(!hit){rows.push(rulePkRow({tok:"",key,lvl,label:locName(n),exp,plain:true,note:LB[n.type]||n.type}));if(e.kids.size&&open)devRows(e.kids,lvl+1,inArea);return}
+    const on=has.has(n.id),exc=pk.ex.has(n.id),inc=!on&&!exc&&cover.has(n.id);
+    rows.push(rulePkRow({tok:n.id,key,lvl,label:locName(n),inc,exp,note:exc?i18n("исключено"):""}));
+    if(e.kids.size&&open)devRows(e.kids,lvl+1,inArea);
+  });
+  rulePkDomains().forEach(d=>{
+    const tok="domain:"+d.id,key="dom:"+d.id,open=!pk.shut.has(key),covered=has.has(tok);
+    rows.push(rulePkRow({tok:ruleAreaOff("domain")?"":tok,key,lvl:1,label:`${i18n("Весь домен")} «${locName(d)}»`,cnt:cnt(tok),exp:open,title:ruleAreaNote(tok,dt)}));
+    if(!open)return;
+    (d.servers||[]).forEach(s=>{
+      const t="server:"+s.id,k="dt:s:"+s.id,b=bySrv.get(s.id),so=pk.open.has(k);
+      rows.push(rulePkRow({tok:ruleAreaOff("server")?"":t,key:k,lvl:2,label:ruleSrvShort(s),cnt:cnt(t),inc:covered,exp:b?so:undefined,title:ruleAreaNote(t,dt)}));
+      if(b&&so)devRows(b.kids,3,covered||has.has(t));
+    });
+    // Устройства без сервера (сервер не найден): своей областью их не отметить, только по одному
+    const lost=bySrv.get("-");
+    if(lost&&lost.dom===d.id){
+      const k="dt:s:-",so=pk.open.has(k);
+      rows.push(rulePkRow({tok:"",key:k,lvl:2,label:i18n("Без сервера"),exp:so,plain:true}));
+      if(so)devRows(lost.kids,3,covered);
+    }
+  });
+  return rows.join("")||`<p class="sub">${i18n("Ничего не найдено")}</p>`;
+}
 function rulePkEx(id,on){
   const pk=rulePk;if(!pk)return;
   if(on)pk.ex.delete(id);
