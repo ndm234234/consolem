@@ -74,7 +74,8 @@
       return out;
     }
 
-    // Схема объекта у вида со schemaPerUnit: условие if решено по свойствам объекта, ветка слита со схемой
+    // Схема объекта у вида со schemaPerUnit: условие if решено по свойствам объекта, ветка слита со схемой. Части allOf
+    // (независимые условия: драйвер камеры, «Активировать» у панорамы) решаются так же и сливаются; allOf в ответе нет
     function unitSchema(kind, properties) {
       const k = map.get(kind);
       if (!k) return null;
@@ -90,6 +91,10 @@
         return out;
       };
       const resolve = (schema) => {
+        if (schema.allOf) {
+          const { allOf: parts, ...rest } = schema;
+          return resolve(parts.reduce((acc, part) => merge(acc, resolve(Object.assign({}, part))), rest));
+        }
         if (!schema.if) return schema;
         const { if: cond, then: yes, else: no, ...rest } = schema;
         const fits = !contract() || !contract().validate(cond, properties || {}, "", {}).length;
