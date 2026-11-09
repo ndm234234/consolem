@@ -8,8 +8,10 @@ UiCheck(async ({ ok, sleep }) => {
   const top = (el) => Math.round(el.getBoundingClientRect().top);
   const last = () => document.getElementById("phSliceLast");
   const statusBtn = () => document.getElementById("filtBtn");
-  const sameLine = () => top(last()) === top(btn()) && top(btn()) === top(statusBtn());
-  const fits = () => statusBtn().getBoundingClientRect().right <= document.getElementById("aside").getBoundingClientRect().right;
+  const collapseBtn = () => document.getElementById("treeCollapseBtn");
+  const mid = (el) => { const r = el.getBoundingClientRect(); return Math.round(r.top + r.height / 2); };
+  const sameLine = () => top(last()) === top(btn()) && top(btn()) === top(statusBtn()) && Math.abs(mid(collapseBtn()) - mid(statusBtn())) <= 1;
+  const fits = () => collapseBtn().getBoundingClientRect().right <= document.getElementById("aside").getBoundingClientRect().right;
 
   // Место в шапке
   click("all");
@@ -20,7 +22,11 @@ UiCheck(async ({ ok, sleep }) => {
   const fold = btn().parentElement;
   ok(fold.classList.contains("ph-fold") && fold.contains(document.getElementById("filtBtn")), "«Папки» и статус за одной чертой");
   ok(getComputedStyle(fold, ":before").width === "1px", "черта перед настройками");
-  ok(document.querySelector("#treeExpandBtn").closest(".ph-row") !== btn().closest(".ph-row"), "кнопки дерева — на отдельной строке");
+  // Шапка дерева — одна строка: «Свернуть всё» за статусом и за своей чертой; «Развернуть всё» и «Показать открытый объект» убраны
+  ok(document.querySelectorAll("#aside .ph .ph-row").length === 1, "шапка дерева — одна строка");
+  ok(statusBtn().nextElementSibling === collapseBtn() && fold.contains(collapseBtn()), "«Свернуть всё» — сразу за статусом");
+  ok(getComputedStyle(collapseBtn(), ":before").width === "1px", "черта перед «Свернуть всё»");
+  ok(!document.getElementById("treeExpandBtn") && !document.getElementById("treeRevealBtn"), "нет «Развернуть всё» и «Показать открытый объект в дереве»");
 
   // Настройки не уезжают отдельно: ни при какой подписи статуса, ни на самой узкой панели
   setAsideWidth(100);
@@ -28,7 +34,7 @@ UiCheck(async ({ ok, sleep }) => {
   for (const st of ["", "nosignal", "license", "nosignal:auth"]) {
     pickStatus(st);
     await sleep(30);
-    ok(sameLine() && fits(), `статус «${st || "все"}»: последний срез, «Папки» и статус в одной строке и в ширине панели`);
+    ok(sameLine() && fits(), `статус «${st || "все"}»: последний срез, «Папки», статус и «Свернуть всё» в одной строке и в ширине панели`);
   }
   pickStatus("");
 

@@ -17,18 +17,8 @@ UiCheck(async ({ ok, until, sleep }) => {
   const start = rows().length;
   ok(start < 100, `дерево при входе короткое: ${start} строк`);
 
-  // Кнопки раскрытия
-  await treeExpandAll();
-  const wide = rows().length;
-  ok(wide > start, `«Развернуть всё» показывает больше строк: ${wide}`);
-  treeCollapseAll();
-  ok(rows().length <= start, "«Свернуть всё» возвращает короткое дерево");
-
-  // «Развернуть всё» разовое: в запомненное раскрытие не попадает
-  await treeExpandAll();
-  setSlice("all");
-  setSlice("cam");
-  ok(rows().length <= start, "разовое «Развернуть всё» не запомнено");
+  // «Развернуть всё» нет: в большой конфигурации оно читало ветку за веткой. Ветку раскрывают по одной
+  ok(typeof treeExpandAll === "undefined" && typeof treeExpandBelow === "undefined", "нет «Развернуть всё» и «Развернуть всё внутри»");
 
   // У каждой вкладки своё раскрытие
   const dom = domains[0];
@@ -40,28 +30,26 @@ UiCheck(async ({ ok, until, sleep }) => {
   ok(!open.has(fldId), "другая вкладка папку не раскрывает");
   setSlice("cam");
   ok(open.has(fldId), "вкладка помнит своё раскрытие");
-  treeCollapseAll();
+  await until(() => !tree().querySelector(".n-skel"));
+  const wide = rows().length;
+  ok(wide > start, `раскрытая папка показывает больше строк: ${wide}`);
 
-  // Раскрытие внутри строки
-  await treeExpandBelow(dom.id);
-  const inner = rows().length;
-  ok(inner > start, "«Развернуть всё внутри» раскрывает ветку");
+  // «Свернуть всё внутри» сворачивает ветку, «Свернуть всё» возвращает короткое дерево
   treeCollapseBelow(dom.id);
-  ok(rows().length < inner, "«Свернуть всё внутри» сворачивает ветку");
+  ok(!open.has(fldId), "«Свернуть всё внутри» сворачивает ветку");
   treeCollapseAll();
+  ok(rows().length <= start, "«Свернуть всё» возвращает короткое дерево");
 
-  // «Свернуть всё» и смена вкладки отменяют идущее раскрытие
-  treeExpandAll();
-  treeCollapseAll();
-  await sleep(600);
-  ok(rows().length <= start, "«Свернуть всё» отменяет идущее раскрытие");
-  treeExpandAll();
-  setSlice("arch");
-  const archOpen = open.size;
-  await sleep(600);
-  ok(open.size === archOpen, "смена вкладки отменяет идущее раскрытие");
-  setSlice("cam");
-  ok(rows().length <= start, "раскрытие не попало в память вкладки");
+  // Ветка читается: на месте её строк — скелетон из трёх строк, он проявляется с задержкой и уходит с ответом
+  const unread = rows().find((r) => r.dataset.tid && shut(r) && treeUnread(r.dataset.tid));
+  if (unread) {
+    unread.querySelector(".tw").click();
+    const sk = [...tree().querySelectorAll(".n-skel")];
+    ok(sk.length === 3 && sk.filter((x) => x.getAttribute("role") === "status").length === 1, "скелетон ветки — три строки, одна из них для экранного диктора");
+    ok(parseFloat(sk[0].style.getPropertyValue("--skd")) > 0, "скелетон проявляется с задержкой: " + sk[0].style.getPropertyValue("--skd"));
+    ok(await until(() => !tree().querySelector(".n-skel")), "скелетон уходит, когда ветка прочитана");
+    treeCollapseAll();
+  } else ok(true, "непрочитанной ветки нет — скелетон не проверить");
 
   // Новый домен открыт: сохранённый список знает только закрытые
   open.delete(dom.id);
@@ -142,8 +130,10 @@ UiCheck(async ({ ok, until, sleep }) => {
   dzFromSel();
   ok(!!dz && dz.ids.length === 3, "очередь зон из карточки выборки");
   // Несохранённая зона: строка вне очереди спрашивает и не отмечается
-  await treeExpandAll();
   const outside = detKindIds().find((id) => !ids.includes(id));
+  expandTo(outside);
+  renderTree();
+  await until(() => tree().querySelector(`.n[data-pick="${outside}"]`));
   const outRow = tree().querySelector(`.n[data-pick="${outside}"]`);
   ok(!!outRow, "строка вне очереди видна");
   dz.draft = { shape: "rect" };

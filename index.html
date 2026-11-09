@@ -136,12 +136,22 @@ aside,main{min-height:0;overflow:hidden}aside{background:var(--one-canvas);borde
 .ph-fold{position:relative;display:inline-flex;align-items:center;gap:4px;min-width:0;margin-left:2px;padding-left:7px}
 .ph-fold:before{content:"";position:absolute;left:0;top:4px;bottom:4px;width:1px;background:var(--one-border-strong)}
 .ph-fold svg.ic-svg{width:14px;height:14px;flex:none}
+/* «Свернуть всё» — действие над деревом, а не фильтр: отделён чертой, как «Папки» от срезов */
+.ph-fold #treeCollapseBtn{position:relative;margin-left:7px;overflow:visible}
+.ph-fold #treeCollapseBtn:before{content:"";position:absolute;left:-6px;top:4px;bottom:4px;width:1px;background:var(--one-border-strong);pointer-events:none}
 /* Нажатые «Папки» — как кнопка статуса с выбранным фильтром: настройки за чертой выглядят одинаково и отличаются от выбранного среза */
 .ph-fold #viewBtn.on{background:var(--one-selected-neutral);border-color:var(--one-selected-indicator);color:var(--one-fg)}
 .ph-fold #viewBtn.on:hover:not(:disabled){background:var(--one-selected-neutral-hover);border-color:var(--one-selected-indicator);color:var(--one-fg)}
 .ph-fold #viewBtn:disabled{opacity:.45;cursor:default}
 .ph-fold #viewBtn:disabled:not(.on):hover{background:transparent;border-color:transparent;color:var(--one-fg-muted)}
 .ph-status-label{max-width:104px;overflow:hidden;text-overflow:ellipsis}
+/* Прототип 39: окно у значка статуса */
+.st-tip{display:none;position:fixed;z-index:60;max-width:280px;padding:8px 10px;border:1px solid var(--ln);border-radius:6px;background:var(--p);color:var(--tx);box-shadow:0 8px 24px #0008;font-size:12px;line-height:1.4}
+.st-tip.open{display:block}
+.st-tip-h{display:flex;align-items:center;gap:6px;margin-bottom:2px}
+.st-tip-fix{margin-top:4px;color:var(--mu)}
+[data-st]{cursor:help}
+
 .ph-cnt{flex:none;min-width:18px;padding:1px 5px;border-radius:99px;background:var(--one-control-bg);color:var(--one-fg-muted);font-size:10px;font-weight:600;line-height:1.4;font-variant-numeric:tabular-nums}
 .ph-choice.on .ph-cnt{background:var(--one-selected-neutral);color:var(--one-fg)}
 /* Число среза: нет числа — нет и места; у оценки («Камеры», «Оборудование») место под «≈оценку» есть всегда — невидимый двойник */
@@ -258,13 +268,18 @@ html[data-theme="light"] .sq-focus.on:hover,html[data-theme="light"] .sq-focus.h
 .filt-pop .mi{display:flex;align-items:center;gap:4px;width:100%;padding:2px 4px 2px 6px;border:0;background:0;color:var(--tx);font-size:12px;line-height:1.25;text-align:left;border-radius:4px}
 .filt-pop .mi:hover{background:var(--one-control-hover)}
 .filt-pop .mi.on{background:var(--one-selected-neutral)}
-.filt-pop.status-pop{width:min(260px,calc(100vw - 16px));max-height:calc(100vh - 16px);padding:4px;overflow-y:auto}
+.filt-pop.status-pop{width:max-content;min-width:220px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);padding:4px;overflow-y:auto}
 .status-pop .mi{min-height:30px;gap:7px;padding:6px 8px;white-space:nowrap}
 .status-pop .mi:focus-visible{outline:2px solid var(--bl);outline-offset:-2px}
 .status-tick{flex:none;width:12px;color:var(--bl)}
 html[data-theme="light"] .status-pop .mi:hover{background:var(--one-control-hover)}
 html[data-theme="light"] .status-pop .mi.on{background:var(--one-surface-muted);color:var(--one-fg)}
 .filt-status-cnt{margin-left:auto;color:var(--mu);font-size:10px;font-variant-numeric:tabular-nums}
+#filtPop .filt-status-cnt{padding-left:16px;min-width:4ch;text-align:right;font-size:11.5px}
+/* Прототип 39: значок, текст, число, галочка — четыре ровные колонки */
+#filtPop .mi>.st-dot{margin:0 3px}
+#filtPop .mi.mi-sub{padding-left:28px}
+#filtPop .mi.mi-sub>span:nth-child(2){color:var(--one-fg-muted)}
 .filt-pop .mi-lab{display:flex;align-items:center;gap:6px;flex:1;min-width:0;cursor:pointer;padding:1px 0}
 .filt-pop .mi input{width:auto;margin:0;accent-color:var(--bl);flex:none;transform:scale(.9)}
 .filt-pop .mi .ic{width:12px;flex:none;opacity:.85;text-align:center;font-size:11px}
@@ -459,6 +474,14 @@ h1{margin:4px 0 10px;font-size:20px;display:flex;align-items:center;gap:10px}
 .g7-hint{position:absolute;left:0;bottom:6px;font-size:11px;color:var(--mu);pointer-events:none}
 .g7-list{margin-top:8px;font-size:12px;color:var(--mu)}
 .n-more .sub,.n-path{color:var(--mu);font-size:11px}
+/* Скелетон читаемой ветки: проявляется после --skd (задержка), серые полосы мерцают */
+.n.n-skel{cursor:default;opacity:0;animation:nSkelIn .18s ease-out var(--skd,300ms) forwards}
+.n-skel .sk{display:block;height:8px;border-radius:4px;background:linear-gradient(90deg,color-mix(in srgb,var(--one-fg) 8%,transparent) 0%,color-mix(in srgb,var(--one-fg) 16%,transparent) 50%,color-mix(in srgb,var(--one-fg) 8%,transparent) 100%) 0 0/200% 100%;animation:nSkelSh 1.4s linear var(--sks,0ms) infinite}
+.n-skel .sk-ic{width:var(--ic);height:10px;flex:none}
+.n-skel .sk-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+@keyframes nSkelIn{to{opacity:1}}
+@keyframes nSkelSh{to{background-position:-200% 0}}
+@media(prefers-reduced-motion:reduce){.n.n-skel{animation-duration:1ms}.n-skel .sk{animation:none}}
 .n-path{display:block;font-weight:400}
 .ici-unalloc,.ici-norec,.ici-nofolder{color:var(--one-fg-muted)}
 .asst-plan{margin-top:10px}
@@ -2062,7 +2085,6 @@ html[data-theme="light"] .n-chk{border-color:var(--one-border)}
 .tree .n-slice-empty>.n-chk{opacity:0}
 .tree .n-slice-empty:hover>.n-chk{opacity:.55}
 .tree.selmode .n-slice-empty>.n-chk,.tree .n-slice-empty>.n-chk.on,.tree .n-slice-empty>.n-chk.part{opacity:1}
-.ph-tools{margin-left:auto;display:inline-flex;align-items:center;gap:2px;flex:none}
 .ph-tool{width:26px;height:26px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--mu);display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
 .ph-tool:hover{background:var(--one-control-hover);color:var(--tx)}
 .sel-here{font-size:11.5px;color:var(--mu);white-space:nowrap}
@@ -2401,6 +2423,10 @@ html[data-theme="light"] .ts-banner{background:var(--one-control-hover);color:va
 .n-err.n-err-t{font-size:10px;line-height:1.2;white-space:nowrap;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .n-err.e-auth{color:var(--one-warning-icon)}.n-err.e-conn{color:var(--one-danger)}.n-err.e-drv{color:var(--one-palette-purple)}
 .n:not(:hover):not(.on) .n-err-t{opacity:.85}
+/* Прототип 39: строка дерева «Оборудования» числа объектов не показывает. Дерево читает ветки по раскрытию, число
+   ветки известно не всегда, и в строках оно было то есть, то нет. Число — в подсказке строки (treeRowTip), когда оно
+   известно, и в карточке объекта */
+.gear-body #tree .n-meta>.n-cnt{display:none}
 .dev-err-nt{display:flex;gap:8px;align-items:flex-start}
 .dev-err-nt .n-err{margin-top:2px}
 .filt-pop .mi.mi-sub{padding-left:26px}
@@ -6628,11 +6654,11 @@ function treeIconHtml(n){
   // Сервер/домен без сигнала — та же иконка + красный крестик (сетка не плывёт)
   if((n.type==="server"||n.type==="domain")&&hasNoSignal(n)){
     const tip=infraNoSignalLabel(n);
-    return`<span class="ici ici-${n.type} ici-stmark ici-nosig" title="${tip}" aria-label="${tip}">${IC[n.type]||"•"}<span class="ici-overlay" aria-hidden="true">${IC_NOSIG_BADGE}</span></span>`;
+    return`<span class="ici ici-${n.type} ici-stmark ici-nosig" role="img" data-st="infra" data-st-id="${escHtml(n.id)}" aria-label="${tip}">${IC[n.type]||"•"}<span class="ici-overlay" aria-hidden="true">${IC_NOSIG_BADGE}</span></span>`;
   }
   if(n.type==="camera"&&n.ruleOff){
     const rt=ruleTmpTitle();
-    return`<span class="ici ici-camera ici-stmark ici-ruletmp" title="${rt}" aria-label="${rt}">${IC.camera||"•"}<span class="ici-overlay" aria-hidden="true">${IC_RULETMP_BADGE}</span></span>`;
+    return`<span class="ici ici-camera ici-stmark ici-ruletmp" role="img" data-st="ruletmp" data-st-id="${escHtml(n.id)}" aria-label="${rt}">${IC.camera||"•"}<span class="ici-overlay" aria-hidden="true">${IC_RULETMP_BADGE}</span></span>`;
   }
   return ic(n.type);
 }
@@ -6668,7 +6694,7 @@ const DEV_ERR={
     ic:`<rect x="3.5" y="7.2" width="9" height="6.3" rx="1.2"/><path d="M5.6 7.2V5.3a2.4 2.4 0 0 1 4.8 0v1.9"/>`},
   conn:{t:"Нет связи с устройством",s:"нет связи",fix:"Проверить сеть, IP-адрес и порт.",
     ic:`<path d="M6.6 9.4 5 11a2.1 2.1 0 0 1-3-3l1.6-1.6M9.4 6.6 11 5a2.1 2.1 0 0 1 3 3l-1.6 1.6M5.4 2.6l.7 1.5M2.6 5.4l1.5.7M10.6 13.4l-.7-1.5M13.4 10.6l-1.5-.7"/>`},
-  drv:{t:"Внутренняя ошибка драйвера",s:"сбой драйвера",fix:"Перезапустить устройство. Если ошибка повторяется, обновить драйвер.",
+  drv:{t:"Внутренняя ошибка драйвера",s:"сбой драйвера",fix:"Перезапустить устройство. Если ошибка повторяется, обратиться в техническую поддержку.",
     ic:`<rect x="4.2" y="4.2" width="7.6" height="7.6" rx="1.2"/><path d="M6.6 6.6l2.8 2.8M9.4 6.6 6.6 9.4M6.2 2v2.2M9.8 2v2.2M6.2 11.8V14M9.8 11.8V14M2 6.2h2.2M2 9.8h2.2M11.8 6.2H14M11.8 9.8H14"/>`}
 };
 function devIsIp(n){return n?.type==="camera"||n?.type==="ipsrv"||n?.type==="acfa"}
@@ -6683,12 +6709,52 @@ function deviceStatusDotHtml(n,tag="i",cls="d"){
   if(!kind)return"";
   const titles={bad:i18n("Нет сигнала"),warn:i18n("Лицензия превышена"),mute:ruleTmpTitle()};
   const tip=titles[kind];
-  return `<${tag} class="${cls} ${kind}" title="${tip}" aria-label="${tip}"></${tag}>`;
+  const st=kind==="bad"?(devErr(n)||"conn"):{warn:"license",mute:"ruletmp"}[kind];
+  return `<${tag} class="${cls} ${kind}" role="img" data-st="${st}" data-st-id="${escHtml(n.id)}" aria-label="${tip}"></${tag}>`;
 }
+// Прототип 39: всплывающее окно у значка статуса — что значит статус и что сделать. Окно появляется при наведении
+// через 250 мс, остаётся, пока курсор на значке или на окне, закрывается по Esc и прокрутке (WCAG 1.4.13).
+function stTipParts(kind,n){
+  const err=k=>[`${i18n("Нет сигнала")}: ${i18n(DEV_ERR[k].t).toLowerCase()}`,i18n({auth:"Устройство не принимает логин или пароль консоли.",conn:"Устройство не отвечает по сети.",drv:"Драйвер устройства перестал работать."}[k]),i18n(DEV_ERR[k].fix)];
+  if(DEV_ERR[kind])return err(kind);
+  if(kind==="license")return[i18n("Лицензия превышена"),i18n("Камера недоступна, пока лицензия не освободится."),i18n("Освободить лицензию или добавить лицензии в разделе «Опции».")];
+  if(kind==="ruletmp"){
+    const rr=n&&typeof n.ruleOff==="string"?rules.find(x=>x.id===n.ruleOff):null;
+    return[i18n("Выключена правилом"),rr?`${i18n("Правило")} «${rr.name}» ${i18n("временно выключило камеру.")}`:i18n("Правило временно выключило камеру."),i18n("Камеру включит правило. Правила настраивают в разделе «Автоматизация».")];
+  }
+  if(kind==="infra")return[infraNoSignalLabel(n),i18n(n?.type==="domain"?"Консоль не получает данные от домена и показывает только свои данные.":"Консоль не получает данные от сервера."),""];
+  return null;
+}
+let stTipT=null,stTipFor=null;
+function stTipEl(){
+  let el=document.getElementById("stTip");
+  if(!el){el=document.createElement("div");el.id="stTip";el.className="st-tip";el.setAttribute("role","tooltip");document.body.appendChild(el)}
+  return el;
+}
+function stTipShow(t){
+  const parts=stTipParts(t.dataset.st,find(t.dataset.stId)?.n);if(!parts)return;
+  const[head,what,fix]=parts,el=stTipEl();
+  const mark=DEV_ERR[t.dataset.st]?`<span class="n-err e-${t.dataset.st}">${devErrIc(t.dataset.st)}</span>`:"";
+  el.innerHTML=`<div class="st-tip-h">${mark}<b>${escHtml(head)}</b></div><div>${escHtml(what)}</div>${fix?`<div class="st-tip-fix">${escHtml(fix)}</div>`:""}`;
+  el.classList.add("open");stTipFor=t;
+  const r=t.getBoundingClientRect(),w=el.offsetWidth,h=el.offsetHeight;
+  let left=Math.min(Math.max(8,r.left+r.width/2-w/2),window.innerWidth-w-8),top=r.bottom+6;
+  if(top+h>window.innerHeight-8)top=r.top-h-6;
+  el.style.left=Math.round(left)+"px";el.style.top=Math.round(top)+"px";
+}
+function stTipHide(){clearTimeout(stTipT);stTipT=null;stTipFor=null;document.getElementById("stTip")?.classList.remove("open")}
+document.addEventListener("mouseover",e=>{
+  const t=e.target.closest?.("[data-st]");
+  if(t){clearTimeout(stTipT);if(t!==stTipFor)stTipT=setTimeout(()=>stTipShow(t),stTipFor?0:250);return}
+  if(e.target.closest?.("#stTip")){clearTimeout(stTipT);return}
+  if(stTipFor||stTipT){clearTimeout(stTipT);stTipT=setTimeout(stTipHide,200)}
+});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&stTipFor)stTipHide()},true);
+document.addEventListener("scroll",()=>{if(stTipFor)stTipHide()},true);
 function statusMarkHtml(n){
   const e=devErr(n);
   if(e){const tip=`${i18n("Нет сигнала")}: ${i18n(DEV_ERR[e].t)}`;
-    return`<span class="n-tail n-err e-${e}" title="${tip}" aria-label="${tip}">${devErrIc(e)}</span>`}
+    return`<span class="n-tail n-err e-${e}" role="img" data-st="${e}" data-st-id="${escHtml(n.id)}" aria-label="${tip}">${devErrIc(e)}</span>`}
   const dot=deviceStatusDotHtml(n);
   return dot?`<span class="n-tail">${dot}</span>`:"";
 }
@@ -6786,14 +6852,12 @@ function treeStatusSlot(n){
 }
 // Причина «нет сигнала» словом — перед IP: значок стоит в колонке статуса,
 // а IP и счётчики остаются ровной колонкой.
-function treeErrTag(n,st){
-  const e=st.includes("n-err")?devErr(n):null;
-  return e?`<span class="n-err n-err-t e-${e}" title="${i18n("Нет сигнала")}: ${i18n(DEV_ERR[e].t)}">${i18n(DEV_ERR[e].s)}</span>`:"";
-}
+// Прототип 39: причину «нет сигнала» строка показывает только значком в колонке статуса (statusMarkHtml).
+// Слово — в окне у значка (stTip), в подсказке строки (treeRowTip) и в карточке.
 function treeRowMeta(n,q,shownLen,expanded,ctx){
   // Справа: теги (IP…) → число → статус — как на макете
   const st=treeStatusSlot(n);
-  return treeTail({tags:treeErrTag(n,st)+treeAttrTags(n,q),cnt:treeCntSlot(n,shownLen,expanded),status:st,acts:n.id,ctx});
+  return treeTail({tags:treeAttrTags(n,q),cnt:treeCntSlot(n,shownLen,expanded),status:st,acts:n.id,ctx});
 }
 // В какой срез попадает объект. treeKind знает три рода — камеры, ACFA и
 // службы; срез «Все» берёт их все, остальные по одному, а срез «Серверы»
@@ -7769,17 +7833,19 @@ function treeAttrTags(n,q){
   const inner=TREE_TAG_ORDER.filter(f=>treeTags.has(f)).map(f=>{
     if(f==="id"&&!showTreeIdTag(n))return"";
     // Камера регистратора — канал, а не адрес: IP один, у самого регистратора.
-    const nvr=f==="ip"&&n.type==="camera"&&!n.ip?ipsrvOwnerNode(n):null;
-    if(nvr){const ch=ipsrvCameraVideoChannel(n,nvr);return`<span class="tag tag-ch" title="${i18n("Видеоканал")} ${escHtml(ch)} ${i18n("регистратора")} «${escHtml(locName(nvr))}», IP ${escHtml(nvr.ip||"—")}">${i18n("кан.")} ${escHtml(ch)}</span>`}
+    // Прототип 39: канал и IP строка не показывает, они в подсказке строки (treeRowTip).
+    // IP появляется, только когда поиск нашёл объект по IP.
+    if(f==="ip"&&n.type==="camera"&&!n.ip&&ipsrvOwnerNode(n))return"";
     const val=fieldText(n,f);if(!val)return"";
     // IP не режем — иначе «съедается» слева; остальное можно укоротить
     const trunc=f!=="ip"&&val.length>16;const shown=trunc?val.slice(0,14):val;
     const inScope=searchScopeFields().includes(f);
     const hit=!!q&&inScope&&val.toLowerCase().includes(q);
+    if(f==="ip"&&!hit)return"";
     const body=hit?hlText(shown,q)+(trunc?"…":""):escHtml(shown)+(trunc?"…":"");
     return`<span class="tag${f==="ip"?" tag-ip":""}${hit?" hit":""}" title="${escHtml(FIELD_LABELS[f])}: ${escHtml(val)}">${body}</span>`;
   }).join("");
-  return`<span class="n-tags">${inner}</span>`;
+  return inner?`<span class="n-tags">${inner}</span>`:"";
 }
 // Набранное, но не сохранённое имя: перерисовка строит поле заново, и текст берётся отсюда, а не из объекта
 let treeRenameDraft=null;
@@ -7980,9 +8046,10 @@ function firstMatching(){
 function placeChoicePop(buttonId,menuId){
   const btn=document.getElementById(buttonId),pop=document.getElementById(menuId);
   if(!btn||!pop)return;
-  const br=btn.getBoundingClientRect(),w=Math.min(260,window.innerWidth-16);
+  // Прототип 39: ширина — по тексту и числам (CSS max-content), не меньше 220 и не шире окна
+  pop.style.width="";
+  const br=btn.getBoundingClientRect(),w=Math.min(Math.max(220,pop.offsetWidth||260),window.innerWidth-16);
   const left=Math.max(8,Math.min(Math.round(br.left),window.innerWidth-w-8));
-  pop.style.width=w+"px";
   const h=pop.offsetHeight||160;
   let top=Math.round(br.bottom+4);
   if(top+h>window.innerHeight-8)top=Math.max(8,Math.round(br.top-h-4));
@@ -8197,10 +8264,17 @@ function asideAdd(){return{
 function treeCntHtml(n){
   return`<span class="n-cnt">${n||""}</span>`;
 }
+// Прототип 39: число статуса в меню полное, когда консоль прочитала срез целиком, поиск по срезу дошёл до конца или сервер нашёл все
+// объекты именно этого статуса (выбран он). Иначе — «N+», как у кнопок срезов: консоль прочитала пока часть устройств.
+function statusCntFull(id){
+  if(sliceAllRead(slice)||sliceFoundAll(slice))return true;
+  return!!fs&&!fs.pick&&fs.done&&!fs.failed&&!typeFilts.size&&curStatus()===id;
+}
+function statusCntText(id,n){return statusCntFull(id)?sliceNum(n):n?`${sliceNum(n)}+`:""}
 function filtPopHtml(){
   const st=curStatus();
   return`<div class="filt-pop status-pop ${filtPop?"open":""}" id="filtPop" role="menu" aria-label="${i18n("Статус")}" ${onEv("click",onEv.stop)} ${onEv("keydown",["statusMenuKey",onEv.event])}>
-    ${["",...STATUS_FILTERS.flatMap(x=>x[0]==="nosignal"?[x[0],...Object.keys(DEV_ERR).map(k=>"nosignal:"+k)]:[x[0]])].map(id=>`<button type="button" class="mi ${st===id?"on":""} ${id.includes(":")?"mi-sub":""}" role="menuitemradio" aria-checked="${st===id}" data-status="${id}" ${onEv("click",["pickStatus",`${id}`])}>${id.includes(":")?`<span class="n-err e-${id.split(":")[1]}" aria-hidden="true">${devErrIc(id.split(":")[1])}</span>`:`<span class="st-dot st-${id||"all"}" aria-hidden="true"></span>`}<span>${id.includes(":")?i18n(DEV_ERR[id.split(":")[1]].t):statusLabel(id)}</span><span class="filt-status-cnt">${statusCount(id)}</span><span class="status-tick" aria-hidden="true">${st===id?lu("check"):""}</span></button>`).join("")}
+    ${["",...STATUS_FILTERS.flatMap(x=>x[0]==="nosignal"?[x[0],...Object.keys(DEV_ERR).map(k=>"nosignal:"+k)]:[x[0]])].map(id=>`<button type="button" class="mi ${st===id?"on":""} ${id.includes(":")?"mi-sub":""}" role="menuitemradio" aria-checked="${st===id}" data-status="${id}" ${onEv("click",["pickStatus",`${id}`])}>${id.includes(":")?`<span class="n-err e-${id.split(":")[1]}" aria-hidden="true">${devErrIc(id.split(":")[1])}</span>`:`<span class="st-dot st-${id||"all"}" aria-hidden="true"></span>`}<span>${id.includes(":")?i18n(DEV_ERR[id.split(":")[1]].t):statusLabel(id)}</span><span class="filt-status-cnt">${statusCntText(id,statusCount(id))}</span><span class="status-tick" aria-hidden="true">${st===id?lu("check"):""}</span></button>`).join("")}
   </div>`;
 }
 function domainPopHtml(){
@@ -8392,12 +8466,34 @@ function treeActsBack(treeEl){
   const row=[...treeEl.querySelectorAll(`.n[data-pick="${CSS.escape(pick)}"]`)].find(el=>treeRowKey(el)===a.key);
   if(row)treeActsAt(row,false);
 }
+// Прототип 39: строка дерева лёгкая — имя, значок статуса, звезда и «⋮». Остальное (IP, канал регистратора, причина
+// «нет сигнала», число объектов) подсказка строки собирает при наведении, а не каждая перерисовка.
+// Собирается при каждом наведении: IP и регистратор в разметке строки нет, и перерисовка с той же разметкой строку не
+// меняет — запомненная подсказка устарела бы. Своё имя строки (title детектора, хранилища) хранит data-name.
+function treeRowTip(row){
+  if(app!=="hw")return;
+  const id=row.dataset.pick,nm=row.querySelector(".nm");
+  if(!id||!nm)return;
+  if(nm.dataset.name==null)nm.dataset.name=nm.title||nm.textContent.trim();
+  const n=find(id)?.n,name=nm.dataset.name;
+  if(!n){nm.title=name;return}
+  const out=[name];
+  const nvr=n.type==="camera"&&!n.ip?ipsrvOwnerNode(n):null;
+  if(nvr)out.push(`${i18n("Видеоканал")} ${ipsrvCameraVideoChannel(n,nvr)} ${i18n("регистратора")} «${locName(nvr)}», IP ${nvr.ip||"—"}`);
+  else{const ip=fieldText(n,"ip");if(ip)out.push(`IP ${ip}`)}
+  const e=devErr(n);
+  if(e)out.push(`${i18n("Нет сигнала")}: ${i18n(DEV_ERR[e].t)}`);
+  else{const k=deviceStatusDotKind(n);if(k==="warn")out.push(i18n("Лицензия превышена"));else if(k==="mute")out.push(ruleTmpTitle())}
+  const c=row.querySelector(".n-cnt")?.textContent.trim();
+  if(c)out.push(`${i18n("Объектов внутри")}: ${c}`);
+  nm.title=out.join("\n");
+}
 // Фокус кнопки пары от нажатия мышью или пальцем (pointerdown в том же событии, что и фокус) пару не держит, остальной
 // (клавиатура, программный) — держит
 let treeActsPtr=false;
 function treeActsBind(treeEl){
   treeEl.addEventListener("pointerdown",()=>{treeActsPtr=true;setTimeout(()=>{treeActsPtr=false})},true);
-  treeEl.addEventListener("mouseover",e=>{const row=e.target.closest?.(".n");if(row&&row.parentElement===treeEl)treeActsAt(row,true)});
+  treeEl.addEventListener("mouseover",e=>{const row=e.target.closest?.(".n");if(row&&row.parentElement===treeEl){treeActsAt(row,true);treeRowTip(row)}});
   treeEl.addEventListener("focusin",e=>{
     const row=e.target.closest?.(".n");if(!row||row.parentElement!==treeEl)return;
     treeActsAt(row,false);
@@ -8639,7 +8735,7 @@ function renderTree(){
   treePaint();
   after.forEach(f=>f());
 }
-// Моргание строки дерева (acc-flash: переход по ссылке, treeReveal) переживает перерисовку: новая строка той же
+// Моргание строки дерева (acc-flash: переход по ссылке) переживает перерисовку: новая строка той же
 // цели продолжает вспышку с того же места анимации, а не обрывает её. Вспышку места прихода (flashKeep) переносит
 // flashReapply внутри paintInto — вместе с заголовком и вкладкой, по одним часам; такую строку (_fk) здесь не трогаем,
 // иначе сдвиг лёг бы дважды. Место анимации — активное время: текущее время минус задержка (у строки, которую
@@ -8708,6 +8804,7 @@ function treePaint(){const treeEl=document.getElementById("tree");if(!treeEl){ru
     paintInto(treeEl,html,`${app}|${slice}|${group()}`,treeSeen);
     treeActsBack(treeEl);
     treeFlashCarry(treeEl,flash);
+    treeSkelPaint(treeEl);
     if(keep)treeEl.querySelector(".n.on")?.scrollIntoView({block:"nearest"});
     decorateTreeSel();detHostMark();renderSelBar();
     if(app==="hw")treeOpenStore();
@@ -8729,7 +8826,7 @@ function treePaint(){const treeEl=document.getElementById("tree");if(!treeEl){ru
 // open меняют десятки мест, поэтому чтение решается здесь, после отрисовки, а не у каждого. Сервер отдаёт порядок сам.
 const treeBr=new Map();
 function treeLayout(){return slice==="arch"?"archives":slice==="det"?(group()==="folder"?"folders":"detectors"):group()==="server"?"servers":"folders"}
-function treeReset(){treeBr.clear();sliceReads.clear();fs=null;archUnlinkedAsked.clear();archDomRead.clear();archDomDoneSet.clear();archTblTried.clear()}
+function treeReset(){treeBr.clear();treeSkelAt.clear();sliceReads.clear();fs=null;archUnlinkedAsked.clear();archDomRead.clear();archDomDoneSet.clear();archTblTried.clear()}
 function treeOpenable(id,layout){
   if(id.startsWith("unalloc:"))return false;// нераспределённые — из /servers, он целиком
   // Виртуальные группы: на сервере их нет, стрелка ведёт на /devices с отбором волнами
@@ -8804,6 +8901,8 @@ async function treeLoad(layout,id){
       try{r=await treeRead(layout,id,b.cursor)}
       catch(e){if(e?.problem?.code!=="INVALID_CURSOR"||!b.cursor)throw e;b.cursor=null;continue}
       if(treeBr.get(key)!==b)return;
+      await treeSkelHold(key);
+      if(treeBr.get(key)!==b)return;
       await treeAdd(r.items,id,layout);
       if(r.parentCount!=null)b.count=r.parentCount;
       b.cursor=r.nextCursor||null;b.done=!r.nextCursor;
@@ -8812,7 +8911,8 @@ async function treeLoad(layout,id){
     if(!hwDone.archives&&servers.some(s=>s.id===id))(await API.get("/units",{parentId:id,implements:"vms.archive/1",limit:LIM.pageMax})).items.forEach(u=>archAdd(unitRec(u)));
     if(b.done){const n=find(id)?.n;if(n&&n._more&&!(n.devices||[]).length)n._more=false}
   }catch(e){b.done=true;b.failed=true}
-  finally{b.busy=false}
+  // Ветку могли перечитать (tree.changed, «Повторить»): время начала скелетона — уже у нового чтения, его не трогаем
+  finally{b.busy=false;if(treeBr.get(key)===b||!treeBr.get(key)?.busy)treeSkelAt.delete(key)}
 }
 const volsDone=new Set();
 async function volsEnsure(a){
@@ -8892,11 +8992,38 @@ function treeMoreRow(id,l,key=id){
   if(!treeOpenable(id,layout)||(b&&b.done&&!b.failed))return"";
   // Ветку раскрыл отбор (статус или текст), а не человек: всё найденное уже пришло отбором, читать её незачем, и
   // «Загрузка…» под ней висела бы без чтения (treeNeed читает только раскрытое человеком, open)
-  if((statusFilts.size||qval())&&!b&&!open.has(key))return"";
+  if(autoExpand()&&!b&&!open.has(key))return"";
   if(b&&b.failed)return`<div class="n n-more" style="--l:${l}"><span class="tw"></span><span class="nm sub">${i18n("Не прочитано")}</span></div>`;
   const scan=treeVirtual(id);
-  if(!b||b.busy||!b.cursor)return`<div class="n n-more" style="--l:${l}"><span class="tw"></span><span class="nm sub">${i18n(scan?"Ищем дальше…":"Загрузка…")}</span></div>`;
+  if(!b||b.busy||!b.cursor)return scan?`<div class="n n-more" style="--l:${l}"><span class="tw"></span><span class="nm sub">${i18n("Ищем дальше…")}</span></div>`:treeSkelHtml(layout+"|"+id,l);
   return`<div class="n n-more n-more-go" style="--l:${l}" data-more="${escHtml(id)}" ${onEv("click",onEv.stop,["treeMore",id])}><span class="tw"></span><span class="nm sub">${i18n(scan?"Искать дальше":"Показать ещё")}</span></div>`;
+}
+// Ветка читается: на месте её строк — скелетон из трёх серых строк. Он проявляется через TREE_SKEL_DELAY: быстрый ответ
+// приходит раньше, и дерево не моргает. Показанный скелетон держится не меньше TREE_SKEL_MIN (treeSkelHold): ответ сразу
+// после появления тоже дал бы мигание. Время начала — по ветке, а не по разметке: перерисовка дерева во время чтения не
+// начинает задержку заново (отрицательная animation-delay — скелетон уже виден). Разметка от времени не зависит: та же
+// разметка — без перерисовки (paintInto), и готовая разметка (revealPlan) совпадает со свежей. Время ставит treeSkelPaint
+// после отрисовки: задержку проявления и фазу мерцания
+const TREE_SKEL_DELAY=300,TREE_SKEL_MIN=400,TREE_SKEL_SHINE=1400,treeSkelAt=new Map();
+function treeSkelHtml(key,l){
+  if(!treeSkelAt.has(key))treeSkelAt.set(key,Date.now());
+  // Три обычные строки высотой в строку дерева: у строк дерева content-visibility, высокая строка-обёртка там сжимается
+  const row=(w,i)=>`<div class="n n-more n-skel" style="--l:${l}" data-skel="${escHtml(key)}"${i?' aria-hidden="true"':' role="status"'}><span class="tw"></span><i class="sk sk-ic"></i><i class="sk" style="width:${w}px"></i>${i?"":`<span class="sk-sr">${i18n("Загрузка…")}</span>`}</div>`;
+  return[132,96,114].map(row).join("");
+}
+function treeSkelPaint(el){
+  el.querySelectorAll(".n-skel[data-skel]").forEach(r=>{
+    const t=treeSkelAt.get(r.dataset.skel),gone=t==null?TREE_SKEL_DELAY:Date.now()-t;
+    r.style.setProperty("--skd",`${TREE_SKEL_DELAY-gone}ms`);
+    r.style.setProperty("--sks",`${-(gone%TREE_SKEL_SHINE)}ms`);
+  });
+}
+// Держим только скелетон, который видно: свернули ветку или ушли из дерева — ответ ждать незачем
+function treeSkelHold(key){
+  const t=treeSkelAt.get(key);if(t==null)return null;
+  if(app!=="hw"||!document.querySelector(`#tree .n-skel[data-skel="${CSS.escape(key)}"]`))return null;
+  const shown=Date.now()-t-TREE_SKEL_DELAY;
+  return shown>0&&shown<TREE_SKEL_MIN?new Promise(r=>setTimeout(r,TREE_SKEL_MIN-shown)):null;
 }
 function treeVirtual(id){return id.startsWith("nofolder:")||id.startsWith("svcs:")||id.startsWith("norec:")}
 // Счётчик виртуальной группы — только по загруженному: полного числа нет, пока отбор не дошёл до конца
@@ -9488,25 +9615,20 @@ function panelHeadHtmlRun(){
   </div><span class="ph-tail">${sliceBtn(ids[ids.length-1],true)}<span class="ph-fold">
     <button type="button" class="ph-choice ${foldersOn?"on":""}" id="viewBtn" aria-pressed="${foldersOn}" ${canFolders?"":"disabled"} title="${canFolders?`${i18n("Группировка")}: ${GROUP_HINT[group()]}`:i18n("В этом срезе нет папок")}" ${onEv("click",["toggleFolders"])}>${IC.folder}<span>${i18n("Папки")}</span></button>
     <button type="button" class="ph-choice ph-status ${filtPop||st?"on":""}" id="filtBtn" aria-haspopup="menu" aria-controls="filtPop" aria-expanded="${filtPop}" title="${statusLabel(st)}" ${onEv("click",["toggleFiltPop",onEv.event])}><span class="st-dot st-${(st||"all").split(":")[0]}" aria-hidden="true"></span><span class="ph-status-label">${statusLabel(st)}</span><span class="ph-chevron" aria-hidden="true"><svg class="btn-chev" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5.5 7.75 4.5 4.5 4.5-4.5"/></svg></span></button>
-  </span></span></div><div class="ph-row">
-    <span class="ph-tools" role="group" aria-label="${i18n("Раскрытие дерева")}">
-      <button type="button" class="ph-tool" id="treeCollapseBtn" title="${i18n("Свернуть всё")}" aria-label="${i18n("Свернуть всё")}" ${onEv("click",["treeCollapseAll"])}>${TREE_IC.shut}</button>
-      <button type="button" class="ph-tool" id="treeExpandBtn" title="${i18n("Развернуть всё")}" aria-label="${i18n("Развернуть всё")}" ${onEv("click",["treeExpandAll"])}>${TREE_IC.open}</button>
-      <button type="button" class="ph-tool" id="treeRevealBtn" title="${i18n("Показать открытый объект в дереве")}" aria-label="${i18n("Показать открытый объект в дереве")}" ${onEv("click",["treeReveal"])}>${TREE_IC.here}</button>
-    </span>
-  </div></div>`;
+    <button type="button" class="ph-tool" id="treeCollapseBtn" title="${i18n("Свернуть всё")}" aria-label="${i18n("Свернуть всё")}" ${onEv("click",["treeCollapseAll"])}>${TREE_IC.shut}</button>
+  </span></span></div></div>`;
 }
 // ── Раскрытие дерева ─────────────────────────────────────────────────────
 // Дерево открывается коротким: небольшие домены и домен открытого объекта с их первым уровнем. У каждого среза и
 // раскладки своё раскрытие; оно хранится в браузере и переживает перезагрузку.
-const TREE_OPEN_LS="consolem.treeOpen",TREE_EXPAND_MAX=3000;
+const TREE_OPEN_LS="consolem.treeOpen";
 const TREE_IC={shut:`<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 20 5-5 5 5"/><path d="m7 4 5 5 5-5"/></svg>`,open:`<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>`,here:`<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v4"/><path d="M12 18v4"/><path d="M2 12h4"/><path d="M18 12h4"/></svg>`};
 const treeOpenBy=new Map();
 function treeOpenOwn(id){return!String(id).startsWith("acc")&&id!==FAV_NODE}
 function treeOpenKey(){return slice+"|"+group()}
 let treeOpenAllShown=false;
 // Закрытый домен хранится как «!id»: домен, которого при сохранении ещё не было, откроется, как положено новому.
-let treeOpenCur=null,treeExpandGen=0;
+let treeOpenCur=null;
 function treeOpenSave(){if(!treeOpenAllShown)treeOpenBy.set(treeOpenCur||treeOpenKey(),[...[...open].filter(treeOpenOwn),...domains.filter(d=>!open.has(d.id)).map(d=>"!"+d.id)])}
 // Срез меняют и переход, и шаг истории: раскрытие прежнего среза остаётся за ним.
 function treeOpenFollow(){if(treeOpenCur&&treeOpenCur!==treeOpenKey()){treeOpenSave();treeOpenRestore()}}
@@ -9531,7 +9653,6 @@ function treeOpenStore(){
 const TREE_DOMAIN_BIG=2000;
 function treeDomainBig(d){return(d.summary?.total||0)+(d.servers||[]).length>TREE_DOMAIN_BIG}
 function treeOpenDefault(){
-  treeExpandGen++;
   [...open].filter(treeOpenOwn).forEach(id=>open.delete(id));
   const own=(sel&&domainById(nodeDomainId(find(sel)?.n)))||domains[0];
   domains.forEach(d=>{if(d===own||!treeDomainBig(d))open.add(d.id)});
@@ -9550,29 +9671,9 @@ function treeCollapseAll(){
   renderTree();
   const el=document.getElementById("tree");if(el)el.scrollTop=0;
 }
-// Ветки читаются по запросу: новые строки появляются после ответа сервера,
-// поэтому раскрываем проходами, пока находятся закрытые строки.
-async function treeExpandRows(scope){
-  if(!document.getElementById("tree"))return;
-  const gen=treeExpandGen,key=treeOpenCur;
-  let idle=0,first=true;
-  // Проход считается только за новый уровень: пока ветки читаются, ждём ответа, сколько бы он ни шёл
-  for(let pass=0;pass<12&&idle<2;){
-    renderTreeFlush();                            // строки берутся из разметки: прошлый проход дорисован
-    const tree=document.getElementById("tree");
-    // «Свернуть всё», смена среза или раздела отменяют раскрытие
-    if(!tree||gen!==treeExpandGen||key!==treeOpenCur||app!=="hw")return;
-    const closed=scope(tree).filter(r=>r.dataset.tid&&!open.has(r.dataset.tid));
-    if(tree.querySelectorAll(".n").length>TREE_EXPAND_MAX){toast(`${i18n("Показано больше")} ${TREE_EXPAND_MAX} ${i18n("строк. Остальные ветки раскрыть по одной")}`);return}
-    idle=closed.length||[...treeBr.values()].some(b=>b.busy)?0:idle+1;
-    closed.forEach(r=>open.add(r.dataset.tid));
-    // Первый проход — ответ на клик, сразу; следующие идут по таймеру — в кадр
-    if(closed.length){pass++;first?renderTree():renderTreeSoon()}
-    first=false;
-    await new Promise(r=>setTimeout(r,120));
-  }
-}
-function treeExpandAll(){treeOpenAllShown=true;return treeExpandRows(t=>[...t.querySelectorAll(".n")])}
+// «Развернуть всё» и «Развернуть всё внутри» убраны: в большой конфигурации (сотни тысяч устройств) они читали
+// ветку за веткой тысячи раз, а 3000 строк никто не читает. Объект находят поиском и «Все статусы», ветку раскрывают
+// по одному уровню; «*» раскрывает соседей строки (WAI-ARIA)
 // Строки внутри строки: идут за ней, пока уровень больше её уровня.
 function treeRowsBelow(row){
   const out=[],lv=rowLevel(row);
@@ -9580,12 +9681,8 @@ function treeRowsBelow(row){
   return out;
 }
 function treeRowOfId(id){return document.querySelector(`#tree .n[data-tid="${CSS.escape(id)}"]`)}
-function treeExpandBelow(id){
-  closeTreeCtx();open.add(id);renderTree();
-  return treeExpandRows(()=>{const r=treeRowOfId(id);return r?treeRowsBelow(r):[]});
-}
 function treeCollapseBelow(id){
-  closeTreeCtx();treeExpandGen++;
+  closeTreeCtx();
   const r=treeRowOfId(id);if(!r)return;
   treeRowsBelow(r).forEach(x=>{if(x.dataset.tid)open.delete(x.dataset.tid)});
   renderTree();
@@ -9598,13 +9695,6 @@ function treeExpandSiblings(){
   let b=i;while(b<rows.length-1&&rowLevel(rows[b+1])>=lv)b++;
   rows.slice(a,b+1).forEach(r=>{if(rowLevel(r)===lv&&r.dataset.tid)open.add(r.dataset.tid)});
   renderTree();
-}
-function treeReveal(){
-  if(!find(sel))return;
-  expandTo(sel,selCtx);renderTree();revealSel();
-  const q=`#tree .n[data-pick="${sel}"]`;
-  const row=(selCtx&&document.querySelector(`${q}[data-ctx="${selCtx}"]`))||document.querySelector(q);
-  if(row){row.scrollIntoView({block:"center"});accFlash(()=>{const r=(selCtx&&document.querySelector(`${q}[data-ctx="${selCtx}"]`))||document.querySelector(q);return r?[r]:null},true)}
 }
 function toggleFolders(){setGroup(group()==="folder"?sliceGroups().find(g=>g!=="folder"):"folder")}
 function setSlice(v){
@@ -10151,7 +10241,7 @@ function openTreeCtx(n,xy){
 
     // Строка дерева раскрывается по своему ключу: его знает строка, а не объект
     const treeId=document.querySelector(`#tree .n[data-pick="${id}"][data-tid]`)?.dataset.tid;
-    if(treeId)groups.push([tctxItem(i18n("Развернуть всё внутри"),["treeExpandBelow",treeId]),tctxItem(i18n("Свернуть всё внутри"),["treeCollapseBelow",treeId])]);
+    if(treeId)groups.push([tctxItem(i18n("Свернуть всё внутри"),["treeCollapseBelow",treeId])]);
 
     const add=[];
     if(n.type==="unalloc"){
@@ -10271,7 +10361,7 @@ function svcrow(n,l){
   const q=qval();
   if(!selfInView(n)||!matchesSearch(n,q))return"";
   return `<div class="n ${sel===n.id?"on":""}${treeRenameId===n.id?" renaming":""}" style="--l:${l}"${treeRowPick(n.id)}${treeCtxAttr(n.id)}>
-    <span class="tw"></span>${treeRowIcon(n)}<span class="nm">${treeNameCell(n,q)}</span>${(st=>treeTail({tags:treeErrTag(n,st)+treeAttrTags(n,q),status:st,acts:n.id}))(treeStatusSlot(n))}</div>`;
+    <span class="tw"></span>${treeRowIcon(n)}<span class="nm">${treeNameCell(n,q)}</span>${treeTail({tags:treeAttrTags(n,q),status:treeStatusSlot(n),acts:n.id})}</div>`;
 }
 function srow(s,l=1,bare=false){
   const q=qval();
@@ -10640,7 +10730,7 @@ function gdetrow(d,l,ctx,parentHit=false){
   const hit=matchesStatus(d)&&(parentHit||matchesSearch(d,q));
   if(!hit)return"";
   return `<div class="n ${rowOn(d.id,ctx)}" style="--l:${l}"${treeRowPick(d.id,ctx)}>
-    <span class="tw"></span>${ic("det")}<span class="nm">${hlText(locName(d),q)}</span>${treeTail({tags:`<span class="tag">${escHtml(i18n(d.kind||DET_TYPES[0]))}</span>`,status:treeStatusSlot(d)})}</div>`;
+    <span class="tw"></span>${ic("det")}<span class="nm" title="${escHtml(locName(d))} · ${escHtml(i18n(d.kind||DET_TYPES[0]))}">${hlText(locName(d),q)}</span>${treeTail({status:treeStatusSlot(d)})}</div>`;
 }
 function gcamrow(cam,dets,l,ctx){
   if(treeHidQ(cam))return"";// камера под GPU сервера: строится не обходом дерева, метку смотрим здесь
@@ -10940,7 +11030,7 @@ function arow(a,l){
   const cnt=slice==="arch"&&!hwDone.archives&&!archCamIds.has(a.id)?"":inventory?allCams.length:hasSliceContext()?sliceParentCount(a.id):cams.length;
   let h=`<div class="n srv stor ${sel===a.id?"on":""}${inventory?"":sliceParentClass(a.id)}${treeRenameId===a.id?" renaming":""}" style="--l:${l}"${treeRowPick(a.id)}${treeCtxAttr(a.id)}${treeExpandMeta(a.id,"srv",hasKids)}>
     ${hasKids?treeChevron(a.id,"srv",hasKids,op):'<span class="tw"></span>'}
-    ${ict(archAddr(a)==="disk"?"asdisk":"asnet")}${treeRenameId===a.id?treeNameCell(a,q):`<span class="nm" title="${escHtml(locName(a))} · ${escHtml(archKindLabel(a))}">${hlText(locName(a),selfHit?q:"")}</span>`}${treeTail({tags:slice==="arch"?"":`<span class="tag ${archAddr(a)==="bucket"?"tag-cloud":""}" title="${escHtml(archKindLabel(a))}">${escHtml(archKindTag(a))}</span>`,cnt:treeCntHtml(cnt),acts:a.id})}</div>`;
+    ${ict(archAddr(a)==="disk"?"asdisk":"asnet")}${treeRenameId===a.id?treeNameCell(a,q):`<span class="nm" title="${escHtml(locName(a))} · ${escHtml(archKindLabel(a))}">${hlText(locName(a),selfHit?q:"")}</span>`}${treeTail({cnt:treeCntHtml(cnt),acts:a.id})}</div>`;
   if(op)h+=children;
   return h;
 }
