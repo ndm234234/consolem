@@ -866,6 +866,11 @@ html[data-theme="light"] .cp.done{border-color:var(--one-success-icon);color:var
 .cs-cq{container-type:inline-size}
 .tabs-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px}.tabs-row>.tabs{flex:0 1 auto;min-width:0}
 .cs-hint{display:block;margin-top:3px}
+.cs-hide{display:none!important}
+.cs-ro .cs-bin :is(input:not([type=checkbox]):not([type=radio]),select,textarea):disabled{opacity:1;color:var(--tx);background:transparent;border-color:transparent;box-shadow:none;appearance:none;-webkit-appearance:none;padding-left:0;cursor:default}
+.cs-ro .cs-bin :is(input[type=checkbox],input[type=radio]):disabled{opacity:.7}
+.cs-sw-ro{pointer-events:none;opacity:.6}
+
 .cs-send{display:inline-flex;align-items:center;gap:8px;margin-left:auto;font-size:13px;white-space:nowrap;cursor:pointer}
 .cs-tocw{display:grid;grid-template-columns:210px minmax(0,1fr);gap:14px;align-items:start}
 .cs-toc{position:sticky;top:0;display:flex;flex-direction:column;gap:2px;padding:8px;border:1px solid var(--ln);border-radius:8px;background:var(--p)}
@@ -12710,6 +12715,36 @@ const csClosed=new Set();
 function csTitleOf(ch){const c=ch.cloneNode(true);c.querySelectorAll("button,.cs-acts,.cs-drv-tag,.bd,select,input,.sw,.sub").forEach(x=>x.remove());return c.textContent.replace(/\s+/g," ").trim()}
 // Краткое значение для оглавления: счётчик из заголовка карточки (.sub), если карточка не задала своё
 function csSumOf(el,ch){return el.dataset.csSum||ch.querySelector(":scope>.sub")?.textContent.trim()||""}
+// ── «Изменить» у прежних блоков вкладок ──────────────────────────────────────────────────────────────────
+// Правило одно для всех вкладок: блок показывает значения, «Изменить» открывает поля. Прежние блоки («Хранилища
+// камеры», «Детекторы камеры», «Периферия», «Доступ», «Расположение»…) сохраняют правку сразу (запрос к серверу или
+// черновик карточки), поэтому «Отменить» у них нет — только «Готово», как у «Размещения и тревог» в прототипе 44.
+// Без «Изменить» поля блока выглядят как текст, кнопки действий скрыты; поиск по списку и ссылки работают.
+const CS_LOCK_SKIP=new Set(["view"]);
+function csSearchInput(c){return c.type==="search"||!!c.closest(".lst-sq")}
+// «Изменить» нужен блоку с полями (поле ввода, список, переключатель). Блок только с кнопками действий («Скан»,
+// «+ Детектор», «Создать правило») оставляет их на виду: это действия, а не значения блока
+function csEditable(el){
+  return[...el.querySelectorAll(":scope>:not(.ch) :is(input,select,textarea),[role=switch],.sw")]
+    .some(c=>!(c.matches("input")&&csSearchInput(c))&&!c.closest(".cs-acts"));
+}
+function csBlkLock(n,el,ch,k){
+  if(CS_LOCK_SKIP.has(tab)||ch.querySelector(".cs-acts")||!csEditable(el))return;
+  const ek="blk:"+tab+":"+k,on=csEditOn(n.id,ek),acts=document.createElement("span"),b=document.createElement("button");
+  acts.className="cs-acts";b.type="button";b.className=on?"btn pri s":"btn s";b.textContent=i18n(on?"Готово":"Изменить");
+  b.setAttribute("data-on-click",JSON.stringify([["csBlkEdit",n.id,ek,!on]]));acts.append(b);ch.append(acts);
+  if(on){el.classList.add("cs-rw");return}
+  el.classList.add("cs-ro");
+  el.querySelectorAll("input,select,textarea,button").forEach(c=>{
+    if(c.closest(".cs-acts")||c.classList.contains("cs-chev")||c.classList.contains("lk"))return;
+    if(c.matches("input")&&csSearchInput(c))return;
+    if(c.tagName==="BUTTON"){if(c.classList.contains("btn"))c.classList.add("cs-hide");return}
+    if(c.matches("select.lst-add,select.ca-add")){c.classList.add("cs-hide");return}   // «+ Добавить в папку…», «＋ Привязать…»
+    c.disabled=true;
+  });
+  el.querySelectorAll('[role=switch],.sw').forEach(c=>{c.setAttribute("aria-disabled","true");c.classList.add("cs-sw-ro");c.removeAttribute("tabindex")});
+}
+function csBlkEdit(id,ek,on){csEditSet(id,ek,on)}
 function csTabWrap(n,html){
   const t=document.createElement("template");t.innerHTML=html;
   const secs=[];
@@ -12726,6 +12761,7 @@ function csTabWrap(n,html){
       btn.innerHTML=lu("chevron-right");ch.prepend(btn);
       const body=document.createElement("div");body.className="cs-body";const bin=document.createElement("div");bin.className="cs-bin";body.append(bin);
       [...el.children].filter(c=>c!==ch).forEach(c=>bin.append(c));el.append(body);
+      csBlkLock(n,el,ch,k);
       secs.push({k,title,sum:csSumOf(el,ch),fold:true});
     }else{
       const inner=el.querySelector(".card>.ch");
