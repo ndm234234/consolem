@@ -13,6 +13,7 @@ Chrome: страница загружает данные со встроенно
   python3 tools/check_ui.py --selftest            самопроверка прототипа (?selftest): те же сценарии изнутри страницы
   python3 tools/check_ui.py --page FILE.html      другой файл (прототип, скопированный с index.html)
   python3 tools/check_ui.py --tests DIR           сценарии и помощники из другой папки (по умолчанию tests)
+Перед сценариями — опоры карты кода (`tools/outline.py --check`): на index.html их потеря — отказ.
 Код выхода 1, если хоть одна проверка не прошла.
 """
 import glob
@@ -108,6 +109,20 @@ def selftest(query):
     return 0 if state and state.group(1) == "pass" else 1
 
 
+def outline_check():
+    """Карта кода (tools/outline.py) опирается на соглашения страницы. Ушли — говорим сразу.
+    Основной макет без опор — отказ; прототип — только предупреждение: старые прототипы
+    сделаны до нынешних соглашений, и карта для них не обещана."""
+    page = os.path.join(ROOT, PAGE)
+    res = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "outline.py"), page, "--check"],
+                         capture_output=True, text=True)
+    print((res.stdout + res.stderr).rstrip())
+    main_page = os.path.realpath(page) == os.path.realpath(os.path.join(ROOT, "index.html"))
+    if res.returncode and not main_page:
+        print("   (прототип: предупреждение, не отказ)")
+    return 1 if res.returncode and main_page else 0
+
+
 def main():
     args = sys.argv[1:]
     query = ""
@@ -115,12 +130,16 @@ def main():
         i = args.index("--latency")
         query = f"?latency={int(args[i + 1])}"
         del args[i:i + 2]
+    outline_bad = outline_check()
     if "--selftest" in args:
-        return selftest(query)
+        res = selftest(query)
+        if outline_bad:  # самопроверка уже напечатала свой RESULT — последняя строка должна сказать правду
+            print("RESULT fail (карта кода: tools/outline.py --check)")
+        return max(res, outline_bad)
     # Сценарии — tests/ui-*.js, кроме самих помощников
     files = args or sorted(f for f in glob.glob(os.path.join(ROOT, TESTS, "ui-*.js")) if not f.endswith("ui-harness.js"))
     fixtures = fixture_of()
-    failed = 0
+    failed = outline_bad
     for f in files:
         fx = fixtures.get(os.path.basename(f))
         lines = run(f, query + (("&" if query else "?") + "fixture=" + fx if fx else ""))
