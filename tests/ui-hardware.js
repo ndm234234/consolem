@@ -4,6 +4,8 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   const cam=devicePool.find(n=>n.type==="camera"&&n.name==="Главный вход");
   ok(!!cam&&/^3/.test(cam.id),"камера из API, id — UUID: "+cam?.id);
   goApp("hw");pick(cam.id);goTab("gen");
+  // Карточка с «Изменить» у блоков: поле «Имя» — после «Изменить» у «Идентификации объекта»
+  if(typeof csEditSet==="function")csEditSet(cam.id,"ident",true);
   const inp=document.querySelector('input[data-df="Имя"]');
   inp.value="Вход — пилот";inp.dispatchEvent(new Event("input"));
   setCamRec(cam.id,"motion");
@@ -34,6 +36,7 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   const off=servers.find(s=>s.online===false&&!isUnallocated(s.id));
   const cam2=devicePool.find(n=>n.type==="camera"&&n.srvId===off.id);
   pick(cam2.id);goTab("gen");
+  if(typeof csEditSet==="function")csEditSet(cam2.id,"ident",true);
   const inp2=document.querySelector('input[data-df="Имя"]');inp2.value="Не примется";inp2.dispatchEvent(new Event("input"));
   cardApply();
   ok(await until(()=>bq&&bq.finished),"операция над камерой сервера без связи завершилась");
@@ -44,7 +47,9 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   closeBulkModal();
   // Поля карточки по подписи (SMTP, канал, титры, детектор в карточке камеры) — тоже операцией на сервере
   const first=t=>{let x=null;walkAll(n=>{if(!x&&n.type===t&&isApiDevice(n)&&!hasNoSignal(srv(n.id)||{}))x=n});return x};
-  const setFld=(l,v)=>{const el=document.querySelector(`[data-df="${l}"]`);if(!el)throw new Error(`нет поля «${l}», вкладка ${tab}, объект ${find(sel)?.n.type}`);el.value=v;el.dispatchEvent(new Event(el.tagName==="SELECT"?"change":"input"))};
+  // Карточка с «Изменить» у блоков: нет поля — открыть правку всех блоков вкладки
+  const editAll=()=>{for(let i=0;i<30;i++){const b=[...document.querySelectorAll("#main .cs-acts .btn")].find(x=>/^(Изменить|Edit)$/.test(x.textContent.trim()));if(!b)return;b.click()}};
+  const setFld=(l,v)=>{let el=document.querySelector(`[data-df="${l}"]`);if(!el){editAll();el=document.querySelector(`[data-df="${l}"]`)}if(!el)throw new Error(`нет поля «${l}», вкладка ${tab}, объект ${find(sel)?.n.type}`);el.value=v;el.dispatchEvent(new Event(el.tagName==="SELECT"?"change":"input"))};
   const viaApi=async(what,check)=>{
     cardApply();
     ok(!!(bq&&bq.api),what+" — операцией на сервере");

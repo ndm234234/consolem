@@ -38,12 +38,21 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   ok(/<label>RTSP/.test(deviceManualHtml()), "производитель RTSP: поле адреса называется RTSP");
   wizd.manual.vendor = manualVendor;
   ok(!/MAC-адрес/.test(deviceManualHtml()), "MAC вручную не вводится: он только из поиска");
+  // Карточка с «Изменить» у блоков (csEditSet): поля «Подключения» — после «Изменить», поле RTSP — только у производителя
+  // RTSP, как в окне добавления. Карточка без этого показывает поле RTSP сразу
+  const csMode = typeof csEditSet === "function";
+  const rtspOf = (id) => {
+    if (csMode) { csEditSet(id, "conn", true); camConnSet(id, "Производитель", "RTSP"); }
+    const v = document.querySelector('[data-df="RTSP"]')?.value;
+    if (csMode) { cardRestore(); csEditSet(id, "conn", false); }
+    return v;
+  };
   const withUrl = of("camera", (d) => d.rtspUrl);
   open(withUrl.id);
-  ok(document.querySelector('[data-df="RTSP"]')?.value === withUrl.rtspUrl, "карточка показывает rtspUrl");
+  ok(rtspOf(withUrl.id) === withUrl.rtspUrl, "карточка показывает rtspUrl");
   const noUrl = of("camera", (d) => !d.rtspUrl && !d.parentId);
   open(noUrl.id);
-  ok(document.querySelector('[data-df="RTSP"]')?.value === "", "адреса нет — поле пустое, а не собранное из IP");
+  ok(rtspOf(noUrl.id) === "", "адреса нет — поле пустое, а не собранное из IP");
 
   // Видео: своего не подставляем, потоки строками, разрешение — из вариантов
   const video = of("camera", (d) => d.resOptions && d.online);
@@ -51,7 +60,8 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   // Вкладка «Видео» с режимом потоков (cvCfgOf): в «Настройках камеры» параметры только для чтения, правка — в «Настройках консоли»
   const cvModes = typeof cvCfgOf === "function";
   const resCtl = () => document.querySelector('[data-df="Разрешение"]');
-  const toConsole = (id) => { if (cvModes) { cvCfgOf(find(id).n).mode = "console"; mainSeen.html = null; gear(); } };
+  // «Параметры потоков» с «Изменить» (cvEditStart): поля — после «Изменить»
+  const toConsole = (id) => { if (cvModes) { cvCfgOf(find(id).n).mode = "console"; if (typeof cvEditStart === "function") cvEditStart(id); mainSeen.html = null; gear(); } };
   if (cvModes) ok(!resCtl(), "режим «Настройки камеры»: разрешение только для чтения");
   toConsole(video.id);
   const resVals = [...(resCtl()?.options || [])].map((o) => o.value).filter(Boolean);
