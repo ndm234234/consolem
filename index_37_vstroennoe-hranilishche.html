@@ -2328,6 +2328,14 @@ html[data-theme="light"] .cp-step{background:var(--one-control-hover);color:var(
 .er-bulk-n{flex:none;min-width:120px;white-space:nowrap}
 .er-rules-nt{margin:0 0 10px}.er-rules td .btn{white-space:nowrap}
 .er-rules-add{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:10px}
+/* Прототип 37: общий вид встроенных хранилищ и история репликации */
+.eo-wrap{overflow-x:auto}.eo-tbl{min-width:620px}.eo-tbl td{padding-top:7px;padding-bottom:7px}
+.eo-row.bad td:first-child{box-shadow:inset 3px 0 0 var(--one-danger-text)}
+.eo-sub{display:block;color:var(--mu);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.eo-bad{color:var(--one-danger-text)}
+.eo-tbl .lk{white-space:nowrap}
+.er-st.lost{background:var(--one-danger-bg);color:var(--one-danger-text)}
+.eo-nt{margin:0 0 10px}
 .er-bulk select{field-sizing:content;flex:none;width:auto;min-width:0;max-width:260px}.er-bulk .sub{margin:0;min-width:0}
 @media (prefers-reduced-motion:reduce){.er-bulk{transition:none}}
 </style>
@@ -2943,8 +2951,8 @@ const sysOptsEN=[
   {id:"mail",g:"dom",n:"Notifications",i:"mail"},{id:"maps",g:"dom",n:"Maps",i:"layout-grid"},
   {id:"lic",g:"lic",n:"Licenses",i:"id-card"}];
 const sysOpts=sysOptsRU.map(o=>({...o}));
-const logCatsRU=[{id:"all",n:"Все события"},{id:"audit",n:"Аудит"},{id:"alarm",n:"Тревоги"},{id:"info",n:"Информация"},{id:"ops",n:"Операции"}];
-const logCatsEN=[{id:"all",n:"All events"},{id:"audit",n:"Audit"},{id:"alarm",n:"Alarms"},{id:"info",n:"Information"},{id:"ops",n:"Operations"}];
+const logCatsRU=[{id:"all",n:"Все события"},{id:"audit",n:"Аудит"},{id:"alarm",n:"Тревоги"},{id:"info",n:"Информация"},{id:"ops",n:"Операции"},{id:"rep",n:"Репликация"}];
+const logCatsEN=[{id:"all",n:"All events"},{id:"audit",n:"Audit"},{id:"alarm",n:"Alarms"},{id:"info",n:"Information"},{id:"ops",n:"Operations"},{id:"rep",n:"Replication"}];
 const logCats=logCatsRU.map(c=>({...c}));
 function syncLocalePack(){
   const en=uiLang==="en";
@@ -10946,7 +10954,7 @@ function tabsFor(n){
   return t.length&&nodeExtraProps(n).length?t.concat([["extra","Дополнительно"]]):t;
 }
 function tabsForHand(n){
-  if(archScope(n))return[["stor","Хранилища"],["gen","Общие"]];
+  if(archScope(n))return[["stor","Хранилища"],["edges","Встроенные хранилища"],["gen","Общие"]];  // прототип 37: общий вид встроенных хранилищ
   if(n.type==="domain")return[["flds","Папки"],["gen","Общие"],["cams","Устройства"],["srvs","Серверы"],["lic","Лицензии"],["topo","Топология"]];
   if(n.type==="unalloc")return[];
   if(n.type==="server"&&isUnallocated(n.id))return[["gen","Общие"],["topo","Топология"]];
@@ -15581,6 +15589,7 @@ function formBase(n){
         unit:"сервер|сервера|серверов"
       });
     if(tab==="stor")return archTableCard(n);
+    if(tab==="edges")return eoHtml(n);
     if(tab==="srvs")return domainServersCard(n)+
       (canCreateKind("archive")?`<p class="sub" data-arch-where>${i18n(n.servers.length?"Хранилище на дисках тоже создают здесь. В окне выбрать вид и сервер.":"Хранилищу на дисках нужен сервер. Сначала добавить сервер.")}</p>`:"")+
       (!domainArchives(n.id).length&&!canDomainArch()?"":listCard({
@@ -15624,6 +15633,7 @@ function formBase(n){
         <button type="button" class="btn pri" style="margin-top:12px;width:100%" ${onEv("click",["addToDomain",`${n.id}`,`${domId}`])}>${i18n("Добавить в домен")}</button>`);
     }
     if(tab==="stor")return archTableCard(n);
+    if(tab==="edges")return eoHtml(n);
     if(tab==="disk"){
       const on=serverArchives(n.id),recCams=serverCameras(n.id).filter(isRecording);
       return listCard({
@@ -24668,6 +24678,7 @@ function opRedo(id){
   })).catch(e=>toast(problemText(e)));
 }
 function logUI(){const cat=logCats.find(x=>x.id===logFilt)||logCats[0];
+  if(cat.id==="rep"){elHtmlPaint(cat);return}   // прототип 37: история репликации со встроенных хранилищ
   if(cat.id==="ops"){
     paintMain(mainHd("Журнал",`<span class="hd-ic">${lu("scroll-text")}</span>${cat.n}`,"Диагностика и аудит")+
       `<div class="sc">${listCard({
@@ -25206,7 +25217,7 @@ function edgeRulesFor(st,camId){
   return rules.filter(r=>!r._new&&edgeRepActs(r.then).some(a=>edgeActHits(r,a,cams)));
 }
 // Перерисовать, только если на экране то, что показывает правила: иначе перерисовка закроет чужое меню
-function edgeRepaint(){const n=find(sel)?.n;if(app==="hw"&&n&&n.type==="storage"&&tab==="rep")gear()}
+function edgeRepaint(){const n=find(sel)?.n;if(app==="hw"&&n&&((n.type==="storage"&&tab==="rep")||tab==="edges"))gear();if(app==="log"&&logFilt==="rep")paint()}
 // Шаблоны репликации, которые сервер умеет: событие, действие и способ запуска объявлены
 function edgeTplOk(tpl){const t=RULE_TPL.find(x=>x.id===tpl);return!!t&&startDeclared(t.start)&&ruleTplDeclared(t)}
 // Новое правило из шаблона: камеры хранилища уже подставлены в событие или в действие
@@ -25352,12 +25363,12 @@ let edgeLoad=null; // {done}
 // После загрузки хранилищ — перерисовать, только если на экране то, что их показывает
 function edgeLoadRepaint(){
   const n=find(sel)?.n;if(app!=="hw"||!n)return;
-  if((n.type==="archive"&&tab==="edge")||((n.type==="camera"||n.type==="ipsrv")&&(tab==="rec"||tab==="io"))||(n.type==="storage"&&tab==="rep"))gear();
+  if(((n.type==="domain"||n.type==="server")&&tab==="edges")||(n.type==="archive"&&tab==="edge")||((n.type==="camera"||n.type==="ipsrv")&&(tab==="rec"||tab==="io"))||(n.type==="storage"&&tab==="rep"))gear();
 }
 function edgeLoadAll(){
   if(edgeLoad)return;
   edgeLoad={busy:true};
-  unitsAll({kind:"storage"}).then(rows=>hwEnsure(rows.map(r=>r.uid)).then(()=>hwFullAll(rows.map(r=>r.uid)))).then(()=>{edgeLoad={done:true};ruleIdxDrop();if(rulePk)rulePickList();edgeRuleSeed();edgeLoadRepaint()}).catch(()=>{edgeLoad={done:true,failed:true};if(rulePk)rulePickList();edgeLoadRepaint()});
+  unitsAll({kind:"storage"}).then(rows=>hwEnsure(rows.map(r=>r.uid)).then(()=>hwFullAll(rows.map(r=>r.uid)))).then(()=>{edgeLoad={done:true};ruleIdxDrop();if(rulePk)rulePickList();edgeRuleSeed();edgeLoadRepaint();if(app==="log"&&logFilt==="rep")paint()}).catch(()=>{edgeLoad={done:true,failed:true};if(rulePk)rulePickList();edgeLoadRepaint()});
 }
 function edgeOfServer(sid){
   const out=[];
@@ -25400,6 +25411,114 @@ function edgeArchHtml(a){
   const hint=i18n("Чтобы открыть встроенное хранилище устройства и настроить репликацию, нажать на устройство.");
   const rl=edgeRulesOn()?`<div class="nt er-rules-nt" style="margin-top:10px">${i18n("«Заполнять пропуски», «По расписанию» и «Только события» сервер выполняет по правилам автоматизации. Чтобы настроить эти типы, открыть раздел «Автоматизация».")} ${can("createRule")?`<button type="button" class="lk lk-act" ${onEv("click",["edgeRulesGo"])}>${i18n("Создать правило репликации")}</button>`:""}</div>`:"";
   return card("Встроенные хранилища",intro+bulk+tbl+`<p class="sub" style="margin-top:10px">${hint}</p>`+rl,stub);
+}
+// ── Прототип 37: общий вид всех встроенных хранилищ ──
+// Срез «Хранилища» → домен или сервер → вкладка «Встроенные хранилища»: настройка и состояние сейчас, проблемы наверху.
+// История заборов — в «Журнале», категория «Репликация». Так разводит Genetec: вид Archive transfer и отчёт Archive transfer history.
+// ЗАГЛУШКА: состояние и история — из edgeStat (по хешу uid). Сервер пока не отдаёт ни состояния, ни событий ошибки.
+const eoSel={key:"",f:{},more:new Set()};
+function eoList(n){
+  const out=[];
+  walkAll(x=>{if(x.type!=="storage")return;const o=edgeOwner(x);if(!o)return;const s=cameraTreeServer(o.id);
+    if(n.type==="server"?s?.id===n.id:domainOf(s?.id)?.id===n.id)out.push(x)});
+  return out;
+}
+// Состояние строки: потерянный пропуск и ожидание связи — проблемы
+const EO_STATE={lost:["пропуск потерян",0],wait:["ждёт связи",1],run:["забирает",2],ok:["в норме",3],off:["выключена",4]};
+function eoState(st){
+  const s=edgeStat(st);if(!s)return"off";
+  if(s.gaps.some(g=>g[2].startsWith("потерян")))return"lost";
+  return s.state;
+}
+function eoRepWord(st){const p=edgeRep(st);return p.type==="all"?"Забирать всё":edgeRulesFor(st).length?"По правилам":"Выключена"}
+function eoSrv(st){const o=edgeOwner(st),s=o&&cameraTreeServer(o.id);return s?ruleSrvShort(s):i18n("без сервера")}
+const EO_DIMS=[["state","состояние",st=>EO_STATE[eoState(st)][0],i18n],["rep","репликация",st=>eoRepWord(st),i18n],["srv","серверы",st=>eoSrv(st)]];
+function eoFilt(n){if(eoSel.key!==n.id){eoSel.key=n.id;eoSel.f={};eoSel.more=new Set()}return eoSel.f}
+function eoFacet(d,v){const f=eoSel.f;if(f[d]===v)delete f[d];else f[d]=v;gear()}
+function eoFacetClear(){eoSel.f={};gear()}
+function eoFacetMore(d){eoSel.more.add(d);gear()}
+function eoProblem(st,s,hist=""){
+  const k=eoState(st);
+  if(k==="lost"){const g=s.gaps.find(x=>x[2].startsWith("потерян"));return`<span class="eo-bad">${i18n("Потерян пропуск")} ${escHtml(g[0])}</span><span class="eo-sub">${i18n("Устройство записало поверх раньше, чем сервер забрал записи")}${hist}</span>`}
+  if(k==="wait")return`<span class="eo-bad">${i18n("Нет связи с устройством")}</span><span class="eo-sub">${i18n("Сервер заберёт записи, когда связь вернётся")}${hist}</span>`;
+  if(!s)return`<span class="sub">—</span>`;
+  return`${i18n("Последний забор:")} ${escHtml(i18n(s.last))}<span class="eo-sub">${i18n("Следующий:")} ${escHtml(s.next)}${hist}</span>`;
+}
+function eoHtml(n){
+  edgeLoadAll();
+  const stub=`<span class="er-stub">${i18n("заглушка")}</span>`,title="Встроенные хранилища";
+  const all=eoList(n),where=n.type==="server"?`${i18n("сервера")} «${escHtml(ruleSrvShort(n))}»`:`${i18n("домена")} «${escHtml(locName(n))}»`;
+  if(!edgeLoad?.done&&!all.length)return card(title,`<p class="sub">${i18n("Загрузка…")}</p>`,stub);
+  if(!all.length)return card(title,`<p class="sub">${i18n("У камер и регистраторов")} ${where} ${i18n("нет встроенных хранилищ.")}</p>`,stub);
+  const f=eoFilt(n),q=(listQ["eo:"+n.id]||"").trim().toLowerCase(),on=Object.values(f).some(Boolean);
+  const inQ=all.filter(st=>!q||[locName(edgeOwner(st)||st),eoSrv(st)].join(" ").toLowerCase().includes(q));
+  const shown=inQ.filter(st=>facetHit(EO_DIMS,st,f)).sort((a,b)=>EO_STATE[eoState(a)][1]-EO_STATE[eoState(b)][1]||locName(edgeOwner(a)||a).localeCompare(locName(edgeOwner(b)||b),"ru",{numeric:true}));
+  const bad=all.filter(st=>EO_STATE[eoState(st)][1]<2).length;
+  const facets=facetRowsHtml(EO_DIMS,inQ,f,"eoFacet",eoSel.more,"eoFacetMore");
+  const said=EO_DIMS.filter(([d])=>f[d]).map(([d,,,lab])=>lab?lab(f[d]):f[d]).join(" · ");
+  const scope=`<div class="bk-sum bk-scope"><div class="bk-scope-h"><span class="bk-scope-l">${i18n("Показать")}</span><button type="button" data-fk="all" class="stchip ${on?"":"on"}" ${onEv("click",["eoFacetClear"])}><span class="stchip-lab">${i18n("все")}</span><span class="stchip-cnt">${inQ.length}</span></button>${facets?`<span class="sub bk-scope-or" data-fk="or">${i18n("или уточните")}:</span>`:""}</div>${facets}<div class="bk-scope-sum ${on||q?"on":""}" data-fk="sum">${i18n("Показано")} <b>${shown.length} ${i18n("из")} ${all.length}</b>${said?`: ${escHtml(said)}`:""}</div></div>`;
+  const intro=`<p class="sub eo-nt">${i18n("Карты камер и диски регистраторов")} ${where}: ${i18n("постоянная репликация, правила и состояние сейчас.")} ${bad?`<b class="eo-bad">${i18n("Проблем:")} ${bad}.</b> ${i18n("Строки с проблемами стоят наверху.")}`:i18n("Проблем нет.")}</p>`;
+  const row=st=>{
+    const o=edgeOwner(st),p=edgeRep(st),s=edgeStat(st),k=eoState(st),nvr=o?.type==="ipsrv",rl=edgeRulesFor(st),a=archById(p.arch);
+    const name=`${ic(nvr?"ipsrv":"camera")}<span class="er-nm"><b>${escHtml(locName(o||st))}</b><small>${escHtml(eoSrv(st))} · ${nvr?`${i18n("диск")} · ${ipsrvCameras(o).length} ${i18n("камер")}`:i18n("карта")}${st.size?` · ${escHtml(st.size)}`:""}</small></span>`;
+    const repl=p.type==="all"?`${i18n("Забирать всё")}<span class="eo-sub">${i18n("в")} «${escHtml(a?locName(a):"—")}»</span>`
+      :rl.length?`${i18n("По правилам:")} ${rl.length}<span class="eo-sub">${rl.length===1?`<button type="button" class="lk" title="${escHtml(rl[0].name)}" ${onEv("click",["ruleGoRule",rl[0].id])}>${escHtml(rl[0].name)}</button>`:escHtml(rl.map(r=>r.name).join(", "))}</span>`
+      :`<span class="sub">${i18n("Выключена")}</span>`;
+    const chip=`<span class="er-st ${k}">${i18n(EO_STATE[k][0])}</span>`;
+    const hist=s?` · <button type="button" class="lk" ${onEv("click",["eoHistory",st.id])}>${i18n("история")}</button>`:"";
+    return`<tr class="eo-row ${k==="lost"||k==="wait"?"bad":""}"><td><button type="button" class="er-dev er-go" title="${i18n("Открыть встроенное хранилище")}" ${onEv("click",["pick",st.id,{tab:"rep"}])}>${name}</button></td><td class="er-ell">${repl}</td><td>${chip}</td><td class="er-ell">${eoProblem(st,s,hist)}</td></tr>`;
+  };
+  const tbl=shown.length?`<div class="eo-wrap"><table class="er-tbl eo-tbl"><colgroup><col style="width:32%"><col style="width:24%"><col style="width:16%"><col style="width:28%"></colgroup>
+    <thead><tr><th>${i18n("Устройство")}</th><th>${i18n("Репликация")}</th><th>${i18n("Сейчас")}</th><th>${i18n("Что не так или последний забор")}</th></tr></thead>
+    <tbody>${shown.map(row).join("")}</tbody></table></div>`:`<p class="sub">${i18n("Ничего не найдено")}</p>`;
+  const foot=`<p class="sub" style="margin-top:10px">${i18n("Чтобы изменить репликацию, открыть устройство. История заборов по всем хранилищам —")} <button type="button" class="lk lk-act" ${onEv("click",["eoHistory",""])}>${i18n("в «Журнале», категория «Репликация»")}</button>.</p>`;
+  return card(title,intro+listSearchHtml("eo:"+n.id,"Устройство или сервер…")+scope+tbl+foot,stub);
+}
+// ── «Журнал» → «Репликация»: заборы и пропуски по всем встроенным хранилищам ──
+const elSel={f:{},more:new Set()};
+// Записи журнала — ЗАГЛУШКА из edgeStat: пропуски и их итог, постоянный забор, ожидание связи
+function elRows(){
+  const out=[],num=t=>{const m=/(\d\d)\.(\d\d) (\d\d):(\d\d)/.exec(t);return m?+(m[2]+m[1]+m[3]+m[4]):t.startsWith("сегодня")?99999999:t.startsWith("вчера")?99999998:0};
+  walkAll(st=>{
+    if(st.type!=="storage")return;const o=edgeOwner(st);if(!o)return;const s=edgeStat(st);if(!s)return;
+    const p=edgeRep(st),rl=edgeRulesFor(st),by=p.type==="all"?{w:"Постоянная репликация"}:rl[0]?{w:"Правило",r:rl[0]}:{w:"Вручную"};
+    const base={st,dev:locName(o),srv:eoSrv(st),by};
+    s.gaps.forEach(g=>{
+      const lost=g[2].startsWith("потерян"),q=g[2]==="в очереди";
+      out.push({...base,t:g[0].split("–")[0],k:num(g[0]),what:`${i18n("Пропуск")} ${g[0]} (${i18n(g[1])})`,res:lost?"потерян":q?"в очереди":"забран",note:lost?i18n("Устройство записало поверх раньше, чем сервер забрал записи"):""});
+    });
+    if(p.type==="all"&&st.online!==false)out.push({...base,t:i18n(s.last),k:num(s.last),what:`${i18n("Сервер забрал")} ${s.today} ${i18n("за сутки")}`,res:"забран",note:""});
+    if(st.online===false)out.push({...base,t:"07.11 14:02",k:num("07.11 14:02"),what:i18n("Связь с устройством пропала. Сервер ждёт связи"),res:"в очереди",note:""});
+  });
+  return out.sort((a,b)=>b.k-a.k);
+}
+const EL_RES={забран:"ok",потерян:"lost","в очереди":"wait"};
+const EL_DIMS=[["res","итог",x=>x.res,i18n],["by","как запущено",x=>x.by.w,i18n],["srv","серверы",x=>x.srv],["dev","устройства",x=>x.dev]];
+function elFacet(d,v){const f=elSel.f;if(f[d]===v)delete f[d];else f[d]=v;paint()}
+function elFacetClear(){elSel.f={};paint()}
+function elFacetMore(d){elSel.more.add(d);paint()}
+// Из общего вида: история одного устройства ("" — всех)
+function eoHistory(id){
+  const st=id?find(id)?.n:null,o=st&&edgeOwner(st);
+  elSel.f=o?{dev:locName(o)}:{};elSel.more=new Set(o?["dev"]:[]);
+  setApp("log");logGo("rep");
+}
+// В общий вид: срез «Хранилища», домен из шапки или первый, вкладка «Встроенные хранилища»
+function elOverview(){const d=domains.find(x=>x.id===domainFilter)||domains[0];if(!d)return;setApp("hw");setSlice("arch");hwJumpFlash=true;pick(d.id,{tab:"edges"});hwJumpFlash=false}
+function elGo(id){setApp("hw");hwJumpFlash=true;pick(id,{tab:"rep"});hwJumpFlash=false}
+function elHtmlPaint(cat){
+  edgeLoadAll();
+  const all=elRows(),f=elSel.f,q=(listQ["el"]||"").trim().toLowerCase(),on=Object.values(f).some(Boolean);
+  const inQ=all.filter(x=>!q||[x.dev,x.srv,x.what,x.by.r?.name||""].join(" ").toLowerCase().includes(q)),shown=inQ.filter(x=>facetHit(EL_DIMS,x,f));
+  const facets=facetRowsHtml(EL_DIMS,inQ,f,"elFacet",elSel.more,"elFacetMore");
+  const said=EL_DIMS.filter(([d])=>f[d]).map(([d,,,lab])=>lab?lab(f[d]):f[d]).join(" · ");
+  const scope=`<div class="bk-sum bk-scope"><div class="bk-scope-h"><span class="bk-scope-l">${i18n("Показать")}</span><button type="button" data-fk="all" class="stchip ${on?"":"on"}" ${onEv("click",["elFacetClear"])}><span class="stchip-lab">${i18n("все")}</span><span class="stchip-cnt">${inQ.length}</span></button>${facets?`<span class="sub bk-scope-or" data-fk="or">${i18n("или уточните")}:</span>`:""}</div>${facets}<div class="bk-scope-sum ${on||q?"on":""}" data-fk="sum">${i18n("Показано")} <b>${shown.length} ${i18n("из")} ${all.length}</b>${said?`: ${escHtml(said)}`:""}</div></div>`;
+  const row=x=>`<tr class="eo-row ${x.res==="потерян"?"bad":""}"><td>${escHtml(x.t)}</td><td class="er-ell"><button type="button" class="lk" title="${i18n("Открыть встроенное хранилище")}" ${onEv("click",["elGo",x.st.id])}>${escHtml(x.dev)}</button><span class="eo-sub">${escHtml(x.srv)}</span></td><td class="er-ell">${escHtml(x.what)}${x.note?`<span class="eo-sub eo-bad">${escHtml(x.note)}</span>`:""}</td><td class="er-ell">${x.by.r?`<button type="button" class="lk" title="${escHtml(x.by.r.name)}" ${onEv("click",["ruleGoRule",x.by.r.id])}>${escHtml(x.by.r.name)}</button>`:escHtml(i18n(x.by.w))}</td><td><span class="er-st ${EL_RES[x.res]}">${i18n(x.res)}</span></td></tr>`;
+  const tbl=!edgeLoad?.done&&!all.length?`<p class="sub">${i18n("Загрузка…")}</p>`:shown.length?`<div class="eo-wrap"><table class="er-tbl eo-tbl"><colgroup><col style="width:13%"><col style="width:22%"><col style="width:31%"><col style="width:20%"><col style="width:14%"></colgroup>
+    <thead><tr><th>${i18n("Время")}</th><th>${i18n("Устройство")}</th><th>${i18n("Что")}</th><th>${i18n("Как запущено")}</th><th>${i18n("Итог")}</th></tr></thead><tbody>${shown.map(row).join("")}</tbody></table></div>`:`<p class="sub">${i18n("Ничего не найдено")}</p>`;
+  const intro=`<p class="sub eo-nt">${i18n("Заборы записей со встроенных хранилищ в хранилища серверов: постоянная репликация, правила автоматизации и забор вручную. Текущее состояние всех встроенных хранилищ показывает домен в срезе «Хранилища».")} <button type="button" class="lk lk-act" ${onEv("click",["elOverview"])}>${i18n("Открыть общий вид")}</button></p>`;
+  paintMain(mainHd("Журнал",`<span class="hd-ic">${lu("scroll-text")}</span>${cat.n}`,"Диагностика и аудит")+
+    `<div class="sc">${card("История репликации",intro+listSearchHtml("el","Устройство, сервер или правило…","log")+scope+tbl,`<span class="er-stub">${i18n("заглушка")}</span>`)}</div>`);
 }
 function camRecSelectHtml(n){
   const has=replicaSources(n,camArchs(n)[0]||{arch:n.arch}).length>0,cur=n.rec||"none";
