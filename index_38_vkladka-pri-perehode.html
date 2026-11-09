@@ -11089,27 +11089,39 @@ function tabsForHand(n){
   if(n.type==="sms")return[["gen","Шлюз"]];
   return[["gen","Основные"]];
 }
-// Вкладка карточки. Вкладку, которую пользователь выбрал щелчком, консоль запоминает
-// и открывает у следующего объекта, если у него есть вкладка с тем же ключом
-// («Архив» камеры и IP-сервера — "rec"). Вкладки формы по схеме ("sf1"…) пронумерованы
-// по порядку, поэтому их сравниваем по подписи. Иначе открывается первая вкладка.
-let tabMem={id:"gen",label:null};
+// Вкладка карточки. Консоль запоминает вкладку, которую пользователь выбрал щелчком,
+// отдельно для каждого типа объекта, и последнюю выбранную вкладку вообще.
+// Следующий объект открывается:
+//   1) на вкладке, выбранной у его типа;
+//   2) иначе — на последней выбранной вкладке, если у объекта есть вкладка с тем же ключом
+//      («Архив» камеры и IP-сервера — "rec");
+//   3) иначе — на первой вкладке.
+// Вкладки формы по схеме ("sf1"…) пронумерованы по порядку, поэтому их сравниваем по подписи.
+// Память живёт до перезагрузки страницы.
+const tabMemByType=new Map();
+let tabMemLast=null;
+function tabMemKey(n){return n?nodeKind(n)||n.type:null}
 function tabGo(id){
   tab=id;
   const n=find(sel)?.n,t=n&&tabsFor(n).find(([k])=>k===id);
-  tabMem={id,label:t?t[1]:null};
+  const m={id,label:t?t[1]:null};
+  tabMemLast=m;
+  if(n&&t)tabMemByType.set(tabMemKey(n),m);
   gear();
 }
 // Первая вкладка без смены запомненной (пункт «Изменить выбранные» в меню дерева)
 function tabFirst(){tab="gen";gear()}
 function tabKeep(n){
   if(!n)return"gen";
-  const sf=/^sf\d+$/.test(tabMem.id);
-  // Строка перечня ещё без полной записи: вкладки известны после загрузки, gear() поправит
-  if(n._row)return sf?"gen":tabMem.id;
-  const tabs=tabsFor(n);
-  const t=sf?tabs.find(([,l])=>l===tabMem.label):tabs.find(([k])=>k===tabMem.id);
-  return t?t[0]:"gen";
+  const pickMem=m=>{
+    if(!m)return null;
+    const sf=/^sf\d+$/.test(m.id);
+    // Строка перечня ещё без полной записи: вкладки известны после загрузки, gear() поправит
+    if(n._row)return sf?null:m.id;
+    const t=tabsFor(n).find(sf?([,l])=>l===m.label:([k])=>k===m.id);
+    return t?t[0]:null;
+  };
+  return pickMem(tabMemByType.get(tabMemKey(n)))||pickMem(tabMemLast)||"gen";
 }
 function gear(){
   ruleIdxDrop();
