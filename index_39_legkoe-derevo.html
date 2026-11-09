@@ -142,6 +142,14 @@ aside,main{min-height:0;overflow:hidden}aside{background:var(--one-canvas);borde
 .ph-fold #viewBtn:disabled{opacity:.45;cursor:default}
 .ph-fold #viewBtn:disabled:not(.on):hover{background:transparent;border-color:transparent;color:var(--one-fg-muted)}
 .ph-status-label{max-width:104px;overflow:hidden;text-overflow:ellipsis}
+/* Прототип 39: вторая строка шапки — статус слева, раскрытие дерева справа */
+.ph-row.ph-row-st{flex-wrap:nowrap}
+.ph-st{display:inline-flex;align-items:center;gap:2px;min-width:0;flex:1 1 auto}
+.ph-stc-list{display:inline-flex;align-items:center;gap:2px;min-width:0}
+.ph .ph-choice.ph-stc{gap:3px;padding:0 6px 0 3px;color:var(--one-fg)}
+.ph-stc .st-dot{margin:0 2px}
+.ph-stc-n{font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
+.ph-row-st .ph-tools{margin-left:auto;flex:none}
 .ph-cnt{flex:none;min-width:18px;padding:1px 5px;border-radius:99px;background:var(--one-control-bg);color:var(--one-fg-muted);font-size:10px;font-weight:600;line-height:1.4;font-variant-numeric:tabular-nums}
 .ph-choice.on .ph-cnt{background:var(--one-selected-neutral);color:var(--one-fg)}
 /* Число среза: нет числа — нет и места; у оценки («Камеры», «Оборудование») место под «≈оценку» есть всегда — невидимый двойник */
@@ -258,13 +266,17 @@ html[data-theme="light"] .sq-focus.on:hover,html[data-theme="light"] .sq-focus.h
 .filt-pop .mi{display:flex;align-items:center;gap:4px;width:100%;padding:2px 4px 2px 6px;border:0;background:0;color:var(--tx);font-size:12px;line-height:1.25;text-align:left;border-radius:4px}
 .filt-pop .mi:hover{background:var(--one-control-hover)}
 .filt-pop .mi.on{background:var(--one-selected-neutral)}
-.filt-pop.status-pop{width:min(260px,calc(100vw - 16px));max-height:calc(100vh - 16px);padding:4px;overflow-y:auto}
+.filt-pop.status-pop{width:max-content;min-width:220px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);padding:4px;overflow-y:auto}
 .status-pop .mi{min-height:30px;gap:7px;padding:6px 8px;white-space:nowrap}
 .status-pop .mi:focus-visible{outline:2px solid var(--bl);outline-offset:-2px}
 .status-tick{flex:none;width:12px;color:var(--bl)}
 html[data-theme="light"] .status-pop .mi:hover{background:var(--one-control-hover)}
 html[data-theme="light"] .status-pop .mi.on{background:var(--one-surface-muted);color:var(--one-fg)}
-.filt-status-cnt{margin-left:auto;color:var(--mu);font-size:10px;font-variant-numeric:tabular-nums}
+.filt-status-cnt{margin-left:auto;padding-left:16px;min-width:4ch;text-align:right;color:var(--mu);font-size:11.5px;font-variant-numeric:tabular-nums}
+/* Прототип 39: значок, текст, число, галочка — четыре ровные колонки */
+#filtPop .mi>.st-dot{margin:0 3px}
+.status-pop .mi.mi-sub{padding-left:28px}
+.status-pop .mi.mi-sub>span:nth-child(2){color:var(--one-fg-muted)}
 .filt-pop .mi-lab{display:flex;align-items:center;gap:6px;flex:1;min-width:0;cursor:pointer;padding:1px 0}
 .filt-pop .mi input{width:auto;margin:0;accent-color:var(--bl);flex:none;transform:scale(.9)}
 .filt-pop .mi .ic{width:12px;flex:none;opacity:.85;text-align:center;font-size:11px}
@@ -2395,6 +2407,8 @@ html[data-theme="light"] .ts-banner{background:var(--one-control-hover);color:va
 .n-err.n-err-t{font-size:10px;line-height:1.2;white-space:nowrap;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .n-err.e-auth{color:var(--one-warning-icon)}.n-err.e-conn{color:var(--one-danger)}.n-err.e-drv{color:var(--one-palette-purple)}
 .n:not(:hover):not(.on) .n-err-t{opacity:.85}
+/* Прототип 39: число объектов — только у свёрнутой ветки. Место колонки остаётся: соседи не сдвигаются */
+#tree .n:has(> .tw > .tw-chev:not(.shut)) .n-cnt{visibility:hidden}
 .dev-err-nt{display:flex;gap:8px;align-items:flex-start}
 .dev-err-nt .n-err{margin-top:2px}
 .filt-pop .mi.mi-sub{padding-left:26px}
@@ -6780,10 +6794,9 @@ function treeStatusSlot(n){
 }
 // Причина «нет сигнала» словом — перед IP: значок стоит в колонке статуса,
 // а IP и счётчики остаются ровной колонкой.
-function treeErrTag(n,st){
-  const e=st.includes("n-err")?devErr(n):null;
-  return e?`<span class="n-err n-err-t e-${e}" title="${i18n("Нет сигнала")}: ${i18n(DEV_ERR[e].t)}">${i18n(DEV_ERR[e].s)}</span>`:"";
-}
+// Прототип 39: причину строка показывает только значком в колонке статуса (statusMarkHtml).
+// Слово — в подсказке значка, в подсказке строки (treeRowTip) и в карточке.
+function treeErrTag(){return""}
 function treeRowMeta(n,q,shownLen,expanded,ctx){
   // Справа: теги (IP…) → число → статус — как на макете
   const st=treeStatusSlot(n);
@@ -7763,17 +7776,19 @@ function treeAttrTags(n,q){
   const inner=TREE_TAG_ORDER.filter(f=>treeTags.has(f)).map(f=>{
     if(f==="id"&&!showTreeIdTag(n))return"";
     // Камера регистратора — канал, а не адрес: IP один, у самого регистратора.
-    const nvr=f==="ip"&&n.type==="camera"&&!n.ip?ipsrvOwnerNode(n):null;
-    if(nvr){const ch=ipsrvCameraVideoChannel(n,nvr);return`<span class="tag tag-ch" title="${i18n("Видеоканал")} ${escHtml(ch)} ${i18n("регистратора")} «${escHtml(locName(nvr))}», IP ${escHtml(nvr.ip||"—")}">${i18n("кан.")} ${escHtml(ch)}</span>`}
+    // Прототип 39: канал и IP строка не показывает, они в подсказке строки (treeRowTip).
+    // IP появляется, только когда поиск нашёл объект по IP.
+    if(f==="ip"&&n.type==="camera"&&!n.ip&&ipsrvOwnerNode(n))return"";
     const val=fieldText(n,f);if(!val)return"";
     // IP не режем — иначе «съедается» слева; остальное можно укоротить
     const trunc=f!=="ip"&&val.length>16;const shown=trunc?val.slice(0,14):val;
     const inScope=searchScopeFields().includes(f);
     const hit=!!q&&inScope&&val.toLowerCase().includes(q);
+    if(f==="ip"&&!hit)return"";
     const body=hit?hlText(shown,q)+(trunc?"…":""):escHtml(shown)+(trunc?"…":"");
     return`<span class="tag${f==="ip"?" tag-ip":""}${hit?" hit":""}" title="${escHtml(FIELD_LABELS[f])}: ${escHtml(val)}">${body}</span>`;
   }).join("");
-  return`<span class="n-tags">${inner}</span>`;
+  return inner?`<span class="n-tags">${inner}</span>`:"";
 }
 // Набранное, но не сохранённое имя: перерисовка строит поле заново, и текст берётся отсюда, а не из объекта
 let treeRenameDraft=null;
@@ -7926,6 +7941,8 @@ function filtChromePaint(){
     const dot=btn.querySelector(".st-dot");if(dot)dot.className=`st-dot st-${(st||"all").split(":")[0]}`;
     const label=btn.querySelector(".ph-status-label");if(label)label.textContent=statusLabel(st);
   }
+  const stc=document.getElementById("phStc");
+  if(stc){const h=statusCountersHtml();if(stc.innerHTML!==h)stc.innerHTML=h}
   sliceCntsPaint([...document.querySelectorAll("#aside .ph-choice[data-slice]")]);
   syncGoInput();
   if(tags)tags.innerHTML=tagsHtml();
@@ -7974,9 +7991,10 @@ function firstMatching(){
 function placeChoicePop(buttonId,menuId){
   const btn=document.getElementById(buttonId),pop=document.getElementById(menuId);
   if(!btn||!pop)return;
-  const br=btn.getBoundingClientRect(),w=Math.min(260,window.innerWidth-16);
+  // Прототип 39: ширина — по тексту и числам (CSS max-content), не меньше 220 и не шире окна
+  pop.style.width="";
+  const br=btn.getBoundingClientRect(),w=Math.min(Math.max(220,pop.offsetWidth||260),window.innerWidth-16);
   const left=Math.max(8,Math.min(Math.round(br.left),window.innerWidth-w-8));
-  pop.style.width=w+"px";
   const h=pop.offsetHeight||160;
   let top=Math.round(br.bottom+4);
   if(top+h>window.innerHeight-8)top=Math.max(8,Math.round(br.top-h-4));
@@ -8191,6 +8209,19 @@ function asideAdd(){return{
 function treeCntHtml(n){
   return`<span class="n-cnt">${n||""}</span>`;
 }
+// Прототип 39: счётчики проблем рядом с «Все статусы». Число — то же, что в меню (statusCount). Клик включает этот
+// статус, второй клик по тому же счётчику снимает фильтр. Нулевой счётчик не показан.
+const STATUS_COUNTERS=["nosignal","off","license"];
+function statusCountersHtml(){
+  const st=curStatus();
+  return STATUS_COUNTERS.map(id=>{
+    const n=statusCount(id),on=st.split(":")[0]===id;
+    if(!n&&!on)return"";
+    const tip=`${statusLabel(id)}: ${n}. ${i18n(on?"Показать все статусы":"Показать только их")}`;
+    return`<button type="button" class="ph-choice ph-stc ${on?"on":""}" data-stc="${id}" aria-pressed="${on}" title="${escHtml(tip)}" aria-label="${escHtml(tip)}" ${onEv("click",["statusCounterPick",`${id}`])}><span class="st-dot st-${id}" aria-hidden="true"></span><span class="ph-stc-n">${n}</span></button>`;
+  }).join("");
+}
+function statusCounterPick(id){pickStatus(curStatus().split(":")[0]===id?"":id)}
 function filtPopHtml(){
   const st=curStatus();
   return`<div class="filt-pop status-pop ${filtPop?"open":""}" id="filtPop" role="menu" aria-label="${i18n("Статус")}" ${onEv("click",onEv.stop)} ${onEv("keydown",["statusMenuKey",onEv.event])}>
@@ -8386,12 +8417,32 @@ function treeActsBack(treeEl){
   const row=[...treeEl.querySelectorAll(`.n[data-pick="${CSS.escape(pick)}"]`)].find(el=>treeRowKey(el)===a.key);
   if(row)treeActsAt(row,false);
 }
+// Прототип 39: строка дерева лёгкая — имя, значок статуса, звезда и «⋮». Остальное (IP, канал регистратора, причина
+// «нет сигнала», число объектов) подсказка строки собирает при наведении, а не каждая перерисовка.
+function treeRowTip(row){
+  const nm=row.querySelector(".nm");
+  if(!nm||nm.dataset.tip)return;
+  nm.dataset.tip="1";
+  const n=find(row.dataset.pick)?.n;
+  const name=nm.title||nm.textContent.trim();
+  if(!n){nm.title=name;return}
+  const out=[name];
+  const nvr=n.type==="camera"&&!n.ip?ipsrvOwnerNode(n):null;
+  if(nvr)out.push(`${i18n("Видеоканал")} ${ipsrvCameraVideoChannel(n,nvr)} ${i18n("регистратора")} «${locName(nvr)}», IP ${nvr.ip||"—"}`);
+  else{const ip=fieldText(n,"ip");if(ip)out.push(`IP ${ip}`)}
+  const e=devErr(n);
+  if(e)out.push(`${i18n("Нет сигнала")}: ${i18n(DEV_ERR[e].t)}`);
+  else{const k=deviceStatusDotKind(n);if(k==="warn")out.push(i18n("Лицензия превышена"));else if(k==="mute")out.push(ruleTmpTitle())}
+  const c=row.querySelector(".n-cnt")?.textContent.trim();
+  if(c)out.push(`${i18n("Объектов внутри")}: ${c}`);
+  nm.title=out.join("\n");
+}
 // Фокус кнопки пары от нажатия мышью или пальцем (pointerdown в том же событии, что и фокус) пару не держит, остальной
 // (клавиатура, программный) — держит
 let treeActsPtr=false;
 function treeActsBind(treeEl){
   treeEl.addEventListener("pointerdown",()=>{treeActsPtr=true;setTimeout(()=>{treeActsPtr=false})},true);
-  treeEl.addEventListener("mouseover",e=>{const row=e.target.closest?.(".n");if(row&&row.parentElement===treeEl)treeActsAt(row,true)});
+  treeEl.addEventListener("mouseover",e=>{const row=e.target.closest?.(".n");if(row&&row.parentElement===treeEl){treeActsAt(row,true);treeRowTip(row)}});
   treeEl.addEventListener("focusin",e=>{
     const row=e.target.closest?.(".n");if(!row||row.parentElement!==treeEl)return;
     treeActsAt(row,false);
@@ -9481,8 +9532,11 @@ function panelHeadHtmlRun(){
     ${ids.slice(0,-1).map(id=>sliceBtn(id)).join("")}
   </div><span class="ph-tail">${sliceBtn(ids[ids.length-1],true)}<span class="ph-fold">
     <button type="button" class="ph-choice ${foldersOn?"on":""}" id="viewBtn" aria-pressed="${foldersOn}" ${canFolders?"":"disabled"} title="${canFolders?`${i18n("Группировка")}: ${GROUP_HINT[group()]}`:i18n("В этом срезе нет папок")}" ${onEv("click",["toggleFolders"])}>${IC.folder}<span>${i18n("Папки")}</span></button>
+  </span></span></div><div class="ph-row ph-row-st">
+    <span class="ph-st" role="group" aria-label="${i18n("Статус")}">
     <button type="button" class="ph-choice ph-status ${filtPop||st?"on":""}" id="filtBtn" aria-haspopup="menu" aria-controls="filtPop" aria-expanded="${filtPop}" title="${statusLabel(st)}" ${onEv("click",["toggleFiltPop",onEv.event])}><span class="st-dot st-${(st||"all").split(":")[0]}" aria-hidden="true"></span><span class="ph-status-label">${statusLabel(st)}</span><span class="ph-chevron" aria-hidden="true"><svg class="btn-chev" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5.5 7.75 4.5 4.5 4.5-4.5"/></svg></span></button>
-  </span></span></div><div class="ph-row">
+    <span class="ph-stc-list" id="phStc">${statusCountersHtml()}</span>
+    </span>
     <span class="ph-tools" role="group" aria-label="${i18n("Раскрытие дерева")}">
       <button type="button" class="ph-tool" id="treeCollapseBtn" title="${i18n("Свернуть всё")}" aria-label="${i18n("Свернуть всё")}" ${onEv("click",["treeCollapseAll"])}>${TREE_IC.shut}</button>
       <button type="button" class="ph-tool" id="treeExpandBtn" title="${i18n("Развернуть всё")}" aria-label="${i18n("Развернуть всё")}" ${onEv("click",["treeExpandAll"])}>${TREE_IC.open}</button>
@@ -10632,7 +10686,7 @@ function gdetrow(d,l,ctx,parentHit=false){
   const hit=matchesStatus(d)&&(parentHit||matchesSearch(d,q));
   if(!hit)return"";
   return `<div class="n ${rowOn(d.id,ctx)}" style="--l:${l}"${treeRowPick(d.id,ctx)}>
-    <span class="tw"></span>${ic("det")}<span class="nm">${hlText(locName(d),q)}</span>${treeTail({tags:`<span class="tag">${escHtml(i18n(d.kind||DET_TYPES[0]))}</span>`,status:treeStatusSlot(d)})}</div>`;
+    <span class="tw"></span>${ic("det")}<span class="nm" title="${escHtml(locName(d))} · ${escHtml(i18n(d.kind||DET_TYPES[0]))}">${hlText(locName(d),q)}</span>${treeTail({status:treeStatusSlot(d)})}</div>`;
 }
 function gcamrow(cam,dets,l,ctx){
   if(treeHidQ(cam))return"";// камера под GPU сервера: строится не обходом дерева, метку смотрим здесь
@@ -10932,7 +10986,7 @@ function arow(a,l){
   const cnt=slice==="arch"&&!hwDone.archives&&!archCamIds.has(a.id)?"":inventory?allCams.length:hasSliceContext()?sliceParentCount(a.id):cams.length;
   let h=`<div class="n srv stor ${sel===a.id?"on":""}${inventory?"":sliceParentClass(a.id)}${treeRenameId===a.id?" renaming":""}" style="--l:${l}"${treeRowPick(a.id)}${treeCtxAttr(a.id)}${treeExpandMeta(a.id,"srv",hasKids)}>
     ${hasKids?treeChevron(a.id,"srv",hasKids,op):'<span class="tw"></span>'}
-    ${ict(archAddr(a)==="disk"?"asdisk":"asnet")}${treeRenameId===a.id?treeNameCell(a,q):`<span class="nm" title="${escHtml(locName(a))} · ${escHtml(archKindLabel(a))}">${hlText(locName(a),selfHit?q:"")}</span>`}${treeTail({tags:slice==="arch"?"":`<span class="tag ${archAddr(a)==="bucket"?"tag-cloud":""}" title="${escHtml(archKindLabel(a))}">${escHtml(archKindTag(a))}</span>`,cnt:treeCntHtml(cnt),acts:a.id})}</div>`;
+    ${ict(archAddr(a)==="disk"?"asdisk":"asnet")}${treeRenameId===a.id?treeNameCell(a,q):`<span class="nm" title="${escHtml(locName(a))} · ${escHtml(archKindLabel(a))}">${hlText(locName(a),selfHit?q:"")}</span>`}${treeTail({cnt:treeCntHtml(cnt),acts:a.id})}</div>`;
   if(op)h+=children;
   return h;
 }
