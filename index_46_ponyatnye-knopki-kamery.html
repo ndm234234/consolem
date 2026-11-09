@@ -9827,9 +9827,12 @@ function pick(id,opts){
   if(!f){if(typeof id==="string"&&!id.includes(":"))hwEnsure([id]).then(()=>{if(find(id))pick(id,opts)}).catch(()=>{});return}
   // Ушли с объекта с неприменёнными правками — спрашиваем, а не теряем молча.
   // Блоки драйвера и «Параметры потоков» с несохранённой правкой — тоже вопрос (их правка не в черновике карточки)
-  if(!opts?.force&&!opts?.csOk&&sel&&sel!==id&&csDirtyList(sel).length){csLeaveAsk(sel,()=>pick(id,{...(opts||{}),csOk:true}));return}
+  // Вопрос и сброс идут вместе: выбор нескольких объектов (range, additive) камеру не закрывает — ни вопроса, ни сброса.
+  // force (подтвердили черновик карточки) этот вопрос не пропускает: о блоках драйвера и потоках спрашивает только он
+  const csGo=sel&&sel!==id&&!opts?.range&&!opts?.additive;
+  if(csGo&&!opts?.csOk&&csDirtyList(sel).length){csLeaveAsk(sel,()=>pick(id,{...(opts||{}),csOk:true}));return}
   if(!opts?.force&&cardDraft&&cardDraft.id!==id&&cardDiff().length){cardLeaveAsk(()=>pick(id,{...(opts||{}),force:true}));return}
-  if(sel&&sel!==id&&!opts?.range&&!opts?.additive)csLeave(sel);
+  if(csGo)csLeave(sel);
   // Открытый объект — в дереве и после поиска, который его принёс (метки _q, _qi)
   treeKeepQ(id);
   const range=!!opts?.range,additive=!!opts?.additive,multi=range||additive;
@@ -11298,7 +11301,7 @@ function gear(){
   if(n.type==="eventsrc"&&tab==="words")tab="overlay"; // прежняя вкладка «Подсветка» теперь внутри «Титров»
   if(tabs.length&&!tabs.some(([id])=>id===tab))tab=tabs[0][0];
   const csOpen=n.type==="camera"&&!isSchemaNode(n)?csOpenTabs(n):new Set();
-  const tabsH=tabs.map(([id,x])=>`<button class="tab ${tab===id?"on":""}" ${onEv("click",["tabGo",id])}>${i18n(x)}${csOpen.has(id)?`<span class="tab-dot" title="${i18n("На вкладке открыта правка блока")}" aria-label="${i18n("На вкладке открыта правка блока")}"></span>`:""}</button>`).join("");
+  const tabsH=tabs.map(([id,x])=>`<button class="tab ${tab===id?"on":""}" ${onEv("click",["tabGo",id])}>${i18n(x)}${csOpen.has(id)?`<span class="tab-dot" role="img" title="${i18n("На этой вкладке вы не закончили правку блока")}" aria-label="${i18n("На этой вкладке вы не закончили правку блока")}"></span>`:""}</button>`).join("");
   // Слева направо — вход добавления устройств (он один, остальное — стрелкой рядом);
   // дальше собственные действия объекта, а звезда последней и без подписи.
   const addBtn=(n.type==="folder"?folderAddBtn():slice==="arch"?archCreateBtn(n)+(n.type==="archive"||n.type==="vol"?inspectorAddBtn(n):""):(lanHost(n)||n.type==="found")?addSplitBtn(n):inspectorAddBtn(n))+schemaRootBtn(n)+bulkCopyBtn(n)+detDeleteBtn(n)+cardMoreBtn(n)+favCardBtn(n)+fullCardBtn();
@@ -12809,7 +12812,7 @@ function drvSendHtml(n){
 }
 function drvSendKey(id,e){if(e.key===" "||e.key==="Enter"){e.preventDefault();drvSendToggle(id)}}
 // Замок в заголовке блока: настройки самой камеры, консоль их не меняет, пока «Отправлять настройки устройству» выключено
-function csLockHtml(){const t=i18n("Настройки самой камеры. Изменить их можно, когда включено «Отправлять настройки устройству».");return`<span class="cs-lock" title="${escHtml(t)}" aria-label="${escHtml(t)}">${lu("lock",13)}</span>`}
+function csLockHtml(){const t=i18n("Настройки самой камеры. Изменить их можно, когда включено «Отправлять настройки устройству».");return`<span class="cs-lock" role="img" title="${escHtml(t)}" aria-label="${escHtml(t)}">${lu("lock",13)}</span>`}
 // Одна строка о режиме устройства на вкладке вместо заметки в каждом блоке. Строка есть, только если на вкладке есть блок с замком
 function csModeLine(n,tabId){
   if(drvSend(n)||!["vid","io","det","rec"].includes(tabId))return"";
@@ -12821,18 +12824,18 @@ function csModeLine(n,tabId){
 }
 // Что консоль запишет в камеру при включении: потоки и «Изображение» — как их показывает карточка сейчас
 function cvSendPreview(n){
-  const c=cvCfgOf(n),out=camStreams(n).map((s,i)=>{const p=c.streams[s.id]||{},res=(cvStreamRes(n,s,i)||"—").replace("x","×"),fps=cvStreamFps(n,s,i);
-    return`<b>${escHtml(s.name)}</b>: ${escHtml(`${s.codec||p.codec||"—"}, ${res}, ${fps??"—"} ${i18n("к/с")}, ${p.brc==="cbr"?i18n("постоянный"):i18n("переменный, до")} ${cvKbpsText(p.kbps)}`)}`});
+  const c=cvCfgOf(n),out=camStreams(n).map((s,i)=>{const p=c.streams[s.id]||{},res=(cvStreamRes(n,s,i)||"—").replace(/x/g,"×"),fps=cvStreamFps(n,s,i);
+    return`<b>${escHtml(s.name)}</b>: ${escHtml(`${s.codec||p.codec||"—"}, ${res}, ${fps?`${fps} ${i18n("к/с")}`:"—"}, ${p.brc==="cbr"?i18n("постоянный"):i18n("переменный, до")} ${cvKbpsText(p.kbps)}`)}`});
   const g=drvGroups(n,"vid").get("Изображение"),st=drvState(n);
   if(g)out.push(`<b>${escHtml(i18n("Изображение"))}</b>: ${escHtml(g.map(([f,p])=>`${propLabel(p,f)} ${sfText(p,st.vals[f])}`).join(", "))}`);
   return out;
 }
 // Несохранённые правки блоков драйвера и «Параметров потоков» камеры: подписи блоков
-function csDirtyList(id){
+function csDirtyList(id,devOnly){
   const n=find(id)?.n;if(!n||n.type!=="camera"||isSchemaNode(n))return[];
   const out=[],st=drvStore.get(id);
-  if(st)Object.entries(st.snap).forEach(([g,snap])=>{if([...drvGroupProps(n,g).keys()].some(f=>JSON.stringify(st.vals[f])!==JSON.stringify(snap[f])))out.push(i18n(g))});
-  if(cvSnap.has(id)&&(cvPendM.has(id)||JSON.stringify(cvCfgOf(n).streams)!==JSON.stringify(cvSnap.get(id))))out.push(i18n("Параметры потоков"));
+  if(st)Object.entries(st.snap).forEach(([g,snap])=>{if((!devOnly||drvGroupDev(n,g))&&[...drvGroupProps(n,g).keys()].some(f=>JSON.stringify(st.vals[f])!==JSON.stringify(snap[f])))out.push(i18n(g))});
+  if(cvDirty(n))out.push(i18n("Параметры потоков"));
   return out;
 }
 function csLeaveAsk(id,go){
@@ -12843,7 +12846,7 @@ function csLeaveAsk(id,go){
 function csLeave(id){
   const n=find(id)?.n,st=drvStore.get(id);
   if(n&&st)Object.keys(st.snap).forEach(g=>{const snap=st.snap[g];drvGroupProps(n,g).forEach((p,f)=>{if(f in snap)st.vals[f]=snap[f];else delete st.vals[f]});delete st.snap[g]});
-  if(n&&cvSnap.has(id))cvCfgOf(n).streams=cvSnap.get(id);
+  if(n&&cvSnap.has(id))cvRestore(n,cvSnap.get(id));
   cvSnap.delete(id);cvPendM.delete(id);
   [...csEdit].forEach(k=>{if(k.startsWith(id+":"))csEdit.delete(k)});
 }
@@ -16465,7 +16468,11 @@ const cvPendM=new Map(),cvSnap=new Map();
 function cvPend(id,sid,k,v){const m=cvPendM.get(id)||{};(m[sid]||(m[sid]={}))[k]=k==="fps"?Number(v):String(v).trim();cvPendM.set(id,m);mainSeen.html=null;gear()}
 function cvPendOf(id,sid,k,v){const x=cvPendM.get(id)?.[sid];return x&&k in x?x[k]:v}
 function cvEditStart(id){const n=find(id)?.n;if(!n)return;cvSnap.set(id,cardClone({v:cvCfgOf(n).streams}).v);cvPendM.delete(id);csEditSet(id,"streams",true)}
-function cvEditCancel(id){const n=find(id)?.n;if(n&&cvSnap.has(id))cvCfgOf(n).streams=cvSnap.get(id);cvSnap.delete(id);cvPendM.delete(id);csEditSet(id,"streams",false)}
+// Возврат по снимку — только для потоков, которые есть и в снимке, и сейчас: новый или удалённый поток консоль уже сохранила
+function cvRestore(n,snap){const cur=cvCfgOf(n).streams;Object.keys(snap).forEach(sid=>{if(sid in cur)cur[sid]=snap[sid]})}
+function cvDirty(n){const snap=cvSnap.get(n.id);if(!snap)return false;const cur=cvCfgOf(n).streams;
+  return cvPendM.has(n.id)||Object.keys(snap).some(sid=>sid in cur&&JSON.stringify(cur[sid])!==JSON.stringify(snap[sid]))}
+function cvEditCancel(id){const n=find(id)?.n;if(n&&cvSnap.has(id))cvRestore(n,cvSnap.get(id));cvSnap.delete(id);cvPendM.delete(id);csEditSet(id,"streams",false)}
 // «Готово»: один PATCH на поток со всеми его значениями. Два PATCH одного потока с той же версией дали бы 412
 function cvEditDone(id){
   const n=find(id)?.n,m=cvPendM.get(id)||{};cvPendM.delete(id);cvSnap.delete(id);csEditSet(id,"streams",false);
@@ -16476,7 +16483,8 @@ function cvEditDone(id){
     return Object.keys(props).length?API.patch(`/units/${s.uid}`,{properties:props},hwVer.get(s.uid)).then(u=>{if(u?.version!=null)hwVer.set(s.uid,u.version)}):null;
   }).filter(Boolean);
   if(!calls.length)return;
-  Promise.all(calls).then(()=>hwStreamsRead(id)).then(()=>gear()).catch(e=>{toast(problemText(e,n));hwStreamsRead(id).then(()=>gear(),()=>gear())});
+  const refocus=()=>{if(!document.activeElement||document.activeElement===document.body)setTimeout(()=>csFocus("streams",false),30)};
+  Promise.all(calls).then(()=>hwStreamsRead(id)).then(()=>{gear();refocus()}).catch(e=>{toast(problemText(e,n));hwStreamsRead(id).then(()=>gear(),()=>gear())});
 }
 function cvStreamsCardHtml(n){
   const c=cvCfgOf(n),con=drvSend(n),rtsp=camDriver(n)==="rtsp",ed=con&&csEditOn(n.id,"streams");
@@ -16528,13 +16536,15 @@ function cvModeSet(id,mode){
   const n=find(id)?.n;if(!n)return;const c=cvCfgOf(n);
   // Выключение: открытые правки параметров устройства закрываются с возвратом значений, иначе поля остались бы открыты
   if(mode!=="console"){
+    const l=csDirtyList(id,true);
+    if(l.length&&!cvModeSet.ok){askConfirm("Выключить «Отправлять настройки устройству»?",`<p>${i18n("Консоль не сохранила изменения камеры")} «${escHtml(locName(n))}» ${i18n("в блоках:")}</p><ul class="bk-del">${l.map(x=>`<li>${escHtml(x)}</li>`).join("")}</ul><p>${i18n("Консоль вернёт прежние значения этих блоков.")}</p>`,"",i18n("Выключить"),()=>{cvModeSet.ok=true;try{cvModeSet(id,mode)}finally{cvModeSet.ok=false}},{html:true,cancelLabel:"Остаться"});return}
     c.mode=mode;
     if(csEditOn(id,"streams")||cvSnap.has(id))cvEditCancel(id);
     Object.keys(drvState(n).snap).forEach(g=>{if(drvGroupDev(n,g))drvEditCancel(id,g)});
     gear();return;
   }
   mainSeen.html=null;gear();// радиокнопка вернётся к «Настройки камеры», пока не подтвердили
-  askConfirm("Включить «Отправлять настройки устройству»?",`<ul class="bk-del"><li>${i18n("Консоль запишет в камеру значения, которые показывает сейчас:")}<ul class="cs-send-prev">${cvSendPreview(n).map(x=>`<li>${x}</li>`).join("")}</ul></li><li>${i18n("Консоль запишет и другие настройки в блоках с замком.")}</li><li>${i18n("Если настройки изменят в веб-интерфейсе камеры, консоль заменит их своими.")}</li><li>${i18n("Камера может перезапустить поток. Тогда видео и запись прервутся на несколько секунд.")}</li></ul>`,"",i18n("Включить"),()=>{c.mode="console";gear()},{html:true});
+  askConfirm("Включить «Отправлять настройки устройству»?",`<ul class="bk-del"><li>${i18n("Консоль запишет в камеру значения, которые показывает сейчас:")}<ul class="cs-send-prev">${cvSendPreview(n).map(x=>`<li>${x}</li>`).join("")}</ul></li><li>${i18n("Консоль запишет и другие настройки в блоках с замком.")}</li><li>${i18n("Если кто-то изменит настройки в веб-интерфейсе камеры, консоль заменит их своими.")}</li><li>${i18n("Камера может перезапустить поток. Тогда видео и запись прервутся на несколько секунд.")}</li></ul>`,"",i18n("Включить"),()=>{c.mode="console";gear()},{html:true});
 }
 function cvStubSet(id,sid,k,v){
   const n=find(id)?.n;if(!n)return;const p=cvCfgOf(n).streams[sid];if(!p)return;
@@ -29399,6 +29409,9 @@ function ctxThen(id,fn,...args){
   closeTreeCtx();
   const run=()=>window[fn](...args);
   if(sel===id&&!(treeSel.size>1&&!treeSel.has(id)))return run();
+  // Несохранённые блоки драйвера и потоки камеры — свой вопрос; после него — вопрос о черновике карточки, затем действие
+  const draftThen=()=>{if(cardDraft&&cardDraft.id!==id&&cardDiff().length){cardLeaveAsk(()=>{pick(id,{force:true,csOk:true});if(sel===id)run()});return}pick(id,{csOk:true});if(sel===id)run()};
+  if(sel&&sel!==id&&csDirtyList(sel).length){csLeaveAsk(sel,draftThen);return}
   if(cardDraft&&cardDraft.id!==id&&cardDiff().length){cardLeaveAsk(()=>{pick(id,{force:true});if(sel===id)run()});return}
   // pick может не открыть объект сразу: черновик зон спрашивает первым.
   pick(id);if(sel===id)run();
