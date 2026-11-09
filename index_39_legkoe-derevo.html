@@ -271,11 +271,12 @@ html[data-theme="light"] .sq-focus.on:hover,html[data-theme="light"] .sq-focus.h
 .status-tick{flex:none;width:12px;color:var(--bl)}
 html[data-theme="light"] .status-pop .mi:hover{background:var(--one-control-hover)}
 html[data-theme="light"] .status-pop .mi.on{background:var(--one-surface-muted);color:var(--one-fg)}
-.filt-status-cnt{margin-left:auto;padding-left:16px;min-width:4ch;text-align:right;color:var(--mu);font-size:11.5px;font-variant-numeric:tabular-nums}
+.filt-status-cnt{margin-left:auto;color:var(--mu);font-size:10px;font-variant-numeric:tabular-nums}
+#filtPop .filt-status-cnt{padding-left:16px;min-width:4ch;text-align:right;font-size:11.5px}
 /* Прототип 39: значок, текст, число, галочка — четыре ровные колонки */
 #filtPop .mi>.st-dot{margin:0 3px}
-.status-pop .mi.mi-sub{padding-left:28px}
-.status-pop .mi.mi-sub>span:nth-child(2){color:var(--one-fg-muted)}
+#filtPop .mi.mi-sub{padding-left:28px}
+#filtPop .mi.mi-sub>span:nth-child(2){color:var(--one-fg-muted)}
 .filt-pop .mi-lab{display:flex;align-items:center;gap:6px;flex:1;min-width:0;cursor:pointer;padding:1px 0}
 .filt-pop .mi input{width:auto;margin:0;accent-color:var(--bl);flex:none;transform:scale(.9)}
 .filt-pop .mi .ic{width:12px;flex:none;opacity:.85;text-align:center;font-size:11px}
@@ -2435,6 +2436,7 @@ html[data-theme="light"] .cp-step{background:var(--one-control-hover);color:var(
 <!-- ONE PSIM: мост по ONE.PSIM.PrototypeKit, подключён после стилей прототипа -->
 <link rel="stylesheet" href="assets/one-psim/bridge.css">
 <script src="assets/i18n-en.js"></script>
+<script src="assets/i18n-en-39.js"></script>
 <!-- API: контракт, эталонный набор, встроенный сервер и клиент (api/README.md) -->
 <script src="api/openapi.js"></script>
 <script src="api/fixture.js"></script>
@@ -6637,11 +6639,11 @@ function treeIconHtml(n){
   // Сервер/домен без сигнала — та же иконка + красный крестик (сетка не плывёт)
   if((n.type==="server"||n.type==="domain")&&hasNoSignal(n)){
     const tip=infraNoSignalLabel(n);
-    return`<span class="ici ici-${n.type} ici-stmark ici-nosig" data-st="infra" data-st-id="${n.id}" aria-label="${tip}">${IC[n.type]||"•"}<span class="ici-overlay" aria-hidden="true">${IC_NOSIG_BADGE}</span></span>`;
+    return`<span class="ici ici-${n.type} ici-stmark ici-nosig" role="img" data-st="infra" data-st-id="${escHtml(n.id)}" aria-label="${tip}">${IC[n.type]||"•"}<span class="ici-overlay" aria-hidden="true">${IC_NOSIG_BADGE}</span></span>`;
   }
   if(n.type==="camera"&&n.ruleOff){
     const rt=ruleTmpTitle();
-    return`<span class="ici ici-camera ici-stmark ici-ruletmp" data-st="ruletmp" data-st-id="${n.id}" aria-label="${rt}">${IC.camera||"•"}<span class="ici-overlay" aria-hidden="true">${IC_RULETMP_BADGE}</span></span>`;
+    return`<span class="ici ici-camera ici-stmark ici-ruletmp" role="img" data-st="ruletmp" data-st-id="${escHtml(n.id)}" aria-label="${rt}">${IC.camera||"•"}<span class="ici-overlay" aria-hidden="true">${IC_RULETMP_BADGE}</span></span>`;
   }
   return ic(n.type);
 }
@@ -6692,8 +6694,8 @@ function deviceStatusDotHtml(n,tag="i",cls="d"){
   if(!kind)return"";
   const titles={bad:i18n("Нет сигнала"),warn:i18n("Лицензия превышена"),mute:ruleTmpTitle()};
   const tip=titles[kind];
-  const st={bad:"conn",warn:"license",mute:"ruletmp"}[kind];
-  return `<${tag} class="${cls} ${kind}" data-st="${st}" data-st-id="${n.id}" aria-label="${tip}"></${tag}>`;
+  const st=kind==="bad"?(devErr(n)||"conn"):{warn:"license",mute:"ruletmp"}[kind];
+  return `<${tag} class="${cls} ${kind}" role="img" data-st="${st}" data-st-id="${escHtml(n.id)}" aria-label="${tip}"></${tag}>`;
 }
 // Прототип 39: всплывающее окно у значка статуса — что значит статус и что сделать. Окно появляется при наведении
 // через 250 мс, остаётся, пока курсор на значке или на окне, закрывается по Esc и прокрутке (WCAG 1.4.13).
@@ -6737,7 +6739,7 @@ document.addEventListener("scroll",()=>{if(stTipFor)stTipHide()},true);
 function statusMarkHtml(n){
   const e=devErr(n);
   if(e){const tip=`${i18n("Нет сигнала")}: ${i18n(DEV_ERR[e].t)}`;
-    return`<span class="n-tail n-err e-${e}" data-st="${e}" data-st-id="${n.id}" aria-label="${tip}">${devErrIc(e)}</span>`}
+    return`<span class="n-tail n-err e-${e}" role="img" data-st="${e}" data-st-id="${escHtml(n.id)}" aria-label="${tip}">${devErrIc(e)}</span>`}
   const dot=deviceStatusDotHtml(n);
   return dot?`<span class="n-tail">${dot}</span>`:"";
 }
@@ -6835,13 +6837,12 @@ function treeStatusSlot(n){
 }
 // Причина «нет сигнала» словом — перед IP: значок стоит в колонке статуса,
 // а IP и счётчики остаются ровной колонкой.
-// Прототип 39: причину строка показывает только значком в колонке статуса (statusMarkHtml).
-// Слово — в подсказке значка, в подсказке строки (treeRowTip) и в карточке.
-function treeErrTag(){return""}
+// Прототип 39: причину «нет сигнала» строка показывает только значком в колонке статуса (statusMarkHtml).
+// Слово — в окне у значка (stTip), в подсказке строки (treeRowTip) и в карточке.
 function treeRowMeta(n,q,shownLen,expanded,ctx){
   // Справа: теги (IP…) → число → статус — как на макете
   const st=treeStatusSlot(n);
-  return treeTail({tags:treeErrTag(n,st)+treeAttrTags(n,q),cnt:treeCntSlot(n,shownLen,expanded),status:st,acts:n.id,ctx});
+  return treeTail({tags:treeAttrTags(n,q),cnt:treeCntSlot(n,shownLen,expanded),status:st,acts:n.id,ctx});
 }
 // В какой срез попадает объект. treeKind знает три рода — камеры, ACFA и
 // службы; срез «Все» берёт их все, остальные по одному, а срез «Серверы»
@@ -8452,12 +8453,14 @@ function treeActsBack(treeEl){
 }
 // Прототип 39: строка дерева лёгкая — имя, значок статуса, звезда и «⋮». Остальное (IP, канал регистратора, причина
 // «нет сигнала», число объектов) подсказка строки собирает при наведении, а не каждая перерисовка.
+// Собирается при каждом наведении: IP и регистратор в разметке строки нет, и перерисовка с той же разметкой строку не
+// меняет — запомненная подсказка устарела бы. Своё имя строки (title детектора, хранилища) хранит data-name.
 function treeRowTip(row){
-  const nm=row.querySelector(".nm");
-  if(!nm||nm.dataset.tip)return;
-  nm.dataset.tip="1";
-  const n=find(row.dataset.pick)?.n;
-  const name=nm.title||nm.textContent.trim();
+  if(app!=="hw")return;
+  const id=row.dataset.pick,nm=row.querySelector(".nm");
+  if(!id||!nm)return;
+  if(nm.dataset.name==null)nm.dataset.name=nm.title||nm.textContent.trim();
+  const n=find(id)?.n,name=nm.dataset.name;
   if(!n){nm.title=name;return}
   const out=[name];
   const nvr=n.type==="camera"&&!n.ip?ipsrvOwnerNode(n):null;
@@ -10347,7 +10350,7 @@ function svcrow(n,l){
   const q=qval();
   if(!selfInView(n)||!matchesSearch(n,q))return"";
   return `<div class="n ${sel===n.id?"on":""}${treeRenameId===n.id?" renaming":""}" style="--l:${l}"${treeRowPick(n.id)}${treeCtxAttr(n.id)}>
-    <span class="tw"></span>${treeRowIcon(n)}<span class="nm">${treeNameCell(n,q)}</span>${(st=>treeTail({tags:treeErrTag(n,st)+treeAttrTags(n,q),status:st,acts:n.id}))(treeStatusSlot(n))}</div>`;
+    <span class="tw"></span>${treeRowIcon(n)}<span class="nm">${treeNameCell(n,q)}</span>${treeTail({tags:treeAttrTags(n,q),status:treeStatusSlot(n),acts:n.id})}</div>`;
 }
 function srow(s,l=1,bare=false){
   const q=qval();
