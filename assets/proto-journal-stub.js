@@ -1,5 +1,6 @@
-// ЗАГЛУШКА прототипов 47–50 (ui-draft «Журнал»): 200 000 событий создаёт браузер,
-// отбор, счётчики и гистограмма — тоже в браузере. В контракте 0.6.0 этого нет:
+// ЗАГЛУШКА прототипов 47–51 (ui-draft «Журнал»): 200 000 событий создаёт браузер,
+// отбор, счётчики и гистограмма — тоже в браузере. В контракте 0.7.0 этого нет
+// (запрос api/requests/2026-11-10-181412Z-mockup-journal-search-request.md):
 // поиск по тексту, пользователь, вид события, счётчики по полям, гистограмма,
 // «было → стало». После утверждения вида — правка контракта, отбор на сервере.
 // Внешний мир — через ctx в PJ.init: объекты, пользователи и переходы консоли.
@@ -10,14 +11,18 @@ const MIN=6e4,HOUR=36e5,DAY=864e5;
 function rng(seed){let s=(seed>>>0)||1;return()=>{s^=s<<13;s>>>=0;s^=s>>>17;s^=s<<5;s>>>=0;return s/4294967296}}
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
 PJ.esc=esc;
-PJ.num=n=>Number(n).toLocaleString("ru-RU");
-PJ.plural=(n,f)=>{const [a,b,c]=f.split("|"),m10=n%10,m100=n%100;return m10===1&&m100!==11?a:m10>=2&&m10<=4&&(m100<12||m100>14)?b:c};
+// Тексты интерфейса — через ctx.t (i18n страницы); данные событий (их текст) приходят как есть
+const t=s=>S.ctx&&S.ctx.t?S.ctx.t(s):s;
+PJ.t=t;
+PJ.num=n=>Number(n).toLocaleString(S.ctx&&S.ctx.lang==="en"?"en-US":"ru-RU");
+PJ.plural=(n,f)=>{const [a,b,c]=t(f).split("|");if(S.ctx&&S.ctx.lang==="en")return n===1?a:(c||b);const m10=n%10,m100=n%100;return m10===1&&m100!==11?a:m10>=2&&m10<=4&&(m100<12||m100>14)?b:c};
 
 // ── Категории и виды событий ──
 const CATS=[
   {id:"alarm",n:"Тревога"},{id:"error",n:"Ошибка"},{id:"audit",n:"Аудит"},
   {id:"info",n:"Информация"},{id:"debug",n:"Служебное"}];
 PJ.CATS=CATS;
+PJ.catName=c=>t(c.n);PJ.kindName=k=>t(k.n);
 const CI=Object.fromEntries(CATS.map((c,i)=>[c.id,i]));
 const pick=(r,a)=>a[Math.floor(r()*a.length)];
 const CAM_SET=[["Разрешение","1920×1080","2560×1440"],["Частота кадров","25 к/с","15 к/с"],["Битрейт","4 Мбит/с","2 Мбит/с"],
@@ -46,8 +51,8 @@ const KINDS=[
   {id:"rec.lost",cat:"error",n:"Потеря записи",on:"cam",w:.8,val:r=>({min:2+Math.floor(r()*30),sto:pick(r,STO)}),text:v=>`Камера «${v.o}» не записала ${v.min} мин: хранилище «${v.sto}» не отвечало`,more:v=>[["Потеряно",`${v.min} мин`],["Хранилище",v.sto]]},
   {id:"disk.full",cat:"error",n:"Хранилище заполнено",on:"srv",w:.4,val:r=>({pct:95+Math.floor(r()*5),sto:pick(r,STO)}),text:v=>`Хранилище «${v.sto}» сервера «${v.o}» заполнено на ${v.pct}%`},
   {id:"cam.auth",cat:"error",n:"Ошибка входа камеры",on:"cam",w:.6,text:v=>`Камера «${v.o}» отклонила имя и пароль сервера «${v.s}»`},
-  {id:"login",cat:"audit",n:"Вход",on:"none",who:1,w:3,text:v=>`Вход ${v.u} с адреса ${v.ip}`},
-  {id:"logout",cat:"audit",n:"Выход",on:"none",who:1,w:2.6,text:v=>`Выход ${v.u}`},
+  {id:"login",cat:"audit",n:"Вход в систему",on:"none",who:1,w:3,text:v=>`Вход ${v.u} с адреса ${v.ip}`},
+  {id:"logout",cat:"audit",n:"Выход из системы",on:"none",who:1,w:2.6,text:v=>`Выход ${v.u}`},
   {id:"login.fail",cat:"audit",n:"Неудачный вход",on:"none",who:1,w:.5,text:v=>`Неверный пароль для ${v.u}, адрес ${v.ip}`},
   {id:"cam.set",cat:"audit",n:"Изменение камеры",on:"cam",who:1,w:1.2,val:r=>{const[p,a,b]=pick(r,CAM_SET);return r()<.5?{p,a,b}:{p,a:b,b:a}},text:v=>`Камера «${v.o}», ${v.p}: ${v.a} → ${v.b}`,diff:1},
   {id:"dev.add",cat:"audit",n:"Добавление устройства",on:"cam",who:1,w:.15,val:r=>({cip:`10.30.${Math.floor(r()*20)}.${10+Math.floor(r()*200)}`}),text:v=>`Сервер «${v.s}» подключил камеру «${v.o}», адрес ${v.cip}`},
@@ -148,9 +153,9 @@ PJ.parseText=function(s){
 };
 PJ.terms=g=>g?[...new Set(g.flat())]:[];
 PJ.hl=function(text,terms){
-  let h=esc(text);if(!terms||!terms.length)return h;
-  const re=new RegExp(`(${terms.map(t=>esc(t).replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("|")})`,"gi");
-  return h.replace(re,"<mark>$1</mark>");
+  text=String(text??"");if(!terms||!terms.length)return esc(text);
+  const re=new RegExp(`(${terms.map(x=>x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("|")})`,"gi");
+  return text.split(re).map((part,j)=>j%2?`<mark>${esc(part)}</mark>`:esc(part)).join("");
 };
 
 // ── Отбор: q = {from,to,cats,kinds,objs,users,text,showDebug}; наборы — Set индексов или null ──
@@ -162,10 +167,12 @@ PJ.query=function(q){
   const groups=PJ.parseText(q.text);
   const idx=new Uint32Array(Math.max(0,hi-lo));let m=0;
   const cc=new Int32Array(CATS.length),kc=new Int32Array(KINDS.length),oc=new Int32Array(S.objs.length+1),uc=new Int32Array(S.users.length+1);
-  let hidden=0;
+  // base — события периода без условий (служебные — по тому же правилу, что список): M в «Показано N из M»
+  let hidden=0,base=0;
   const cats=q.cats,kinds=q.kinds,objs=q.objs,users=q.users,dbg=CI.debug,hideDbg=!q.showDebug&&!(cats&&cats.has(dbg));
   const nk=q.nkinds,no=q.nobjs,nu=q.nusers;
   for(let i=lo;i<hi;i++){
+    if(!hideDbg||KINDS[S.K[i]].ci!==dbg)base++;
     if(groups&&!match(S.HAY[i],groups))continue;
     const k=S.K[i],ci=KINDS[k].ci,o=S.O[i],u=S.U[i];
     const pc=cats?cats.has(ci):!(hideDbg&&ci===dbg),pk=(kinds?kinds.has(k):true)&&!(nk&&nk.has(k)),po=(objs?objs.has(o):true)&&!(no&&no.has(o)),pu=(users?users.has(u):true)&&!(nu&&nu.has(u));
@@ -176,7 +183,7 @@ PJ.query=function(q){
       else if(!pk)kc[k]++;else if(!po)oc[o===65535?S.objs.length:o]++;else uc[u===255?S.users.length:u]++;
     }
   }
-  return{idx:idx.subarray(0,m),total:m,cc,kc,oc,uc,hidden,groups,ms:Math.round(performance.now()-t0),span:hi-lo};
+  return{idx:idx.subarray(0,m),total:m,base,cc,kc,oc,uc,hidden,groups,ms:Math.round(performance.now()-t0),span:hi-lo};
 };
 function match(h,groups){
   for(const g of groups){let ok=true;for(const t of g)if(!h.includes(t)){ok=false;break}if(ok)return true}
@@ -198,13 +205,11 @@ PJ.hist=function(q,from,to,nb){
   let max=1;for(let b=0;b<nb;b++)max=Math.max(max,a[b*3]+a[b*3+1]+a[b*3+2]);
   return{a,nb,from,to,step,max};
 };
-// sel — [первый, последний] выбранный столбик; hot — столбик под курсором
 PJ.histSvg=function(h,o={}){
   const H=o.height||48,W=h.nb*10,sx=10,bars=[];
   for(let b=0;b<h.nb;b++){
     const v=[h.a[b*3],h.a[b*3+1],h.a[b*3+2]];let y=H;
-    const on=!o.sel||(b>=o.sel[0]&&b<=o.sel[1]);
-    [[2,"pj-h-info"],[1,"pj-h-audit"],[0,"pj-h-alarm"]].forEach(([j,cl])=>{if(!v[j])return;const hh=Math.max(1,v[j]/h.max*(H-2));y-=hh;bars.push(`<rect x="${b*sx+1}" y="${y.toFixed(1)}" width="${sx-2}" height="${hh.toFixed(1)}" class="${cl}${on?"":" pj-h-off"}"/>`)});
+    [[2,"pj-h-info"],[1,"pj-h-audit"],[0,"pj-h-alarm"]].forEach(([j,cl])=>{if(!v[j])return;const hh=Math.max(1,v[j]/h.max*(H-2));y-=hh;bars.push(`<rect x="${b*sx+1}" y="${y.toFixed(1)}" width="${sx-2}" height="${hh.toFixed(1)}" class="${cl}"/>`)});
     bars.push(`<rect x="${b*sx}" y="0" width="${sx}" height="${H}" class="pj-h-hit" data-b="${b}"><title>${esc(PJ.fmtSpan(h.from+b*h.step,h.from+(b+1)*h.step))}: ${PJ.num(v[0]+v[1]+v[2])}</title></rect>`);
   }
   return`<svg class="pj-hist" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="height:${H}px">${bars.join("")}</svg>`;
@@ -235,10 +240,10 @@ const MONF=["января","февраля","марта","апреля","мая"
 const WD=["воскресенье","понедельник","вторник","среда","четверг","пятница","суббота"];
 const p2=x=>String(x).padStart(2,"0");
 function dayDiff(t){const a=new Date(S.now),b=new Date(t);a.setHours(0,0,0,0);b.setHours(0,0,0,0);return Math.round((a-b)/DAY)}
-PJ.fmtDay=t=>{const d=new Date(t),dd=dayDiff(t);return dd===0?"сегодня":dd===1?"вчера":`${d.getDate()} ${MON[d.getMonth()]}`};
+PJ.fmtDay=x=>{const d=new Date(x),dd=dayDiff(x);return dd===0?t("сегодня"):dd===1?t("вчера"):`${d.getDate()} ${t(MON[d.getMonth()])}`};
 PJ.fmt=t=>{const d=new Date(t);return`${PJ.fmtDay(t)} ${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`};
-PJ.fmtFull=t=>{const d=new Date(t);return`${WD[d.getDay()]}, ${d.getDate()} ${MONF[d.getMonth()]} ${d.getFullYear()}, ${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`};
-PJ.fmtTick=(t,span)=>{const d=new Date(t);return span>3*DAY?`${d.getDate()} ${MON[d.getMonth()]}`:span>20*HOUR?`${PJ.fmtDay(t)} ${p2(d.getHours())}:00`:`${p2(d.getHours())}:${p2(d.getMinutes())}`};
+PJ.fmtFull=x=>{const d=new Date(x);return`${t(WD[d.getDay()])}, ${d.getDate()} ${t(MONF[d.getMonth()])} ${d.getFullYear()}, ${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`};
+PJ.fmtTick=(x,span)=>{const d=new Date(x);return span>3*DAY?`${d.getDate()} ${t(MON[d.getMonth()])}`:span>20*HOUR?`${PJ.fmtDay(x)} ${p2(d.getHours())}:00`:`${p2(d.getHours())}:${p2(d.getMinutes())}`};
 PJ.fmtSpan=(a,b)=>{const da=new Date(a),db=new Date(b);const same=dayDiff(a)===dayDiff(b-1);
   return same?`${PJ.fmtDay(a)} ${p2(da.getHours())}:${p2(da.getMinutes())}–${p2(db.getHours())}:${p2(db.getMinutes())}`:`${PJ.fmtDay(a)} ${p2(da.getHours())}:${p2(da.getMinutes())} – ${PJ.fmtDay(b)} ${p2(db.getHours())}:${p2(db.getMinutes())}`};
 // Быстрые периоды: от «сейчас» назад
@@ -252,30 +257,31 @@ PJ.list=function(host,o){
   // o: {idx, terms, sel, cols:"full"|"compact", onPick(i), onFilter(field,value), empty, flash(el)}
   if(!host)return null;
   const compact=o.cols==="compact";
-  host.innerHTML=`<div class="pj-l${compact?" pj-l-c":""}"><div class="pj-lh" role="row"></div>
-    <div class="pj-ls" tabindex="0" role="grid" aria-label="События"><div class="pj-lsp"></div><div class="pj-lr"></div></div></div>`;
+  host.innerHTML=`<div class="pj-l${compact?" pj-l-c":""}"><div class="pj-lh" aria-hidden="true"></div>
+    <div class="pj-ls" tabindex="0" role="listbox" aria-label="${esc(t("События"))}"><div class="pj-lsp"></div><div class="pj-lr"></div></div></div>`;
   const box=host.firstElementChild,hd=host.querySelector(".pj-lh"),sc=host.querySelector(".pj-ls"),sp=host.querySelector(".pj-lsp"),rows=host.querySelector(".pj-lr");
   const st={idx:o.idx,sel:o.sel??-1,terms:o.terms||[],two:null,rh:32};
   function mode(){
     const two=(host.clientWidth||900)<(compact?620:860);
     if(two===st.two)return false;
     st.two=two;st.rh=two?52:32;box.classList.toggle("pj-two",two);
-    hd.innerHTML=`<span>Время</span><span>Событие</span>${compact?"":"<span>Объект</span>"}<span>Кто</span>${two?"":"<span>Описание</span>"}`;
+    hd.innerHTML=`<span>${esc(t("Время"))}</span><span>${esc(t("Событие"))}</span>${compact?"":`<span>${esc(t("Объект"))}</span>`}<span>${esc(t("Пользователь"))}</span>${two?"":`<span>${esc(t("Описание"))}</span>`}`;
     sp.style.height=`${st.idx.length*st.rh}px`;return true;
   }
   let raf=0;
   function draw(){
     raf=0;mode();const RH=st.rh;
-    if(!st.idx.length){rows.style.transform="";rows.innerHTML=`<div class="pj-empty">${o.empty||"Событий нет. Измените условия поиска."}</div>`;return}
+    if(!st.idx.length){rows.style.transform="";sc.removeAttribute("aria-activedescendant");rows.innerHTML=`<div class="pj-empty" role="presentation">${o.empty||esc(t("Нет событий, которые подходят под условия. Изменить условия поиска."))}</div>`;return}
     const top=sc.scrollTop,vh=sc.clientHeight||600,a=Math.max(0,Math.floor(top/RH)-8),b=Math.min(st.idx.length,Math.ceil((top+vh)/RH)+8);
     let h="";
     for(let j=a;j<b;j++){
       const r=PJ.row(st.idx[j]);
-      h+=`<div class="pj-r pj-c-${r.cat.id}${r.i===st.sel?" on":""}" data-i="${r.i}" role="row">
+      const kn=PJ.kindName(r.kind),cn=PJ.catName(r.cat);
+      h+=`<div class="pj-r pj-c-${r.cat.id}${r.i===st.sel?" on":""}" data-i="${r.i}" id="pjR${r.i}" role="option" aria-selected="${r.i===st.sel}" aria-posinset="${j+1}" aria-setsize="${st.idx.length}">
         <span class="pj-t" title="${esc(PJ.fmtFull(r.t))}">${esc(PJ.fmt(r.t))}</span>
-        <span class="pj-k" title="${esc(r.cat.n)}"><i class="pj-dot pj-c-${r.cat.id}"></i>${PJ.hl(r.kind.n,st.terms)}</span>
-        ${compact?"":`<span>${r.obj?`<button type="button" class="pj-cell" data-f="obj" data-v="${r.obj.i}" title="Только события объекта «${esc(r.obj.name)}»">${PJ.hl(r.obj.name,st.terms)}</button>`:'<span class="pj-mu">—</span>'}</span>`}
-        <span>${r.user?`<button type="button" class="pj-cell" data-f="user" data-v="${r.user.i}" title="Только события пользователя ${esc(r.user.login)}">${PJ.hl(r.user.login,st.terms)}</button>`:'<span class="pj-mu">—</span>'}</span>
+        <span class="pj-k" title="${esc(`${kn} · ${cn}`)}"><i class="pj-dot pj-c-${r.cat.id}"></i>${PJ.hl(kn,st.terms)}</span>
+        ${compact?"":`<span>${r.obj?`<button type="button" class="pj-cell" tabindex="-1" data-f="obj" data-v="${r.obj.i}" title="${esc(t("Добавить условие: объект «{o}»").replace("{o}",r.obj.name))}">${PJ.hl(r.obj.name,st.terms)}</button>`:'<span class="pj-mu">—</span>'}</span>`}
+        <span>${r.user?`<button type="button" class="pj-cell" tabindex="-1" data-f="user" data-v="${r.user.i}" title="${esc(t("Добавить условие: пользователь {u}").replace("{u}",r.user.login))}">${PJ.hl(r.user.login,st.terms)}</button>`:'<span class="pj-mu">—</span>'}</span>
         <span class="pj-x" title="${esc(r.text)}">${PJ.hl(r.text,st.terms)}</span></div>`;
     }
     rows.style.transform=`translateY(${a*RH}px)`;rows.innerHTML=h;
@@ -283,7 +289,8 @@ PJ.list=function(host,o){
   }
   const ask=()=>{if(!raf)raf=requestAnimationFrame(draw)};
   sc.addEventListener("scroll",ask,{passive:true});
-  if(window.ResizeObserver)new ResizeObserver(ask).observe(host);
+  // Список монтируют в тот же узел много раз: прежний наблюдатель размера снимаем
+  host._pjRo?.disconnect();if(window.ResizeObserver){host._pjRo=new ResizeObserver(ask);host._pjRo.observe(host)}
   rows.addEventListener("click",e=>{
     const c=e.target.closest(".pj-cell");
     if(c&&o.onFilter){e.stopPropagation();o.onFilter(c.dataset.f,+c.dataset.v);return}
@@ -297,7 +304,8 @@ PJ.list=function(host,o){
     ctl.select(st.idx[j]);ctl.reveal(j);o.onPick&&o.onPick(st.idx[j]);
   });
   const ctl={
-    select(i){st.sel=i;rows.querySelectorAll(".pj-r").forEach(el=>el.classList.toggle("on",+el.dataset.i===i))},
+    select(i){st.sel=i;rows.querySelectorAll(".pj-r").forEach(el=>{const on=+el.dataset.i===i;el.classList.toggle("on",on);el.setAttribute("aria-selected",on)});
+      if(rows.querySelector(`#pjR${i}`))sc.setAttribute("aria-activedescendant","pjR"+i);else sc.removeAttribute("aria-activedescendant")},
     reveal(j){const y=j*st.rh;if(y<sc.scrollTop)sc.scrollTop=y;else if(y+st.rh>sc.scrollTop+sc.clientHeight)sc.scrollTop=y+st.rh-sc.clientHeight},
     scrollToRow(j,center){mode();sc.scrollTop=Math.max(0,j*st.rh-(center?sc.clientHeight/2-st.rh:0));ask()},
     flash(i){setTimeout(()=>{const el=rows.querySelector(`.pj-r[data-i="${i}"]`);if(el&&o.flash)o.flash(el)},40)},
@@ -309,28 +317,28 @@ PJ.list=function(host,o){
 
 // ── Панель события ──
 PJ.detailHtml=function(i,o={}){
-  if(i==null||i<0)return`<div class="pj-det pj-det-0"><p class="pj-mu">Выберите событие в списке. Здесь появятся подробности, ссылки на объект и видео, события рядом.</p></div>`;
+  if(i==null||i<0)return`<div class="pj-det pj-det-0"><p class="pj-mu">${esc(t("Выбрать событие в списке. Панель покажет подробности, ссылки на объект и видео, события рядом."))}</p></div>`;
   const r=PJ.row(i),k=r.kind,v=r.v,ctx=S.ctx||{};
   const kv=[];
-  const fx=(f,v)=>`<span class="pj-fx"><button type="button" data-pj-act="inc" data-f="${f}" data-v="${v}" title="Добавить условие: только такие" aria-label="Только такие">=</button><button type="button" data-pj-act="exc" data-f="${f}" data-v="${v}" title="Скрыть такие события" aria-label="Скрыть такие">≠</button></span>`;
-  kv.push(["Событие",`${esc(k.n)}${fx("kinds",k.i)}`]);
-  if(r.obj)kv.push(["Объект",`<button type="button" class="lk" data-pj-act="obj" data-v="${r.obj.i}">${esc(r.obj.name)}</button>${fx("objs",r.obj.i)}`]);
-  if(r.obj&&r.obj.type==="cam"&&r.obj.srv)kv.push(["Сервер",esc(r.obj.srv)]);
-  if(r.user)kv.push(["Пользователь",`<button type="button" class="lk" data-pj-act="user" data-v="${r.user.i}">${esc(r.user.login)}</button>${fx("users",r.user.i)}`]);
-  if(r.user&&(k.id==="login"||k.id==="login.fail"))kv.push(["Адрес",esc(r.user.ip)]);
-  (k.more?k.more(v):[]).forEach(([a,b])=>kv.push([a,esc(b)]));
-  const diff=k.diff?`<div class="pj-diff"><div class="pj-diff-p">${esc(v.p)}</div><div><span class="pj-mu">Было</span><s>${esc(v.a)}</s></div><div><span class="pj-mu">Стало</span><b>${esc(v.b)}</b></div></div>`:"";
+  const fx=(f,v)=>`<span class="pj-fx"><button type="button" data-pj-act="inc" data-f="${f}" data-v="${v}" title="${esc(t("Показать только такие события"))}" aria-label="${esc(t("Показать только такие события"))}">=</button><button type="button" data-pj-act="exc" data-f="${f}" data-v="${v}" title="${esc(t("Скрыть такие события"))}" aria-label="${esc(t("Скрыть такие события"))}">≠</button></span>`;
+  kv.push([t("Событие"),`${esc(PJ.kindName(k))}${fx("kinds",k.i)}`]);
+  if(r.obj)kv.push([t("Объект"),`<button type="button" class="lk" data-pj-act="obj" data-v="${r.obj.i}">${esc(r.obj.name)}</button>${fx("objs",r.obj.i)}`]);
+  if(r.obj&&r.obj.type==="cam"&&r.obj.srv)kv.push([t("Сервер"),esc(r.obj.srv)]);
+  if(r.user)kv.push([t("Пользователь"),`<button type="button" class="lk" data-pj-act="user" data-v="${r.user.i}">${esc(r.user.login)}</button>${fx("users",r.user.i)}`]);
+  if(r.user&&(k.id==="login"||k.id==="login.fail"))kv.push([t("Адрес"),esc(r.user.ip)]);
+  (k.more?k.more(v):[]).forEach(([a,b])=>kv.push([t(a),esc(b)]));
+  const diff=k.diff?`<div class="pj-diff"><div class="pj-diff-p">${esc(v.p)}</div><div><span class="pj-mu">${esc(t("Было"))}</span><s>${esc(v.a)}</s></div><div><span class="pj-mu">${esc(t("Стало"))}</span><b>${esc(v.b)}</b></div></div>`:"";
   // События рядом: у того же объекта или пользователя, три до и три после
   const byTime=PJ.nearMode==="time"||!(r.obj||r.user),near=nearRows(r,3,byTime);
-  const nm=r.obj||r.user?`<span class="pj-seg pj-seg-s" role="group" aria-label="Что показать рядом"><button type="button" class="${byTime?"":"on"}" data-pj-act="near" data-v="0">${r.obj?"Этот объект":"Этот пользователь"}</button><button type="button" class="${byTime?"on":""}" data-pj-act="near" data-v="1">Весь журнал</button></span>`:"";
-  const nearHtml=near.length?`<div class="pj-near"><div class="pj-near-h"><span>Рядом</span>${nm}</div>${near.map(j=>{const x=PJ.row(j);return`<button type="button" class="pj-nr${j===i?" on":""}" data-pj-act="pick" data-v="${j}"><span class="pj-t">${esc(PJ.fmt(x.t))}</span><i class="pj-dot pj-c-${x.cat.id}"></i><span>${esc(x.kind.n)}${byTime&&x.obj?`<span class="pj-mu"> · ${esc(x.obj.name)}</span>`:""}</span></button>`}).join("")}</div>`:"";
+  const nm=r.obj||r.user?`<span class="pj-seg pj-seg-s" role="group" aria-label="${esc(t("Что показать рядом"))}"><button type="button" class="${byTime?"":"on"}" aria-pressed="${!byTime}" data-pj-act="near" data-v="0">${esc(t(r.obj?"Этот объект":"Этот пользователь"))}</button><button type="button" class="${byTime?"on":""}" aria-pressed="${byTime}" data-pj-act="near" data-v="1">${esc(t("Весь журнал"))}</button></span>`:"";
+  const nearHtml=near.length?`<div class="pj-near"><div class="pj-near-h"><span>${esc(t("Рядом"))}</span>${nm}</div>${near.map(j=>{const x=PJ.row(j);return`<button type="button" class="pj-nr${j===i?" on":""}" data-pj-act="pick" data-v="${j}"><span class="pj-t">${esc(PJ.fmt(x.t))}</span><i class="pj-dot pj-c-${x.cat.id}"></i><span title="${esc(PJ.kindName(x.kind)+(x.obj?" · "+x.obj.name:""))}">${esc(PJ.kindName(x.kind))}${byTime&&x.obj?`<span class="pj-mu"> · ${esc(x.obj.name)}</span>`:""}</span></button>`}).join("")}</div>`:"";
   const acts=[
-    k.video&&r.obj&&ctx.openVideo?`<button type="button" class="btn s pri" data-pj-act="video" data-v="${r.obj.i}">Открыть видео на ${esc(PJ.fmt(r.t).replace(/:\d\d$/,""))}</button>`:"",
-    `<button type="button" class="btn s" data-pj-act="similar" data-v="${i}" title="Тот же вид события${r.obj?" и тот же объект":""}">Найти похожие</button>`,
-    `<button type="button" class="btn s" data-pj-act="copy" data-v="${i}">Копировать ссылку</button>`
+    k.video&&r.obj&&ctx.openVideo?`<button type="button" class="btn s pri" data-pj-act="video" data-v="${r.obj.i}">${esc(t("Открыть видео на {t}").replace("{t}",PJ.fmt(r.t).replace(/:\d\d$/,"")))}</button>`:"",
+    `<button type="button" class="btn s" data-pj-act="similar" data-v="${i}" title="${esc(t(r.obj?"Тот же вид события и тот же объект":"Тот же вид события"))}">${esc(t("Найти похожие"))}</button>`,
+    `<button type="button" class="btn s" data-pj-act="copy" data-v="${i}">${esc(t("Копировать ссылку"))}</button>`
   ].join("");
   return`<div class="pj-det">
-    <div class="pj-det-hd"><span class="pj-tag pj-c-${r.cat.id}">${esc(r.cat.n)}</span><b>${esc(k.n)}</b></div>
+    <div class="pj-det-hd"><span class="pj-tag pj-c-${r.cat.id}">${esc(PJ.catName(r.cat))}</span><b>${esc(PJ.kindName(k))}</b></div>
     <div class="pj-det-t">${esc(PJ.fmtFull(r.t))}</div>
     <p class="pj-det-x">${esc(r.text)}</p>${diff}
     <dl class="pj-kv">${kv.map(([a,b])=>`<dt>${esc(a)}</dt><dd>${b}</dd>`).join("")}</dl>
@@ -380,6 +388,7 @@ function injectCss(){
 .pj-two .pj-x{grid-column:1/-1;font:var(--one-type-body-sm);letter-spacing:var(--one-type-body-sm-tracking);color:var(--one-fg-muted)}
 .pj-lh{height:32px;font-weight:500;color:var(--one-fg-muted);border-bottom:1px solid var(--one-table-row-divider);background:var(--one-surface-muted)}
 .pj-ls{flex:1;min-height:0;overflow:auto;position:relative;scrollbar-gutter:stable;outline:none}
+.pj-ls:focus-visible{outline:2px solid var(--one-focus-ring);outline-offset:-2px}
 .pj-lr{position:absolute;left:0;right:0;top:0}
 .pj-r{height:32px;box-sizing:border-box;border-bottom:1px solid var(--one-table-row-divider);cursor:pointer;white-space:nowrap}
 .pj-r>span{overflow:hidden;text-overflow:ellipsis;min-width:0}
@@ -411,7 +420,7 @@ function injectCss(){
 .pj-brush{display:none;position:absolute;top:0;bottom:16px;background:var(--one-accent-soft);border-left:1px solid var(--one-accent);border-right:1px solid var(--one-accent);pointer-events:none}
 .pj-hist{width:100%;display:block}
 .pj-h-alarm{fill:var(--one-danger-icon)}.pj-h-audit{fill:var(--one-palette-purple)}.pj-h-info{fill:color-mix(in srgb,var(--one-fg-muted) 55%,transparent)}
-.pj-h-off{opacity:.25}.pj-h-hit{fill:transparent;cursor:pointer}.pj-h-hit:hover{fill:var(--one-control-hover)}
+.pj-h-hit{fill:transparent;cursor:pointer}.pj-h-hit:hover{fill:var(--one-control-hover)}
 .pj-axis{position:absolute;left:0;right:0;bottom:0;height:16px;font:var(--one-type-caption);letter-spacing:var(--one-type-caption-tracking);color:var(--one-fg-muted)}
 .pj-axis span{position:absolute;transform:translateX(-50%);white-space:nowrap}.pj-axis span:first-child{transform:none}.pj-axis span:last-child{transform:translateX(-100%)}
 /* Карточка события — тело body-md, заголовок heading-sm (как .cp-h). */
@@ -451,7 +460,7 @@ function injectCss(){
 .pj-chip i{font-style:normal;color:var(--one-fg-muted)}
 .pj-chip.ex i b,.pj-chip b{font-weight:600;color:var(--one-fg-muted)}
 .pj-chip>button{all:unset;cursor:pointer;width:20px;height:20px;border-radius:var(--one-radius-pill);display:inline-grid;place-items:center;color:var(--one-fg-muted)}
-.pj-chip>button svg{width:14px;height:14px}
+.pj-chip>button svg{width:16px;height:16px}
 .pj-chip>button:hover{background:var(--one-selected-neutral-hover);color:var(--one-fg)}
 .pj-chip>button:focus-visible{outline:2px solid var(--one-focus-ring);outline-offset:-2px}
 /* Подписи панели (оснастка, D-067): заголовок — label-strong без капса, пояснение body-sm, счётчик caption. */

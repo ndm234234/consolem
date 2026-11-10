@@ -2626,6 +2626,7 @@ html[data-theme="light"] .cp-step{background:var(--one-control-hover);color:var(
 <!-- ONE PSIM: мост по ONE.PSIM.PrototypeKit, подключён после стилей прототипа -->
 <link rel="stylesheet" href="assets/one-psim/bridge.css">
 <script src="assets/i18n-en.js"></script>
+<script src="assets/i18n-en-51.js"></script>
 <!-- API: контракт, эталонный набор, встроенный сервер и клиент (api/README.md) -->
 <script src="api/openapi.js"></script>
 <script src="api/fixture.js"></script>
@@ -2740,7 +2741,7 @@ html[data-theme="light"] .cp-step{background:var(--one-control-hover);color:var(
   </div>
 </div>
 <div class="tctx" id="tctx" role="menu" data-on-mousedown='[["rcMenuDown",{"$on":"event"}]]'></div>
-<script src="assets/proto-journal-stub.js?v=9e160e09"></script>
+<script src="assets/proto-journal-stub.js?v=bfe52960"></script>
 <script>
 // Тема — одна кнопка в шапке; выбор запоминается (ключ кита kit-theme).
 try{const t=localStorage.getItem("kit-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}
@@ -26445,19 +26446,21 @@ function pjInit(){
   if(!pjBoot)pjBoot=API.get("/units",{implements:"vms.camera/1",limit:1000}).then(r=>hwEnsure(r.items.map(x=>x.uid))).catch(()=>{}).then(()=>{pjBuild();if(app==="log")paint()});
   return false;
 }
-function pjWait(){paintMain(mainHd("",`<span class="hd-ic">${lu("scroll-text")}</span>${i18n("Журнал событий")}`,"")+`<div class="pj"><p class="pj-mu">Консоль готовит журнал…</p></div>`)}
+function pjWait(){paintMain(`<div class="pj pj-nohd"><p class="pj-mu">${escHtml(i18n("Консоль готовит журнал…"))}</p></div>`)}
 function pjBuild(){
   const cams=[],srvs=[],seen=new Set();
   walkAll(n=>{if(!n||seen.has(n.id))return;seen.add(n.id);
     if(n.type==="server")srvs.push({id:n.id,name:locName(n)});
     else if(n.type==="camera"){const s=cameraTreeServer(n.id);cams.push({id:n.id,name:locName(n),srv:s?locName(s):""})}});
-  PJ.init({cams,srvs,rules:(typeof rules!=="undefined"?rules:[]).map(r=>({id:r.id,name:r.name})),users:accUsers().map(u=>u.login),
+  PJ.init({t:s=>i18n(s),get lang(){return uiLang},cams,srvs,rules:(typeof rules!=="undefined"?rules:[]).map(r=>({id:r.id,name:r.name})),users:(accData()?accUsers():[]).map(u=>u.login),
     openObj:o=>{if(o.type==="rule"){goApp("rules");ruleOpen(o.id,true)}else{openNode(o.id,{app:"hw",tab:"gen"});hwFlashLanding()}},
-    openUser:l=>{const u=accUsers().find(x=>x.login===l);if(u){goApp("acc");accGo("user:"+u.id)}else toast(`Пользователя ${l} нет в разделе «Права» этой консоли`)},
+    openUser:l=>{const u=(accData()?accUsers():[]).find(x=>x.login===l);if(u){goApp("acc");accGo("user:"+u.id)}else toast(i18n("Пользователя {l} нет в разделе «Права» этой консоли").replace("{l}",l))},
     openVideo:o=>{openNode(o.id,{app:"hw",tab:can("startUnitLive")?"view":"rec"});hwFlashLanding()}});
 }
 function pjRange(){return pjQ.range==="custom"&&pjQ.from!=null?{from:pjQ.from,to:pjQ.to}:PJ.range(pjQ.range)}
-function pjRangeName(){if(pjQ.range==="custom")return PJ.fmtSpan(pjQ.from,pjQ.to);const x=PJ.RANGES.find(r=>r[0]===pjQ.range);return`за ${x?x[1]:"24 часа"}`}
+function pjRangeName(){if(pjQ.range==="custom")return PJ.fmtSpan(pjQ.from,pjQ.to);const x=PJ.RANGES.find(r=>r[0]===pjQ.range);return i18n(`за ${x?x[1]:"24 часа"}`)}
+// Период, от которого сужали гистограммой: снятие сужения возвращает его, а не 24 часа
+function pjBaseRange(){const b=pjQ.range==="custom"?pjZoom[0]?.range:pjQ.range;return b&&b!=="custom"?b:"24h"}
 function pjRun(){
   const r=pjRange();pjRes=PJ.query({...pjQ,from:r.from,to:r.to});
   if(pjSel>=0&&!pjRes.idx.includes(pjSel))pjSel=-1;
@@ -26465,14 +26468,16 @@ function pjRun(){
 }
 function pjSetRange(id){pjZoom=[];pjQ={...pjQ,range:id,from:null,to:null};pjRefresh()}
 // Протяжка по гистограмме сужает период; «Вернуть период» снимает последнее сужение
+// Короче двух минут период не бывает: столбик «1 часа» (50 с) консоль расширяет до двух минут вокруг него
 function pjZoomTo(from,to){
-  if(to-from<PJ.MIN*2){toast("Отрезок уже меньше двух минут");return}
+  if(to-from<PJ.MIN*2){const cur=pjRange();if(cur.to-cur.from<=PJ.MIN*2){toast(i18n("Период уже не длиннее двух минут, поэтому консоль не сузит его"));return}
+    const c=(from+to)/2;from=Math.max(cur.from,c-PJ.MIN);to=Math.min(cur.to,from+PJ.MIN*2);from=to-PJ.MIN*2}
   pjZoom=[...pjZoom,{range:pjQ.range,from:pjQ.from,to:pjQ.to}].slice(-20);pjQ={...pjQ,range:"custom",from,to};pjRefresh();
 }
 function pjZoomBack(){const z=pjZoom[pjZoom.length-1];if(!z)return;pjZoom=pjZoom.slice(0,-1);pjQ={...pjQ,range:z.range,from:z.from,to:z.to};pjRefresh()}
 function pjHistMount(host,height=44){
   if(!host)return;const r=pjRange(),h=PJ.hist(pjQ,r.from,r.to,72);
-  host.innerHTML=PJ.histSvg(h,{height})+PJ.histAxis(h);host.title="Протяните мышью, чтобы сузить период; щелчок — один столбик";
+  host.innerHTML=PJ.histSvg(h,{height})+PJ.histAxis(h);host.title=i18n("Протянуть мышью по шкале, чтобы сузить период. Щелчок выбирает один столбик.");
   PJ.brush(host,h,pjZoomTo);
 }
 // Исключение: «≠» скрывает такие события; включение того же значения снимает исключение
@@ -26489,23 +26494,25 @@ function pjToggle(field,v){
   const s=new Set(pjQ[field]||[]);s.has(v)?s.delete(v):s.add(v);
   pjQ={...pjQ,[field]:s.size?s:null};pjRefresh();
 }
-function pjOnly(field,v){pjQ={...pjQ,[field]:new Set([v])};pjRefresh()}
+// «Только»: значение включено, его исключение снято — иначе «= root» и «≠ root» вместе дали бы пустой список
+function pjOnly(field,v){const nf=PJ_NF[field],x=nf&&pjQ[nf]?new Set(pjQ[nf]):null;x?.delete(v);pjQ={...pjQ,[field]:new Set([v]),...(nf?{[nf]:x&&x.size?x:null}:{})};pjRefresh()}
 function pjClear(field){pjQ={...pjQ,[field]:null,...(PJ_NF[field]?{[PJ_NF[field]]:null}:{})};pjRefresh()}
 function pjShowDebug(on){pjQ={...pjQ,showDebug:!!on};pjRefresh()}
-function pjResetAll(){pjQ={range:"24h",from:null,to:null,cats:null,kinds:null,objs:null,users:null,nkinds:null,nobjs:null,nusers:null,text:"",showDebug:false};pjZoom=[];pjSel=-1;pjRefresh()}
+function pjResetAll(){if(typeof pjaClearText==="function")pjaClearText();pjQ={range:"24h",from:null,to:null,cats:null,kinds:null,objs:null,users:null,nkinds:null,nobjs:null,nusers:null,text:"",showDebug:false};pjZoom=[];pjSel=-1;pjRefresh()}
 // Текст: список обновляется после паузы в наборе
 function pjText(v){pjQ={...pjQ,text:v};clearTimeout(pjTextT);pjTextT=setTimeout(pjRefresh,160)}
 function pjSum(extra=""){
   const r=pjRes;if(!r)return"";
-  return`<span><b>${PJ.num(r.total)}</b> ${PJ.plural(r.total,"событие|события|событий")} ${escHtml(pjRangeName())}</span>
-    ${r.hidden&&!pjQ.showDebug?`<span>· служебных скрыто ${PJ.num(r.hidden)} <button type="button" class="lk lk-act" ${onEv("click",["pjShowDebug",true])}>Показать</button></span>`:""}
-    ${pjQ.showDebug?`<span>· <button type="button" class="lk lk-act" ${onEv("click",["pjShowDebug",false])}>Скрыть служебные</button></span>`:""}
-    ${pjZoom.length?`<span>· <button type="button" class="lk lk-act" ${onEv("click",["pjZoomBack"])}>${lu("chevron-left")} Вернуть период</button></span>`:""}
-    <span class="pj-mu">· отбор ${r.ms} мс из ${PJ.num(PJ.S.n)}</span>${extra}`;
+  // «Показано N из M» (правило фильтров): M — события периода без условий
+  return`<span>${escHtml(i18n("Показано"))} <b>${PJ.num(r.total)}</b> ${escHtml(i18n("из"))} ${PJ.num(r.base)} ${escHtml(PJ.plural(r.base,"события|событий|событий"))} ${escHtml(pjRangeName())}</span>
+    ${r.hidden&&!pjQ.showDebug?`<span>· ${escHtml(i18n("Консоль скрывает служебные события: {n}.").replace("{n}",PJ.num(r.hidden)))} <button type="button" class="lk lk-act" ${onEv("click",["pjShowDebug",true])}>${escHtml(i18n("Показать"))}</button></span>`:""}
+    ${pjQ.showDebug?`<span>· <button type="button" class="lk lk-act" ${onEv("click",["pjShowDebug",false])}>${escHtml(i18n("Скрыть служебные"))}</button></span>`:""}
+    ${pjZoom.length?`<span>· <button type="button" class="lk lk-act" ${onEv("click",["pjZoomBack"])}>${lu("chevron-left")} ${escHtml(i18n("Вернуть период"))}</button></span>`:""}
+    <span class="pj-mu">· ${escHtml(i18n("Консоль отобрала их за {ms} мс из {n}.").replace("{ms}",r.ms).replace("{n}",PJ.num(PJ.S.n)))}</span>${extra}`;
 }
 function pjMountList(host,o={}){
   pjList=PJ.list(host,{idx:pjRes.idx,sel:pjSel,terms:PJ.terms(pjRes.groups),cols:o.cols,empty:o.empty,
-    onPick:i=>{pjSel=i;pjMountDet()},onScroll:o.onScroll,onFilter:o.onFilter||((f,v)=>pjOnly(f==="obj"?"objs":"users",v)),
+    onPick:i=>{pjSel=i;pjMountDet()},onScroll:o.onScroll,onFilter:o.onFilter||((f,v)=>pjSetVal(f==="obj"?"objs":"users",v,false)),
     flash:el=>accFlash(()=>[el],true)});
   return pjList;
 }
@@ -26520,17 +26527,17 @@ function pjAct(act,v,f){
   if(act==="pick"){
     pjSel=v;const j=pjRes.idx.indexOf(v);
     if(j>=0&&pjList){pjList.select(v);pjList.scrollToRow(j,true);pjList.flash(v)}
-    else toast("Это событие не попадает в текущий отбор. Подробности — в панели справа.");
+    else toast(i18n("Это событие не попадает в текущий отбор. Подробности показывает панель справа."));
     pjMountDet();return;
   }
-  if(act==="similar"){const r=PJ.row(v);pjQ={...pjQ,kinds:new Set([r.kind.i]),objs:r.obj?new Set([r.obj.i]):null,users:null,cats:null,nkinds:null,nobjs:null,nusers:null,text:"",showDebug:r.cat.id==="debug"};pjSel=v;pjRefresh();return}
-  if(act==="copy"){const url=`${location.origin}${location.pathname}#log=ev:${v}`;(navigator.clipboard?.writeText(url)||Promise.reject()).then(()=>toast("Консоль скопировала ссылку на событие"),()=>toast(url));return}
+  if(act==="similar"){const r=PJ.row(v);if(typeof pjaClearText==="function")pjaClearText();pjQ={...pjQ,kinds:new Set([r.kind.i]),objs:r.obj?new Set([r.obj.i]):null,users:null,cats:null,nkinds:null,nobjs:null,nusers:null,text:"",showDebug:r.cat.id==="debug"};pjSel=v;pjRefresh();return}
+  if(act==="copy"){const url=`${location.origin}${location.pathname}#log=ev:${v}`;(navigator.clipboard?.writeText(url)||Promise.reject()).then(()=>toast(i18n("Консоль скопировала ссылку на событие. В прототипе ссылка работает до перезагрузки страницы: заглушка создаёт события заново.")),()=>toast(url));return}
 }
 // Ссылка #log или #log=ev:N открывает журнал (и событие)
 function pjDeepLink(){
   const m=/^#log(?:=ev:(\d+))?$/.exec(location.hash);if(!m)return false;
   goApp("log");
-  if(m[1]){if(!PJ.ready()){(pjBoot||Promise.resolve()).then(()=>setTimeout(pjDeepLink,0));pjInit();return true}const i=+m[1];if(i<PJ.S.n){const t=PJ.S.T[i];pjQ={...pjQ,range:"custom",from:t-PJ.HOUR,to:t+PJ.HOUR,cats:null,kinds:null,objs:null,users:null,nkinds:null,nobjs:null,nusers:null,text:"",showDebug:true};pjSel=i;pjRefresh();setTimeout(()=>{const j=pjRes.idx.indexOf(i);if(pjList&&j>=0){pjList.scrollToRow(j,true);pjList.flash(i)}},60)}}
+  if(m[1]){if(!PJ.ready()){(pjBoot||Promise.resolve()).then(()=>setTimeout(pjDeepLink,0));pjInit();return true}const i=+m[1];if(i<PJ.S.n){if(typeof pjaClearText==="function")pjaClearText();const t=PJ.S.T[i];pjQ={...pjQ,range:"custom",from:t-PJ.HOUR,to:t+PJ.HOUR,cats:null,kinds:null,objs:null,users:null,nkinds:null,nobjs:null,nusers:null,text:"",showDebug:true};pjSel=i;pjRefresh();setTimeout(()=>{const j=pjRes.idx.indexOf(i);if(pjList&&j>=0){pjList.scrollToRow(j,true);pjList.flash(i)}},60)}}
   return true;
 }
 // «Операции» — прежний экран: отмена и повтор групповых правок
@@ -26542,7 +26549,7 @@ function logOpsUI(){
       empty:"Операций нет",ph:"Имя устройства…",unit:"операция|операции|операций"
     })}</div>`);
 }
-function pjTreeRow(lab,on,ev,ic,sub){return`<div class="n ${on?"on":""}" ${onEv("click",ev)}><span class="tw"></span><span class="ici">${lu(ic)}</span><span class="nm">${escHtml(lab)}</span>${sub!=null?`<span class="pj-tree-n">${escHtml(sub)}</span>`:""}</div>`}
+function pjTreeRow(lab,on,ev,ic,sub){return`<div class="n ${on?"on":""}" ${onEv("click",ev)}><span class="tw"></span><span class="ici">${lu(ic)}</span><span class="nm" title="${escHtml(lab)}">${escHtml(lab)}</span>${sub!=null?`<span class="pj-tree-n">${escHtml(sub)}</span>`:""}</div>`}
 function pjTreeOps(){return`<div class="pj-tree-h">Ещё</div>${pjTreeRow("Операции",logFilt==="ops",["logGo","ops"],"refresh-cw")}`}
 
 // Вариант A+B (прототип 51): строка поиска из A и фасеты слева из B — одни и те же условия.
@@ -26552,34 +26559,40 @@ function pjTreeOps(){return`<div class="pj-tree-h">Ещё</div>${pjTreeRow("Оп
 let pjaIn="",pjaTexts=[],pjaSugOpen=false,pjaAt=0,pjaItems=[],pjaFocus=false;
 const PJA_KEY="pj51.saved";
 function pjaSaved(){try{return JSON.parse(localStorage.getItem(PJA_KEY)||"[]")}catch(e){return[]}}
-function pjaSaveList(a){try{localStorage.setItem(PJA_KEY,JSON.stringify(a.slice(0,8)))}catch(e){}}
+// false — браузер не дал записать (приватное окно, запрет хранилища)
+function pjaSaveList(a){try{localStorage.setItem(PJA_KEY,JSON.stringify(a.slice(0,8)));return true}catch(e){return false}}
 // pjRefresh — в разделе «Объединение» ниже
+// Текст условий снимают «Сбросить всё», «Найти похожие» и ссылка на событие
+function pjaClearText(){pjaTexts=[];pjaIn=""}
 const PJA_TYPE={cam:"Камера",srv:"Сервер",rule:"Правило"};
 // Чип условия: «=» — только такие, «≠» — скрыть такие; щелчок по чипу меняет одно на другое
 function pjaChips(){
   const S=PJ.S,ch=[];
-  const add=(lab,val,rm,o={})=>ch.push(`<span class="pj-chip${o.ex?" ex":""}">${o.flip?`<button type="button" class="pja-cv" title="${o.ex?"Скрыты такие события. Щелчок — показать только такие":"Показаны только такие события. Щелчок — скрыть такие"}" ${onEv("click",o.flip)}><i>${escHtml(lab)}</i> <b>${o.ex?"≠":"="}</b> ${escHtml(val)}</button>`:`<i>${escHtml(lab)}:</i> ${escHtml(val)}`}<button type="button" aria-label="Убрать условие" title="Убрать условие" ${onEv("click",rm)}>${lu("x")}</button></span>`);
-  const L={objs:i=>PJA_TYPE[S.objs[i]?.type]||"Объект",users:()=>"Пользователь",kinds:()=>"Событие"};
-  const V={objs:i=>S.objs[i]?.name||"—",users:i=>S.users[i]?.login||"—",kinds:i=>PJ.KINDS[i].n};
+  const add=(lab,val,rm,o={})=>ch.push(`<span class="pj-chip${o.ex?" ex":""}">${o.flip?`<button type="button" class="pja-cv" title="${escHtml(i18n(o.ex?"Консоль скрывает такие события. Щёлкнуть, чтобы показать только их":"Консоль показывает только такие события. Щёлкнуть, чтобы скрыть их"))}" ${onEv("click",o.flip)}><i>${escHtml(lab)}</i> <b>${o.ex?"≠":"="}</b> ${escHtml(val)}</button>`:`<i>${escHtml(lab)}:</i> ${escHtml(val)}`}<button type="button" aria-label="${escHtml(i18n("Убрать условие"))}" title="${escHtml(i18n("Убрать условие"))}" ${onEv("click",rm)}>${lu("x")}</button></span>`);
+  const L={objs:i=>i18n(PJA_TYPE[S.objs[i]?.type]||"Объект"),users:()=>i18n("Пользователь"),kinds:()=>i18n("Событие")};
+  const V={objs:i=>S.objs[i]?.name||"—",users:i=>S.users[i]?.login||"—",kinds:i=>PJ.kindName(PJ.KINDS[i])};
   ["objs","users","kinds"].forEach(f=>{
     (pjQ[f]?[...pjQ[f]]:[]).forEach(i=>add(L[f](i),V[f](i),["pjToggle",f,i],{flip:["pjFlip",f,i]}));
     (pjQ[PJ_NF[f]]?[...pjQ[PJ_NF[f]]]:[]).forEach(i=>add(L[f](i),V[f](i),["pjUnEx",f,i],{ex:1,flip:["pjFlip",f,i]}));
   });
-  (pjQ.cats?[...pjQ.cats]:[]).forEach(i=>add("Категория",PJ.CATS[i].n,["pjToggle","cats",i]));
-  pjaTexts.forEach((t,j)=>add("Текст",`«${t}»`,["pjaTextDel",j]));
-  if(pjQ.range==="custom")add("Период",PJ.fmtSpan(pjQ.from,pjQ.to),["pjSetRange","24h"]);
+  (pjQ.cats?[...pjQ.cats]:[]).forEach(i=>add(i18n("Категория"),PJ.catName(PJ.CATS[i]),["pjToggle","cats",i]));
+  pjaTexts.forEach((t,j)=>add(i18n("Текст"),`«${t}»`,["pjaTextDel",j]));
+  if(pjQ.range==="custom")add(i18n("Период"),PJ.fmtSpan(pjQ.from,pjQ.to),["pjaPeriodDel"]);
   return ch.join("");
 }
 function pjaTextDel(j){pjaTexts=pjaTexts.filter((x,k)=>k!==j);pjRefresh()}
+// Снять сужение периода: вернуть период, от которого сужали, а не всегда 24 часа
+function pjaPeriodDel(){pjSetRange(pjBaseRange())}
 // logUI — в разделе «Одно поле поиска» ниже
 function pjaMount(){
   const inp=document.getElementById("pjaIn");
   if(inp&&inp.value!==pjaIn)inp.value=pjaIn;
   if(pjaFocus&&inp&&document.activeElement!==inp){inp.focus();inp.setSelectionRange(pjaIn.length,pjaIn.length)}
   const sum=document.getElementById("pjSum");
-  if(sum)sum.innerHTML=pjSum(`<span class="pja-save"><button type="button" class="lk lk-act" ${onEv("click",["pjaSave"])}>${lu("star")} Сохранить поиск</button></span>`);
+  if(sum)sum.innerHTML=pjSum(`<span class="pja-save"><button type="button" class="lk lk-act" ${onEv("click",["pjaSave"])}>${lu("star")} ${escHtml(i18n("Сохранить поиск"))}</button></span>`);
   pjHistMount(document.getElementById("pjHist"),44);
-  pjMountList(document.getElementById("pjList"),{onFilter:(f,v)=>pjToggle(f==="obj"?"objs":"users",v)});
+  // Ячейка «Объект» или «Пользователь» добавляет условие «=» (подсказка ячейки говорит то же)
+  pjMountList(document.getElementById("pjList"));
   pjMountDet();
   if(pjaSugOpen)pjaSugPaint();
 }
@@ -26587,10 +26600,13 @@ function pjaExampleGo(j){logFilt="all";pjaExample(j);paint()}
 function pjaLoadGo(j){logFilt="all";pjaLoad(j);paint()}
 function pjaBarDown(e){if(e.target.closest("button"))return;e.preventDefault();pjaFocus=true;document.getElementById("pjaIn")?.focus()}
 function pjaFocusOn(){pjaFocus=true;pjaSugOpen=true;pjaAt=0;pjaSugPaint()}
-function pjaFocusOff(){pjaFocus=false;setTimeout(()=>{if(!pjaFocus){pjaSugOpen=false;const s=document.getElementById("pjaSug");if(s)s.hidden=true}},120)}
+// Закрыть подсказки: поле сообщает об этом и чтению с экрана (aria-expanded)
+function pjaSugHide(){pjaSugOpen=false;const s=document.getElementById("pjaSug");if(s)s.hidden=true;
+  const i=document.getElementById("pjaIn");if(i){i.setAttribute("aria-expanded","false");i.removeAttribute("aria-activedescendant")}}
+function pjaFocusOff(){pjaFocus=false;setTimeout(()=>{if(!pjaFocus)pjaSugHide()},120)}
 // Щелчок вне строки поиска закрывает подсказки: список и панель не всегда забирают фокус у поля
-document.addEventListener("pointerdown",e=>{if(!pjaSugOpen||e.target.closest?.(".pja-wrap"))return;
-  pjaSugOpen=false;pjaFocus=false;const s=document.getElementById("pjaSug");if(s)s.hidden=true;document.getElementById("pjaIn")?.blur()},true);
+document.addEventListener("pointerdown",e=>{if(app!=="log"||!pjaSugOpen||e.target.closest?.(".pja-wrap"))return;
+  pjaFocus=false;pjaSugHide();document.getElementById("pjaIn")?.blur()},true);
 function pjaSugDown(e){e.preventDefault();const it=e.target.closest("[data-k]");if(it)pjaApply(+it.dataset.k)}
 function pjaType(v){pjaIn=v;pjaSugOpen=true;pjaAt=0;pjaSugPaint();clearTimeout(pjTextT);pjTextT=setTimeout(pjRefresh,180)}
 function pjaKey(e){
@@ -26600,92 +26616,111 @@ function pjaKey(e){
   if(e.key==="Backspace"&&!pjaIn){pjaPopChip()}
 }
 function pjaPopChip(){
-  if(pjQ.range==="custom"){pjSetRange("24h");return}
+  if(pjQ.range==="custom"){pjaPeriodDel();return}
   if(pjaTexts.length){pjaTexts.pop();pjRefresh();return}
   for(const f of["cats","nkinds","kinds","nusers","users","nobjs","objs"])if(pjQ[f]){const a=[...pjQ[f]];a.pop();pjQ={...pjQ,[f]:a.length?new Set(a):null};pjRefresh();return}
 }
 function pjaCommitText(){const t=pjaIn.trim();if(t)pjaTexts.push(t);pjaIn="";pjRefresh();pjaRemember()}
-function pjaClearAll(){pjaTexts=[];pjaIn="";pjZoom=[];pjQ={...pjQ,cats:null,kinds:null,objs:null,users:null,nkinds:null,nobjs:null,nusers:null,range:pjQ.range==="custom"?"24h":pjQ.range,from:null,to:null};pjRefresh()}
+function pjaClearAll(){const base=pjBaseRange();pjaTexts=[];pjaIn="";pjZoom=[];pjQ={...pjQ,cats:null,kinds:null,objs:null,users:null,nkinds:null,nobjs:null,nusers:null,range:base,from:null,to:null};pjRefresh()}
 // Подсказки: что совпало по имени, со счётчиком «сколько найдётся» в текущем отборе
-const PJA_PREFIX={"камера":"cam","объект":"obj","сервер":"srv","правило":"rule","пользователь":"user","кто":"user","событие":"kind","тип":"kind","категория":"cat"};
+const PJA_PREFIX={"камера":"cam","объект":"obj","сервер":"srv","правило":"rule","пользователь":"user","кто":"user","событие":"kind","тип":"kind","категория":"cat",
+  "camera":"cam","object":"obj","server":"srv","rule":"rule","user":"user","event":"kind","category":"cat"};
+// Префикс условия («камера:») или отрицание («-root», «не root») — ещё не текст: поле ждёт выбора подсказки
+const PJA_NEG=/^(?:-|не\s+|not\s+)(.*)$/i,PJA_PFX=/^([a-zа-яё]+):\s*(.*)$/i;
+function pjaPending(s){s=s.trim();const m=PJA_PFX.exec(s);return PJA_NEG.test(s)||!!(m&&PJA_PREFIX[m[1].toLowerCase()])}
 function pjaSugBuild(){
   const S=PJ.S,r=pjRes,raw=pjaIn.trim(),items=[];
   let scope=null,neg=false,q=raw;
-  const nm=/^(?:-|не\s+)(.*)$/i.exec(q);if(nm&&nm[1].trim()){neg=true;q=nm[1].trim()}
+  const nm=PJA_NEG.exec(q);if(nm&&nm[1].trim()){neg=true;q=nm[1].trim()}
   let t=q.toLowerCase();
-  const m=/^([а-яё]+):\s*(.*)$/i.exec(q);if(m&&PJA_PREFIX[m[1].toLowerCase()]){scope=PJA_PREFIX[m[1].toLowerCase()];t=m[2].toLowerCase()}
+  const m=PJA_PFX.exec(q);if(m&&PJA_PREFIX[m[1].toLowerCase()]){scope=PJA_PREFIX[m[1].toLowerCase()];t=m[2].toLowerCase()}
   const ok=s=>!t||s.toLowerCase().includes(t);
-  const G=g=>neg?`Скрыть: ${g.toLowerCase()}`:g;
+  const G=g=>neg?i18n("Скрыть: {g}").replace("{g}",i18n(g).toLowerCase()):i18n(g);
   if(!raw){
-    pjaRecent().forEach((s,j)=>items.push({g:"Недавние",label:s.name,sub:"",run:()=>pjaLoadQ(s.q)}));
-    pjaSaved().forEach((s,j)=>items.push({g:"Мои поиски",label:s.name,sub:"",run:()=>pjaLoad(j)}));
-    pjaExamples().forEach((e,j)=>items.push({g:"Частые вопросы",label:e.label,sub:"",run:()=>pjaExample(j)}));
-    PJ.CATS.forEach((c,i)=>items.push({g:"Категория",label:c.n,n:r.cc[i],run:()=>pjToggle("cats",i)}));
+    pjaRecent().forEach((s,j)=>items.push({g:i18n("Недавние"),label:s.name,sub:"",run:()=>pjaLoadQ(s.q)}));
+    pjaSaved().forEach((s,j)=>items.push({g:i18n("Мои поиски"),label:s.name,sub:"",run:()=>pjaLoad(j)}));
+    pjaExamples().forEach((e,j)=>items.push({g:i18n("Примеры поиска"),label:e.label,sub:"",run:()=>pjaExample(j)}));
+    PJ.CATS.forEach((c,i)=>items.push({g:i18n("Категория"),label:PJ.catName(c),n:r.cc[i],run:()=>pjToggle("cats",i)}));
     return items;
   }
-  if(!scope&&!neg)items.push({g:"Текст",label:`Искать «${raw}» во всех полях`,sub:"«|» — или, пробел — и, кавычки — точная фраза",run:pjaCommitText});
+  if(!scope&&!neg)items.push({g:i18n("Текст"),label:i18n("Искать «{q}» во всех полях").replace("{q}",raw),sub:i18n("Пробел значит «и», «|» значит «или», кавычки задают точную фразу"),run:pjaCommitText});
   if(!scope||scope==="cam"||scope==="srv"||scope==="rule"||scope==="obj")
     S.objs.filter(o=>(scope==="cam"||scope==="srv"||scope==="rule"?o.type===scope:true)&&ok(o.name)).sort((a,b)=>r.oc[b.i]-r.oc[a.i]).slice(0,scope?12:6)
-      .forEach(o=>items.push({g:G("Объект"),label:o.name,sub:PJA_TYPE[o.type]+(o.type==="cam"&&o.srv?` · ${o.srv}`:""),n:r.oc[o.i],run:()=>pjaPick("objs",o.i,neg)}));
+      .forEach(o=>items.push({g:G("Объект"),label:o.name,sub:i18n(PJA_TYPE[o.type])+(o.type==="cam"&&o.srv?` · ${o.srv}`:""),n:r.oc[o.i],run:()=>pjaPick("objs",o.i,neg)}));
   if(!scope||scope==="user")S.users.filter(u=>ok(u.login)).sort((a,b)=>r.uc[b.i]-r.uc[a.i]).slice(0,scope?12:4).forEach(u=>items.push({g:G("Пользователь"),label:u.login,n:r.uc[u.i],run:()=>pjaPick("users",u.i,neg)}));
-  if(!scope||scope==="kind")PJ.KINDS.filter(k=>ok(k.n)||ok(PJ.CATS[k.ci].n)).sort((a,b)=>r.kc[b.i]-r.kc[a.i]).slice(0,scope?30:5).forEach(k=>items.push({g:G("Событие"),label:k.n,sub:PJ.CATS[k.ci].n,n:r.kc[k.i],run:()=>pjaPick("kinds",k.i,neg)}));
-  if(!neg&&(!scope||scope==="cat"))PJ.CATS.filter(c=>ok(c.n)).forEach(c=>items.push({g:"Категория",label:c.n,n:r.cc[PJ.CATS.indexOf(c)],run:()=>pjaPick("cats",PJ.CATS.indexOf(c))}));
+  if(!scope||scope==="kind")PJ.KINDS.filter(k=>ok(PJ.kindName(k))||ok(PJ.catName(PJ.CATS[k.ci]))).sort((a,b)=>r.kc[b.i]-r.kc[a.i]).slice(0,scope?30:5).forEach(k=>items.push({g:G("Событие"),label:PJ.kindName(k),sub:PJ.catName(PJ.CATS[k.ci]),n:r.kc[k.i],run:()=>pjaPick("kinds",k.i,neg)}));
+  if(!neg&&(!scope||scope==="cat"))PJ.CATS.forEach((c,i)=>{if(ok(PJ.catName(c)))items.push({g:i18n("Категория"),label:PJ.catName(c),n:r.cc[i],run:()=>pjaPick("cats",i)})});
   return items;
 }
 function pjaPick(f,v,neg){pjaIn="";pjSel=-1;if(PJ_NF[f])pjSetVal(f,v,!!neg);else{const s=new Set(pjQ[f]||[]);s.add(v);pjQ={...pjQ,[f]:s};pjRefresh()}pjaRemember()}
 function pjaApply(k){const it=pjaItems[k];if(!it)return;pjaFocus=true;pjaAt=0;it.run()}
+// Поле — combobox: подсказки — listbox с группами, выбранная подсказка — aria-activedescendant
 function pjaSugPaint(){
-  const box=document.getElementById("pjaSug");if(!box)return;
-  if(!pjaSugOpen||!pjRes){box.hidden=true;return}
+  const box=document.getElementById("pjaSug"),inp=document.getElementById("pjaIn");if(!box)return;
+  if(!pjaSugOpen||!pjRes){pjaSugHide();return}
   pjaItems=pjaSugBuild();
-  if(!pjaItems.length){box.hidden=false;box.innerHTML=`<div class="pja-none">${escHtml(pjaNone())}</div>`;return}
-  const t=pjaIn.trim().replace(/^(?:-|не\s+)/i,"").replace(/^[а-яё]+:\s*/i,"").toLowerCase();let g="";
-  box.innerHTML=pjaItems.map((it,k)=>{const head=it.g!==g?`<div class="pja-g">${escHtml(it.g)}</div>`:"";g=it.g;
-    return`${head}<div class="pja-it${k===pjaAt?" on":""}" role="option" aria-selected="${k===pjaAt}" data-k="${k}"><span class="pja-l">${PJ.hl(it.label,t?[t]:[])}${it.sub?`<span class="pj-mu"> · ${escHtml(it.sub)}</span>`:""}</span>${it.n!=null?`<span class="pja-n${it.n?"":" z"}">${PJ.num(it.n)}</span>`:""}</div>`}).join("")
-    +`<div class="pja-foot pj-mu">↑↓ — выбрать · Enter — добавить · Esc — закрыть · Backspace — убрать последнее условие · «-» перед словом — скрыть такие</div>`;
+  inp?.setAttribute("aria-expanded","true");
+  if(!pjaItems.length){box.hidden=false;box.innerHTML=`<div role="listbox" id="pjaSugL" aria-label="${escHtml(i18n("Подсказки поиска"))}"></div><div class="pja-none" role="status">${escHtml(pjaNone())}</div>`;inp?.removeAttribute("aria-activedescendant");return}
+  const t=pjaIn.trim().replace(PJA_NEG,"$1").replace(/^[a-zа-яё]+:\s*/i,"").toLowerCase();
+  const groups=[];pjaItems.forEach((it,k)=>{let gr=groups[groups.length-1];if(!gr||gr.g!==it.g)groups.push(gr={g:it.g,ks:[]});gr.ks.push(k)});
+  box.innerHTML=`<div role="listbox" id="pjaSugL" aria-label="${escHtml(i18n("Подсказки поиска"))}">${groups.map((gr,gi)=>`<div role="group" aria-labelledby="pjaG${gi}"><div class="pja-g" id="pjaG${gi}" role="presentation">${escHtml(gr.g)}</div>${gr.ks.map(k=>{const it=pjaItems[k];
+    return`<div class="pja-it${k===pjaAt?" on":""}" id="pjaO${k}" role="option" aria-selected="${k===pjaAt}" data-k="${k}"><span class="pja-l" title="${escHtml(it.label+(it.sub?" · "+it.sub:""))}">${PJ.hl(it.label,t?[t]:[])}${it.sub?`<span class="pj-mu"> · ${escHtml(it.sub)}</span>`:""}</span>${it.n!=null?`<span class="pja-n${it.n?"":" z"}">${PJ.num(it.n)}</span>`:""}</div>`}).join("")}</div>`).join("")}</div>`
+    +`<div class="pja-foot pj-mu">${escHtml(i18n("↑↓: выбрать. Enter: добавить. Esc: закрыть. Backspace: убрать последнее условие. «-» перед словом: скрыть такие события."))}</div>`;
   box.hidden=false;
+  inp?.setAttribute("aria-activedescendant","pjaO"+pjaAt);
   box.querySelector(".pja-it.on")?.scrollIntoView({block:"nearest"});
 }
-// Частые вопросы — готовые наборы условий
+// Примеры поиска — готовые наборы условий
 function pjaExamples(){
   const S=PJ.S,ki=id=>PJ.KINDS.findIndex(k=>k.id===id),cam=S.objs.find(o=>o.type==="cam"),root=S.users.findIndex(u=>u.login==="root");
   return[
-    {label:"Кто менял настройки",set:{kinds:[ki("cam.set"),ki("rule.set"),ki("role.set")],range:"7d"}},
-    {label:"Неудачные входы за 7 дней",set:{kinds:[ki("login.fail")],range:"7d"}},
-    ...(root>=0?[{label:"Действия пользователей, кроме root",set:{cats:[PJ.CATS.findIndex(c=>c.id==="audit")],nusers:[root],range:"24h"}}]:[]),
-    {label:"Ошибки за 24 часа",set:{cats:[PJ.CATS.findIndex(c=>c.id==="error")],range:"24h"}},
-    ...(cam?[{label:`Тревоги камеры «${cam.name}»`,set:{cats:[0],objs:[cam.i],range:"7d"}}]:[])
+    {label:i18n("Кто менял настройки"),set:{kinds:[ki("cam.set"),ki("rule.set"),ki("role.set")],range:"7d"}},
+    {label:i18n("Неудачные входы за 7 дней"),set:{kinds:[ki("login.fail")],range:"7d"}},
+    ...(root>=0?[{label:i18n("Действия пользователей, кроме root"),set:{cats:[PJ.CATS.findIndex(c=>c.id==="audit")],nusers:[root],range:"24h"}}]:[]),
+    {label:i18n("Ошибки за 24 часа"),set:{cats:[PJ.CATS.findIndex(c=>c.id==="error")],range:"24h"}},
+    ...(cam?[{label:i18n("Тревоги камеры «{c}»").replace("{c}",cam.name),set:{cats:[0],objs:[cam.i],range:"7d"}}]:[])
   ];
 }
 function pjaExample(j){const e=pjaExamples()[j];if(!e)return;pjaLoadQ({...e.set,texts:[]})}
 // Набор условий из примера, сохранённого или недавнего поиска
+// Сохранённый и недавний поиск хранит ключи значений (id объекта, логин, id вида), а не номера в списке:
+// номера зависят от набора данных и после перезагрузки указали бы на другие объекты
+const PJA_F=["cats","kinds","objs","users","nkinds","nobjs","nusers"];
+const PJA_KEYOF={cats:i=>PJ.CATS[i]?.id,kinds:i=>PJ.KINDS[i]?.id,objs:i=>PJ.S.objs[i]?.id,users:i=>PJ.S.users[i]?.login};
+const PJA_BASE={cats:"cats",kinds:"kinds",objs:"objs",users:"users",nkinds:"kinds",nobjs:"objs",nusers:"users"};
+function pjaIdx(f,x){if(typeof x==="number")return x;const b=PJA_BASE[f],a=b==="cats"?PJ.CATS:b==="kinds"?PJ.KINDS:b==="objs"?PJ.S.objs:PJ.S.users;
+  const i=a.findIndex((v,k)=>PJA_KEYOF[b](k)===x);return i>=0?i:null}
+function pjaKeys(q){const o={v:2,range:q.range,texts:q.texts};PJA_F.forEach(f=>o[f]=q[f]?q[f].map(i=>PJA_KEYOF[PJA_BASE[f]](i)).filter(x=>x!=null):null);return o}
 function pjaLoadQ(q){pjaTexts=(q.texts||[]).slice();pjaIn="";pjZoom=[];
-  pjQ={...pjQ,range:q.range||"24h",from:null,to:null};["cats","kinds","objs","users","nkinds","nobjs","nusers"].forEach(f=>{pjQ[f]=q[f]&&q[f].length?new Set(q[f]):null});
+  pjQ={...pjQ,range:q.range||"24h",from:null,to:null};PJA_F.forEach(f=>{const a=(q[f]||[]).map(x=>pjaIdx(f,x)).filter(x=>x!=null);pjQ[f]=a.length?new Set(a):null});
   pjSel=-1;pjaSugOpen=false;pjRefresh();pjaRemember()}
-function pjaSnap(){const q={range:pjQ.range==="custom"?"24h":pjQ.range,texts:pjaTexts.slice()};["cats","kinds","objs","users","nkinds","nobjs","nusers"].forEach(f=>q[f]=pjQ[f]?[...pjQ[f]]:null);return q}
-// Имя поиска — по условиям, как на чипах
+// Период поиска — тот, от которого сужали гистограммой: сужение не сохраняется
+function pjaSnap(){const q={range:pjBaseRange(),texts:pjaTexts.slice()};PJA_F.forEach(f=>q[f]=pjQ[f]?[...pjQ[f]]:null);return q}
+// Имя поиска — по условиям, как на чипах, и период
 function pjaName(q){
   const S=PJ.S,p=[];
-  (q.objs||[]).forEach(i=>p.push(S.objs[i]?.name));(q.nobjs||[]).forEach(i=>p.push("без "+S.objs[i]?.name));
-  (q.users||[]).forEach(i=>p.push(S.users[i]?.login));(q.nusers||[]).forEach(i=>p.push("кроме "+S.users[i]?.login));
-  (q.kinds||[]).forEach(i=>p.push(PJ.KINDS[i].n));(q.nkinds||[]).forEach(i=>p.push("без «"+PJ.KINDS[i].n+"»"));
-  (q.cats||[]).forEach(i=>p.push(PJ.CATS[i].n));(q.texts||[]).forEach(t=>p.push(`«${t}»`));
-  return p.filter(Boolean).join(", ");
+  (q.objs||[]).forEach(i=>p.push(S.objs[i]?.name));(q.nobjs||[]).forEach(i=>S.objs[i]&&p.push(i18n("без {x}").replace("{x}",S.objs[i].name)));
+  (q.users||[]).forEach(i=>p.push(S.users[i]?.login));(q.nusers||[]).forEach(i=>S.users[i]&&p.push(i18n("кроме {x}").replace("{x}",S.users[i].login)));
+  (q.kinds||[]).forEach(i=>PJ.KINDS[i]&&p.push(PJ.kindName(PJ.KINDS[i])));(q.nkinds||[]).forEach(i=>PJ.KINDS[i]&&p.push(i18n("без «{x}»").replace("{x}",PJ.kindName(PJ.KINDS[i]))));
+  (q.cats||[]).forEach(i=>PJ.CATS[i]&&p.push(PJ.catName(PJ.CATS[i])));(q.texts||[]).forEach(t=>p.push(`«${t}»`));
+  const c=p.filter(Boolean);if(!c.length)return"";
+  const x=PJ.RANGES.find(r=>r[0]===q.range);return`${c.join(", ")} · ${i18n(x?x[1]:"24 часа")}`;
 }
 const PJA_RKEY="pj51.recent";
 function pjaRecent(){try{return JSON.parse(localStorage.getItem(PJA_RKEY)||"[]")}catch(e){return[]}}
 function pjaRemember(){const q=pjaSnap(),name=pjaName(q);if(!name)return;
-  try{localStorage.setItem(PJA_RKEY,JSON.stringify([{name,q},...pjaRecent().filter(s=>s.name!==name)].slice(0,5)))}catch(e){}}
+  try{localStorage.setItem(PJA_RKEY,JSON.stringify([{name,q:pjaKeys(q)},...pjaRecent().filter(s=>s.name!==name)].slice(0,5)))}catch(e){}}
 // Пустые подсказки объясняют почему: префикс, которого нет, или имя, которого нет
 function pjaNone(){
-  const raw=pjaIn.trim().replace(/^(?:-|не\s+)/i,""),m=/^([а-яё]+):\s*(.*)$/i.exec(raw);
-  if(m&&!PJA_PREFIX[m[1].toLowerCase()])return`Условия «${m[1]}:» нет. Есть: камера:, сервер:, правило:, пользователь:, событие:, категория:.`;
-  if(m)return`Нет значения «${m[2]}» для «${m[1]}:». Проверьте имя или уберите «${m[1]}:», чтобы искать по тексту.`;
-  return"Совпадений нет. Enter — искать как текст.";
+  const raw=pjaIn.trim().replace(PJA_NEG,"$1"),m=PJA_PFX.exec(raw);
+  if(m&&!PJA_PREFIX[m[1].toLowerCase()])return i18n("Условия «{p}:» нет. Есть условия: камера:, сервер:, правило:, пользователь:, событие:, категория:.").replace("{p}",m[1]);
+  if(m)return i18n("Нет значения «{v}» для «{p}:». Проверить имя или убрать «{p}:», чтобы искать по тексту.").replace("{v}",m[2]).replaceAll("{p}",m[1]);
+  return i18n("Совпадений нет. Нажать Enter, чтобы искать как текст.");
 }
 function pjaSave(){
-  const q=pjaSnap(),name=pjaName(q)||"Все события";
-  pjaSaveList([{name,q},...pjaSaved().filter(s=>s.name!==name)]);renderTree();toast(`Консоль сохранила поиск «${name}». Он есть в подсказках строки поиска.`);
+  const q=pjaSnap(),name=pjaName(q)||i18n("Все события");
+  if(!pjaSaveList([{name,q:pjaKeys(q)},...pjaSaved().filter(s=>s.name!==name)])){toast(i18n("Консоль не сохранила поиск: браузер не дал записать данные."));return}
+  renderTree();toast(i18n("Консоль сохранила поиск «{n}». Он есть в панели слева и в подсказках строки поиска.").replace("{n}",name));
 }
 function pjaLoad(j){const s=pjaSaved()[j];if(s)pjaLoadQ(s.q)}
 (function pjaCss(){const st=document.createElement("style");st.textContent=`
@@ -26720,15 +26755,15 @@ function pjaLoad(j){const s=pjaSaved()[j];if(s)pjaLoadQ(s.q)}
 .pja-cv:focus-visible{outline:2px solid var(--one-focus-ring);outline-offset:2px}
 `;document.head.appendChild(st)})();
 
-// ── Часть B (прототип 48): фасеты со счётчиками в левой панели ──
-let pjbFind={kinds:"",objs:"",users:""},pjbMore={kinds:false,objs:false,users:false},pjbShut=new Set();
 // ── Фасеты в левой панели ──
+// Часть B (прототип 48): фасеты со счётчиками в левой панели
+let pjbFind={kinds:"",objs:"",users:""},pjbMore={kinds:false,objs:false,users:false},pjbShut=new Set();
 const PJB_TYPE={cam:"камера",srv:"сервер",rule:"правило"};
 function pjbItems(f){
   const S=PJ.S,r=pjRes;
-  if(f==="cats")return PJ.CATS.map((c,i)=>({v:i,label:c.n,n:r.cc[i],dot:c.id}));
-  if(f==="kinds")return PJ.KINDS.map(k=>({v:k.i,label:k.n,n:r.kc[k.i],dot:PJ.CATS[k.ci].id}));
-  if(f==="objs")return S.objs.map(o=>({v:o.i,label:o.name,n:r.oc[o.i],sub:PJB_TYPE[o.type]}));
+  if(f==="cats")return PJ.CATS.map((c,i)=>({v:i,label:PJ.catName(c),n:r.cc[i],dot:c.id}));
+  if(f==="kinds")return PJ.KINDS.map(k=>({v:k.i,label:PJ.kindName(k),n:r.kc[k.i],dot:PJ.CATS[k.ci].id}));
+  if(f==="objs")return S.objs.map(o=>({v:o.i,label:o.name,n:r.oc[o.i],sub:i18n(PJB_TYPE[o.type])}));
   return S.users.map(u=>({v:u.i,label:u.login,n:r.uc[u.i]}));
 }
 // Категории без выбора — все, кроме служебных
@@ -26736,35 +26771,70 @@ function pjbCatOn(i){return pjQ.cats?pjQ.cats.has(i):PJ.CATS[i].id!=="debug"||pj
 function pjbOn(f,v){return f==="cats"?pjbCatOn(v):!!pjQ[f]?.has(v)}
 function pjbEx(f,v){return f!=="cats"&&!!pjQ[PJ_NF[f]]?.has(v)}
 function pjbClearEx(f){pjQ={...pjQ,[PJ_NF[f]]:null};pjRefresh()}
+// Порядок строк — по числу событий. Счётчик поля консоль считает без условия на само поле,
+// поэтому флажок не меняет порядок своего раздела: строка под курсором остаётся на месте.
+// Выбранное значение, которое не вошло в первые строки, стоит в конце раздела.
 function pjbRows(f){
   const all=pjbItems(f),q=(pjbFind[f]||"").toLowerCase();
-  let list=f==="cats"?all:all.filter(x=>!q||x.label.toLowerCase().includes(q)).sort((a,b)=>pjbOn(f,b.v)-pjbOn(f,a.v)||pjbEx(f,b.v)-pjbEx(f,a.v)||b.n-a.n);
-  const lim=f==="cats"?99:pjbMore[f]?60:6,shown=list.slice(0,lim),rest=list.length-shown.length;
-  return shown.map(x=>{const on=pjbOn(f,x.v),ex=pjbEx(f,x.v);
-    return`<label class="pjb-r${on?" on":""}${ex?" ex":""}${x.n||ex?"":" z"}"${ex?` title="Такие события скрыты. Флажок вернёт их"`:""}><input type="checkbox" ${on?"checked":""} ${onEv("change",["pjbToggle",f,x.v])}>${ex?`<b class="pjb-ne">≠</b>`:""}
-      ${x.dot?`<i class="pj-dot pj-c-${x.dot}"></i>`:""}<span class="pjb-l" title="${escHtml(x.label)}">${PJ.hl(x.label,q?[q]:[])}${x.sub?`<span class="pj-mu"> · ${escHtml(x.sub)}</span>`:""}</span>
-      <span class="pjb-n">${PJ.num(x.n)}</span><span class="pjb-acts"><span class="pjb-only" role="button" tabindex="0" title="Только это значение" ${onEv("click",["pjbOnly",onEv.event,f,x.v])}>только</span>${f!=="cats"&&!ex?`<span class="pjb-only" role="button" tabindex="0" title="Скрыть такие события" ${onEv("click",["pjbNot",onEv.event,f,x.v])}>без</span>`:""}</span></label>`}).join("")
-    +(rest>0?`<button type="button" class="lk lk-act pjb-more" ${onEv("click",["pjbMoreSet",f,true])}>Ещё ${PJ.num(rest)}${q?"":" · или найдите по имени"}</button>`:pjbMore[f]&&f!=="cats"?`<button type="button" class="lk lk-act pjb-more" ${onEv("click",["pjbMoreSet",f,false])}>Свернуть</button>`:"");
+  const list=f==="cats"?all:all.filter(x=>!q||x.label.toLowerCase().includes(q)).sort((a,b)=>b.n-a.n||a.v-b.v);
+  const lim=f==="cats"?99:pjbMore[f]?60:6,shown=list.slice(0,lim),tail=list.slice(lim).filter(x=>pjbOn(f,x.v)||pjbEx(f,x.v));
+  const rest=list.length-shown.length-tail.length;
+  return[...shown,...tail].map(x=>pjbRow(f,x,q)).join("")
+    // Раскрытый список длиннее 60 строк: остальные значения — через поле «Найти»
+    +(pjbMore[f]&&f!=="cats"?`<div class="pjb-more" data-fk="m:${f}"><button type="button" class="lk lk-act" ${onEv("click",["pjbMoreSet",f,false])}>${escHtml(i18n("Свернуть"))}</button>${rest>0?` <span class="pj-mu">${escHtml(i18n("Ещё {n}: найти их по имени в поле «Найти».").replace("{n}",PJ.num(rest)))}</span>`:""}</div>`
+      :rest>0?`<button type="button" class="lk lk-act pjb-more" data-fk="m:${f}" ${onEv("click",["pjbMoreSet",f,true])}>${escHtml(i18n("Показать ещё {n}").replace("{n}",PJ.num(rest)))}</button>`:"");
+}
+// Строка: флажок с подписью и счётчиком; «только» и «без» — кнопки рядом, вне подписи.
+// Счётчик и кнопки занимают одно место в конце строки: наведение не меняет ширину подписи.
+function pjbRow(f,x,q){
+  const on=pjbOn(f,x.v),ex=pjbEx(f,x.v),lab=x.label+(x.sub?` · ${x.sub}`:"");
+  return`<div class="pjb-r${on?" on":""}${ex?" ex":""}${x.n||ex?"":" z"}" data-fk="r:${f}:${x.v}"${ex?` title="${escHtml(i18n("Консоль скрывает такие события. Флажок вернёт их."))}"`:""}>
+    <label class="pjb-lab"><input type="checkbox" ${on?"checked":""} ${onEv("change",["pjbToggle",f,x.v])}>${ex?`<b class="pjb-ne" aria-hidden="true">≠</b>`:""}${x.dot?`<i class="pj-dot pj-c-${x.dot}"></i>`:""}<span class="pjb-l" title="${escHtml(lab)}">${PJ.hl(x.label,q?[q]:[])}${x.sub?`<span class="pj-mu"> · ${escHtml(x.sub)}</span>`:""}</span></label>
+    <span class="pjb-end"><span class="pjb-n">${PJ.num(x.n)}</span><span class="pjb-acts"><button type="button" class="pjb-only" title="${escHtml(i18n("Показать только «{x}»").replace("{x}",x.label))}" ${onEv("click",["pjbOnly",f,x.v])}>${escHtml(i18n("только"))}</button>${f!=="cats"&&!ex?`<button type="button" class="pjb-only" title="${escHtml(i18n("Скрыть события «{x}»").replace("{x}",x.label))}" ${onEv("click",["pjbNot",f,x.v])}>${escHtml(i18n("без"))}</button>`:""}</span></span></div>`;
 }
 function pjbSec(title,f,find){
   const act=f==="cats"?!!pjQ.cats:!!(pjQ[f]||pjQ[PJ_NF[f]]),shut=pjbShut.has(f),n=f==="cats"?0:(pjQ[f]?.size||0)+(pjQ[PJ_NF[f]]?.size||0);
-  return`<div class="pjb-sec${shut?" shut":""}"><div class="pjb-h"><button type="button" class="pjb-tg" aria-expanded="${!shut}" ${onEv("click",["pjbShutSet",f])}>${lu("chevron-right")}${escHtml(title)}${shut&&n?` <span class="pjb-cnt">${n}</span>`:""}</button>${act?`<button type="button" class="lk lk-act" ${onEv("click",["pjClear",f])}>сбросить</button>`:""}</div>
-    ${shut?"":find?`<input class="pjb-find" type="text" placeholder="Найти" aria-label="Найти: ${escHtml(title)}" value="${escHtml(pjbFind[f])}" ${onEv("input",["pjbFindSet",f,onEv.value])}>`:""}
+  title=i18n(title);
+  return`<div class="pjb-sec${shut?" shut":""}"><div class="pjb-h" data-fk="h:${f}"><button type="button" class="pjb-tg" aria-expanded="${!shut}" ${onEv("click",["pjbShutSet",f])}>${lu("chevron-right")}${escHtml(title)}${shut&&n?` <span class="pjb-cnt">${n}</span>`:""}</button>${act?`<button type="button" class="lk lk-act" ${onEv("click",["pjClear",f])}>${escHtml(i18n("сбросить"))}</button>`:""}</div>
+    ${shut?"":find?`<input class="pjb-find" data-fk="q:${f}" type="text" placeholder="${escHtml(i18n("Найти"))}" aria-label="${escHtml(i18n("Найти: {x}").replace("{x}",title))}" value="${escHtml(pjbFind[f])}" ${onEv("input",["pjbFindSet",f,onEv.value])}>`:""}
     ${shut?"":`<div id="pjbL-${f}">${pjbRows(f)}</div>`}</div>`;
 }
 function pjbToggle(f,v){
   logFilt="all";
   if(f==="cats"){const eff=new Set(PJ.CATS.map((c,i)=>i).filter(pjbCatOn));eff.has(v)?eff.delete(v):eff.add(v);
-    const def=PJ.CATS.every((c,i)=>eff.has(i)===(c.id!=="debug"));pjQ={...pjQ,cats:def?null:eff,showDebug:false};pjRefresh();return}
+    const def=!eff.size||PJ.CATS.every((c,i)=>eff.has(i)===(c.id!=="debug"));pjQ={...pjQ,cats:def?null:eff,showDebug:false};pjRefresh();return}
   if(pjbEx(f,v)){pjUnEx(f,v);return}
   pjToggle(f,v);
 }
-function pjbNot(e,f,v){e.preventDefault();e.stopPropagation();logFilt="all";pjSetVal(f,v,true)}
-function pjbShutSet(f){const s=new Set(pjbShut);s.has(f)?s.delete(f):s.add(f);pjbShut=s;renderTree()}
-function pjbOnly(e,f,v){e.preventDefault();e.stopPropagation();logFilt="all";pjOnly(f,v)}
-function pjbMoreSet(f,on){pjbMore={...pjbMore,[f]:on};const el=document.getElementById("pjbL-"+f);if(el)el.innerHTML=pjbRows(f)}
+function pjbNot(f,v){logFilt="all";pjSetVal(f,v,true)}
+function pjbOnly(f,v){logFilt="all";pjOnly(f,v)}
+function pjbShutSet(f){const s=new Set(pjbShut);s.has(f)?s.delete(f):s.add(f);pjbShut=s;const sn=pjbSnap();renderTree();pjbFlip(sn)}
+function pjbMoreSet(f,on){pjbMore={...pjbMore,[f]:on};pjbListSet(f)}
 // Поиск по значениям меняет только свой список: поле ввода остаётся в фокусе
-function pjbFindSet(f,v){pjbFind={...pjbFind,[f]:v};const el=document.getElementById("pjbL-"+f);if(el)el.innerHTML=pjbRows(f)}
+function pjbFindSet(f,v){pjbFind={...pjbFind,[f]:v};pjbListSet(f)}
+function pjbListSet(f){const el=document.getElementById("pjbL-"+f);if(!el)return;const sn=pjbSnap();el.innerHTML=pjbRows(f);pjbFlip(sn)}
+// Плавность фасетов (правило фильтров): строки, что остались, съезжают на новые места, новые проявляются.
+// bulkScopeSnap и bulkScopeFlip работают только с «Применить к» в #main, поэтому у панели слева свои функции.
+// Перерисовка панели заменяет разметку: фокус возвращается на тот же флажок, кнопку или поле.
+function pjbSnap(){
+  const t=document.getElementById("tree");if(!t||!t.querySelector(".pjb-sec"))return null;
+  const m=new Map();t.querySelectorAll("[data-fk]").forEach(el=>m.set(el.dataset.fk,el.getBoundingClientRect().top));
+  const a=document.activeElement,fe=a&&t.contains(a)?a.closest("[data-fk]"):null;
+  const focus=fe?{k:fe.dataset.fk,n:fe===a?-1:[...fe.querySelectorAll("input,button")].indexOf(a),caret:a.selectionStart??null}:null;
+  return{m,focus};
+}
+function pjbFlip(s){
+  const t=document.getElementById("tree");if(!s||!t)return;
+  const byK=new Map();t.querySelectorAll("[data-fk]").forEach(el=>byK.set(el.dataset.fk,el));
+  if(s.focus&&!t.contains(document.activeElement)){const el=byK.get(s.focus.k),cs=el?el.querySelectorAll("input,button"):[],c=el&&(s.focus.n<0?el:cs[s.focus.n]||cs[cs.length-1]);
+    // Кнопки строки видны только при фокусе в строке: сначала фокус на флажок, затем на кнопку
+    if(c){if(c.tagName==='BUTTON')el.querySelector('input')?.focus({preventScroll:true});c.focus({preventScroll:true});if(s.focus.caret!=null&&c.setSelectionRange)try{c.setSelectionRange(s.focus.caret,s.focus.caret)}catch(e){}}}
+  if(matchMedia("(prefers-reduced-motion: reduce)").matches||!t.animate)return;
+  const ease="cubic-bezier(.2,.8,.3,1)";
+  byK.forEach((el,k)=>{const o=s.m.get(k);
+    if(o==null){el.animate([{opacity:0},{opacity:1}],{duration:200,delay:80,easing:"ease-out",fill:"backwards"});return}
+    const dy=o-el.getBoundingClientRect().top;if(Math.abs(dy)>.5)el.animate([{transform:`translateY(${dy}px)`},{transform:"none"}],{duration:260,easing:ease})});
+}
 (function pjbCss(){const st=document.createElement("style");st.textContent=`
 /* Поле поиска — обёртка моста (.sq): рамка и halo на обёртке. */
 .pjb-q{flex:1;min-width:300px;display:flex;align-items:center;gap:8px;height:var(--ctrl-h,32px);box-sizing:border-box;padding:0 8px;border:1px solid var(--one-editor-border);border-radius:var(--one-radius-control);background:var(--one-editor-bg)}
@@ -26778,20 +26848,25 @@ function pjbFindSet(f,v){pjbFind={...pjbFind,[f]:v};const el=document.getElement
 .pjb-h .lk{font:var(--one-type-label);letter-spacing:var(--one-type-label-tracking)}
 .pjb-find{width:100%;box-sizing:border-box;height:var(--ctl-dense,24px);margin:0 0 4px;font:var(--one-type-body-sm)}
 /* Строка значения — как строка дерева: hover nav-hover, радиус control; флажок 16. */
-.pjb-r{display:flex;align-items:center;gap:8px;min-height:var(--ctl-compact,28px);font:var(--one-type-body-sm);letter-spacing:var(--one-type-body-sm-tracking);color:var(--one-fg);cursor:pointer;border-radius:var(--one-radius-control);padding:0 8px;margin:0 -8px}
-.pjb-r:hover{background:var(--one-nav-hover)}
+.pjb-r{display:flex;align-items:center;gap:8px;min-height:var(--ctl-compact,28px);font:var(--one-type-body-sm);letter-spacing:var(--one-type-body-sm-tracking);color:var(--one-fg);border-radius:var(--one-radius-control);padding:0 8px;margin:0 -8px}
+.pjb-r:is(:hover,:focus-within){background:var(--one-nav-hover)}
+.pjb-lab{flex:1;min-width:0;display:flex;align-items:center;gap:8px;min-height:var(--ctl-compact,28px);cursor:pointer}
 .pjb-r input{margin:0;flex:none;width:16px;height:16px}
-.pjb-r:focus-within:has(input:focus-visible){outline:2px solid var(--one-focus-ring);outline-offset:-2px}
+.pjb-r:has(.pjb-lab input:focus-visible){outline:2px solid var(--one-focus-ring);outline-offset:-2px}
 /* Пустое значение отступает тоном, а не прозрачностью (как .n-slice-empty). */
 .pjb-r.z:not(:hover) :is(.pjb-l,.pjb-n,.pj-dot){color:var(--one-fg-disabled)}
 .pjb-r.z:not(:hover) .pj-dot{background:var(--one-fg-disabled)}
 .pjb-r .pj-dot{margin-right:0}
 .pjb-l{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pjb-n{font:var(--one-type-caption);letter-spacing:var(--one-type-caption-tracking);color:var(--one-fg-muted);font-variant-numeric:tabular-nums}
-.pjb-acts{display:none;gap:8px}.pjb-r:hover .pjb-acts,.pjb-acts:focus-within{display:inline-flex}.pjb-r:hover .pjb-n{display:none}
+/* Счётчик и «только»/«без» — в одной ячейке конца строки: ширина ячейки постоянна, подпись не сужается при наведении. */
+.pjb-end{display:grid;justify-items:end;align-items:center;flex:none}.pjb-end>*{grid-area:1/1}
+.pjb-acts{display:inline-flex;gap:8px;visibility:hidden}
+.pjb-r:is(:hover,:focus-within) .pjb-acts{visibility:visible}.pjb-r:is(:hover,:focus-within) .pjb-n{visibility:hidden}
 /* «только» и «без» — отдельно стоящие ссылки (.lk.lk-act): 500, без подчёркивания, под курсором — с ним. */
-.pjb-only{font:var(--one-type-label);letter-spacing:var(--one-type-label-tracking);color:var(--x-link);cursor:pointer;border-radius:var(--one-radius-control)}
+.pjb-only{all:unset;font:var(--one-type-label);letter-spacing:var(--one-type-label-tracking);color:var(--x-link);cursor:pointer;border-radius:var(--one-radius-control)}
 .pjb-only:hover{color:var(--x-link-hover);text-decoration:underline;text-underline-offset:2px}
+.pjb-only:focus-visible{outline:2px solid var(--one-focus-ring);outline-offset:1px}
 .pjb-r.ex .pjb-l{text-decoration:line-through;color:var(--one-fg-muted)}.pjb-ne{color:var(--one-fg-muted);font:var(--one-type-label-strong);margin-left:-4px}
 .pjb-tg{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:4px;border-radius:var(--one-radius-control)}.pjb-tg svg{width:16px;height:16px;color:var(--one-fg-muted);transition:transform .15s}.pjb-tg[aria-expanded="true"] svg{transform:rotate(90deg)}
 /* Число выбранных у свёрнутого раздела — бейдж строки дерева (.n .tag): selected-neutral, label. */
@@ -26803,14 +26878,15 @@ function pjbFindSet(f,v){pjbFind={...pjbFind,[f]:v};const el=document.getElement
 
 // ── Объединение: строка и фасеты читают и меняют одни условия ──
 // Выбор в фасете сразу виден чипом в строке; чип из строки отмечает значение в фасете
-function pjRefresh(){pjQ.text=[...pjaTexts,pjaIn].filter(Boolean).join(" ");if(app!=="log")return;logUI();renderTree()}
+// Префикс («камера: ») или отрицание («-root») в поле — ещё не текст: список ждёт выбора подсказки
+function pjRefresh(){pjQ.text=[...pjaTexts,pjaPending(pjaIn)?"":pjaIn].filter(Boolean).join(" ");if(app!=="log")return;const sn=pjbSnap();logUI();renderTree();pjbFlip(sn)}
 // Без строки «Журнал событий» и без «Операций»: панель — только условия поиска и сохранённые поиски
 function treeLog(){
   if(!PJ.ready())return"";
   if(!pjRes)pjRun();
   const sv=pjaSaved();
   return`${pjbSec("Категория","cats",false)}${pjbSec("Событие","kinds",true)}${pjbSec("Объект","objs",true)}${pjbSec("Пользователь","users",true)}
-    <div class="pj-tree-h">Мои поиски</div>${sv.length?sv.map((s,k)=>pjTreeRow(s.name,false,["pjaLoadGo",k],"star")).join(""):`<p class="pj-tree-p">Кнопка «Сохранить поиск» над списком добавит поиск сюда.</p>`}`;
+    <div data-fk="saved"><div class="pj-tree-h">${escHtml(i18n("Мои поиски"))}</div>${sv.length?sv.map((s,k)=>pjTreeRow(s.name,false,["pjaLoadGo",k],"star")).join(""):`<p class="pj-tree-p">${escHtml(i18n("Кнопка «Сохранить поиск» над списком добавит поиск сюда."))}</p>`}</div>`;
 }
 // ── Одно поле поиска: в «Журнале» поле в шапке ищет по журналу ──
 // Строка журнала встаёт на место общего поиска (#gojump); Ctrl K ставит курсор в неё.
@@ -26821,11 +26897,11 @@ function pjaBarHtml(){
   const chips=pjaChips(),has=!!chips;
   return`<div class="pja-wrap pja-hd">
     <div class="pja-bar" ${onEv("mousedown",["pjaBarDown",onEv.event])}>${lu("search")}${chips}
-      <input id="pjaIn" type="text" autocomplete="off" spellcheck="false" placeholder="${has?"Добавить условие":"Искать в журнале: камера, пользователь, событие или текст"}" aria-label="Поиск в журнале" aria-autocomplete="list" aria-controls="pjaSug"
+      <input id="pjaIn" type="text" role="combobox" autocomplete="off" spellcheck="false" placeholder="${escHtml(i18n(has?"Добавить условие":"Искать в журнале: камера, пользователь, событие или текст"))}" aria-label="${escHtml(i18n("Поиск в журнале"))}" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="pjaSugL"
         ${onEv("input",["pjaType",onEv.value])} ${onEv("keydown",["pjaKey",onEv.event])} ${onEv("focus",["pjaFocusOn"])} ${onEv("blur",["pjaFocusOff"])}>
-      ${has?`<button type="button" class="pja-clr" title="Убрать все условия" ${onEv("click",["pjaClearAll"])}>${lu("x")}</button>`:""}<span class="pja-hint" aria-hidden="true">Ctrl K</span>
+      ${has?`<button type="button" class="pja-clr" title="${escHtml(i18n("Убрать все условия"))}" aria-label="${escHtml(i18n("Убрать все условия"))}" ${onEv("click",["pjaClearAll"])}>${lu("x")}</button>`:""}<span class="pja-hint" aria-hidden="true">Ctrl K</span>
     </div>
-    <div class="pja-sug" id="pjaSug" role="listbox" hidden ${onEv("mousedown",["pjaSugDown",onEv.event])}></div>
+    <div class="pja-sug" id="pjaSug" hidden ${onEv("mousedown",["pjaSugDown",onEv.event])}><div role="listbox" id="pjaSugL" aria-label="${escHtml(i18n("Подсказки поиска"))}"></div></div>
   </div>`;
 }
 function pjaHdSync(){
@@ -26833,9 +26909,20 @@ function pjaHdSync(){
   const on=pjaHdOn();document.body.classList.toggle("pj-hdlog",on);
   let slot=document.getElementById("pjaHdSlot");
   if(!slot){slot=document.createElement("div");slot.id="pjaHdSlot";slot.className="pja-slot";gj.after(slot)}
-  if(!on){if(pjaHdCache){slot.innerHTML="";pjaHdCache=""}return}
-  const h=pjaBarHtml();if(h!==pjaHdCache){slot.innerHTML=h;pjaHdCache=h}
+  // Поле ушло без blur (переход Alt+←): фокус и подсказки сбрасываются, иначе следующий вход сам откроет подсказки
+  if(!on){if(pjaHdCache){slot.innerHTML="";pjaHdCache="";pjaFocus=false;pjaSugOpen=false}return}
+  const h=pjaBarHtml();if(h!==pjaHdCache){slot.innerHTML=h;pjaHdCache=h;pjaBarFadeBind();pjaBarEnd()}
+  pjaBarFade();
 }
+// Чипы не влезли в поле: поле прокручивается, а край, за которым ещё чипы, гаснет (маска).
+// Фокус в поле — прокрутка к концу, где курсор ввода.
+// Прокрутка к концу — только при новой разметке и при входе в поле: иначе пользователь не прокрутил бы чипы влево
+function pjaBarEnd(){const b=document.querySelector(".pja-hd .pja-bar");if(b&&pjaFocus){b.scrollLeft=b.scrollWidth;pjaBarFade()}}
+const _pjaFocusOn=pjaFocusOn;
+pjaFocusOn=function(){_pjaFocusOn.apply(this,arguments);pjaBarEnd()};
+function pjaBarFade(){const b=document.querySelector(".pja-hd .pja-bar");if(!b)return;
+  const l=b.scrollLeft>1,r=b.scrollLeft+b.clientWidth<b.scrollWidth-1;b.classList.toggle("ov-l",l);b.classList.toggle("ov-r",r)}
+function pjaBarFadeBind(){const b=document.querySelector(".pja-hd .pja-bar");if(b)b.addEventListener("scroll",pjaBarFade,{passive:true})}
 function logUI(){
   logFilt="all";
   if(!pjInit()){pjWait();return}
@@ -26845,12 +26932,12 @@ function logUI(){
   // Без заголовка раздела: имя раздела уже на рельсе, а место отдано списку
   paintMain(`<div class="pj pj-nohd">
     <div class="pj-top">
-      ${has||pjaIn?`<span class="pj-mu pja-tip">Условия — в поле поиска вверху и в панели слева.</span>`:`<div class="pja-ex"><span class="pj-mu">Например:</span>${pjaExamples().map((e,j)=>`<button type="button" class="lk lk-act" ${onEv("click",["pjaExample",j])}>${escHtml(e.label)}</button>`).join("")}</div>`}
-      <div class="pj-seg" role="group" aria-label="Период" style="margin-left:auto">${PJ.RANGES.map(([id,n])=>`<button type="button" class="${pjQ.range===id?"on":""}" ${onEv("click",["pjSetRange",id])}>${n}</button>`).join("")}</div>
+      ${has||pjaIn?`<span class="pj-mu pja-tip">${escHtml(i18n("Поле поиска вверху и панель слева меняют одни и те же условия."))}</span>`:`<div class="pja-ex"><span class="pj-mu">${escHtml(i18n("Примеры поиска:"))}</span>${pjaExamples().map((e,j)=>`<button type="button" class="lk lk-act" ${onEv("click",["pjaExample",j])}>${escHtml(e.label)}</button>`).join("")}</div>`}
+      <div class="pj-seg" role="group" aria-label="${escHtml(i18n("Период"))}" style="margin-left:auto">${PJ.RANGES.map(([id,n])=>`<button type="button" class="${pjQ.range===id?"on":""}" aria-pressed="${pjQ.range===id}" ${onEv("click",["pjSetRange",id])}>${escHtml(i18n(n))}</button>`).join("")}</div>
     </div>
     <div class="pj-sum" id="pjSum"></div>
     <div class="pj-histbox" id="pjHist"></div>
-    <div class="pj-body"><div class="pj-main"><div class="pj-listbox" id="pjList"></div></div><aside class="pj-side" id="pjDet" aria-label="Подробности события"></aside></div>
+    <div class="pj-body"><div class="pj-main"><div class="pj-listbox" id="pjList"></div></div><aside class="pj-side" id="pjDet" aria-label="${escHtml(i18n("Подробности события"))}"></aside></div>
   </div>`);
   pjaMount();
 }
@@ -26862,9 +26949,10 @@ focusGo=function(){if(pjaHdOn()){const i=document.getElementById("pjaIn");if(i){
 // Поиск по всей консоли из строки журнала: общий поиск с тем же текстом в «Оборудовании»
 const _pjaSugBuild=pjaSugBuild;
 pjaSugBuild=function(){const it=_pjaSugBuild(),raw=pjaIn.trim();
-  if(raw&&!/^(?:-|не\s)/i.test(raw))it.push({g:"Вся консоль",label:`Искать «${raw}» в оборудовании, разделах и настройках`,sub:"",run:()=>pjaGlobal(raw)});
+  if(raw&&!pjaPending(raw))it.push({g:i18n("Вся консоль"),label:i18n("Искать «{q}» в оборудовании, разделах и настройках").replace("{q}",raw),sub:"",run:()=>pjaGlobal(raw)});
   return it};
-function pjaGlobal(q){pjaIn="";pjaSugOpen=false;pjaFocus=false;goApp("hw");
+// Текст из поля ушёл в общий поиск: отбор журнала его больше не держит
+function pjaGlobal(q){pjaIn="";pjaSugOpen=false;pjaFocus=false;pjQ.text=pjaTexts.join(" ");goApp("hw");
   setTimeout(()=>{const i=document.getElementById("gq");if(!i)return;i.value=q;i.focus();goType(q)},0)}
 (function pjaHdCss(){const st=document.createElement("style");st.textContent=`
 .pja-slot{display:none;flex:1 1 auto;min-width:0;max-width:860px}
@@ -26874,6 +26962,9 @@ body.pj-hdlog .gojump{display:none}
 /* В шапке — то же поле, что общий поиск (.gojump): ступень regular 32, чипы внутри — dense 24 (D-077). */
 .pja-hd .pja-bar{flex-wrap:nowrap;height:var(--ctrl-h,32px);min-height:0;padding:0 4px 0 8px;overflow-x:auto;scrollbar-width:none}
 .pja-hd .pja-bar::-webkit-scrollbar{display:none}
+.pja-hd .pja-bar.ov-l{-webkit-mask-image:linear-gradient(to right,transparent,#000 24px);mask-image:linear-gradient(to right,transparent,#000 24px)}
+.pja-hd .pja-bar.ov-r{-webkit-mask-image:linear-gradient(to left,transparent,#000 24px);mask-image:linear-gradient(to left,transparent,#000 24px)}
+.pja-hd .pja-bar.ov-l.ov-r{-webkit-mask-image:linear-gradient(to right,transparent,#000 24px,#000 calc(100% - 24px),transparent);mask-image:linear-gradient(to right,transparent,#000 24px,#000 calc(100% - 24px),transparent)}
 .pja-hd .pja-bar input{min-width:160px}
 .pja-hd .pj-chip{flex:none}
 /* Подсказка клавиши — тот же ярлык, что у общего поиска (.gojump-hint моста). */
@@ -26882,6 +26973,13 @@ body.pj-hdlog .gojump{display:none}
 .pj.pj-nohd{padding-top:12px}
 .pja-tip{font:var(--one-type-body-sm);letter-spacing:var(--one-type-body-sm-tracking)}
 `;document.head.appendChild(st)})();
+// Глобальный поиск ведёт в «Журнал» по категориям прежнего журнала (logCats): категория становится условием
+const PJ_LOGCAT={audit:["audit"],alarm:["alarm","error"],info:["info"]};
+const _pjLogGo=logGo;
+logGo=function(id){if(!PJ_LOGCAT[id]&&id!=="all")return _pjLogGo.apply(this,arguments);
+  logFilt="all";if(PJ.ready()){const c=id==="all"?null:new Set(PJ_LOGCAT[id].map(x=>PJ.CATS.findIndex(k=>k.id===x)).filter(i=>i>=0));pjQ={...pjQ,cats:c&&c.size?c:null}}
+  paint()};
+// ── Мастер устройства ──
 
 
 let ws=1,wizd={};
