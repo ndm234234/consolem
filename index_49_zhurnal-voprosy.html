@@ -2740,7 +2740,7 @@ html[data-theme="light"] .cp-step{background:var(--one-control-hover);color:var(
   </div>
 </div>
 <div class="tctx" id="tctx" role="menu" data-on-mousedown='[["rcMenuDown",{"$on":"event"}]]'></div>
-<script src="assets/proto-journal-stub.js?v=ec681c23"></script>
+<script src="assets/proto-journal-stub.js?v=d40f47a3"></script>
 <script>
 // Тема — одна кнопка в шапке; выбор запоминается (ключ кита kit-theme).
 try{const t=localStorage.getItem("kit-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}
@@ -26439,7 +26439,7 @@ function opRedo(id){
 // ── Журнал: поиск в большом журнале (ЗАГЛУШКА assets/proto-journal-stub.js) ──
 // 200 000 событий за 30 суток создаёт браузер; отбор, счётчики и гистограмма — тоже он.
 // В контракте этого пока нет: после утверждения вида — правка контракта и отбор на сервере.
-let pjQ={range:"24h",from:null,to:null,cats:null,kinds:null,objs:null,users:null,text:"",showDebug:false},pjRes=null,pjSel=-1,pjList=null,pjTextT=0;
+let pjQ={range:"24h",from:null,to:null,cats:null,kinds:null,objs:null,users:null,nkinds:null,nobjs:null,nusers:null,text:"",showDebug:false},pjZoom=[],pjRes=null,pjSel=-1,pjList=null,pjTextT=0;
 // Камеры кэш грузит по запросу: перед созданием событий журнал читает их список сам
 let pjBoot=null;
 function pjInit(){
@@ -26465,15 +26465,36 @@ function pjRun(){
   if(pjSel>=0&&!pjRes.idx.includes(pjSel))pjSel=-1;
   return pjRes;
 }
-function pjSetRange(id){pjQ={...pjQ,range:id,from:null,to:null};pjRefresh()}
+function pjSetRange(id){pjZoom=[];pjQ={...pjQ,range:id,from:null,to:null};pjRefresh()}
+// Протяжка по гистограмме сужает период; «Вернуть период» снимает последнее сужение
+function pjZoomTo(from,to){
+  if(to-from<PJ.MIN*2){toast("Отрезок уже меньше двух минут");return}
+  pjZoom=[...pjZoom,{range:pjQ.range,from:pjQ.from,to:pjQ.to}].slice(-20);pjQ={...pjQ,range:"custom",from,to};pjRefresh();
+}
+function pjZoomBack(){const z=pjZoom[pjZoom.length-1];if(!z)return;pjZoom=pjZoom.slice(0,-1);pjQ={...pjQ,range:z.range,from:z.from,to:z.to};pjRefresh()}
+function pjHistMount(host,height=44){
+  if(!host)return;const r=pjRange(),h=PJ.hist(pjQ,r.from,r.to,72);
+  host.innerHTML=PJ.histSvg(h,{height})+PJ.histAxis(h);host.title="Протяните мышью, чтобы сузить период; щелчок — один столбик";
+  PJ.brush(host,h,pjZoomTo);
+}
+// Исключение: «≠» скрывает такие события; включение того же значения снимает исключение
+const PJ_NF={kinds:"nkinds",objs:"nobjs",users:"nusers"};
+function pjSetVal(f,v,neg){
+  const nf=PJ_NF[f];if(!nf){pjToggle(f,v);return}
+  const inc=new Set(pjQ[f]||[]),exc=new Set(pjQ[nf]||[]);
+  if(neg){exc.add(v);inc.delete(v)}else{inc.add(v);exc.delete(v)}
+  pjQ={...pjQ,[f]:inc.size?inc:null,[nf]:exc.size?exc:null};pjRefresh();
+}
+function pjUnEx(f,v){const nf=PJ_NF[f],s=new Set(pjQ[nf]||[]);s.delete(v);pjQ={...pjQ,[nf]:s.size?s:null};pjRefresh()}
+function pjFlip(f,v){const nf=PJ_NF[f];if(pjQ[nf]?.has(v))pjSetVal(f,v,false);else pjSetVal(f,v,true)}
 function pjToggle(field,v){
   const s=new Set(pjQ[field]||[]);s.has(v)?s.delete(v):s.add(v);
   pjQ={...pjQ,[field]:s.size?s:null};pjRefresh();
 }
 function pjOnly(field,v){pjQ={...pjQ,[field]:new Set([v])};pjRefresh()}
-function pjClear(field){pjQ={...pjQ,[field]:null};pjRefresh()}
+function pjClear(field){pjQ={...pjQ,[field]:null,...(PJ_NF[field]?{[PJ_NF[field]]:null}:{})};pjRefresh()}
 function pjShowDebug(on){pjQ={...pjQ,showDebug:!!on};pjRefresh()}
-function pjResetAll(){pjQ={range:"24h",from:null,to:null,cats:null,kinds:null,objs:null,users:null,text:"",showDebug:false};pjSel=-1;pjRefresh()}
+function pjResetAll(){pjQ={range:"24h",from:null,to:null,cats:null,kinds:null,objs:null,users:null,nkinds:null,nobjs:null,nusers:null,text:"",showDebug:false};pjZoom=[];pjSel=-1;pjRefresh()}
 // Текст: список обновляется после паузы в наборе
 function pjText(v){pjQ={...pjQ,text:v};clearTimeout(pjTextT);pjTextT=setTimeout(pjRefresh,160)}
 function pjSum(extra=""){
@@ -26481,6 +26502,7 @@ function pjSum(extra=""){
   return`<span><b>${PJ.num(r.total)}</b> ${PJ.plural(r.total,"событие|события|событий")} ${escHtml(pjRangeName())}</span>
     ${r.hidden&&!pjQ.showDebug?`<span>· служебных скрыто ${PJ.num(r.hidden)} <button type="button" class="lk" ${onEv("click",["pjShowDebug",true])}>Показать</button></span>`:""}
     ${pjQ.showDebug?`<span>· <button type="button" class="lk" ${onEv("click",["pjShowDebug",false])}>Скрыть служебные</button></span>`:""}
+    ${pjZoom.length?`<span>· <button type="button" class="lk" ${onEv("click",["pjZoomBack"])}>${lu("chevron-left")} Вернуть период</button></span>`:""}
     <span class="pj-mu">· отбор ${r.ms} мс из ${PJ.num(PJ.S.n)}</span>${extra}`;
 }
 function pjMountList(host,o={}){
@@ -26493,22 +26515,24 @@ function pjMountDet(){
   const host=document.getElementById("pjDet");if(!host)return;
   host.innerHTML=PJ.detailHtml(pjSel);PJ.bindActs(host,pjAct);
 }
-function pjAct(act,v){
+function pjAct(act,v,f){
   if(PJ.openAct(act,v))return;
+  if(act==="inc"||act==="exc"){pjSetVal(f,v,act==="exc");return}
+  if(act==="near"){PJ.nearMode=v?"time":"obj";pjMountDet();return}
   if(act==="pick"){
     pjSel=v;const j=pjRes.idx.indexOf(v);
     if(j>=0&&pjList){pjList.select(v);pjList.scrollToRow(j,true);pjList.flash(v)}
     else toast("Это событие не попадает в текущий отбор. Подробности — в панели справа.");
     pjMountDet();return;
   }
-  if(act==="similar"){const r=PJ.row(v);pjQ={...pjQ,kinds:new Set([r.kind.i]),objs:r.obj?new Set([r.obj.i]):null,users:null,cats:null,text:"",showDebug:r.cat.id==="debug"};pjSel=v;pjRefresh();return}
+  if(act==="similar"){const r=PJ.row(v);pjQ={...pjQ,kinds:new Set([r.kind.i]),objs:r.obj?new Set([r.obj.i]):null,users:null,cats:null,nkinds:null,nobjs:null,nusers:null,text:"",showDebug:r.cat.id==="debug"};pjSel=v;pjRefresh();return}
   if(act==="copy"){const url=`${location.origin}${location.pathname}#log=ev:${v}`;(navigator.clipboard?.writeText(url)||Promise.reject()).then(()=>toast("Консоль скопировала ссылку на событие"),()=>toast(url));return}
 }
 // Ссылка #log или #log=ev:N открывает журнал (и событие)
 function pjDeepLink(){
   const m=/^#log(?:=ev:(\d+))?$/.exec(location.hash);if(!m)return false;
   goApp("log");
-  if(m[1]){if(!PJ.ready()){(pjBoot||Promise.resolve()).then(()=>setTimeout(pjDeepLink,0));pjInit();return true}const i=+m[1];if(i<PJ.S.n){const t=PJ.S.T[i];pjQ={...pjQ,range:"custom",from:t-PJ.HOUR,to:t+PJ.HOUR,cats:null,kinds:null,objs:null,users:null,text:"",showDebug:true};pjSel=i;pjRefresh();setTimeout(()=>{const j=pjRes.idx.indexOf(i);if(pjList&&j>=0){pjList.scrollToRow(j,true);pjList.flash(i)}},60)}}
+  if(m[1]){if(!PJ.ready()){(pjBoot||Promise.resolve()).then(()=>setTimeout(pjDeepLink,0));pjInit();return true}const i=+m[1];if(i<PJ.S.n){const t=PJ.S.T[i];pjQ={...pjQ,range:"custom",from:t-PJ.HOUR,to:t+PJ.HOUR,cats:null,kinds:null,objs:null,users:null,nkinds:null,nobjs:null,nusers:null,text:"",showDebug:true};pjSel=i;pjRefresh();setTimeout(()=>{const j=pjRes.idx.indexOf(i);if(pjList&&j>=0){pjList.scrollToRow(j,true);pjList.flash(i)}},60)}}
   return true;
 }
 // «Операции» — прежний экран: отмена и повтор групповых правок

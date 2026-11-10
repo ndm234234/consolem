@@ -2740,7 +2740,7 @@ html[data-theme="light"] .cp-step{background:var(--one-control-hover);color:var(
   </div>
 </div>
 <div class="tctx" id="tctx" role="menu" data-on-mousedown='[["rcMenuDown",{"$on":"event"}]]'></div>
-<script src="assets/proto-journal-stub.js?v=ec681c23"></script>
+<script src="assets/proto-journal-stub.js?v=d40f47a3"></script>
 <script>
 // Тема — одна кнопка в шапке; выбор запоминается (ключ кита kit-theme).
 try{const t=localStorage.getItem("kit-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}
@@ -26437,7 +26437,7 @@ function opRedo(id){
 // ── Журнал: поиск в большом журнале (ЗАГЛУШКА assets/proto-journal-stub.js) ──
 // 200 000 событий за 30 суток создаёт браузер; отбор, счётчики и гистограмма — тоже он.
 // В контракте этого пока нет: после утверждения вида — правка контракта и отбор на сервере.
-let pjQ={range:"24h",from:null,to:null,cats:null,kinds:null,objs:null,users:null,text:"",showDebug:false},pjRes=null,pjSel=-1,pjList=null,pjTextT=0;
+let pjQ={range:"24h",from:null,to:null,cats:null,kinds:null,objs:null,users:null,nkinds:null,nobjs:null,nusers:null,text:"",showDebug:false},pjZoom=[],pjRes=null,pjSel=-1,pjList=null,pjTextT=0;
 // Камеры кэш грузит по запросу: перед созданием событий журнал читает их список сам
 let pjBoot=null;
 function pjInit(){
@@ -26463,15 +26463,36 @@ function pjRun(){
   if(pjSel>=0&&!pjRes.idx.includes(pjSel))pjSel=-1;
   return pjRes;
 }
-function pjSetRange(id){pjQ={...pjQ,range:id,from:null,to:null};pjRefresh()}
+function pjSetRange(id){pjZoom=[];pjQ={...pjQ,range:id,from:null,to:null};pjRefresh()}
+// Протяжка по гистограмме сужает период; «Вернуть период» снимает последнее сужение
+function pjZoomTo(from,to){
+  if(to-from<PJ.MIN*2){toast("Отрезок уже меньше двух минут");return}
+  pjZoom=[...pjZoom,{range:pjQ.range,from:pjQ.from,to:pjQ.to}].slice(-20);pjQ={...pjQ,range:"custom",from,to};pjRefresh();
+}
+function pjZoomBack(){const z=pjZoom[pjZoom.length-1];if(!z)return;pjZoom=pjZoom.slice(0,-1);pjQ={...pjQ,range:z.range,from:z.from,to:z.to};pjRefresh()}
+function pjHistMount(host,height=44){
+  if(!host)return;const r=pjRange(),h=PJ.hist(pjQ,r.from,r.to,72);
+  host.innerHTML=PJ.histSvg(h,{height})+PJ.histAxis(h);host.title="Протяните мышью, чтобы сузить период; щелчок — один столбик";
+  PJ.brush(host,h,pjZoomTo);
+}
+// Исключение: «≠» скрывает такие события; включение того же значения снимает исключение
+const PJ_NF={kinds:"nkinds",objs:"nobjs",users:"nusers"};
+function pjSetVal(f,v,neg){
+  const nf=PJ_NF[f];if(!nf){pjToggle(f,v);return}
+  const inc=new Set(pjQ[f]||[]),exc=new Set(pjQ[nf]||[]);
+  if(neg){exc.add(v);inc.delete(v)}else{inc.add(v);exc.delete(v)}
+  pjQ={...pjQ,[f]:inc.size?inc:null,[nf]:exc.size?exc:null};pjRefresh();
+}
+function pjUnEx(f,v){const nf=PJ_NF[f],s=new Set(pjQ[nf]||[]);s.delete(v);pjQ={...pjQ,[nf]:s.size?s:null};pjRefresh()}
+function pjFlip(f,v){const nf=PJ_NF[f];if(pjQ[nf]?.has(v))pjSetVal(f,v,false);else pjSetVal(f,v,true)}
 function pjToggle(field,v){
   const s=new Set(pjQ[field]||[]);s.has(v)?s.delete(v):s.add(v);
   pjQ={...pjQ,[field]:s.size?s:null};pjRefresh();
 }
 function pjOnly(field,v){pjQ={...pjQ,[field]:new Set([v])};pjRefresh()}
-function pjClear(field){pjQ={...pjQ,[field]:null};pjRefresh()}
+function pjClear(field){pjQ={...pjQ,[field]:null,...(PJ_NF[field]?{[PJ_NF[field]]:null}:{})};pjRefresh()}
 function pjShowDebug(on){pjQ={...pjQ,showDebug:!!on};pjRefresh()}
-function pjResetAll(){pjQ={range:"24h",from:null,to:null,cats:null,kinds:null,objs:null,users:null,text:"",showDebug:false};pjSel=-1;pjRefresh()}
+function pjResetAll(){pjQ={range:"24h",from:null,to:null,cats:null,kinds:null,objs:null,users:null,nkinds:null,nobjs:null,nusers:null,text:"",showDebug:false};pjZoom=[];pjSel=-1;pjRefresh()}
 // Текст: список обновляется после паузы в наборе
 function pjText(v){pjQ={...pjQ,text:v};clearTimeout(pjTextT);pjTextT=setTimeout(pjRefresh,160)}
 function pjSum(extra=""){
@@ -26479,6 +26500,7 @@ function pjSum(extra=""){
   return`<span><b>${PJ.num(r.total)}</b> ${PJ.plural(r.total,"событие|события|событий")} ${escHtml(pjRangeName())}</span>
     ${r.hidden&&!pjQ.showDebug?`<span>· служебных скрыто ${PJ.num(r.hidden)} <button type="button" class="lk" ${onEv("click",["pjShowDebug",true])}>Показать</button></span>`:""}
     ${pjQ.showDebug?`<span>· <button type="button" class="lk" ${onEv("click",["pjShowDebug",false])}>Скрыть служебные</button></span>`:""}
+    ${pjZoom.length?`<span>· <button type="button" class="lk" ${onEv("click",["pjZoomBack"])}>${lu("chevron-left")} Вернуть период</button></span>`:""}
     <span class="pj-mu">· отбор ${r.ms} мс из ${PJ.num(PJ.S.n)}</span>${extra}`;
 }
 function pjMountList(host,o={}){
@@ -26491,22 +26513,24 @@ function pjMountDet(){
   const host=document.getElementById("pjDet");if(!host)return;
   host.innerHTML=PJ.detailHtml(pjSel);PJ.bindActs(host,pjAct);
 }
-function pjAct(act,v){
+function pjAct(act,v,f){
   if(PJ.openAct(act,v))return;
+  if(act==="inc"||act==="exc"){pjSetVal(f,v,act==="exc");return}
+  if(act==="near"){PJ.nearMode=v?"time":"obj";pjMountDet();return}
   if(act==="pick"){
     pjSel=v;const j=pjRes.idx.indexOf(v);
     if(j>=0&&pjList){pjList.select(v);pjList.scrollToRow(j,true);pjList.flash(v)}
     else toast("Это событие не попадает в текущий отбор. Подробности — в панели справа.");
     pjMountDet();return;
   }
-  if(act==="similar"){const r=PJ.row(v);pjQ={...pjQ,kinds:new Set([r.kind.i]),objs:r.obj?new Set([r.obj.i]):null,users:null,cats:null,text:"",showDebug:r.cat.id==="debug"};pjSel=v;pjRefresh();return}
+  if(act==="similar"){const r=PJ.row(v);pjQ={...pjQ,kinds:new Set([r.kind.i]),objs:r.obj?new Set([r.obj.i]):null,users:null,cats:null,nkinds:null,nobjs:null,nusers:null,text:"",showDebug:r.cat.id==="debug"};pjSel=v;pjRefresh();return}
   if(act==="copy"){const url=`${location.origin}${location.pathname}#log=ev:${v}`;(navigator.clipboard?.writeText(url)||Promise.reject()).then(()=>toast("Консоль скопировала ссылку на событие"),()=>toast(url));return}
 }
 // Ссылка #log или #log=ev:N открывает журнал (и событие)
 function pjDeepLink(){
   const m=/^#log(?:=ev:(\d+))?$/.exec(location.hash);if(!m)return false;
   goApp("log");
-  if(m[1]){if(!PJ.ready()){(pjBoot||Promise.resolve()).then(()=>setTimeout(pjDeepLink,0));pjInit();return true}const i=+m[1];if(i<PJ.S.n){const t=PJ.S.T[i];pjQ={...pjQ,range:"custom",from:t-PJ.HOUR,to:t+PJ.HOUR,cats:null,kinds:null,objs:null,users:null,text:"",showDebug:true};pjSel=i;pjRefresh();setTimeout(()=>{const j=pjRes.idx.indexOf(i);if(pjList&&j>=0){pjList.scrollToRow(j,true);pjList.flash(i)}},60)}}
+  if(m[1]){if(!PJ.ready()){(pjBoot||Promise.resolve()).then(()=>setTimeout(pjDeepLink,0));pjInit();return true}const i=+m[1];if(i<PJ.S.n){const t=PJ.S.T[i];pjQ={...pjQ,range:"custom",from:t-PJ.HOUR,to:t+PJ.HOUR,cats:null,kinds:null,objs:null,users:null,nkinds:null,nobjs:null,nusers:null,text:"",showDebug:true};pjSel=i;pjRefresh();setTimeout(()=>{const j=pjRes.idx.indexOf(i);if(pjList&&j>=0){pjList.scrollToRow(j,true);pjList.flash(i)}},60)}}
   return true;
 }
 // «Операции» — прежний экран: отмена и повтор групповых правок
@@ -26530,12 +26554,16 @@ function pjaSaved(){try{return JSON.parse(localStorage.getItem(PJA_KEY)||"[]")}c
 function pjaSaveList(a){try{localStorage.setItem(PJA_KEY,JSON.stringify(a.slice(0,8)))}catch(e){}}
 function pjRefresh(){pjQ.text=[...pjaTexts,pjaIn].filter(Boolean).join(" ");if(app==="log")logUI()}
 const PJA_TYPE={cam:"Камера",srv:"Сервер",rule:"Правило"};
+// Чип условия: «=» — только такие, «≠» — скрыть такие; щелчок по чипу меняет одно на другое
 function pjaChips(){
   const S=PJ.S,ch=[];
-  const add=(lab,val,rm)=>ch.push(`<span class="pj-chip"><i>${escHtml(lab)}:</i> ${escHtml(val)}<button type="button" aria-label="Убрать условие" title="Убрать условие" ${onEv("click",rm)}>×</button></span>`);
-  (pjQ.objs?[...pjQ.objs]:[]).forEach(i=>add(PJA_TYPE[S.objs[i]?.type]||"Объект",S.objs[i]?.name||"—",["pjToggle","objs",i]));
-  (pjQ.users?[...pjQ.users]:[]).forEach(i=>add("Пользователь",S.users[i]?.login||"—",["pjToggle","users",i]));
-  (pjQ.kinds?[...pjQ.kinds]:[]).forEach(i=>add("Событие",PJ.KINDS[i].n,["pjToggle","kinds",i]));
+  const add=(lab,val,rm,o={})=>ch.push(`<span class="pj-chip${o.ex?" ex":""}">${o.flip?`<button type="button" class="pja-cv" title="${o.ex?"Скрыты такие события. Щелчок — показать только такие":"Показаны только такие события. Щелчок — скрыть такие"}" ${onEv("click",o.flip)}><i>${escHtml(lab)}</i> <b>${o.ex?"≠":"="}</b> ${escHtml(val)}</button>`:`<i>${escHtml(lab)}:</i> ${escHtml(val)}`}<button type="button" aria-label="Убрать условие" title="Убрать условие" ${onEv("click",rm)}>×</button></span>`);
+  const L={objs:i=>PJA_TYPE[S.objs[i]?.type]||"Объект",users:()=>"Пользователь",kinds:()=>"Событие"};
+  const V={objs:i=>S.objs[i]?.name||"—",users:i=>S.users[i]?.login||"—",kinds:i=>PJ.KINDS[i].n};
+  ["objs","users","kinds"].forEach(f=>{
+    (pjQ[f]?[...pjQ[f]]:[]).forEach(i=>add(L[f](i),V[f](i),["pjToggle",f,i],{flip:["pjFlip",f,i]}));
+    (pjQ[PJ_NF[f]]?[...pjQ[PJ_NF[f]]]:[]).forEach(i=>add(L[f](i),V[f](i),["pjUnEx",f,i],{ex:1,flip:["pjFlip",f,i]}));
+  });
   (pjQ.cats?[...pjQ.cats]:[]).forEach(i=>add("Категория",PJ.CATS[i].n,["pjToggle","cats",i]));
   pjaTexts.forEach((t,j)=>add("Текст",`«${t}»`,["pjaTextDel",j]));
   if(pjQ.range==="custom")add("Период",PJ.fmtSpan(pjQ.from,pjQ.to),["pjSetRange","24h"]);
@@ -26573,7 +26601,7 @@ function pjaMount(){
   if(pjaFocus&&inp&&document.activeElement!==inp){inp.focus();inp.setSelectionRange(pjaIn.length,pjaIn.length)}
   const sum=document.getElementById("pjSum");
   if(sum)sum.innerHTML=pjSum(`<span class="pja-save"><button type="button" class="lk" ${onEv("click",["pjaSave"])}>${lu("star")} Сохранить поиск</button></span>`);
-  pjaHistMount();
+  pjHistMount(document.getElementById("pjHist"),44);
   pjMountList(document.getElementById("pjList"),{onFilter:(f,v)=>pjToggle(f==="obj"?"objs":"users",v)});
   pjMountDet();
   if(pjaSugOpen)pjaSugPaint();
@@ -26587,15 +26615,6 @@ function treeLog(){
 }
 function pjaExampleGo(j){logFilt="all";pjaExample(j);paint()}
 function pjaLoadGo(j){logFilt="all";pjaLoad(j);paint()}
-// Гистограмма: столбик — отрезок периода; щелчок сужает период до него
-function pjaHistMount(){
-  const host=document.getElementById("pjHist");if(!host)return;
-  const r=pjRange(),h=PJ.hist(pjQ,r.from,r.to,72);
-  host.innerHTML=PJ.histSvg(h,{height:44})+PJ.histAxis(h);
-  host.onclick=e=>{const b=e.target.closest("[data-b]");if(!b)return;const k=+b.dataset.b,from=h.from+k*h.step,to=from+h.step;
-    if(to-from<PJ.MIN*2){toast("Отрезок уже меньше двух минут");return}
-    pjQ={...pjQ,range:"custom",from,to};pjRefresh()};
-}
 function pjaBarDown(e){if(e.target.closest("button"))return;e.preventDefault();pjaFocus=true;document.getElementById("pjaIn")?.focus()}
 function pjaFocusOn(){pjaFocus=true;pjaSugOpen=true;pjaAt=0;pjaSugPaint()}
 function pjaFocusOff(){pjaFocus=false;setTimeout(()=>{if(!pjaFocus){pjaSugOpen=false;const s=document.getElementById("pjaSug");if(s)s.hidden=true}},120)}
@@ -26610,66 +26629,92 @@ function pjaKey(e){
 function pjaPopChip(){
   if(pjQ.range==="custom"){pjSetRange("24h");return}
   if(pjaTexts.length){pjaTexts.pop();pjRefresh();return}
-  for(const f of["cats","kinds","users","objs"])if(pjQ[f]){const a=[...pjQ[f]];a.pop();pjQ={...pjQ,[f]:a.length?new Set(a):null};pjRefresh();return}
+  for(const f of["cats","nkinds","kinds","nusers","users","nobjs","objs"])if(pjQ[f]){const a=[...pjQ[f]];a.pop();pjQ={...pjQ,[f]:a.length?new Set(a):null};pjRefresh();return}
 }
-function pjaCommitText(){const t=pjaIn.trim();if(t)pjaTexts.push(t);pjaIn="";pjRefresh()}
-function pjaClearAll(){pjaTexts=[];pjaIn="";pjQ={...pjQ,cats:null,kinds:null,objs:null,users:null,range:pjQ.range==="custom"?"24h":pjQ.range};pjRefresh()}
+function pjaCommitText(){const t=pjaIn.trim();if(t)pjaTexts.push(t);pjaIn="";pjRefresh();pjaRemember()}
+function pjaClearAll(){pjaTexts=[];pjaIn="";pjZoom=[];pjQ={...pjQ,cats:null,kinds:null,objs:null,users:null,nkinds:null,nobjs:null,nusers:null,range:pjQ.range==="custom"?"24h":pjQ.range,from:null,to:null};pjRefresh()}
 // Подсказки: что совпало по имени, со счётчиком «сколько найдётся» в текущем отборе
 const PJA_PREFIX={"камера":"cam","объект":"obj","сервер":"srv","правило":"rule","пользователь":"user","кто":"user","событие":"kind","тип":"kind","категория":"cat"};
 function pjaSugBuild(){
   const S=PJ.S,r=pjRes,raw=pjaIn.trim(),items=[];
-  let scope=null,t=raw.toLowerCase();
-  const m=/^([а-яё]+):\s*(.*)$/i.exec(raw);if(m&&PJA_PREFIX[m[1].toLowerCase()]){scope=PJA_PREFIX[m[1].toLowerCase()];t=m[2].toLowerCase()}
+  let scope=null,neg=false,q=raw;
+  const nm=/^(?:-|не\s+)(.*)$/i.exec(q);if(nm&&nm[1].trim()){neg=true;q=nm[1].trim()}
+  let t=q.toLowerCase();
+  const m=/^([а-яё]+):\s*(.*)$/i.exec(q);if(m&&PJA_PREFIX[m[1].toLowerCase()]){scope=PJA_PREFIX[m[1].toLowerCase()];t=m[2].toLowerCase()}
   const ok=s=>!t||s.toLowerCase().includes(t);
+  const G=g=>neg?`Скрыть: ${g.toLowerCase()}`:g;
   if(!raw){
+    pjaRecent().forEach((s,j)=>items.push({g:"Недавние",label:s.name,sub:"",run:()=>pjaLoadQ(s.q)}));
     pjaSaved().forEach((s,j)=>items.push({g:"Мои поиски",label:s.name,sub:"",run:()=>pjaLoad(j)}));
     pjaExamples().forEach((e,j)=>items.push({g:"Частые вопросы",label:e.label,sub:"",run:()=>pjaExample(j)}));
     PJ.CATS.forEach((c,i)=>items.push({g:"Категория",label:c.n,n:r.cc[i],run:()=>pjToggle("cats",i)}));
     return items;
   }
-  if(!scope)items.push({g:"Текст",label:`Искать «${raw}» во всех полях`,sub:"«|» — или, пробел — и, кавычки — точная фраза",run:pjaCommitText});
+  if(!scope&&!neg)items.push({g:"Текст",label:`Искать «${raw}» во всех полях`,sub:"«|» — или, пробел — и, кавычки — точная фраза",run:pjaCommitText});
   if(!scope||scope==="cam"||scope==="srv"||scope==="rule"||scope==="obj")
     S.objs.filter(o=>(scope==="cam"||scope==="srv"||scope==="rule"?o.type===scope:true)&&ok(o.name)).sort((a,b)=>r.oc[b.i]-r.oc[a.i]).slice(0,scope?12:6)
-      .forEach(o=>items.push({g:"Объект",label:o.name,sub:PJA_TYPE[o.type]+(o.type==="cam"&&o.srv?` · ${o.srv}`:""),n:r.oc[o.i],run:()=>pjaPick("objs",o.i)}));
-  if(!scope||scope==="user")S.users.filter(u=>ok(u.login)).sort((a,b)=>r.uc[b.i]-r.uc[a.i]).slice(0,scope?12:4).forEach(u=>items.push({g:"Пользователь",label:u.login,n:r.uc[u.i],run:()=>pjaPick("users",u.i)}));
-  if(!scope||scope==="kind")PJ.KINDS.filter(k=>ok(k.n)||ok(PJ.CATS[k.ci].n)).sort((a,b)=>r.kc[b.i]-r.kc[a.i]).slice(0,scope?30:5).forEach(k=>items.push({g:"Событие",label:k.n,sub:PJ.CATS[k.ci].n,n:r.kc[k.i],run:()=>pjaPick("kinds",k.i)}));
-  if(!scope||scope==="cat")PJ.CATS.filter(c=>ok(c.n)).forEach(c=>items.push({g:"Категория",label:c.n,n:r.cc[PJ.CATS.indexOf(c)],run:()=>pjaPick("cats",PJ.CATS.indexOf(c))}));
+      .forEach(o=>items.push({g:G("Объект"),label:o.name,sub:PJA_TYPE[o.type]+(o.type==="cam"&&o.srv?` · ${o.srv}`:""),n:r.oc[o.i],run:()=>pjaPick("objs",o.i,neg)}));
+  if(!scope||scope==="user")S.users.filter(u=>ok(u.login)).sort((a,b)=>r.uc[b.i]-r.uc[a.i]).slice(0,scope?12:4).forEach(u=>items.push({g:G("Пользователь"),label:u.login,n:r.uc[u.i],run:()=>pjaPick("users",u.i,neg)}));
+  if(!scope||scope==="kind")PJ.KINDS.filter(k=>ok(k.n)||ok(PJ.CATS[k.ci].n)).sort((a,b)=>r.kc[b.i]-r.kc[a.i]).slice(0,scope?30:5).forEach(k=>items.push({g:G("Событие"),label:k.n,sub:PJ.CATS[k.ci].n,n:r.kc[k.i],run:()=>pjaPick("kinds",k.i,neg)}));
+  if(!neg&&(!scope||scope==="cat"))PJ.CATS.filter(c=>ok(c.n)).forEach(c=>items.push({g:"Категория",label:c.n,n:r.cc[PJ.CATS.indexOf(c)],run:()=>pjaPick("cats",PJ.CATS.indexOf(c))}));
   return items;
 }
-function pjaPick(f,v){pjaIn="";const s=new Set(pjQ[f]||[]);s.add(v);pjQ={...pjQ,[f]:s};pjSel=-1;pjRefresh()}
+function pjaPick(f,v,neg){pjaIn="";pjSel=-1;if(PJ_NF[f])pjSetVal(f,v,!!neg);else{const s=new Set(pjQ[f]||[]);s.add(v);pjQ={...pjQ,[f]:s};pjRefresh()}pjaRemember()}
 function pjaApply(k){const it=pjaItems[k];if(!it)return;pjaFocus=true;pjaAt=0;it.run()}
 function pjaSugPaint(){
   const box=document.getElementById("pjaSug");if(!box)return;
   if(!pjaSugOpen||!pjRes){box.hidden=true;return}
   pjaItems=pjaSugBuild();
-  if(!pjaItems.length){box.hidden=false;box.innerHTML=`<div class="pja-none">Совпадений нет. Enter — искать как текст.</div>`;return}
-  const t=pjaIn.trim().replace(/^[а-яё]+:\s*/i,"").toLowerCase();let g="";
+  if(!pjaItems.length){box.hidden=false;box.innerHTML=`<div class="pja-none">${escHtml(pjaNone())}</div>`;return}
+  const t=pjaIn.trim().replace(/^(?:-|не\s+)/i,"").replace(/^[а-яё]+:\s*/i,"").toLowerCase();let g="";
   box.innerHTML=pjaItems.map((it,k)=>{const head=it.g!==g?`<div class="pja-g">${escHtml(it.g)}</div>`:"";g=it.g;
     return`${head}<div class="pja-it${k===pjaAt?" on":""}" role="option" aria-selected="${k===pjaAt}" data-k="${k}"><span class="pja-l">${PJ.hl(it.label,t?[t]:[])}${it.sub?`<span class="pj-mu"> · ${escHtml(it.sub)}</span>`:""}</span>${it.n!=null?`<span class="pja-n${it.n?"":" z"}">${PJ.num(it.n)}</span>`:""}</div>`}).join("")
-    +`<div class="pja-foot pj-mu">↑↓ — выбрать · Enter — добавить · Esc — закрыть · Backspace — убрать последнее условие</div>`;
+    +`<div class="pja-foot pj-mu">↑↓ — выбрать · Enter — добавить · Esc — закрыть · Backspace — убрать последнее условие · «-» перед словом — скрыть такие</div>`;
   box.hidden=false;
   box.querySelector(".pja-it.on")?.scrollIntoView({block:"nearest"});
 }
 // Частые вопросы — готовые наборы условий
 function pjaExamples(){
-  const S=PJ.S,ki=id=>PJ.KINDS.findIndex(k=>k.id===id),cam=S.objs.find(o=>o.type==="cam");
+  const S=PJ.S,ki=id=>PJ.KINDS.findIndex(k=>k.id===id),cam=S.objs.find(o=>o.type==="cam"),root=S.users.findIndex(u=>u.login==="root");
   return[
     {label:"Кто менял настройки",set:{kinds:[ki("cam.set"),ki("rule.set"),ki("role.set")],range:"7d"}},
     {label:"Неудачные входы за 7 дней",set:{kinds:[ki("login.fail")],range:"7d"}},
+    ...(root>=0?[{label:"Действия пользователей, кроме root",set:{cats:[PJ.CATS.findIndex(c=>c.id==="audit")],nusers:[root],range:"24h"}}]:[]),
     {label:"Ошибки за 24 часа",set:{cats:[PJ.CATS.findIndex(c=>c.id==="error")],range:"24h"}},
     ...(cam?[{label:`Тревоги камеры «${cam.name}»`,set:{cats:[0],objs:[cam.i],range:"7d"}}]:[])
   ];
 }
-function pjaExample(j){const e=pjaExamples()[j];if(!e)return;pjaTexts=[];pjaIn="";
-  pjQ={...pjQ,cats:null,kinds:null,objs:null,users:null,range:e.set.range||pjQ.range};
-  ["cats","kinds","objs","users"].forEach(f=>{if(e.set[f])pjQ[f]=new Set(e.set[f])});pjSel=-1;pjaSugOpen=false;pjRefresh()}
+function pjaExample(j){const e=pjaExamples()[j];if(!e)return;pjaLoadQ({...e.set,texts:[]})}
+// Набор условий из примера, сохранённого или недавнего поиска
+function pjaLoadQ(q){pjaTexts=(q.texts||[]).slice();pjaIn="";pjZoom=[];
+  pjQ={...pjQ,range:q.range||"24h",from:null,to:null};["cats","kinds","objs","users","nkinds","nobjs","nusers"].forEach(f=>{pjQ[f]=q[f]&&q[f].length?new Set(q[f]):null});
+  pjSel=-1;pjaSugOpen=false;pjRefresh();pjaRemember()}
+function pjaSnap(){const q={range:pjQ.range==="custom"?"24h":pjQ.range,texts:pjaTexts.slice()};["cats","kinds","objs","users","nkinds","nobjs","nusers"].forEach(f=>q[f]=pjQ[f]?[...pjQ[f]]:null);return q}
+// Имя поиска — по условиям, как на чипах
+function pjaName(q){
+  const S=PJ.S,p=[];
+  (q.objs||[]).forEach(i=>p.push(S.objs[i]?.name));(q.nobjs||[]).forEach(i=>p.push("без "+S.objs[i]?.name));
+  (q.users||[]).forEach(i=>p.push(S.users[i]?.login));(q.nusers||[]).forEach(i=>p.push("кроме "+S.users[i]?.login));
+  (q.kinds||[]).forEach(i=>p.push(PJ.KINDS[i].n));(q.nkinds||[]).forEach(i=>p.push("без «"+PJ.KINDS[i].n+"»"));
+  (q.cats||[]).forEach(i=>p.push(PJ.CATS[i].n));(q.texts||[]).forEach(t=>p.push(`«${t}»`));
+  return p.filter(Boolean).join(", ");
+}
+const PJA_RKEY="pj47.recent";
+function pjaRecent(){try{return JSON.parse(localStorage.getItem(PJA_RKEY)||"[]")}catch(e){return[]}}
+function pjaRemember(){const q=pjaSnap(),name=pjaName(q);if(!name)return;
+  try{localStorage.setItem(PJA_RKEY,JSON.stringify([{name,q},...pjaRecent().filter(s=>s.name!==name)].slice(0,5)))}catch(e){}}
+// Пустые подсказки объясняют почему: префикс, которого нет, или имя, которого нет
+function pjaNone(){
+  const raw=pjaIn.trim().replace(/^(?:-|не\s+)/i,""),m=/^([а-яё]+):\s*(.*)$/i.exec(raw);
+  if(m&&!PJA_PREFIX[m[1].toLowerCase()])return`Условия «${m[1]}:» нет. Есть: камера:, сервер:, правило:, пользователь:, событие:, категория:.`;
+  if(m)return`Нет значения «${m[2]}» для «${m[1]}:». Проверьте имя или уберите «${m[1]}:», чтобы искать по тексту.`;
+  return"Совпадений нет. Enter — искать как текст.";
+}
 function pjaSave(){
-  const name=[...document.querySelectorAll(".pja-bar .pj-chip")].map(c=>c.textContent.replace("×","").trim()).join(", ")||"Все события";
-  const q={cats:pjQ.cats&&[...pjQ.cats],kinds:pjQ.kinds&&[...pjQ.kinds],objs:pjQ.objs&&[...pjQ.objs],users:pjQ.users&&[...pjQ.users],range:pjQ.range==="custom"?"24h":pjQ.range,texts:pjaTexts.slice()};
+  const q=pjaSnap(),name=pjaName(q)||"Все события";
   pjaSaveList([{name,q},...pjaSaved().filter(s=>s.name!==name)]);renderTree();toast(`Консоль сохранила поиск «${name}». Он есть в подсказках строки поиска.`);
 }
-function pjaLoad(j){const s=pjaSaved()[j];if(!s)return;pjaTexts=s.q.texts||[];pjaIn="";
-  pjQ={...pjQ,range:s.q.range,from:null,to:null};["cats","kinds","objs","users"].forEach(f=>{pjQ[f]=s.q[f]?new Set(s.q[f]):null});pjaSugOpen=false;pjRefresh()}
+function pjaLoad(j){const s=pjaSaved()[j];if(s)pjaLoadQ(s.q)}
 (function pjaCss(){const st=document.createElement("style");st.textContent=`
 .pja-wrap{position:relative;flex:1;min-width:320px}
 .pja-bar{display:flex;flex-wrap:wrap;align-items:center;gap:6px;min-height:36px;padding:4px 8px;border:1px solid var(--ln);border-radius:8px;background:var(--p);cursor:text}
@@ -26687,6 +26732,8 @@ function pjaLoad(j){const s=pjaSaved()[j];if(!s)return;pjaTexts=s.q.texts||[];pj
 .pja-foot{font-size:11px;padding:6px 12px;border-top:1px solid var(--ln);margin-top:4px}
 .pja-ex{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:13px;align-items:center}
 .pja-save{margin-left:auto}
+.pj-chip .pja-cv{width:auto;height:auto;border-radius:0;line-height:inherit;color:var(--tx);display:inline-flex;gap:4px;align-items:baseline}.pj-chip .pja-cv:hover{background:transparent}.pja-cv:hover b,.pja-cv:focus-visible b{text-decoration:underline}
+.pja-cv b{font-weight:600;color:var(--bl)}.pj-chip.ex .pja-cv b{color:var(--rd,#e5484d)}.pj-chip.ex .pja-cv{text-decoration:none}
 .pj-sum .lk svg{width:13px;height:13px;vertical-align:-2px}
 `;document.head.appendChild(st)})();
 
