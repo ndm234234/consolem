@@ -901,13 +901,15 @@ html[data-theme="light"] .cp.done{border-color:var(--one-success-icon);color:var
 .cs-lock{display:inline-flex;align-items:center;margin-left:6px;color:var(--mu)}.cs-lock svg{width:13px;height:13px}
 .tab-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--one-warning-icon);margin-left:6px;vertical-align:middle}
 .cs-tocw{display:grid;grid-template-columns:210px minmax(0,1fr);gap:14px;align-items:start}
-.cs-toc{position:sticky;top:0;display:flex;flex-direction:column;gap:2px;padding:8px;border:1px solid var(--ln);border-radius:8px;background:var(--p)}
+.cs-toc{position:sticky;top:0;display:flex;flex-direction:column;gap:2px;padding:8px;border:1px solid var(--ln);border-radius:8px;background:var(--p);max-height:var(--cs-toc-max,none);min-height:0}
+.cs-toc-list{display:flex;flex-direction:column;gap:2px;min-height:0;overflow-y:auto;scrollbar-gutter:stable}
+.cs-state{font-size:13px;margin:2px 0 8px}.cs-state b{font-weight:600}
 .cs-toc-h{font-size:12px;color:var(--mu);padding:4px 8px}
 .cs-toc-i{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;min-width:0;padding:6px 8px;border:0;border-radius:6px;background:none;font:inherit;font-size:13px;color:inherit;text-align:left;cursor:pointer}
 .cs-toc-i:hover{background:var(--p2)}
 .cs-toc-i span,.cs-toc-i small{max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cs-toc-i small{color:var(--mu);font-size:12px}
-.cs-toc-acts{display:flex;flex-wrap:wrap;gap:4px 12px;padding:8px 8px 2px;border-top:1px solid var(--ln);margin-top:4px;font-size:12px}
+.cs-toc-acts{display:flex;flex-wrap:wrap;gap:4px 12px;padding:8px 8px 2px;border-top:1px solid var(--ln);margin-top:4px;font-size:12px;flex:0 0 auto}
 .cs-sec>.ch{flex-wrap:nowrap;justify-content:flex-start}
 .cs-chev{display:inline-flex;align-items:center;justify-content:center;flex:none;width:24px;height:24px;margin:-4px 4px -4px -6px;padding:0;border:0;border-radius:6px;background:none;color:inherit;cursor:pointer}
 .cs-chev:hover{background:var(--p2)}.cs-chev:focus-visible{outline:2px solid var(--bl)}
@@ -8846,7 +8848,7 @@ function paintMain(html){
   const host=document.getElementById("main");
   const snap=bulkScopeSnap();
   if(host)paintInto(host,html,mainKey(),mainSeen);
-  bulkScopeFlip(snap);tsFixInd(host);
+  bulkScopeFlip(snap);tsFixInd(host);csTocFit();
   liveSync();
   navRecord();
   fitCrumbs();
@@ -12761,9 +12763,26 @@ function csFocus(k,on){
     .find(c=>!c.closest(".cs-acts,.ch")&&!(c.matches("input")&&csSearchInput(c))&&c.getClientRects().length>0):el.querySelector(":scope>.ch .cs-acts button");
   f?.focus();
 }
-function csEditSet(id,k,on){if(on)csEdit.add(id+":"+k);else csEdit.delete(id+":"+k);gear();setTimeout(()=>csFocus(k,on),30)}
+// Блок меняет высоту плавно: поля появляются и уходят без скачка, блоки ниже съезжают следом. prefers-reduced-motion — без движения
+function csAnim(k,paint){
+  const q=`#main [data-sec="${CSS.escape(csSecOf(k))}"]`,el0=document.querySelector(q),h0=el0?el0.getBoundingClientRect().height:0;
+  paint();
+  const el=document.querySelector(q);if(!el||!h0||!el.animate||matchMedia("(prefers-reduced-motion: reduce)").matches)return;
+  const h1=el.getBoundingClientRect().height;if(Math.abs(h1-h0)<2)return;
+  el.style.overflow="hidden";
+  const a=el.animate([{height:h0+"px"},{height:h1+"px"}],{duration:220,easing:"cubic-bezier(.2,.7,.3,1)"});
+  const body=el.querySelector(":scope>.cs-body,:scope>.cb");body?.animate([{opacity:0},{opacity:1}],{duration:200,easing:"ease-out"});
+  a.onfinish=a.oncancel=()=>{el.style.overflow=""};
+}
+// «Размещение и тревоги» меняет метки и тревоги объекта сразу (черновик карточки): «Отменить» возвращает их по снимку
+const csPlaceSnap=new Map();
+function csEditSet(id,k,on){
+  if(k==="place"){const n=find(id)?.n;if(on&&n)csPlaceSnap.set(id,cardClone({labels:n.labels,alarmKinds:n.alarmKinds}));else if(!on)csPlaceSnap.delete(id)}
+  if(on)csEdit.add(id+":"+k);else csEdit.delete(id+":"+k);csAnim(k,gear);setTimeout(()=>csFocus(k,on),30)}
 function csEditCancel(id,k){
   if(cardDraft&&cardDraft.id===id)(CS_SEC_FIELDS[k]||[]).forEach(l=>delete cardDraft.fields[l]);
+  const ps=k==="place"&&csPlaceSnap.get(id),pn=find(id)?.n;
+  if(ps&&pn)["labels","alarmKinds"].forEach(f=>{if(ps[f]===undefined)delete pn[f];else pn[f]=ps[f]});
   setD(true);csEditSet(id,k,false);
 }
 function csChanged(l){return!!(cardDraft&&cardDraft.id===sel&&cardDraft.fields[l])}
@@ -12801,9 +12820,10 @@ function camGenLayout(n,p,ips){
     const chips=l=>l&&l.length?`<div class="cs-chips">${l.map(x=>`<span class="cs-tag">${escHtml(i18n(x))}</span>`).join("")}</div>`:`<span class="cs-empty">${i18n("не заданы")}</span>`;
     place=card("Размещение и тревоги",csDl([["Метки серверов: где работает",chips(n.labels)],["Что считать тревогой",chips(n.alarmKinds)]]));
   }
-  place=csHead(csWrap("place",place),csEditOn(n.id,"place")?`<button type="button" class="btn pri s" ${onEv("click",["csEditSet",`${n.id}`,"place",false])}>${i18n("Добавить в план")}</button>`:csEditBtns(n,"place"));
+  place=csHead(csWrap("place",place),csEditBtns(n,"place"));
   // Частые блоки выше: «Расположение» и «Размещение и тревоги» нужны при каждой установке, параметры драйвера — реже
-  return ident+conn+csWrap("folders",p.folders)+place+drvSecsHtml(n,"gen")+csWrap("periph",p.periph)+csWrap("rules",p.rules);
+  // «Периферия» — на своей вкладке, здесь её нет
+  return ident+conn+csWrap("folders",p.folders)+place+drvSecsHtml(n,"gen")+csWrap("rules",p.rules);
 }
 // ── Параметры драйвера камеры (ЗАГЛУШКА до ответа на запрос api/requests/2026-11-09-182805Z-mockup-camera-driver-params-request.md) ─────────────────────────────────────────────────────
 // Набор параметров зависит от драйвера: RTSP, ONVIF или нативная интеграция. В контракте 0.2.0 такой набор отдаёт
@@ -13010,7 +13030,7 @@ function csLeave(id){
   if(n&&st)Object.keys(st.snap).forEach(g=>{const snap=st.snap[g];drvGroupProps(n,g).forEach((p,f)=>{if(f in snap)st.vals[f]=snap[f];else delete st.vals[f]});delete st.snap[g]});
   if(n&&cvSnap.has(id))cvRestore(n,cvSnap.get(id));
   cvSnap.delete(id);cvPendM.delete(id);
-  [...csEdit].forEach(k=>{if(k.startsWith(id+":"))csEdit.delete(k)});
+  csPlaceSnap.delete(id);[...csEdit].forEach(k=>{if(k.startsWith(id+":"))csEdit.delete(k)});
 }
 // Вкладки камеры, где открыта правка блока: точка у названия вкладки
 function csOpenTabs(n){
@@ -13031,9 +13051,14 @@ function drvSecsHtml(n,tabId){
     const acts=lock?"":ed?`<button type="button" class="btn s" ${onEv("click",["drvEditCancel",`${n.id}`,g])}>${i18n("Отменить")}</button><button type="button" class="btn pri s" ${onEv("click",["drvEditDone",`${n.id}`,g])}>${i18n("Сохранить")}</button>`
       :`<button type="button" class="btn s" ${onEv("click",["drvEditStart",`${n.id}`,g])}>${i18n("Изменить")}</button>`;
     const hint=p=>p["x-hint"]?`<small class="sub cs-hint">${escHtml(i18n(p["x-hint"]))}</small>`:"";
+    // Главный переключатель группы — поле с подписью «Включить»: в просмотре «Включить: выключено» читается как приказ,
+    // поэтому он — строка состояния «Сейчас выключено»; в правке остаётся переключатель «Включить»
+    const main=fs.find(([,p])=>p.type==="boolean"&&p["x-label"]==="Включить"),mainOn=main&&!!st.vals[main[0]],rest=main?fs.filter(x=>x!==main):fs;
+    const state=main?`<div class="cs-state">${i18n("Сейчас")} <b>${i18n(mainOn?"включено":"выключено")}</b>${st.chg.has(main[0])?`<span class="cs-chg">${i18n("изменено")}</span>`:""}</div>`:"";
     const body=ed?`<div class="g">${fs.map(([f,p])=>drvHint(sfFieldHtml("drv",n.id,f,p,st.vals[f],{ro:sfReadOnly(p)}),hint(p))).join("")}</div>`
-      :csDl(fs.map(([f,p])=>[propLabel(p,f),p.type==="boolean"?escHtml(st.vals[f]?i18n("включено"):i18n("выключено")):sfText(p,st.vals[f])==="—"?`<span class="cs-empty">—</span>`:escHtml(sfText(p,st.vals[f])),st.chg.has(f)]));
-    out+=`<div class="card" data-sec="${escHtml(k)}" data-cs-sum="${escHtml(`${fs.length} ${i18n(plural(fs.length,"параметр|параметра|параметров"))}`)}"><div class="ch">${escHtml(i18n(g))}${lock?csLockHtml():""}<span class="cs-acts">${acts}</span></div><div class="cb">${body}</div></div>`;
+      :state+(rest.length?csDl(rest.map(([f,p])=>[propLabel(p,f),p.type==="boolean"?escHtml(st.vals[f]?i18n("включено"):i18n("выключено")):sfText(p,st.vals[f])==="—"?`<span class="cs-empty">—</span>`:escHtml(sfText(p,st.vals[f])),st.chg.has(f)])):"");
+    const sum=main?i18n(mainOn?"включено":"выключено"):`${fs.length} ${i18n(plural(fs.length,"параметр|параметра|параметров"))}`;
+    out+=`<div class="card" data-sec="${escHtml(k)}" data-cs-sum="${escHtml(sum)}"><div class="ch">${escHtml(i18n(g))}${lock?csLockHtml():""}<span class="cs-acts">${acts}</span></div><div class="cb">${body}</div></div>`;
   });
   if(!groups.size&&tabId!=="gen"&&tabId!=="acc"&&tabId!=="view"&&d==="rtsp")
     out+=`<div class="nt">${i18n("У камеры RTSP здесь нет настроек: их задают на самой камере.")}</div>`;
@@ -13113,7 +13138,7 @@ function csTabWrap(n,html){
     const b=document.createElement("div");b.append(t2.content);return b.innerHTML;
   }
   const toc=`<nav class="cs-toc" aria-label="${i18n("На этой странице")}"><div class="cs-toc-h">${i18n("На этой странице")}</div>
-    ${secs.map(x=>`<button type="button" class="cs-toc-i" ${onEv("click",["csGo",x.k])}><span>${escHtml(x.title)}</span>${x.sum?`<small>${escHtml(x.sum)}</small>`:""}</button>`).join("")}
+    <div class="cs-toc-list">${secs.map(x=>`<button type="button" class="cs-toc-i" ${onEv("click",["csGo",x.k])}><span>${escHtml(x.title)}</span>${x.sum?`<small>${escHtml(x.sum)}</small>`:""}</button>`).join("")}</div>
     <div class="cs-toc-acts"><button type="button" class="lk" ${onEv("click",["csAll",true])}>${i18n("Развернуть всё")}</button><button type="button" class="lk" ${onEv("click",["csAll",false])}>${i18n("Свернуть всё")}</button></div></nav>`;
   const box=document.createElement("div");box.append(t.content.cloneNode(true));
   return`<div class="cs-tocw">${toc}<div class="cs-secs">${box.innerHTML}</div></div>`;
@@ -13122,6 +13147,13 @@ function csSecSet(c,open){
   const k=c.dataset.sec;c.classList.toggle("closed",!open);
   if(open)csClosed.delete(tab+"|"+k);else csClosed.add(tab+"|"+k);
   c.querySelector(":scope>.ch>.cs-chev")?.setAttribute("aria-expanded",String(open));
+}
+// Оглавление не выше видимой части области прокрутки (.sc): иначе его низ с «Развернуть всё» виден только в конце страницы
+function csTocFit(){
+  const sc=document.querySelector("#main .cs-toc")?.closest(".sc");if(!sc)return;
+  const pad=parseFloat(getComputedStyle(sc).paddingTop)||0;
+  sc.style.setProperty("--cs-toc-max",Math.max(160,sc.clientHeight-pad*2)+"px");
+  if(!csTocFit.on){csTocFit.on=true;addEventListener("resize",()=>csTocFit())}
 }
 function csSecEl(k){return[...document.querySelectorAll("#main .cs-sec")].find(c=>c.dataset.sec===k)}
 function csSecToggle(k){const c=csSecEl(k);if(c)csSecSet(c,c.classList.contains("closed"))}
