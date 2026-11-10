@@ -49,8 +49,14 @@ Object.assign(window.I18N_EN,{
 "В режиме «По событию» камера пишет, только когда правило автоматизации с действием «Записывать» запускает запись. В других режимах такое правило добавляет запись к основной. Правило с действием «Начать репликацию» забирает записи со встроенного хранилища камеры.":"In the “By event” mode, the camera records only when an automation rule with the “Record” action starts recording. In other modes, such a rule adds recording to the main recording. A rule with the “Start replication” action takes the recordings from the built-in storage of the camera.",
 "Запись не начнётся, потому что ни одно правило автоматизации не запускает запись этой камеры.":"Recording will not start, because no automation rule starts recording of this camera.",
 "Открыть расписание":"Open schedule",
-"нет правила записи":"no recording rule",
 "запускает запись.":"starts recording.",
 "запускают запись.":"start recording.",
 "Предзапись — 3 секунды. Консоль создаёт серверный детектор движения. Чтобы камера писала по движению, создать правило автоматизации «Движение — запись» на вкладке «Архив» в карточке камеры. Встроенный детектор можно добавить в карточке камеры, когда устройство ответит.":"Pre-recording is 3 seconds. The console creates a server motion detector. To make the camera record on motion, create the “Motion — record” automation rule on the “Archive” tab of the camera card. You can add the built-in detector in the camera card when the device responds.",
+// «По событию»: вопрос о детекторе перед созданием правила записи
+"Камера в режиме «По событию» пишет, только когда правило автоматизации запускает запись. Консоль создаст правило, которое записывает камеру, когда детектор сработает. Если выбрать новый детектор, консоль создаст и его.":"In the “By event” mode, the camera records only when an automation rule starts recording. The console will create a rule that records the camera when the detector triggers. If you select a new detector, the console also creates it.",
+"Какой детектор запускает запись":"Which detector starts recording",
+"Чем запускать запись":"What starts recording",
+"Не создавать":"Do not create",
+"Детектор и правило записи…":"Detector and recording rule…",
+"Правило создано":"Rule created",
 });

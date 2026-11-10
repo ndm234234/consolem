@@ -2627,7 +2627,12 @@ html[data-theme="light"] .cp-step{background:var(--one-control-hover);color:var(
 .er-rules-nt{margin:0 0 10px}.er-rules td .btn{white-space:nowrap}
 .er-rules-add{margin-top:12px}.er-rules-add>.sub{display:block;margin-bottom:8px}
 .rec-gap{color:var(--one-warning-icon);display:flex;gap:4px;align-items:flex-start}
-.ca-tbl tr.ca-when td{padding:0 0 10px;border-bottom:1px solid var(--ln)}.ca-when .rec-gap{font-size:12px;margin:0 0 6px}
+.ca-tbl tr.ca-when td{padding:0 0 10px;border-bottom:1px solid var(--ln)}.ca-when .rec-gap{font-size:12px;margin:0 0 6px;padding:6px 8px;border-radius:6px;background:color-mix(in srgb, var(--one-warning-icon) 12%, transparent)}
+/* Предупреждение «Запись не начнётся…» моргает два раза, когда появилось после правки: цвет предупреждения, а не синий */
+@keyframes recGapFlash{0%,100%{box-shadow:inset 0 0 0 2px transparent}12%,44%{box-shadow:inset 0 0 0 2px var(--one-warning-icon);background-color:color-mix(in srgb, var(--one-warning-icon) 30%, transparent)}28%,60%{box-shadow:inset 0 0 0 2px transparent}}
+.rec-gap.rec-gap-flash{animation:recGapFlash 2.4s ease-out}
+@media (prefers-reduced-motion:reduce){.rec-gap.rec-gap-flash{animation:none;box-shadow:inset 0 0 0 2px var(--one-warning-icon)}}
+.rec-ev-pick{display:block;width:100%;margin-top:4px}
 .ca-when-ok{font-size:12px;color:var(--mu)}.ca-when-add{display:flex;flex-wrap:wrap;gap:6px}
 .ca-sch{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin-bottom:4px}.ca-sch label{font-size:12px;color:var(--mu)}.ca-tbl .ca-sch select{width:auto;field-sizing:content;max-width:100%}.rec-gap svg{flex:none;width:13px;height:13px;margin-top:2px}
 .er-t-rule:hover{border-color:var(--bl)}.er-t-go{display:flex;align-items:center;gap:5px;color:var(--x-link);font-size:12px}
@@ -27200,7 +27205,39 @@ function camRecGap(n,mode){
 function camRecGaps(n){return[...new Set(camArchs(n).filter(x=>!x.ro).map(x=>x.rec))].map(m=>camRecGap(n,m)).filter(Boolean)}
 function camRecGapHtml(n,mode){
   const g=camRecGap(n,mode);if(!g)return"";
-  return`<div class="bk-hint rec-gap" data-rec-gap="${g.k}">${lu("triangle-alert")} ${escHtml(g.text)}</div>`;
+  return`<div class="bk-hint rec-gap${camRecFlash===n.id?" rec-gap-flash":""}" data-rec-gap="${g.k}">${lu("triangle-alert")} ${escHtml(g.text)}</div>`;
+}
+// Предупреждение моргает, когда пользователь сменил режим или хранилище: иначе строку под таблицей легко не заметить
+let camRecFlash=null;
+function camRecFlashOn(id){camRecFlash=id;clearTimeout(camRecFlashOn.t);camRecFlashOn.t=setTimeout(()=>{camRecFlash=null},2600)}
+// «По событию» без правила: как в Axxon One, консоль предлагает детектор и правило записи. Сначала спросить,
+// какой детектор: движения (как в Axxon One), другой вид или детектор, который у камеры уже есть
+function camRecEventAsk(id){
+  const n=find(id)?.n;if(!n||!can("createRule")||!edgeRulesOn()||!camRecGap(n,"motion"))return;
+  const own=camDetectors(n),kinds=DET_TYPES.length?DET_TYPES:[DET_KIND_RU.motion];
+  const def=own.length?"use:"+own[0].id:"new:"+(kinds.includes(DET_KIND_RU.motion)?DET_KIND_RU.motion:kinds[0]);
+  const opt=(v,l)=>`<option value="${escHtml(v)}" ${v===def?"selected":""}>${escHtml(l)}</option>`;
+  const html=`<p>${escHtml(i18n("Камера в режиме «По событию» пишет, только когда правило автоматизации запускает запись. Консоль создаст правило, которое записывает камеру, когда детектор сработает. Если выбрать новый детектор, консоль создаст и его."))}</p>
+    <label for="recEvPick">${escHtml(i18n("Какой детектор запускает запись"))}</label>
+    <select id="recEvPick" class="rec-ev-pick">${own.length?`<optgroup label="${escHtml(i18n("Детекторы камеры"))}">${own.map(d=>opt("use:"+d.id,`${detTitle(d)} · ${detKindText(d,n)}`)).join("")}</optgroup>`:""}
+      <optgroup label="${escHtml(i18n("Создать детектор"))}">${kinds.map(k=>opt("new:"+k,i18n(k))).join("")}</optgroup></select>`;
+  askConfirm("Чем запускать запись",html,"","Создать",()=>camRecEventMake(id,document.getElementById("recEvPick")?.value||def),{html:true,cancelLabel:"Не создавать",onCancel:()=>{camRecFlashOn(id);paint()}});
+}
+function camRecEventMake(id,v){
+  const n=find(id)?.n;if(!n||!v)return;
+  const kindOf=ru=>Object.keys(DET_KIND_RU).find(k=>DET_KIND_RU[k]===ru)||"motion";
+  let kind,label;
+  if(v.startsWith("use:")){const d=camDetectors(n).find(x=>x.id===v.slice(4));if(!d)return;kind=kindOf(d.kind);label=detKindText(d,n)}
+  else{const ru=v.slice(4);kind=kindOf(ru);label=i18n(ru);
+    const d={id:"det"+Date.now(),type:"det",name:`${i18n("Детектор")}: ${label.toLowerCase()}`,kind:ru,sens:"12",online:true,devices:[]};
+    (n.devices||(n.devices=[])).push(d);hwIdxDrop();setD(true)}
+  const now=ruleNow();
+  const body=ruleBody({name:`${locName(n)}: ${label.toLowerCase()} — ${i18n("запись").toLowerCase()}`,on:true,watch:false,repeat:"skip",start:"event",run:{mode:"always",modes:[]},cond:[],menu:false,rate:6,within:0,sched:null,
+    when:[{sub:"det",kind,ref:refMake([n.id],[]),match:{}}],then:[{sub:"rec",action:"record",ref:"$src",dur:"event",after:10}],
+    owner:ACC_ME,purpose:"",created:{by:ACC_ME,at:now},changed:{by:ACC_ME,at:now},server:dcRuleServer([n.id]),runAs:"system",chain:true});
+  API.post("/rules",body).then(async x=>{ruleSet(x);await ruleHistLoad(x.id);paint();
+    toastAction("recev",`${i18n("Правило создано")}: «${x.name}»`,i18n("Открыть"),()=>ruleGoRule(x.id))}).catch(e=>{toast(problemText(e));paint()});
+  paint();
 }
 // Полоса «Когда писать» под строкой хранилища: что запускает запись в выбранном режиме
 function camRecWhenHtml(n,x){
@@ -27220,6 +27257,7 @@ function camRecWhenHtml(n,x){
 function camRecAddHtml(n){
   if(!can("createRule"))return"";
   const dets=camDetectors(n).length,b=[];
+  if(edgeRulesOn()&&camRecGap(n,"motion"))b.push(`<button type="button" class="btn s pri" data-rec-ev-ask ${onEv("click",["camRecEventAsk",n.id])}>${lu("zap",13)} ${i18n("Детектор и правило записи…")}</button>`);
   if(dets&&edgeTplOk("mrec"))b.push(`<button type="button" class="btn s" ${onEv("click",["camRecRuleNew",n.id,"mrec"])}>${lu("zap",13)} ${i18n("Движение — запись")}</button>`);
   if(camRecActOk())b.push(`<button type="button" class="btn s" ${onEv("click",["camRecRuleNew",n.id,""])}>${lu("zap",13)} ${i18n("Правило с записью…")}</button>`);
   if(!dets)b.push(`<button type="button" class="btn s" ${onEv("click",["goTab","det"])}>${i18n("Создать детектор")} →</button>`);
@@ -28354,11 +28392,11 @@ function camArchsCardHtml(n){
     const a=archById(x.arch),opts=(x.main?archChoicesFor(n):archRowChoices(n)).filter(o=>o.id===x.arch||!used.has(o.id));
     if(x.ro)return`<tr data-arch-ro="${x.arch}"><td>${escHtml(a?locName(a):x.arch)} · ${escHtml(a?archKindTag(a):"")}<div class="bk-hint">${i18n("работает со всеми камерами сервера. У камеры это значение можно только читать")}</div>${recStateHtml(x)}</td>
       <td>${escHtml(camStreams(n).find(s=>s.id===x.stream)?.name||x.stream||"")}</td><td>${escHtml(i18n(a&&archSpec(a).archiveModes.length?ARCH_MODE_RU[x.rec]||x.rec||"Авто":recordModeLabel(x.rec)))}</td><td></td></tr>`;
-    const recOpts=(a?recModesOf(a):REC_MODES_ALL.slice(1)).filter(([v])=>x.main?v!=="backup":true),mGap=x.rec!=="motion"?camRecGap(n,"motion"):null;
+    const recOpts=(a?recModesOf(a):REC_MODES_ALL.slice(1)).filter(([v])=>x.main?v!=="backup":true);
     return`<tr><td><select ${onEv("change",["camArchRowSet",`${n.id}`,i,"arch",onEv.value])}>${opts.map(o=>`<option value="${o.id}" ${o.id===x.arch?"selected":""}>${escHtml(locName(o))} · ${escHtml(archKindTag(o))}</option>`).join("")}</select>
         ${x.main?`<div class="bk-hint ca-main">${i18n("основное")}${a?` · ${archDaysText(a,x)}`:""}</div>`:`<div class="bk-hint">${a?archDaysText(a,x):""}</div>${chipsHtml(refLabels,x.labels,"camArchRowLabel",`${n.id}`,i)}`}${replicaSrcHtml(n,x,i)}${recDepthHtml(n,x,i,a)}${recStateHtml(x)}</td>
       <td class="ca-fit" data-l="${i18n("Поток")}"><select title="${escHtml(camStreams(n).find(s=>s.id===(x.stream||camStreams(n)[0].id))?.name||"")}" ${onEv("change",["camArchRowSet",`${n.id}`,i,"stream",onEv.value])}>${camStreams(n).filter(s=>x.rec!=="replica"||s.id===replicaStream(n,x,list)).map(s=>`<option value="${escHtml(s.id)}" ${s.id===(x.stream||camStreams(n)[0].id)?"selected":""}>${escHtml(s.name)}</option>`).join("")}</select></td>
-      <td class="ca-fit" data-l="${i18n("Режим записи")}"><select title="${escHtml(i18n(recordModeLabel(x.rec)))}" ${onEv("change",["camArchRowSet",`${n.id}`,i,"rec",onEv.value])}>${recOpts.map(([v,l])=>`<option value="${v}" ${x.rec===v?"selected":""} ${(v==="replica"&&!replicaSources(n,x).length)||(v==="sched"&&!recSchedules().length&&!can("createSchedule"))?"disabled":""}>${i18n(l)}${v==="motion"&&x.rec!=="motion"&&mGap?` — ${i18n("нет правила записи")}`:""}</option>`).join("")}${x.rec==="none"?`<option value="none" selected>${i18n("Нет")}</option>`:""}</select></td>
+      <td class="ca-fit" data-l="${i18n("Режим записи")}"><select title="${escHtml(i18n(recordModeLabel(x.rec)))}" ${onEv("change",["camArchRowSet",`${n.id}`,i,"rec",onEv.value])}>${recOpts.map(([v,l])=>`<option value="${v}" ${x.rec===v?"selected":""} ${(v==="replica"&&!replicaSources(n,x).length)||(v==="sched"&&!recSchedules().length&&!can("createSchedule"))?"disabled":""}>${i18n(l)}</option>`).join("")}${x.rec==="none"?`<option value="none" selected>${i18n("Нет")}</option>`:""}</select></td>
       <td class="ca-x"><button type="button" class="btn s" title="${i18n("Отвязать от хранилища")}" ${onEv("click",["camArchRowDel",`${n.id}`,i])}>${i18n("Отвязать")}</button></td></tr>${camRecWhenHtml(n,x)}`;
   }).join("");
   const add=free.length?`<select class="ca-add" ${onEv("change",onEv.ifValue,["camArchRowAdd",n.id,onEv.value])}><option value="">＋ ${i18n("Привязать к хранилищу")}…</option>${free.map(a=>`<option value="${a.id}">${escHtml(locName(a))} · ${escHtml(archKindTag(a))}</option>`).join("")}</select>`
@@ -28392,7 +28430,9 @@ function camArchRowSet(id,i,k,v){
     if(!modes.includes(row.rec))row.rec=modes[0]||"none";
   }
   camReplicaSync(n);
+  if(k==="rec"||k==="arch")camRecFlashOn(n.id);
   treeMatchCache.clear();searchMatchCache.clear();setD(true);paint();
+  if(k==="rec"&&v==="motion")camRecEventAsk(n.id);
 }
 function camArchSelectHtml(n){
   return `<div><label>${i18n("Архив")}</label><select ${onEv("change",["setCamArch",`${n.id}`,onEv.value])}><option value="" ${!n.arch?"selected":""}>${i18n("Не задан")}</option>${
