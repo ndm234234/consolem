@@ -81,4 +81,8 @@ Object.assign(window.I18N_EN,{
 // Хранилища и запись одной карточкой; потоки под видео списком
 "Хранилища и запись":"Storages and recording",
 "Настройки записи":"Recording settings",
+// Предзапись — своя у каждого хранилища (контракт 0.7.0)
+"Если поле пустое, хранилище берёт предзапись основного хранилища:":"If the field is empty, the storage takes the pre-recording of the main storage:",
+"Предзапись основного хранилища, с":"Pre-recording of the main storage, s",
+"предзапись основного хранилища":"pre-recording of the main storage",
 });

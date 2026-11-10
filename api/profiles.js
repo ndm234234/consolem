@@ -385,6 +385,8 @@
           if (next && k in next) d[k] = next[k];
           else delete d[k];
         });
+        // Своя предзапись строки (0.7.0) переходит к камере; строка без своей брала значение камеры, оно остаётся
+        if (next && next.preRecordSec != null) d.preRecordSec = next.preRecordSec;
       }
       ctx.bump(d);
       ctx.changed("device", d);

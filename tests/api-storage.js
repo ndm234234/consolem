@@ -140,10 +140,11 @@
     const other = FX.archives.find((x) => x.id !== a.id);
     const cams = FX.devices.filter((d) => d.type === "camera" && d.archiveId === a.id);
     assert.ok(cams.length >= 2, `камер, которые пишут в «${a.name}»: ${cams.length}`);
-    await env.ok("PATCH", U(cams[0].id), { properties: { extraArchives: [{ archiveId: other.id, recordMode: "motion", stream: "sub" }] } }, v(cams[0]));
+    await env.ok("PATCH", U(cams[0].id), { properties: { preRecordSec: 5, extraArchives: [{ archiveId: other.id, recordMode: "motion", stream: "sub", preRecordSec: 12 }] } }, v(cams[0]));
     assert.status(await env.call("DELETE", U(a.id), undefined, v(a)), 204);
     const [c0, c1] = await Promise.all([cams[0], cams[1]].map((c) => env.ok("GET", U(c.id)).then((u) => u.properties)));
     assert.eq([c0.archiveId, c0.recordMode, c0.stream, c0.extraArchives], [other.id, "motion", "sub", []], "следующее стало основным");
+    assert.eq(c0.preRecordSec, 12, "своя предзапись строки (0.7.0) перешла к камере");
     assert.eq([c1.archiveId == null, c1.recordMode], [true, "none"], "без хранилищ — не пишет");
     assert.eq((await env.list(`/units?parentId=${a.id}`)).length, 0, "томов нет");
     assert.eq((await env.list("/units?kind=camera")).length, FX.devices.filter((d) => d.type === "camera").length, "камеры на месте");

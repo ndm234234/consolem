@@ -2463,6 +2463,9 @@ body :is(.n:not(.on,.mark),.as-name,.it) .ici.ici-asdisk{color:color-mix(in srgb
 .ca-tbl .ca-more{width:32px;height:32px;min-width:32px;padding:0;justify-content:center}
 /* Настройки записи — раздел той же карточки под списком хранилищ */
 .ca-set{margin-top:16px;padding-top:12px;border-top:1px solid var(--ln)}.ca-set-h{font-weight:600;font-size:13px;margin:0 0 8px}
+/* Срок, глубина и предзапись строки — в один ряд: подписи над полями, поля по низу одной линии */
+.ca-depth{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px 12px;align-items:end;margin-top:8px;max-width:420px}
+.ca-depth>div{display:flex;flex-direction:column;gap:4px;min-width:0}.ca-depth label{font-size:12px;color:var(--mu);line-height:1.25}.ca-depth input{width:100%;min-width:0}
 .ca-add{max-width:360px}
 /* Камеры регистратора: группа под заголовком, канал вместо своего IP */
 .tag.tag-ch{color:color-mix(in srgb, var(--one-palette-purple) 30%, var(--one-fg));background:color-mix(in srgb, var(--one-palette-purple) var(--x-tint), var(--one-surface))}
@@ -3653,7 +3656,7 @@ function devNode(r){
     else if(k==="sizeBytes"){n.size=bytesText(v);n.bytes=v}
     else if(k==="lat"||k==="lon")n[k]=v==null?"":v.toFixed(6);
     else if(k==="azimuth")n[k]=v==null?"":String(v);
-    else if(k==="extraArchives")n.archx=v.map(x=>({arch:x.archiveId,rec:x.recordMode,stream:x.stream,...(x.labels?{labels:x.labels}:{}),...(x.state?{state:x.state}:{}),...(x.reason?{reason:x.reason}:{}),...(x.readOnly?{ro:true}:{}),...("replicaFrom" in x?{replicaFrom:x.replicaFrom}:{}),...(x.replicaLagSec!=null?{lag:x.replicaLagSec}:{}),...(x.retentionDays!=null?{retentionDays:x.retentionDays}:{}),...(x.minDepthDays!=null?{minDepthDays:x.minDepthDays}:{})}));
+    else if(k==="extraArchives")n.archx=v.map(x=>({arch:x.archiveId,rec:x.recordMode,stream:x.stream,...(x.labels?{labels:x.labels}:{}),...(x.state?{state:x.state}:{}),...(x.reason?{reason:x.reason}:{}),...(x.readOnly?{ro:true}:{}),...("replicaFrom" in x?{replicaFrom:x.replicaFrom}:{}),...(x.replicaLagSec!=null?{lag:x.replicaLagSec}:{}),...(x.retentionDays!=null?{retentionDays:x.retentionDays}:{}),...(x.minDepthDays!=null?{minDepthDays:x.minDepthDays}:{}),...(x.preRecordSec!=null?{pre:x.preRecordSec}:{})}));
     else if(k==="mode"&&r.type==="email")n.mode=EMAIL_MODE_RU[v]||v;
     else if(k==="norm")n.norm=NORM_RU[v]||v;
     else if(k==="disabledByRuleAt")n.ruleOffAt=v?clockText(v,true):"";
@@ -5380,7 +5383,7 @@ function isRecording(n){return n&&n.type==="camera"&&!!n.arch&&n.rec&&n.rec!=="n
 function camArchs(n){
   if(!n||n.type!=="camera")return[];
   if(!n.arch)return(n.archx||[]).map(x=>({...x}));
-  return[{arch:n.arch,rec:n.rec||"none",stream:n.stream||"main",main:true,state:n.recordState,reason:n.recordReason,replicaFrom:n.replicaFrom,lag:n.replicaLagSec,retentionDays:n.retentionDays,minDepthDays:n.minDepthDays},...(n.archx||[]).map(x=>({...x}))];
+  return[{arch:n.arch,rec:n.rec||"none",stream:n.stream||"main",main:true,state:n.recordState,reason:n.recordReason,replicaFrom:n.replicaFrom,lag:n.replicaLagSec,retentionDays:n.retentionDays,minDepthDays:n.minDepthDays,pre:n.pre},...(n.archx||[]).map(x=>({...x}))];
 }
 function camWritesTo(n,aid){return camArchs(n).some(x=>x.arch===aid&&x.rec&&x.rec!=="none")}
 // Камеры хранилища: у строки кэша записи нет, поэтому — и то, что прочитано дверью archiveId
@@ -5432,7 +5435,9 @@ function camDropArch(n,aid){
   if(n.arch===aid){
     // Строка только для чтения и резерв на сбой основной не становятся
     const i=n.archx.findIndex(x=>!x.ro&&x.rec!=="backup"),next=i>=0?n.archx.splice(i,1)[0]:null;
-    if(next){n.arch=next.arch;n.rec=next.rec;n.stream=next.stream}else{n.arch=null;n.rec="none"}
+    // Срок и глубина строки переходят к камере, как на сервере; своя предзапись строки — тоже, иначе остаётся предзапись камеры
+    if(next){n.arch=next.arch;n.rec=next.rec;n.stream=next.stream;["retentionDays","minDepthDays"].forEach(k=>{if(k in next)n[k]=next[k];else delete n[k]});if(next.pre!=null)n.pre=next.pre}
+    else{n.arch=null;n.rec="none"}
   }
 }
 // Виртуальная группа: на сервере её нет, это отбор noRecord. У строки кэша записи нет, поэтому в группе то, что отбор
@@ -17804,7 +17809,7 @@ function formBase(n){
     if(tab==="acc")return accCamAccessHtml(n);
     if(tab==="rec"){
       const noRec=!isRecording(n),edge=recEdge(n),list=camArchs(n);
-      return recTargetCardHtml(n)+camArchsCardHtml(n,`<div class="g">${n.rec==="replica"?fldRo("Предзапись, с","—"):fld("Предзапись, с",String(n.pre??5),"number")}${recMicHtml(n)}</div>
+      return recTargetCardHtml(n)+camArchsCardHtml(n,`${recMicHtml(n)?`<div class="g">${recMicHtml(n)}</div>`:""}
       ${edge?"":`<p class="sub">${i18n("Встроенного хранилища нет. Репликация берёт записи только из другого архива этой камеры.")}</p>`}
       ${list.some(x=>x.rec==="replica")?`<div class="nt" data-replica-note>${!edgeStorage(n)&&edge&&list.some(x=>x.rec==="replica"&&!x.replicaFrom)?`${i18n("Записи этой камеры находятся на диске регистратора")} «${escHtml(locName(ipsrvOwnerNode(n)))}» — ${i18n("сервер берёт их оттуда.")} `:""}${i18n("Сервер берёт записи без постоянного потока: из встроенного хранилища или из другого архива этой камеры. Сервер сам выбирает период. Строка записи показывает отставание. Если источник стёр минуты записи раньше, чем сервер их взял, эти минуты пропадают. Строка и журнал сообщают об этом.")}</div>`:""}
       ${list.some(x=>x.rec==="backup")?`<div class="nt" data-backup-note>${i18n("Резерв при сбое. Сервер записывает сюда живой поток, только когда основная запись должна идти, но не идёт из-за сбоя.")}</div>`:""}
@@ -28465,13 +28470,17 @@ function replicaSrcHtml(n,x,i){
   const can=replicaSources(n,x),gone=x.replicaFrom&&!can.some(s=>s.id===x.replicaFrom);
   return`<div class="ca-src" data-replica-src><label>${i18n("Откуда забирать")}</label><select ${onEv("change",["camArchRowSet",`${n.id}`,i,"replicaFrom",onEv.value])}>${gone?`<option value="${escHtml(x.replicaFrom)}" selected>${i18n("источник снят")}</option>`:""}${can.map(s=>`<option value="${escHtml(s.id)}" ${s.id===(x.replicaFrom||"")?"selected":""}>${escHtml(s.name)}</option>`).join("")}</select></div>`;
 }
-// Срок и наименьшая глубина — свои у каждой записи; пустой срок — как у хранилища
+// Срок, наименьшая глубина и предзапись — свои у каждой записи (как prerecord_sec привязки в Axxon One).
+// Пустой срок — как у хранилища; пустая предзапись дополнительной строки — как у камеры (основного хранилища).
+// replica забирает готовые записи, поэтому предзаписи у неё нет
 function recDepthHtml(n,x,i,a){
-  const inp=(l,k,ph)=>`<div><label>${i18n(l)}</label><input type="number" min="0" value="${x[k]??""}" placeholder="${escHtml(ph)}" data-rec-field="${k}" ${onEv("change",["camArchRowSet",`${n.id}`,i,k,onEv.value])}></div>`;
-  return`<div class="ca-depth" data-rec-depth>${inp("Срок, дней","retentionDays",a?String(a.days):"")}${inp("Глубина не меньше, дней","minDepthDays","")}</div>`;
+  const inp=(l,k,ph,tip="")=>`<div><label>${i18n(l)}</label><input type="number" min="0" value="${x[k]??""}" placeholder="${escHtml(ph)}" ${tip?`title="${escHtml(tip)}"`:""} data-rec-field="${k}" ${onEv("change",["camArchRowSet",`${n.id}`,i,k,onEv.value])}></div>`;
+  const pre=x.rec==="replica"?"":x.main?inp("Предзапись, с","pre","5")
+    :inp("Предзапись, с","pre",String(n.pre??5),`${i18n("Если поле пустое, хранилище берёт предзапись основного хранилища:")} ${n.pre??5} ${i18n("с")}`);
+  return`<div class="ca-depth" data-rec-depth>${inp("Срок, дней","retentionDays",a?String(a.days):"")}${inp("Глубина не меньше, дней","minDepthDays","")}${pre}</div>`;
 }
 function archDaysText(a,x){const d=x.retentionDays??a?.days;return d?d+" "+i18n("дн."):i18n("без ограничения")}
-// Хранилища и запись одной карточкой: предзапись и микрофон — настройки записи в хранилища (rest — их разметка)
+// Хранилища и запись одной карточкой. Предзапись — в строке хранилища; rest — общие настройки записи камеры (микрофон, заметки)
 function camArchsCardHtml(n,rest=""){
   const list=camArchs(n),used=new Set(list.map(x=>x.arch));
   const free=(n.arch?archRowChoices(n):archChoicesFor(n)).filter(a=>!used.has(a.id));
@@ -28528,6 +28537,8 @@ function camArchRowSet(id,i,k,v){
   const gapsWas=new Set(camRecGaps(n).map(g=>g.k));
   if(k==="replicaFrom"){if(v)row.replicaFrom=v;else delete row.replicaFrom}
   else if(k==="retentionDays"||k==="minDepthDays"){if(v==="")delete row[k];else row[k]=Math.max(0,Number(v)||0)}
+  // Предзапись основного хранилища — preRecordSec камеры (row === n); пустая у дополнительной строки — как у камеры
+  else if(k==="pre"){if(v==="")delete row.pre;else row.pre=Math.max(0,Number(v)||0)}   // пустое у камеры — null, как прежнее поле: сервер берёт умолчание
   else if(k==="rec")camRecModeSet(n,row,v);
   else row[k]=v;
   if(k==="arch"){
@@ -31865,7 +31876,7 @@ function bulkRecHtml(nodes){
   const archOpts=[["__none__",i18n("Не задан")],...arch.map(a=>[a,cams.filter(n=>archChoicesFor(n).includes(a)).length]).filter(([,k])=>k)
     .map(([a,k])=>[a.id,locName(a)+(k<cams.length?` — ${i18n("подходит")} ${k} ${i18n("из")} ${cams.length}`:"")])];
   const recOpts=recModes().map(([v,l])=>[v,i18n(l),v==="replica"&&!edgeAll]);
-  return card("Архив и запись",`<div class="g">${bkSelect("Архив","arch",archOpts,archD)}${bkSelect("Режим","rec",recOpts,recD)}${bkInput("Предзапись, с","pre","number",preD)}</div>
+  return card("Архив и запись",`<div class="g">${bkSelect("Архив","arch",archOpts,archD)}${bkSelect("Режим","rec",recOpts,recD)}${bkInput("Предзапись основного хранилища, с","pre","number",preD)}</div>
     <p class="sub">${i18n("Камера с сервером записывает только в хранилища своего сервера или в сетевые хранилища домена. План пропустит камеры другого сервера. Камера без сервера подключается к серверу выбранного хранилища, поэтому изменение идёт через план. Консоль применяет всё через план. После этого можно нажать «Отменить».")} ${edgeAll?"":`${i18n("Репликация недоступна. Источник для репликации есть только у")} ${edgeN} ${i18n("из")} ${nodes.length}.`}</p>`);
 }
 function bulkVidHtml(nodes,st){
@@ -33465,7 +33476,7 @@ function apiVal(k,v){
 }
 // Строка плана карточки → изменение устройства; null — строку не выразить через API
 function fldToApi(label,prop,v){
-  const k=prop?(DEV_API[prop]||prop):DEV_FLD_API[label]||(label==="Предзапись, с"?"preRecordSec":null);
+  const k=prop?(DEV_API[prop]||prop):DEV_FLD_API[label]||null;
   // Пароль камеры (блок «Подключение»): в API — password, только на запись; пустое поле снимает пароль
   if(prop==="pass")return{password:v===""||v==null?null:v};
   if(!k||!DEVICE_PATCH.has(k))return null;
@@ -33487,7 +33498,7 @@ function keyToApi(node,key,v){
   if(key==="size")return{sizeBytes:v===undefined?null:Math.round(sizeTb(v)*TB)};
   if(key==="kind"&&node.type==="det")return{detectorKind:v===undefined?null:DET_KIND_CODE[v]||v};
   if(key==="sens")return{sensitivity:apiVal("sensitivity",v)};
-  if(key==="archx")return{extraArchives:v===undefined?null:v.filter(x=>!x.ro).map(x=>({archiveId:x.arch,recordMode:x.rec??null,stream:x.stream??null,...(x.labels?.length?{labels:x.labels}:{}),...(x.rec==="replica"?{replicaFrom:x.replicaFrom??null}:{}),...(x.retentionDays!=null?{retentionDays:x.retentionDays}:{}),...(x.minDepthDays!=null?{minDepthDays:x.minDepthDays}:{})}))};
+  if(key==="archx")return{extraArchives:v===undefined?null:v.filter(x=>!x.ro).map(x=>({archiveId:x.arch,recordMode:x.rec??null,stream:x.stream??null,...(x.labels?.length?{labels:x.labels}:{}),...(x.rec==="replica"?{replicaFrom:x.replicaFrom??null}:{}),...(x.retentionDays!=null?{retentionDays:x.retentionDays}:{}),...(x.minDepthDays!=null?{minDepthDays:x.minDepthDays}:{}),...(x.pre!=null?{preRecordSec:x.pre}:{})}))};
   if(key==="mode"&&node.type==="email")return{mode:v===undefined?null:EMAIL_MODE_CODE[v]||v};
   if(key==="pass")return{password:v===undefined?null:v};
   if(key==="norm")return{norm:v===undefined?null:NORM_CODE[v]||v};
@@ -33989,7 +34000,7 @@ function cpGroups(src){
     const a=arch.find(x=>x.id===src.arch);
     return[
       {key:"arch",label:"Привязка к архиву",value:a?locName(a):i18n("архив не задан"),tag:cpArchScope(a),off:!a},
-      {key:"rec",label:"Настройки записи",value:`${i18n(recordModeLabel(src.rec||"none"))} · ${i18n("предзапись")} ${src.pre??5} ${i18n("с")}`},
+      {key:"rec",label:"Настройки записи",value:`${i18n(recordModeLabel(src.rec||"none"))} · ${i18n("предзапись основного хранилища")} ${src.pre??5} ${i18n("с")}`},
       {key:"video",label:"Видео",value:`${src._f?.["Разрешение"]||"—"} · ${src._f?.["к/с"]||"—"} ${i18n("к/с")}`,tag:i18n("только та же модель")},
       en,fGroup,
       {key:"creds",label:"Учётные данные",value:i18n("логин и пароль источника (консоль не показывает пароль)")}

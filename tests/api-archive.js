@@ -342,6 +342,21 @@
     assert.eq([row.properties.extraArchives[0].retentionDays, row.properties.extraArchives[0].minDepthDays], [90, 30], "строка");
   }, { needs: ["patchUnit", "kind:camera"] });
 
+  test("Предзапись (0.7.0): у строки extraArchives своя; строка без поля берёт preRecordSec камеры", async () => {
+    const env = await makeEnv();
+    const c = await get(env, plainCam().id);
+    const others = FX.archives.filter((x) => x.id !== c.properties.archiveId && x.domainId === c.domainId && x.admits !== false && ["network", "local"].includes(x.kind)).slice(0, 2);
+    assert.eq(others.length, 2, "в наборе есть два других архива");
+    const res = await set(env, c, { preRecordSec: 5, extraArchives: [{ archiveId: others[0].id, recordMode: "always", stream: "main", preRecordSec: 12 }, { archiveId: others[1].id, recordMode: "always", stream: "main" }] });
+    const rows = res.properties.extraArchives;
+    assert.eq([res.properties.preRecordSec, rows[0].preRecordSec, "preRecordSec" in rows[1]], [5, 12, false], "своя у строки, у камеры — основной архив");
+    const again = await set(env, res, { preRecordSec: 7 });
+    assert.eq([again.properties.preRecordSec, again.properties.extraArchives[0].preRecordSec], [7, 12], "правка камеры строку не трогает");
+    field(await put(env, again, { extraArchives: [{ archiveId: others[0].id, recordMode: "always", stream: "main", preRecordSec: -1 }] }), "VALIDATION_FAILED", "/properties/extraArchives/0/preRecordSec", "меньше нуля — отказ");
+    const plain = await set(env, again, { extraArchives: [{ archiveId: others[0].id, recordMode: "always", stream: "main" }] });
+    assert.ok(!("preRecordSec" in plain.properties.extraArchives[0]), "строка без поля — своя предзапись снята, строка берёт значение камеры");
+  }, { needs: ["patchUnit", "kind:camera"] });
+
   test("Микрофон записи: запись mic этой камеры, null — первый", async () => {
     const env = await makeEnv();
     const c = FX.devices.find((d) => d.type === "camera" && FX.devices.filter((x) => x.type === "mic" && x.parentId === d.id).length > 1);
