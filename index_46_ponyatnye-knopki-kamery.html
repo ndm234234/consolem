@@ -929,16 +929,16 @@ html[data-theme="light"] .cp.done{border-color:var(--one-success-icon);color:var
 /* Оглавление — строка над разделами, а не третий столбец: слева уже дерево (ресёрч 2026-11-10, вариант А). Строка не
    прилипает: прилипшую строку ссылок под вкладками легко принять за вторые вкладки (NN/g) */
 .cs-tocw{display:flex;flex-direction:column;gap:12px;min-width:0}
-/* Подпись, ссылки и «Развернуть всё» — одна строка; ссылки переносятся внутри своей части, а не под подпись */
-.cs-toc{display:flex;flex-wrap:wrap;align-items:flex-start;gap:6px 12px;min-width:0}
-.cs-toc-list{display:flex;flex-wrap:wrap;gap:6px;min-width:0;flex:1 1 320px}
+/* Подпись, ссылки и «Развернуть всё» — один поток на всю ширину: ссылки занимают и место под подписью, строк меньше */
+.cs-toc{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-width:0}
+.cs-toc-list{display:contents}
 .cs-state{font-size:13px;margin:2px 0 8px}.cs-state b{font-weight:600}
-.cs-toc-h{font-size:12px;line-height:28px;color:var(--mu);white-space:nowrap}
-.cs-toc-i{display:inline-flex;align-items:baseline;gap:6px;max-width:100%;min-width:0;height:28px;padding:0 10px;border:1px solid var(--ln);border-radius:14px;background:var(--p);font:inherit;font-size:13px;line-height:26px;color:inherit;cursor:pointer;white-space:nowrap}
+.cs-toc-h{font-size:12px;line-height:24px;color:var(--mu);white-space:nowrap;margin-right:4px}
+.cs-toc-i{display:inline-flex;align-items:baseline;gap:6px;max-width:100%;min-width:0;height:24px;padding:0 9px;border:1px solid var(--ln);border-radius:12px;background:var(--p);font:inherit;font-size:12px;line-height:22px;color:inherit;cursor:pointer;white-space:nowrap}
 .cs-toc-i:hover{background:var(--p2)}.cs-toc-i:focus-visible{outline:2px solid var(--bl);outline-offset:1px}
 .cs-toc-i span{min-width:0;overflow:hidden;text-overflow:ellipsis}
-.cs-toc-i small{color:var(--mu);font-size:12px}
-.cs-toc-acts{display:flex;gap:12px;margin-left:auto;font-size:12px;line-height:28px;white-space:nowrap}
+.cs-toc-i small{color:var(--mu);font-size:11px}
+.cs-toc-acts{display:flex;gap:12px;margin-left:auto;padding-left:6px;font-size:12px;line-height:24px;white-space:nowrap}
 .cs-sec>.ch{flex-wrap:nowrap;justify-content:flex-start}
 .cs-chev{display:inline-flex;align-items:center;justify-content:center;flex:none;width:24px;height:24px;margin:-4px 4px -4px -6px;padding:0;border:0;border-radius:6px;background:none;color:inherit;cursor:pointer}
 .cs-chev:hover{background:var(--p2)}.cs-chev:focus-visible{outline:2px solid var(--bl)}
@@ -13403,8 +13403,6 @@ function csTabWrap(n,html){
     const b=document.createElement("div");b.append(t2.content);return b.innerHTML;
   }
   const box=document.createElement("div");box.append(t.content.cloneNode(true));
-  // «Видео» — рабочее место, а не длинная страница: строки нет, видео и «Поворот» сразу под вкладками (вариант Д)
-  if(tab==="vid")return`<div class="cs-tocw"><div class="cs-secs">${box.innerHTML}</div></div>`;
   const toc=`<nav class="cs-toc" aria-label="${i18n("На этой странице")}"><div class="cs-toc-h">${i18n("На этой странице")}:</div>
     <div class="cs-toc-list">${secs.map(x=>`<button type="button" class="cs-toc-i" title="${escHtml(x.sum?`${x.title}: ${x.sum}`:x.title)}" ${onEv("click",["csGo",x.k])}><span>${escHtml(x.title)}</span>${x.sum?`<small>${escHtml(x.sum)}</small>`:""}</button>`).join("")}</div>
     <div class="cs-toc-acts"><button type="button" class="lk" ${onEv("click",["csAll",true])}>${i18n("Развернуть всё")}</button><button type="button" class="lk" ${onEv("click",["csAll",false])}>${i18n("Свернуть всё")}</button></div></nav>`;
@@ -16502,7 +16500,7 @@ function camVideoHtml(n){
   const main=`<div class="card cv-main"><div class="ch cv-h"><span>${i18n("Видео")}</span>${bdg(n)}</div>
     <div class="cb">${liveFrameHtml(n,ptz?cvTourOvHtml(n)+cvOnVidHtml(n):"")}${cvStreamPickHtml(n,cur)}</div></div>`;
   const side=ptz?`<aside class="card cv-side" data-cv-side><div class="cv-side-in">${cvTourEdit?.id===n.id?"":cvPtzHtml(n)}${cvPresetsHtml(n)}</div></aside>`:"";
-  // .cv-cq — контейнер: узкая область ставит «Поворот» под видео, широкая — рядом. Оглавления на «Видео» нет (csTabWrap)
+  // .cv-cq — контейнер: узкая область ставит «Поворот» под видео, широкая — рядом. Строка оглавления (csTabWrap) — над видео, как на других вкладках
   return`<div class="cv-cq"><div class="cv ${ptz?"cv-has-ptz":""} ${ptz&&cvTourEdit?.id===n.id?"cv-editing":""}">${main}${side}</div></div>${cvStreamsCardHtml(n)}`;
 }
 // Под видео — потоки камеры списком: строка на поток (имя, разрешение, к/с, кодек, битрейт), выбранная строка — поток
