@@ -783,6 +783,8 @@ div.exp-ln{display:flex;align-items:center;padding:8px 0}
 /* Поворот на видео (ресёрч 2026-11-10, вариант Е, как OnScreen PTZ в Axxon One): тянуть по кадру — поворот, скорость растёт
    с расстоянием от точки нажатия; колесо и «+ −» в углу — зум. Стрелка от точки нажатия показывает направление */
 .cv-onvid{position:absolute;inset:0;z-index:1;cursor:move;touch-action:none}
+/* Симуляция PTZ на стенде: панорама поверх тестовой картинки, под органами поворота и подписями */
+.cv-sim{position:absolute;inset:0;width:100%;height:100%;z-index:1;pointer-events:none}.cv-sim[hidden]{display:none}.cv-sim~.live-note{z-index:2}
 .cv-onvid~.live-acts{z-index:3}.cv-onvid~.live-note{max-width:calc(100% - 64px)}
 .cv-tour-ov:not([hidden])~.cv-onvid .cv-onvid-hint{display:none}
 .cv-onvid-arr{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
@@ -2701,6 +2703,7 @@ html[data-theme="light"] .cp-step{background:var(--one-control-hover);color:var(
 <link rel="stylesheet" href="assets/one-psim/bridge.css">
 <script src="assets/i18n-en.js"></script>
 <script src="assets/i18n-en-46.js"></script>
+<script src="assets/i18n-en-47.js"></script>
 <!-- API: контракт, эталонный набор, встроенный сервер и клиент (api/README.md) -->
 <script src="api/openapi.js"></script>
 <script src="api/fixture.js"></script>
@@ -16498,7 +16501,7 @@ function camVideoHtml(n){
   // «Авто» нет: в превью одного размера оно прячет, какой поток на экране (как вкладки Main / Second stream в Axxon One)
   const cur=(lv?.id===n.id&&lv.stream)||camStreams(n)[0]?.id||"";
   const main=`<div class="card cv-main"><div class="ch cv-h"><span>${i18n("Видео")}</span>${bdg(n)}</div>
-    <div class="cb">${liveFrameHtml(n,ptz?cvTourOvHtml(n)+cvOnVidHtml(n):"")}${cvStreamPickHtml(n,cur)}</div></div>`;
+    <div class="cb">${liveFrameHtml(n,ptz?cvSimHtml(n)+cvTourOvHtml(n)+cvOnVidHtml(n):"")}${cvStreamPickHtml(n,cur)}</div></div>`;
   const side=ptz?`<aside class="card cv-side" data-cv-side><div class="cv-side-in">${cvTourEdit?.id===n.id?"":cvPtzHtml(n)}${cvPresetsHtml(n)}</div></aside>`:"";
   // .cv-cq — контейнер: узкая область ставит «Поворот» под видео, широкая — рядом. Строка оглавления (csTabWrap) — над видео, как на других вкладках
   return`<div class="cv-cq"><div class="cv ${ptz?"cv-has-ptz":""} ${ptz&&cvTourEdit?.id===n.id?"cv-editing":""}">${main}${side}</div></div>${cvStreamsCardHtml(n)}`;
@@ -16698,6 +16701,93 @@ document.addEventListener("wheel",e=>{
   cvRun(ov.dataset.cvOnvid,{zoom:(e.deltaY<0?1:-1)*Math.max(.3,cvSpeed/10)});
   cvWheelT=setTimeout(cvStop,350);
 },{passive:false});
+// ── Симуляция PTZ на стенде ───────────────────────────────────────────────
+// ЗАГЛУШКА: на стенде нет камеры, а подставной WHEP (api/whep-stub.js) даёт неподвижную тестовую картинку. Поэтому у
+// PTZ-камеры поверх неё страница рисует панораму 360° и сама поворачивает «камеру». Скорость берётся из тех же команд,
+// которые уходят в PUT /units/{uid}/ptz (тело cvMove), пока идёт аренда: джойстик, стрелки, тяга по кадру, колесо, кнопки.
+// Поворот медленнее на большом зуме, как у настоящей камеры. «Перейти» в пресет и шаг тура ведут камеру к положению пресета.
+// Положения пресета в контракте нет: страница запоминает его сама при «Запомнить» (cvSimPre), а для старых пресетов
+// берёт положение по номеру. С настоящим шлюзом (lv.stub — нет) панорамы нет: картинку двигает сама камера
+const CV_SIM={pan:80,tilt:40,zoom:1.4,focus:.6,goPan:120,goTilt:60,goZoom:1.5,fov:64,zMax:20,tMin:-80,tMax:12};
+const cvSimPos=new Map(),cvSimPre=new Map();
+let cvSimLast=0;
+function cvSimOf(id){if(!cvSimPos.has(id))cvSimPos.set(id,{p:0,t:3,z:1,f:0,go:null,tour:""});return cvSimPos.get(id)}
+// Пресет без запомненного положения: по номеру. Первые два у «Главного входа» смотрят на вход и на парковку
+function cvSimPreOf(id,no){return cvSimPre.get(`${id}:${no}`)||{p:[0,125,215,300,40,170,255,330][(no-1)%8],t:no===1?-1:-3.5,z:2.2}}
+function cvSimSnap(id){const s=cvSimOf(id);return{p:s.p,t:s.t,z:s.z}}
+function cvSimRemember(id,no,at){cvSimPre.set(`${id}:${no}`,at||cvSimSnap(id))}
+function cvSimForget(id,no){cvSimPre.delete(`${id}:${no}`)}
+function cvSimGo(id,no){const s=cvSimOf(id);s.go=cvSimPreOf(id,no)}
+function cvSimHtml(n){return n.online===false||n.direct===false?"":`<canvas class="cv-sim" data-cv-sim="${escHtml(n.id)}" width="640" height="360" hidden aria-hidden="true"></canvas>`}
+const cvSimWrap=d=>((d%360)+540)%360-180;
+// Один шаг движения: аренда — скорость из тела команды; иначе — к цели пресета, у цели плавно
+function cvSimStep(id,s,dt){
+  const st=cvTourState.get(id)?.run,key=st?`${st.tid}:${st.step}:${st.paused}`:"";
+  if(key!==s.tour){s.tour=key;if(st&&!st.paused){const no=cvTourOfRun(cvTourState.get(id))?.steps[st.step]?.n;if(no!=null)cvSimGo(id,no)}}
+  const m=cvMove?.id===id?cvMove.body:null;
+  if(m){
+    s.go=null;
+    s.p=(s.p+(m.pan||0)*CV_SIM.pan/Math.sqrt(s.z)*dt+360)%360;
+    s.t=Math.max(CV_SIM.tMin,Math.min(CV_SIM.tMax,s.t+(m.tilt||0)*CV_SIM.tilt/Math.sqrt(s.z)*dt));
+    s.z=Math.max(1,Math.min(CV_SIM.zMax,s.z*Math.exp((m.zoom||0)*CV_SIM.zoom*dt)));
+    s.f=Math.max(-1,Math.min(1,s.f+(m.focus||0)*CV_SIM.focus*dt));
+    return true;
+  }
+  if(!s.go)return false;
+  const g=s.go,near=(v,max)=>Math.sign(v)*Math.min(Math.abs(v),Math.max(max*.08,Math.min(max,Math.abs(v)*4))*dt);
+  const dp=cvSimWrap(g.p-s.p),dtl=g.t-s.t,dz=Math.log(g.z/s.z);
+  s.p=(s.p+near(dp,CV_SIM.goPan)+360)%360;s.t+=near(dtl,CV_SIM.goTilt);s.z*=Math.exp(near(dz,CV_SIM.goZoom));s.f*=Math.max(0,1-dt*3);
+  if(Math.abs(dp)<.05&&Math.abs(dtl)<.05&&Math.abs(dz)<.002){s.p=g.p;s.t=g.t;s.z=g.z;s.f=0;s.go=null}
+  return true;
+}
+// Панорама: здание со входом на азимуте 0°, парковка около 125°, дорога, деревья. Кадр — линейная проекция угла
+function cvSimDraw(c,n,s,now){
+  const g=c.getContext("2d"),W=c.width,H=c.height,hf=CV_SIM.fov/s.z,vf=hf*H/W;
+  const X=a=>W/2+cvSimWrap(a-s.p)/hf*W,Y=e=>H/2-(e-s.t)/vf*H,px=d=>d/hf*W;
+  const box=(a0,a1,e0,e1,col)=>{const w=px(a1-a0),y0=Y(e1),h=Y(e0)-y0;if(y0>H||y0+h<0)return;g.fillStyle=col;
+    for(const k of[-360,0,360]){const x=W/2+(cvSimWrap(a0-s.p)+k)/hf*W;if(x<W&&x+w>0)g.fillRect(x,y0,w,h)}};
+  const text=(a,e,size,str,col)=>{const x=X(a);if(x<-W||x>2*W)return;g.fillStyle=col;g.font=`bold ${Math.max(4,px(size))}px sans-serif`;g.textAlign="center";g.fillText(str,x,Y(e))};
+  const bl=Math.abs(s.f)>.05?`blur(${(Math.abs(s.f)*4).toFixed(1)}px)`:"";if(c.style.filter!==bl)c.style.filter=bl;
+  const sky=g.createLinearGradient(0,Y(40),0,Y(0));sky.addColorStop(0,"#1d3b5c");sky.addColorStop(1,"#6d8fb0");
+  g.fillStyle=sky;g.fillRect(0,0,W,H);
+  const yh=Y(0);if(yh<H){g.fillStyle="#4b5159";g.fillRect(0,Math.max(0,yh),W,H)}
+  // Плитка площади: полосы чаще у горизонта — так видно наклон камеры
+  for(const e of[-1.5,-3,-5,-8,-12,-18,-26,-38,-55,-75]){const y=Y(e);if(y>0&&y<H){g.fillStyle="#5a616b";g.fillRect(0,y,W,Math.max(1,px(.15)))}}
+  for(let a=0;a<360;a+=30){box(a,a+.15,-90,-1,"#5a616b")}
+  for(let i=0;i<6;i++){const a=(i*61+now/1000*.6)%360;box(a,a+14,22+i%3*5,24+i%3*5,"#9fb3c8aa")}
+  // Здание со входом
+  box(-48,48,0,26,"#56677d");box(-48,48,26,27.5,"#3d4b5c");
+  for(let a=-44;a<44;a+=6)for(let e=5;e<24;e+=6)if(Math.abs(a+1.5)>8||e>12)box(a,a+3.2,e,e+3.4,(a*7+e*3)%5?"#93a9c2":"#e8d27a");
+  box(-7,7,0,10,"#2b3644");box(-6,-.25,0,9.3,"#7fa7c9");box(.25,6,0,9.3,"#7fa7c9");box(-10,10,11,14,"#1f6f43");text(0,11.7,2.2,i18n("ВХОД"),"#fff");
+  // Человек идёт по площади к входу и обратно
+  const wa=-22+Math.abs(((now/1000*3)%60)-30)*1.3;box(wa,wa+1.1,-3.2,1.2,"#c45d3c");box(wa+.15,wa+.95,1.2,2.4,"#e9c29c");
+  // Парковка: разметка и машины, одна выезжает
+  box(92,160,-6,-.6,"#3c4148");for(let a=94;a<160;a+=6)box(a,a+.25,-6,-1,"#d8dde3");
+  ["#b03a2e","#d4d8dd","#2e5e8e","#1c1f24","#c9a227","#6c7a89","#8e3b6a","#d4d8dd","#2f6b3f","#b03a2e"].forEach((col,i)=>{if(i===4)return;const a=95.5+i*6;box(a,a+4,-4.8,-2.2,col);box(a+.6,a+3.4,-2.2,-1.2,"#1c2a38")});
+  const ca=110+((now/1000*4)%120);box(ca,ca+5,-9,-6.4,"#c9a227");box(ca+.8,ca+4.2,-6.4,-5.2,"#1c2a38");
+  box(123.4,126.6,1.2,5,"#2471a3");text(125,2,2.4,"P","#fff");
+  // Дорога, фонари, деревья
+  box(170,350,-14,-8,"#33373d");for(let a=172;a<350;a+=8)box(a,a+3,-11.2,-10.8,"#e6e6e6");
+  for(const a of[60,75,180,240,300,335])box(a,a+.4,0,14,"#2b2f35"),box(a-.6,a+1,14,15,"#f4e7a1");
+  for(const a of[190,205,222,262,278,315]){box(a,a+1,0,5,"#4a3624");box(a-4,a+5,5,16,"#2f5d3a");box(a-2.5,a+3.5,13,19,"#3b7046")}
+  // OSD как у камеры: имя и время, ниже положение
+  const t=new Date(),pad=v=>String(v).padStart(2,"0");
+  g.font="bold 15px monospace";g.textAlign="right";g.fillStyle="#fff";g.shadowColor="#000";g.shadowBlur=3;
+  g.fillText(`${n.name} ${pad(t.getHours())}:${pad(t.getMinutes())}:${pad(t.getSeconds())}`,W-10,22);
+  g.font="14px monospace";
+  g.fillText(`${i18n("Пан")} ${Math.round(s.p)}°  ${i18n("Наклон")} ${s.t.toFixed(0).replace("-","−")}°  ${i18n("Зум")} ${s.z.toFixed(1).replace(".",",")}×`,W-10,42);
+  g.shadowBlur=0;
+}
+// Цикл: пока на экране кадр PTZ-камеры с тестовой картинкой — кадр анимации; иначе проверка раз в полсекунды
+function cvSimTick(now){
+  const c=document.querySelector("#main canvas[data-cv-sim]"),id=c?.dataset.cvSim,n=id&&find(id)?.n;
+  const on=!!n&&lv?.id===id&&lv.stub&&lv.state==="live"&&!!liveEl?.srcObject;
+  if(c&&c.hidden===on)c.hidden=!on;
+  if(!on){cvSimLast=0;setTimeout(()=>requestAnimationFrame(cvSimTick),500);return}
+  const dt=cvSimLast?Math.min(.1,(now-cvSimLast)/1000):0;cvSimLast=now;
+  try{const s=cvSimOf(id);cvSimStep(id,s,dt);cvSimDraw(c,n,s,now)}finally{requestAnimationFrame(cvSimTick)}
+}
+requestAnimationFrame(cvSimTick);
 // ── Джойстик: клавиатура ──────────────────────────────────────────────────
 // Клавиатура: стрелка — движение, пока клавиша нажата; + и − — зум; отпустили или ушли с круга — стоп
 // Как горячие клавиши Axxon One: NumPad 8/2/4/6 — поворот, 9/3 — зум, Home/End — фокус
@@ -16827,7 +16917,7 @@ function cvTourToggle(id,tid){
   if(st.run?.tid===tid){cvTourHalt(st);toast(i18n("Консоль остановила тур"));cvSidePaint(n);cvTourOvSync(n);return}
   const t=st.tours.find(x=>x.id===tid);if(!t)return;
   cvTourStart(n,st,t);
-  toast(`${i18n("Консоль запустила тур")} «${t.name}». ${i18n("Прототип: в API нет туров и перехода в пресет, поэтому камера не поедет")}`);
+  toast(`${i18n("Консоль запустила тур")} «${t.name}». ${i18n("Прототип: в API нет туров и перехода в пресет. На стенде камеру по точкам ведёт симуляция")}`);
 }
 function cvTourStart(n,st,t,trial){
   cvTourHalt(st);
@@ -16991,7 +17081,7 @@ function cvPresetNew(id){
   const n=find(id)?.n;if(!n||n.direct===false||n.online===false)return;
   const no=presetFree(n);if(no==null){toast(i18n("Все номера заняты"));return}
   const name=String(document.querySelector("#main [data-cv-newname]")?.value||"").trim();
-  API.put(`/units/${id}/presets/${no}`,{}).then(r=>{hwApplyUnit(r);return name?API.put(`/units/${id}/presets/${no}`,{name}).then(hwApplyUnit):null}).then(()=>{gear();toast(`${i18n("Пресет")} ${no}${name?` «${name}»`:""}: ${i18n("положение запомнено")}`);requestAnimationFrame(()=>cvPresetFlash(no))}).catch(e=>{toast(problemText(e,n));gear()});
+  const at=cvSimSnap(id);API.put(`/units/${id}/presets/${no}`,{}).then(r=>{hwApplyUnit(r);cvSimRemember(id,no,at);return name?API.put(`/units/${id}/presets/${no}`,{name}).then(hwApplyUnit):null}).then(()=>{gear();toast(`${i18n("Пресет")} ${no}${name?` «${name}»`:""}: ${i18n("положение запомнено")}`);requestAnimationFrame(()=>cvPresetFlash(no))}).catch(e=>{toast(problemText(e,n));gear()});
 }
 function cvPresetFlash(no){const li=document.querySelector(`#main [data-cv-pl] [data-preset="${no}"]`);if(!li)return;li.scrollIntoView({block:"nearest"});li.classList.remove("acc-flash");void li.offsetWidth;li.classList.add("acc-flash")}
 function cvPresetOverwrite(id,no){
@@ -17003,7 +17093,8 @@ function cvPresetOverwrite(id,no){
 function cvPresetGo(id,no){
   const n=find(id)?.n,p=n&&presetRows(n).find(x=>x.n===no);if(!p)return;
   document.querySelectorAll("#main [data-cv-pl] li").forEach(li=>li.classList.toggle("on",+li.dataset.preset===no));
-  toast(`${i18n("Камера поворачивается в пресет")} «${p.name||`${i18n("Пресет")} ${no}`}». ${i18n("Прототип: в API нет такой команды")}`);
+  cvSimGo(id,no);
+  toast(`${i18n("Камера поворачивается в пресет")} «${p.name||`${i18n("Пресет")} ${no}`}». ${i18n("Прототип: в API нет такой команды. На стенде камеру поворачивает симуляция")}`);
 }
 
 // ── Параметры потоков ─────────────────────────────────────────────────────
@@ -17129,7 +17220,7 @@ function ptzCardHtml(n){
 }
 function presetPut(id,no,body){
   const n=find(id)?.n;
-  return API.put(`/units/${id}/presets/${no}`,body).then(r=>{hwApplyUnit(r);gear()}).catch(e=>{toast(problemText(e,n));gear()});
+  return API.put(`/units/${id}/presets/${no}`,body).then(r=>{hwApplyUnit(r);gear();return true}).catch(e=>{toast(problemText(e,n));gear();return false});
 }
 // Device.presets — все сохранённые номера: без подписи имя пустое, форма показывает номер
 function presetRows(n){return[...(n.presets||[])].sort((a,b)=>a.n-b.n)}
@@ -17143,15 +17234,15 @@ function presetAdd(id){
   const n=find(id)?.n;if(!n)return;
   const no=presetFree(n);if(no==null){toast("Все номера заняты");return}
   // Кнопка заводит строку и положения не трогает: его пишет «Запомнить здесь»
-  presetPut(id,no,{name:""});
+  cvSimForget(id,no);presetPut(id,no,{name:""});
 }
-function presetSave(id,no){if(find(id)?.n?.direct===false)return;presetPut(id,no,{}).then(()=>toast(`${i18n("Пресет")} ${no}: ${i18n("положение запомнено")}`))}
+function presetSave(id,no){if(find(id)?.n?.direct===false)return;const at=cvSimSnap(id);presetPut(id,no,{}).then(ok=>{if(!ok)return;cvSimRemember(id,no,at);toast(`${i18n("Пресет")} ${no}: ${i18n("положение запомнено")}`)})}
 function presetName(id,no,v){presetPut(id,no,{name:String(v).trim()})}
 function presetDel(id,no){
   const n=find(id)?.n,p=n&&presetRows(n).find(x=>x.n===no);if(!p)return;
   const name=p.name||`${i18n("Пресет")} ${no}`;
   askConfirm("Удалить пресет?",`<ul class="bk-del"><li>${i18n("Будет удалён пресет")} «${escHtml(name)}»</li><li>${i18n("Правила с этим номером больше не будут наводить камеру")}</li><li>${i18n("Камера и другие пресеты останутся")}</li></ul>`,"",i18n("Удалить"),()=>scheduleDelete([`${id}#${no}`],{label:`«${name}»`,commit:()=>{
-    API.del(`/units/${id}/presets/${no}`).then(r=>{hwApplyUnit(r);gear();toast(i18n("Пресет удалён"))}).catch(e=>toast(problemText(e,n)));
+    API.del(`/units/${id}/presets/${no}`).then(r=>{hwApplyUnit(r);cvSimForget(id,no);gear();toast(i18n("Пресет удалён"))}).catch(e=>toast(problemText(e,n)));
   }}),{html:true,typeCount:1});
 }
 // Правило: номер пресета — из списка камеры; цель не одна камера или списка нет — вводится руками
