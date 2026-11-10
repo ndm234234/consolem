@@ -2932,7 +2932,9 @@
         "type": "string",
         "enum": [
          "event",
-         "offline"
+         "offline",
+         "whole",
+         "last"
         ],
         "x-enum-labels": {
          "event": {
@@ -2944,13 +2946,67 @@
           "key": "field.camera.replicate.period.offline",
           "text": "пока сервер был недоступен",
           "lang": "ru"
+         },
+         "whole": {
+          "key": "field.camera.replicate.period.whole",
+          "text": "всё, чего нет в архиве",
+          "lang": "ru"
+         },
+         "last": {
+          "key": "field.camera.replicate.period.last",
+          "text": "последние минуты",
+          "lang": "ru"
          }
         },
         "x-label": {
          "key": "field.camera.replicate.period",
          "text": "Период",
          "lang": "ru"
-        }
+        },
+        "description": "offline — пропуски, пока не было связи; whole — всё, чего нет в архиве; last — последние minutes минут; event — от начала события до его конца (beforeSec до начала, afterSec после конца). Нет значения — offline. Сервер забирает со встроенного хранилища камеры или регистратора и кладёт в archive"
+       },
+       "minutes": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 1440,
+        "x-label": {
+         "key": "field.camera.replicate.minutes",
+         "text": "Минут",
+         "lang": "ru"
+        },
+        "description": "Только period last"
+       },
+       "beforeSec": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 3600,
+        "x-label": {
+         "key": "field.camera.replicate.beforeSec",
+         "text": "Секунд до события",
+         "lang": "ru"
+        },
+        "description": "Только period event"
+       },
+       "afterSec": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 3600,
+        "x-label": {
+         "key": "field.camera.replicate.afterSec",
+         "text": "Секунд после конца события",
+         "lang": "ru"
+        },
+        "description": "Только period event"
+       },
+       "archive": {
+        "type": "string",
+        "format": "uuid",
+        "x-label": {
+         "key": "field.camera.replicate.archive",
+         "text": "Куда",
+         "lang": "ru"
+        },
+        "description": "Хранилище для забранных записей. Нет значения — replication.archiveId встроенного хранилища, иначе архив записи камеры"
        }
       }
      },
@@ -3123,6 +3179,30 @@
      "alarm": false,
      "right": {
       "level": "FULL"
+     },
+     "params": {
+      "type": "object",
+      "properties": {
+       "from": {
+        "type": "string",
+        "format": "date-time",
+        "x-label": {
+         "key": "field.segment.from",
+         "text": "С",
+         "lang": "ru"
+        }
+       },
+       "to": {
+        "type": "string",
+        "format": "date-time",
+        "x-label": {
+         "key": "field.segment.to",
+         "text": "До",
+         "lang": "ru"
+        }
+       }
+      },
+      "description": "Потеря записи: период, которого нет ни в архиве, ни на устройстве. Приходит и когда встроенное хранилище перезаписало записи раньше, чем сервер их забрал"
      }
     },
     {
@@ -5835,6 +5915,22 @@
    ],
    "apis": [
     "pos/raw"
+   ]
+  },
+  {
+   "id": "vms.edge/1",
+   "label": {
+    "key": "profile.vms.edge/1",
+    "text": "Встроенное хранилище устройства",
+    "lang": "ru"
+   },
+   "properties": [
+    "replication"
+   ],
+   "status": [
+    "replicationStatus",
+    "mediaOk",
+    "profileG"
    ]
   }
  ],
@@ -8611,7 +8707,7 @@
     "vendor": "Axis",
     "model": "P3245-LV",
     "archiveId": "50000001-0000-4000-8000-000000000000",
-    "recordMode": "motion",
+    "recordMode": "always",
     "serverId": "20000001-0000-4000-8000-000000000000",
     "lat": 55.750912,
     "lon": 37.619102,
@@ -8678,8 +8774,6 @@
     "link": "offline",
     "observed": {
      "fault": "auth",
-     "recordState": "waiting",
-     "recordReason": "Камера не отвечает",
      "armed": true
     }
    }
@@ -8722,7 +8816,7 @@
     "model": "DS-2CD2143G2",
     "enabled": false,
     "archiveId": "50000001-0000-4000-8000-000000000000",
-    "recordMode": "motion",
+    "recordMode": "always",
     "serverId": "20000001-0000-4000-8000-000000000000",
     "lat": 55.75101,
     "lon": 37.61888,
@@ -8791,7 +8885,6 @@
    "status": {
     "link": "online",
     "observed": {
-     "recordState": "running",
      "armed": false,
      "disabledByRuleId": "70000007-0000-4000-8000-000000000000",
      "disabledByRuleAt": "2026-10-29T06:05:00Z"
@@ -15222,6 +15315,74 @@
    "changedBy": "it.chief",
    "mute": null,
    "order": 9,
+   "version": "1"
+  },
+  {
+   "id": "70000012-0000-4000-8000-000000000000",
+   "name": "Заполнять пропуски после обрыва связи",
+   "enabled": true,
+   "logOnly": false,
+   "logOnlySince": null,
+   "start": "event",
+   "runMode": "always",
+   "operatorMenu": false,
+   "ratePerMinute": 6,
+   "windowSec": 0,
+   "runAt": null,
+   "repeat": "skip",
+   "triggers": [
+    {
+     "source": "unit",
+     "kinds": [
+      "camera"
+     ],
+     "event": "device.restored",
+     "target": {
+      "include": [
+       {
+        "uid": "30000013-0000-4000-8000-000000000000"
+       },
+       {
+        "uid": "30000038-0000-4000-8000-000000000000"
+       },
+       {
+        "uid": "30000041-0000-4000-8000-000000000000"
+       }
+      ],
+      "exclude": [],
+      "gone": [],
+      "fromEvent": false
+     },
+     "match": {}
+    }
+   ],
+   "conditions": [],
+   "steps": [
+    {
+     "type": "unitAction",
+     "action": "replicate",
+     "target": {
+      "include": [],
+      "exclude": [],
+      "gone": [],
+      "fromEvent": true
+     },
+     "params": {
+      "period": "offline"
+     }
+    }
+   ],
+   "owner": "admin",
+   "purpose": "Когда связь с камерой вернулась, сервер забирает с её карты памяти минуты, которых нет в архиве",
+   "serverId": "20000001-0000-4000-8000-000000000000",
+   "runAsRoleId": null,
+   "allowChain": true,
+   "createdAt": "2026-10-20T08:00:00Z",
+   "createdBy": "admin",
+   "changedAt": "2026-10-20T08:00:00Z",
+   "changedBy": "admin",
+   "mute": null,
+   "order": 12,
    "version": "1"
   }
  ],

@@ -103,7 +103,7 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   const bs = await uiRec(bare.id);
   ok(bs.extraArchives?.[0]?.replicaFrom === bare.archiveId, "на сервере — строка забирает из основного: " + JSON.stringify(bs.extraArchives));
   // Карта камеры w2c
-  const cardDev = (await uiDevices()).find((d) => d.type === "storage" && d.writableFields?.length);
+  const cardDev = (await uiDevices()).find((d) => d.type === "storage" && d.writableFields?.includes("sizeBytes"));
   open(cardDev.id, "gen");
   ok(!!main().querySelector("[data-card-mode]") && !!main().querySelector("[data-card-size]"), "карта камеры: режим и объём правятся");
   storageSet(cardDev.id, "rec", "always");
@@ -112,7 +112,7 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   ok(await until(() => bq && bq.finished), "план карты: не ок " + bq?.fail);
   const cs = await uiRec(cardDev.id);
   ok(cs.recordMode === "always" && cs.sizeBytes === 512 * 1024 ** 3, "на сервере — режим и объём");
-  open((await uiDevices()).find((d) => d.type === "storage" && !d.writableFields?.length).id, "gen");
+  open((await uiDevices()).find((d) => d.type === "storage" && !d.writableFields?.includes("sizeBytes")).id, "gen");
   ok(!main().querySelector("[data-card-mode]") && !main().querySelector("[data-card-size]"), "обычное встроенное — только чтение");
 
   // Срок и глубина строки, запись по расписанию, микрофон

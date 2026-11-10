@@ -167,7 +167,7 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   ok(TRIGGER_KINDS.some((k) => k.kind === "other") && ruleDetOthers().some((x) => x[1] === "Вскрытие корпуса"), "другой вид выбирается в правиле по имени шаблона");
 
   // Карта камеры w2c: меньший объём — со вторым подтверждением
-  const cardN = of("storage", (d) => d.writableFields?.length);
+  const cardN = of("storage", (d) => d.writableFields?.includes("sizeBytes"));
   if (cardN) {
     const was = (await uiRec(cardN.id)).sizeBytes;
     open(cardN.id, "gen");

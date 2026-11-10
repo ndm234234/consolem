@@ -488,7 +488,7 @@
     const HOOKS = Profiles.HOOKS;
     const hFolder = HOOKS["vms.folder/1"];
     const hDevice = Profiles.DEVICE, hCamera = HOOKS["vms.camera/1"], hStream = HOOKS["vms.stream/1"], hDetector = HOOKS["vms.detector/1"], hAcs = HOOKS["vms.acs/1"];
-    const hLive = HOOKS["vms.live/1"], hPtz = HOOKS["vms.ptz/1"], hTalk = HOOKS["vms.talk/1"], hTimeline = HOOKS["vms.timeline/1"], hPos = HOOKS["vms.pos/1"];
+    const hLive = HOOKS["vms.live/1"], hPtz = HOOKS["vms.ptz/1"], hTalk = HOOKS["vms.talk/1"], hTimeline = HOOKS["vms.timeline/1"], hPos = HOOKS["vms.pos/1"], hEdge = HOOKS["vms.edge/1"];
     const pctx = {
       get units() { return store; },
       get kinds() { return kinds; },
@@ -536,6 +536,10 @@
       get plan() { return planNow; },
       // Идёт запрос пути ядра или шаг по uid: событие — с видом объекта (решение 5)
       get core() { return coreMode; },
+      // Событие объекта изнутри сервера (репликация): запись журнала и запуск правил, что его слушают
+      unitEvent: (u, eventId, match, fields) => unitEvent(u, eventId, match, fields),
+      // Ближайший запуск правила по расписанию с командой replicate на эту камеру (ISO) или null
+      nextReplication: (cam) => nextReplication(cam),
     };
     // Хуки вида — по его профилям (implements), только те, что сервер знает. У устройств (таблица devices) первыми — общие
     // хуки устройства (DEVICE: система, папки, ссылки, сервер-исполнитель, удаление), затем — профилей
@@ -1273,6 +1277,61 @@
       if (f.pause) runPause(run, f.pause);
       return rec;
     }
+    /* Событие объекта, которое сервер заметил сам (репликация встроенного хранилища: replication.done, failed, segment.lost
+       камеры): запись журнала (journal.event) и запуск включённых правил с этим событием, как POST /test/events unit.event.
+       У хранилища камеры в записи — камера, у хранилища регистратора — камера из fields.cameraId, иначе регистратор */
+    function unitEvent(u, eventId, match, fields) {
+      const ev = ((kinds.get(u.kind) || {}).events || []).find((e) => e.id === eventId);
+      if (!ev) return;
+      const at = iso(now()), owner = u.parentId ? store.get(u.parentId) : null;
+      const cameraId = u.kind === "camera" ? u.uid : (fields && fields.cameraId) || (owner && owner.kind === "camera" ? owner.uid : null);
+      const e = Object.assign({ id: uuid("journal"), at, occurredAt: at, category: ["alarm", "critical", "error"].includes(ev.severity) ? "alarm" : "info",
+        text: `${(ev.label || {}).text || ev.id}: ${u.name}`, deviceId: u.uid, source: u.kind, kind: eventId }, cameraId ? { cameraId } : {}, fields && Object.keys(fields).length ? { fields: clone(fields) } : {});
+      db.journal.unshift(e);
+      send("journal.event", { entityId: u.uid, payload: clone(e) });
+      // Правила слышат событие не сразу, а из очереди: событие, которое сервер поднял, пока шагал запуск правила (replicate →
+      // replication.failed), не запускает правила внутри шага. Событие из очереди — цепочка: правило с allowChain: false его
+      // не слышит; всего за один разбор не больше EV_DRAIN_MAX событий; частоту держит ratePerMinute правила
+      evQueue.push({ u, eventId, occurred: { source: "unit", event: eventId, match: clone(match || {}), deviceId: u.uid, at }, chain: evDraining });
+      evDrain();
+    }
+    const EV_DRAIN_MAX = 50;
+    const evQueue = [];
+    let evDraining = false;
+    function evDrain() {
+      if (evDraining) return;
+      evDraining = true;
+      try {
+        for (let n = 0; evQueue.length && n < EV_DRAIN_MAX; n++) {
+          const { u, eventId, occurred, chain } = evQueue.shift();
+          const fits = (t) => Object.entries(t.match || {}).every(([k, v]) => k in occurred.match && JSON.stringify(occurred.match[k]) === JSON.stringify(v));
+          db.rules.filter((r) => !(chain && r.allowChain === false) && ruleHears(r, (t) => engine.hears(t, eventId, u.uid) && fits(t)))
+            .forEach((r) => fireDo(ruleStart(r, { via: "event", events: [occurred], src: [u.uid] })));
+        }
+      } finally {
+        evQueue.length = 0;
+        evDraining = false;
+      }
+    }
+    // Правило-расписание с командой replicate, цель которого называет камеру: когда оно запустится в следующий раз
+    function nextReplication(cam) {
+      const hit = (t) => !!t && !t.fromEvent && (t.include || []).some((x) => (x.area ? areaHas(x, cam) : x.uid === cam.uid)) && !(t.exclude || []).includes(cam.uid);
+      const steps = (l) => l.flatMap((a) => [a].concat(steps(a.yes || []), steps(a.no || [])));
+      let best = null;
+      db.rules.forEach((r) => {
+        // Только то, что сервер запустит сам (schedOn): правило-расписание без everyMin он не запускает, времени у него нет
+        if (!schedOn(r) || !steps(r.steps || []).some((a) => a.type === "unitAction" && a.action === "replicate" && hit(a.target))) return;
+        const at = schedNext(r, now());
+        if (at != null && (best == null || at < best)) best = at;
+      });
+      return best == null ? null : iso(best);
+    }
+    const areaHas = (x, cam) => {
+      const p = props(cam), parent = cam.parentId ? store.get(cam.parentId) : null;
+      if (x.area === "server") return (p.serverId || (parent && props(parent).serverId)) === x.uid;
+      if (x.area === "folder") return (cam.folders || []).includes(x.uid);
+      return x.area === "domain" && cam.domainId === x.uid;
+    };
     // Выполнить шаги запуска, которые движок счёл выполненными: команды объектов (unitAction) — как POST /units/{uid}/actions/…
     // Только мгновенные команды вида и не «Только журнал»; итог — в status.observed объекта
     function fireDo(f) {
@@ -1280,6 +1339,11 @@
       f.steps.forEach((x) => {
         if (x.state !== "ok" || !x.action || x.action.type !== "unitAction" || !x.deviceId) return;
         const u = store.get(x.deviceId), desc = u && unitCommand(u.kind, x.action.action);
+        // Команда только для правила (ruleOnly) с поведением у хука профиля исполняется (replicate); без хука — только запись запуска
+        // Хук называет команду сам (actions[id]); общий "*" (единицы СКУД) сюда не входит
+        const own = u && !desc ? kinds.action(u.kind, x.action.action) : null;
+        const hook = own ? hooksOf(u.kind).find((h) => h.actions && h.actions[own.id]) : null;
+        if (own && own.ruleOnly && own.execution !== "longRunning" && hook) return hook.actions[own.id](u, clone(x.action.params || {}), pctx, own.id);
         if (!desc || desc.execution === "longRunning") return;
         const params = clone(x.action.params || {}), run = actionRun(u.kind, desc.id);
         if (run) run(u, params, pctx, desc.id);
@@ -1928,6 +1992,7 @@
       });
       tickDiscovery(fired);
       applyTick(fired);
+      hEdge.tick(pctx, fired);
       runTick();
       schedTick();
       modeTick();
@@ -4902,7 +4967,7 @@
           const fired = [];
           const target = now() + ms;
           for (let t = now(); ; ) {
-            const due = Math.min(target, ...[...ops.values()].filter((o) => o.state === "running").map((o) => o.nextAt), ...formatting.values(), ...[...searches.values()].map((s) => s.nextAt), ...[...syncing.values()].map((s) => s.at), ...applying.values(), ...runDue(), ...schedDue(), ...modeDue());
+            const due = Math.min(target, ...[...ops.values()].filter((o) => o.state === "running").map((o) => o.nextAt), ...formatting.values(), ...[...searches.values()].map((s) => s.nextAt), ...[...syncing.values()].map((s) => s.at), ...applying.values(), ...runDue(), ...schedDue(), ...modeDue(), ...hEdge.due(pctx));
             if (clock.frozenAt != null) clock.frozenAt = Math.max(t, due);
             else clock.offset += Math.max(t, due) - now();
             fired.push(...tick());
@@ -4933,6 +4998,13 @@
             db.journal.unshift(e);
             send("journal.event", { entityId: e.deviceId, payload: clone(e) });
             return { status: 200, body: { applied: true } };
+          }
+          // Встроенное хранилище (vms.edge/1): пропуск, проверка носителя, отказ забора
+          if (typeof body.type === "string" && body.type.startsWith("edge.")) {
+            const u = store.get(body.deviceId);
+            if (!u) return notFound("Объект");
+            if (!kinds.profileOf(u.kind, "vms.edge/1")) return problem(422, "NOT_SUPPORTED", `Вид ${u.kind} не реализует vms.edge/1`, { field: "/kind", params: { kind: u.kind, profile: "vms.edge/1" } });
+            return hEdge.test(u, body, pctx);
           }
           // Касса передала сырую строку: к последним строкам источника (GET /units/{uid}/pos/raw)
           if (body.type === "pos.raw") {
@@ -4999,6 +5071,18 @@
             dev.online = body.online;
             if (dev.online) delete dev.fault;
             else dev.fault = body.fault || dev.fault || "conn";
+            // Встроенное хранилище живёт в устройстве: связь камеры или регистратора — и его связь
+            if (dev.type === "camera" || dev.type === "ipsrv") {
+              // Через индекс склада (не обход всех устройств): сигналы идут сотнями. Событий об объекте нет — клиент берёт связь из replication.changed
+              const link = dev.online ? "online" : "offline";
+              store.byParent(dev.id).filter((x) => x.kind === "storage" && (x.status || {}).link !== link).forEach((x) => {
+                (x.status || (x.status = {})).link = link;
+                if (x.status.observed) {
+                  if (dev.online) delete x.status.observed.fault;
+                  else x.status.observed.fault = dev.fault;
+                }
+              });
+            }
           } else {
             if (body.fault) dev.fault = body.fault;
             else delete dev.fault;

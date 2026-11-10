@@ -210,7 +210,7 @@
     assert.eq([ok.name, ok.properties.enabled, ok.properties.norm], ["Ворота", false, "closed"], "имя, включение, norm");
     const ch = await ofKind(env, "channel");
     field(await patch(env, ch, { name: "x" }), "NOT_SUPPORTED", "/name", "у канала ничего");
-    const st = await ofKind(env, "storage", (u) => u.writable && !u.writable.length);
+    const st = await ofKind(env, "storage", (u) => u.writable && u.writable.join() === "replication");
     assert.status(await props(env, st, { enabled: false }), 422, null, "у хранилища ничего");
   });
 

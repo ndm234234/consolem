@@ -274,7 +274,8 @@
   }, { needs: ["createArchiveWatch"] });
 
   // Что правится у объекта сейчас — Unit.writable: у карты камеры w2c — recordMode, sizeBytes; у обычного встроенного — ничего
-  const writable = (u) => (u.writable || []).length > 0;
+  // Правка карты камеры w2c — recordMode и sizeBytes; replication (vms.edge/1) правится у любого встроенного хранилища
+  const writable = (u) => (u.writable || []).some((k) => k !== "replication");
 
   test("Карта камеры w2c: уменьшение только с подтверждением; поле не хранится; откат объёма не возвращает, как у тома", async () => {
     const env = await makeEnv();
@@ -295,14 +296,14 @@
     const env = await makeEnv();
     const list = await env.list("/units?kind=storage");
     const cardRec = list.find((u) => writable(u));
-    assert.eq([cardRec.writable, list.filter((u) => writable(u)).length], [["recordMode", "sizeBytes"], 1], "одна карта в наборе");
+    assert.eq([cardRec.writable, list.filter((u) => writable(u)).length], [["recordMode", "sizeBytes", "replication"], 1], "одна карта в наборе");
     assert.ok(list.every((u) => !("writableFields" in ((u.status || {}).observed || {}))), "в status.observed списка правок нет");
     const res = await set(env, cardRec, { recordMode: "always", sizeBytes: cardRec.properties.sizeBytes * 2 });
     assert.eq([res.properties.recordMode, res.properties.sizeBytes], ["always", cardRec.properties.sizeBytes * 2], "режим и объём");
     field(await put(env, res, { recordMode: "motion" }), "VALIDATION_FAILED", P("recordMode"), "только постоянно или при сбое");
     field(await env.call("PATCH", U(res.uid), { name: "Другая" }, v(res)), "NOT_SUPPORTED", "/name", "имя постоянное");
     const plain = list.find((u) => !writable(u));
-    assert.eq(plain.writable, [], "у обычного встроенного — пустой список");
+    assert.eq(plain.writable, ["replication"], "у обычного встроенного — только репликация");
     field(await put(env, plain, { sizeBytes: GB }), "NOT_SUPPORTED", P("sizeBytes"), "обычное — только чтение");
     assert.ok(!(await env.list("/units?implements=vms.archive/1")).some((a) => a.uid === cardRec.uid), "среди хранилищ её нет");
   }, needs);

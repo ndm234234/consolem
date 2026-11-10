@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Конфигуратор — API",
-    "version": "0.5.0",
+    "version": "0.6.0",
     "description": "Контракт конфигуратора: всё, что интерфейс читает и меняет. Источник истины: встроенный сервер прототипа (api/server.js) и бэкенд отвечают по нему. Договорённости — api/README.md: версии записей (ETag / If-Match, 428, 412), ошибки application/problem+json с машинным code, групповые операции с частичным успехом и idempotencyKey, поток событий SSE. Система может поддерживать не весь контракт: что она умеет — GET /reference → capabilities; остальные операции отвечают 404 NO_ROUTE, неподдержанные виды устройств и настройки — 422 NOT_SUPPORTED. Операции с тегом test-support есть только на тестовом стенде. Форма работает с одним адресом входа, другой — только если этот недоступен. Список операций, откат и память idempotencyKey у каждого адреса свои: после 5xx и смены адреса запись сперва перечитывается. Версия одной записи на разных адресах может отличаться: 412 и перечитывание. У изменений чужого кластера at — время, когда их увидели.",
     "license": {
       "name": "Внутренний документ",
@@ -6068,7 +6068,7 @@
           "hardware"
         ],
         "summary": "Закрепить минуты в архиве",
-        "description": "Предметный API объекта по uid (профиль vms.timeline/1): тело — схема ниже. Нет объекта — 404; вид объекта не реализует vms.timeline/1 — 422 NOT_SUPPORTED, field /kind. field отказа — JSON Pointer: в теле запроса (/streamId), свойство объекта — /properties/<имя>.\n\nПривезти минуты из резервного или с устройства в основной архив камеры. Отрезок делится по суткам, одна просьба на сутки, не больше 7 на человека: остальное в refused с причиной per_person. refused — только о подаче: отказ регистратора приходит поздно, в журнале archive.backfill.refused. Основной записи своего кластера нет — 409 NO_PRIMARY, форма кнопки не даёт. Конец не позже начала — 422, field: /to. Другой кластер — 409 OTHER_CLUSTER.",
+        "description": "Предметный API объекта по uid (профиль vms.timeline/1): тело — схема ниже. Нет объекта — 404; вид объекта не реализует vms.timeline/1 — 422 NOT_SUPPORTED, field /kind. field отказа — JSON Pointer: в теле запроса (/streamId), свойство объекта — /properties/<имя>.\n\nПривезти минуты из резервного или с устройства в основной архив камеры. Отрезок делится по суткам, одна просьба на сутки, не больше 7 на человека: остальное в refused с причиной per_person. refused — только о подаче: отказ регистратора приходит поздно, в журнале archive.backfill.refused. Основной записи своего кластера нет — 409 NO_PRIMARY, форма кнопки не даёт. Конец не позже начала — 422, field: /to. Другой кластер — 409 OTHER_CLUSTER. Камера со встроенным хранилищем (vms.edge/1): запрос ещё и заказывает забор её пропусков внутри периода, edgeOrdered — сколько; edgeOnly: true делает только это, без квоты.",
         "parameters": [
           {
             "name": "uid",
@@ -9558,7 +9558,8 @@
               "journal.event",
               "kinds.changed",
               "export.progress",
-              "export.finished"
+              "export.finished",
+              "replication.changed"
             ],
             "x-enum-descriptions": {
               "stream.reset": "Пропущенное не дослать (Last-Event-ID слишком старый): клиент перечитывает то, что есть у него в кэше. Весь перечень не читается никогда",
@@ -9577,7 +9578,8 @@
               "journal.event": "Новая запись журнала об устройстве: entityId — устройство, payload — JournalEvent. Наблюдающим устройство, его родителя или камеру, к которой привязан источник событий: лента и титры закладки «Просмотр»",
               "kinds.changed": "Описания видов изменились: payload.kinds — коды. Подсказка, а не гарантия: после stream.reset клиент сам перечитывает GET /kinds с If-None-Match",
               "export.progress": "Ход выгрузки: kind=exportJob, entityId — задание, payload — progress и part. Только автору",
-              "export.finished": "Выгрузка закончилась: kind=exportJob, payload — state и files. Только автору"
+              "export.finished": "Выгрузка закончилась: kind=exportJob, payload — state и files. Только автору",
+              "replication.changed": "Изменилось состояние репликации встроенного хранилища (профиль vms.edge/1): kind=storage, entityId — хранилище, payload — state (общее состояние), cameraId (у регистратора — камера, чьё состояние изменилось), gap (новый или изменённый пропуск: from, to, result). Приходит при смене state и при новом или закрытом пропуске; клиент перечитывает объект (status.observed.replicationStatus)"
             }
           },
           "at": {
@@ -9738,7 +9740,7 @@
         "properties": {
           "type": {
             "type": "string",
-            "description": "device.signal — пропало или вернулось соединение с устройством (online), device.fault — причина без связи, device.found — устройство назвало новую запись под deviceId (found), device.lost — запись deviceId пропала, device.parent — у записи сменился родитель (parentId), io.input — сигнал входа deviceId (value): active запускает включённые правила по этому событию, normal кончает событие: эскалация с stop: reset останавливается, journal.event — новая запись журнала об устройстве deviceId (event): уходит в поток, unit.event — событие объекта deviceId из описания его вида (eventId, match): запускает включённые правила по этому событию, их шаги unitAction выполняются, pos.raw — касса источника событий deviceId передала сырую строку (text, необязательно at): сервер добавляет её к последним строкам, их отдаёт GET /units/{uid}/pos/raw; вид без vms.pos/1 — 422 NOT_SUPPORTED, clear: true очищает список; пустой text или длиннее 1000 символов — 422 VALIDATION_FAILED, field: text",
+            "description": "device.signal — пропало или вернулось соединение с устройством (online), device.fault — причина без связи, device.found — устройство назвало новую запись под deviceId (found), device.lost — запись deviceId пропала, device.parent — у записи сменился родитель (parentId), io.input — сигнал входа deviceId (value): active запускает включённые правила по этому событию, normal кончает событие: эскалация с stop: reset останавливается, journal.event — новая запись журнала об устройстве deviceId (event): уходит в поток, unit.event — событие объекта deviceId из описания его вида (eventId, match): запускает включённые правила по этому событию, их шаги unitAction выполняются, pos.raw — касса источника событий deviceId передала сырую строку (text, необязательно at): сервер добавляет её к последним строкам, их отдаёт GET /units/{uid}/pos/raw; вид без vms.pos/1 — 422 NOT_SUPPORTED, clear: true очищает список; пустой text или длиннее 1000 символов — 422 VALIDATION_FAILED, field: text. edge.gap — встроенное хранилище (deviceId — uid хранилища) получило пропуск: cameraId (у регистратора), from, to, result (queued по умолчанию, lost или done); edge.check — mediaOk и profileG хранилища; edge.fail — серверу не удалось забрать записи: reason (no_link, media, archive, space), cameraId",
             "enum": [
               "device.signal",
               "device.fault",
@@ -9750,7 +9752,10 @@
               "domain.link",
               "journal.event",
               "unit.event",
-              "pos.raw"
+              "pos.raw",
+              "edge.gap",
+              "edge.check",
+              "edge.fail"
             ]
           },
           "deviceId": {
@@ -9849,6 +9854,49 @@
           "clear": {
             "type": "boolean",
             "description": "pos.raw: true — очистить строки источника (text не нужен): пример чека больше не возвращается, items: []"
+          },
+          "cameraId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "edge.gap, edge.fail: камера регистратора, к которой относится пропуск или отказ"
+          },
+          "from": {
+            "type": "string",
+            "format": "date-time",
+            "description": "edge.gap: начало пропуска"
+          },
+          "to": {
+            "type": "string",
+            "format": "date-time",
+            "description": "edge.gap: конец пропуска"
+          },
+          "result": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "done",
+              "lost"
+            ],
+            "description": "edge.gap: итог пропуска; нет поля — queued"
+          },
+          "mediaOk": {
+            "type": "boolean",
+            "description": "edge.check: карта или диск на месте и пишут"
+          },
+          "profileG": {
+            "type": "boolean",
+            "description": "edge.check: устройство отдаёт записи по ONVIF Profile G"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "no_link",
+              "media",
+              "archive",
+              "space",
+              "profile"
+            ],
+            "description": "edge.fail: причина отказа (profile — устройство не отдаёт записи по ONVIF Profile G)"
           }
         },
         "additionalProperties": false,
@@ -16665,6 +16713,10 @@
           "to": {
             "type": "string",
             "format": "date-time"
+          },
+          "edgeOnly": {
+            "type": "boolean",
+            "description": "Только пропуски встроенного хранилища (vms.edge/1): сервер заказывает забор пропусков камеры внутри периода, просьбы «закрепить» не подаёт и квоту на человека не тратит; accepted 0. Нет поля — false"
           }
         }
       },
@@ -16705,6 +16757,11 @@
                 }
               }
             }
+          },
+          "edgeOrdered": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Сколько пропусков встроенного хранилища камеры или регистратора внутри периода сервер заказал к забору (vms.edge/1). Не зависит от квоты на человека: refused о них не говорит. Нет встроенного хранилища или пропусков — 0"
           }
         }
       },
@@ -17288,7 +17345,25 @@
           },
           "observed": {
             "type": "object",
-            "properties": {},
+            "properties": {
+              "replicaLagSec": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Камера (vms.camera/1) в режиме replica: на сколько секунд архив отстаёт от источника. Нет значения — сервер не знает"
+              },
+              "replicationStatus": {
+                "$ref": "#/components/schemas/EdgeReplicationStatus",
+                "description": "Встроенное хранилище (vms.edge/1): состояние репликации"
+              },
+              "mediaOk": {
+                "type": "boolean",
+                "description": "Встроенное хранилище: карта или диск на месте и пишут. Нет значения — true. false: сервер ничего не заберёт, state waiting, replication.failed с reason media"
+              },
+              "profileG": {
+                "type": "boolean",
+                "description": "Встроенное хранилище: устройство отдаёт записи по ONVIF Profile G. Нет значения — true. false: сервер ничего не заберёт, state waiting, replication.failed с reason profile"
+              }
+            },
             "additionalProperties": true,
             "description": "Значения, которые система назначила или измерила сама: размещение, serverId, состояние"
           },
@@ -18034,6 +18109,155 @@
           "text": {
             "type": "string",
             "description": "Строка как есть, без перевода строки в конце"
+          }
+        }
+      },
+      "EdgeReplicationStatus": {
+        "type": "object",
+        "additionalProperties": true,
+        "description": "status.observed.replicationStatus встроенного хранилища (профиль vms.edge/1), только чтение. Состояние считает сервер; у регистратора общее состояние — худшее из состояний камер (waiting, running, planned, ok, off), а cameras — состояние каждой камеры",
+        "required": [
+          "state",
+          "gaps"
+        ],
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "off",
+              "waiting",
+              "planned",
+              "running",
+              "ok"
+            ],
+            "description": "off — репликации нет, забранного нет; waiting — есть что забрать, нет связи; planned — есть что забрать, ждёт правила с командой replicate, ручного забора или времени запуска (nextTransferAt); running — сервер забирает сейчас; ok — всё забрано"
+          },
+          "lagSec": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "mode all: на сколько секунд архив отстаёт от устройства (replicaLagSec камеры). Нет значения — сервер не знает"
+          },
+          "timeLeftSec": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "description": "Сколько осталось забирать; нет значения, когда сервер не забирает"
+          },
+          "lastTransferAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "nextTransferAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Ближайший запуск правила по расписанию с командой replicate на камеры хранилища; нет — null"
+          },
+          "bytesToday": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Сколько сервер забрал за сутки"
+          },
+          "gaps": {
+            "type": "array",
+            "description": "Пропуски в архиве за 7 дней, новые первыми. У регистратора — всех камер, с cameraId",
+            "items": {
+              "$ref": "#/components/schemas/EdgeReplicationGap"
+            }
+          },
+          "cameras": {
+            "type": "array",
+            "description": "Только у хранилища регистратора: состояние каждой камеры регистратора",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "cameraId",
+                "state",
+                "gaps"
+              ],
+              "properties": {
+                "cameraId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "off",
+                    "waiting",
+                    "planned",
+                    "running",
+                    "ok"
+                  ]
+                },
+                "excluded": {
+                  "type": "boolean",
+                  "description": "Камера в excludedCameras: постоянная репликация её не берёт"
+                },
+                "lastTransferAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                },
+                "nextTransferAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                },
+                "gaps": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EdgeReplicationGap"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "EdgeReplicationGap": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "from",
+          "to",
+          "result"
+        ],
+        "description": "Пропуск в архиве: минуты, которые камера записала на встроенное хранилище, а на сервер они не дошли",
+        "properties": {
+          "cameraId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Только в общем списке хранилища регистратора"
+          },
+          "from": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "to": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "result": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "done",
+              "lost"
+            ],
+            "description": "queued — сервер ещё не забрал; done — забрал; lost — устройство записало поверх раньше, чем сервер забрал: минут нет нигде"
           }
         }
       }
