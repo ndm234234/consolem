@@ -2740,6 +2740,7 @@ html[data-theme="light"] .cp-step{background:var(--one-control-hover);color:var(
   </div>
 </div>
 <div class="tctx" id="tctx" role="menu" data-on-mousedown='[["rcMenuDown",{"$on":"event"}]]'></div>
+<script src="assets/proto-journal-stub.js?v=ec681c23"></script>
 <script>
 // Тема — одна кнопка в шапке; выбор запоминается (ключ кита kit-theme).
 try{const t=localStorage.getItem("kit-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}
@@ -7303,6 +7304,7 @@ function ctxOpenNewTab(id){
   window.open(nodeDeepLink(id),"_blank","noopener");
 }
 function applyDeepLink(){
+  if(pjDeepLink())return true;
   const raw=location.hash.replace(/^#/,"");
   if(!raw)return false;
   const p=new URLSearchParams(raw),id=p.get("node");
@@ -11358,7 +11360,7 @@ function learnUI(){
     </div>
     <div class="lrn-grid">${learnTopics().map(t=>`<div class="card lrn-topic"><button type="button" class="as-link lrn-t" ${onEv("click",["learnLink",t.id])}>${escHtml(i18n(t.title))}</button><p class="sub">${escHtml(i18n(t.why))}</p><div class="lrn-foot"><span class="sub">${learnCount(t.chapters.length,"глава|главы|глав")} · ${learnMins(t.secs)}</span>${learnPlayBtn(t.id,null,"Смотреть")}</div></div>`).join("")}</div></div>`);
 }
-function treeLog(){const q=qval();return logCats.filter(c=>matchesText(q,c.n)).map(c=>`<div class="n ${logFilt===c.id?"on":""}" data-go="log:${c.id}" ${onEv("click",["logGo",c.id])}><span class="tw"></span><span class="ici">${lu("scroll-text")}</span><span class="nm">${hlText(c.n,q)}</span></div>`).join("")}
+// treeLog — в разделе «Журнал» ниже (прототип журнала)
 
 function tabsFor(n){
   if(isSchemaNode(n))return schemaTabs(n);
@@ -26432,29 +26434,199 @@ function opRedo(id){
     logOpsLoad();
   })).catch(e=>toast(problemText(e)));
 }
-function logUI(){const cat=logCats.find(x=>x.id===logFilt)||logCats[0];
-  if(cat.id==="ops"){
-    paintMain(mainHd("Журнал",`<span class="hd-ic">${lu("scroll-text")}</span>${cat.n}`,"Диагностика и аудит")+
-      `<div class="sc">${listCard({
-        key:"log:ops",title:"Операции",items:logOps,text:op=>[opTitle(op)],row:opRow,
-        wrap:b=>`<table><tr><th>${i18n("Время")}</th><th>${i18n("Тип")}</th><th>${i18n("Что")}</th><th>${i18n("Итог")}</th><th></th></tr>${b}</table>`,
-        empty:"Операций нет",ph:"Имя устройства…",unit:"операция|операции|операций"
-      })}</div>`);
-    return;
+// ── Журнал: поиск в большом журнале (ЗАГЛУШКА assets/proto-journal-stub.js) ──
+// 200 000 событий за 30 суток создаёт браузер; отбор, счётчики и гистограмма — тоже он.
+// В контракте этого пока нет: после утверждения вида — правка контракта и отбор на сервере.
+let pjQ={range:"24h",from:null,to:null,cats:null,kinds:null,objs:null,users:null,text:"",showDebug:false},pjRes=null,pjSel=-1,pjList=null,pjTextT=0;
+// Камеры кэш грузит по запросу: перед созданием событий журнал читает их список сам
+let pjBoot=null;
+function pjInit(){
+  if(PJ.ready())return true;
+  if(!pjBoot)pjBoot=API.get("/units",{implements:"vms.camera/1",limit:1000}).then(r=>hwEnsure(r.items.map(x=>x.uid))).catch(()=>{}).then(()=>{pjBuild();if(app==="log")paint()});
+  return false;
+}
+function pjWait(){paintMain(mainHd("",`<span class="hd-ic">${lu("scroll-text")}</span>${i18n("Журнал событий")}`,"")+`<div class="pj"><p class="pj-mu">Консоль готовит журнал…</p></div>`)}
+function pjBuild(){
+  const cams=[],srvs=[],seen=new Set();
+  walkAll(n=>{if(!n||seen.has(n.id))return;seen.add(n.id);
+    if(n.type==="server")srvs.push({id:n.id,name:locName(n)});
+    else if(n.type==="camera"){const s=cameraTreeServer(n.id);cams.push({id:n.id,name:locName(n),srv:s?locName(s):""})}});
+  PJ.init({cams,srvs,rules:(typeof rules!=="undefined"?rules:[]).map(r=>({id:r.id,name:r.name})),users:accUsers().map(u=>u.login),
+    openObj:o=>{if(o.type==="rule"){goApp("rules");ruleOpen(o.id,true)}else{openNode(o.id,{app:"hw",tab:"gen"});hwFlashLanding()}},
+    openUser:l=>{const u=accUsers().find(x=>x.login===l);if(u){goApp("acc");accGo("user:"+u.id)}else toast(`Пользователя ${l} нет в разделе «Права» этой консоли`)},
+    openVideo:o=>{openNode(o.id,{app:"hw",tab:can("startUnitLive")?"view":"rec"});hwFlashLanding()}});
+}
+function pjRange(){return pjQ.range==="custom"&&pjQ.from!=null?{from:pjQ.from,to:pjQ.to}:PJ.range(pjQ.range)}
+function pjRangeName(){if(pjQ.range==="custom")return PJ.fmtSpan(pjQ.from,pjQ.to);const x=PJ.RANGES.find(r=>r[0]===pjQ.range);return`за ${x?x[1]:"24 часа"}`}
+function pjRun(){
+  const r=pjRange();pjRes=PJ.query({...pjQ,from:r.from,to:r.to});
+  if(pjSel>=0&&!pjRes.idx.includes(pjSel))pjSel=-1;
+  return pjRes;
+}
+function pjSetRange(id){pjQ={...pjQ,range:id,from:null,to:null};pjRefresh()}
+function pjToggle(field,v){
+  const s=new Set(pjQ[field]||[]);s.has(v)?s.delete(v):s.add(v);
+  pjQ={...pjQ,[field]:s.size?s:null};pjRefresh();
+}
+function pjOnly(field,v){pjQ={...pjQ,[field]:new Set([v])};pjRefresh()}
+function pjClear(field){pjQ={...pjQ,[field]:null};pjRefresh()}
+function pjShowDebug(on){pjQ={...pjQ,showDebug:!!on};pjRefresh()}
+function pjResetAll(){pjQ={range:"24h",from:null,to:null,cats:null,kinds:null,objs:null,users:null,text:"",showDebug:false};pjSel=-1;pjRefresh()}
+// Текст: список обновляется после паузы в наборе
+function pjText(v){pjQ={...pjQ,text:v};clearTimeout(pjTextT);pjTextT=setTimeout(pjRefresh,160)}
+function pjSum(extra=""){
+  const r=pjRes;if(!r)return"";
+  return`<span><b>${PJ.num(r.total)}</b> ${PJ.plural(r.total,"событие|события|событий")} ${escHtml(pjRangeName())}</span>
+    ${r.hidden&&!pjQ.showDebug?`<span>· служебных скрыто ${PJ.num(r.hidden)} <button type="button" class="lk" ${onEv("click",["pjShowDebug",true])}>Показать</button></span>`:""}
+    ${pjQ.showDebug?`<span>· <button type="button" class="lk" ${onEv("click",["pjShowDebug",false])}>Скрыть служебные</button></span>`:""}
+    <span class="pj-mu">· отбор ${r.ms} мс из ${PJ.num(PJ.S.n)}</span>${extra}`;
+}
+function pjMountList(host,o={}){
+  pjList=PJ.list(host,{idx:pjRes.idx,sel:pjSel,terms:PJ.terms(pjRes.groups),cols:o.cols,empty:o.empty,
+    onPick:i=>{pjSel=i;pjMountDet()},onScroll:o.onScroll,onFilter:o.onFilter||((f,v)=>pjOnly(f==="obj"?"objs":"users",v)),
+    flash:el=>accFlash(()=>[el],true)});
+  return pjList;
+}
+function pjMountDet(){
+  const host=document.getElementById("pjDet");if(!host)return;
+  host.innerHTML=PJ.detailHtml(pjSel);PJ.bindActs(host,pjAct);
+}
+function pjAct(act,v){
+  if(PJ.openAct(act,v))return;
+  if(act==="pick"){
+    pjSel=v;const j=pjRes.idx.indexOf(v);
+    if(j>=0&&pjList){pjList.select(v);pjList.scrollToRow(j,true);pjList.flash(v)}
+    else toast("Это событие не попадает в текущий отбор. Подробности — в панели справа.");
+    pjMountDet();return;
   }
-  const rows=logRes?logRes.items.map(logRow):LOG_BY_CAT[cat.id]||LOG_ROWS;
-  paintMain(mainHd("Журнал",`<span class="hd-ic">${lu("scroll-text")}</span>${cat.n}`,"Диагностика и аудит")+
-    `<div class="sc">${logFilterHtml()}${listCard({
-      key:"log:"+cat.id,
-      title:"События",
-      items:rows,
-      text:r=>r,
-      row:r=>`<tr><td>${escHtml(r[0])}</td><td>${escHtml(r[1])}</td><td>${escHtml(r[2])}</td><td>${r[1]==="Тревога"?`<button type="button" class="lk" data-t="${escHtml(r[2])}" title="${i18n("Создать правило…")}" ${onEv("click",["ruleFromLog",onEv.data("t")])}>${i18n("Создать правило…")}</button>`:""}</td></tr>`,
-      wrap:b=>`<table><tr><th>${i18n("Время")}</th><th>${i18n("Тип")}</th><th>${i18n("Описание")}</th><th></th></tr>${b}</table>`,
-      empty:"Событий нет",
-      ph:"Время, тип или описание…",
-      unit:"событие|события|событий"
-    })}</div>`)}
+  if(act==="similar"){const r=PJ.row(v);pjQ={...pjQ,kinds:new Set([r.kind.i]),objs:r.obj?new Set([r.obj.i]):null,users:null,cats:null,text:"",showDebug:r.cat.id==="debug"};pjSel=v;pjRefresh();return}
+  if(act==="copy"){const url=`${location.origin}${location.pathname}#log=ev:${v}`;(navigator.clipboard?.writeText(url)||Promise.reject()).then(()=>toast("Консоль скопировала ссылку на событие"),()=>toast(url));return}
+}
+// Ссылка #log или #log=ev:N открывает журнал (и событие)
+function pjDeepLink(){
+  const m=/^#log(?:=ev:(\d+))?$/.exec(location.hash);if(!m)return false;
+  goApp("log");
+  if(m[1]){if(!PJ.ready()){(pjBoot||Promise.resolve()).then(()=>setTimeout(pjDeepLink,0));pjInit();return true}const i=+m[1];if(i<PJ.S.n){const t=PJ.S.T[i];pjQ={...pjQ,range:"custom",from:t-PJ.HOUR,to:t+PJ.HOUR,cats:null,kinds:null,objs:null,users:null,text:"",showDebug:true};pjSel=i;pjRefresh();setTimeout(()=>{const j=pjRes.idx.indexOf(i);if(pjList&&j>=0){pjList.scrollToRow(j,true);pjList.flash(i)}},60)}}
+  return true;
+}
+// «Операции» — прежний экран: отмена и повтор групповых правок
+function logOpsUI(){
+  paintMain(mainHd("",`<span class="hd-ic">${lu("refresh-cw")}</span>${i18n("Операции")}`,"Групповые и одиночные правки оборудования. Отменить можно последнюю.")+
+    `<div class="sc">${listCard({
+      key:"log:ops",title:"Операции",items:logOps,text:op=>[opTitle(op)],row:opRow,
+      wrap:b=>`<table><tr><th>${i18n("Время")}</th><th>${i18n("Тип")}</th><th>${i18n("Что")}</th><th>${i18n("Итог")}</th><th></th></tr>${b}</table>`,
+      empty:"Операций нет",ph:"Имя устройства…",unit:"операция|операции|операций"
+    })}</div>`);
+}
+function pjTreeRow(lab,on,ev,ic,sub){return`<div class="n ${on?"on":""}" ${onEv("click",ev)}><span class="tw"></span><span class="ici">${lu(ic)}</span><span class="nm">${escHtml(lab)}</span>${sub!=null?`<span class="pj-tree-n">${escHtml(sub)}</span>`:""}</div>`}
+function pjTreeOps(){return`<div class="pj-tree-h">Ещё</div>${pjTreeRow("Операции",logFilt==="ops",["logGo","ops"],"refresh-cw")}`}
+
+// Вариант B (прототип 48): фасеты со счётчиками в левой панели — категория, событие, объект, пользователь.
+// Счётчик у значения — сколько событий даст выбор при остальных условиях. Над списком — поиск по тексту.
+let pjbFind={kinds:"",objs:"",users:""},pjbMore={kinds:false,objs:false,users:false};
+function pjRefresh(){if(app!=="log")return;logUI();renderTree()}
+function logUI(){
+  if(logFilt==="ops"){logOpsUI();return}
+  if(!pjInit()){pjWait();return}
+  pjRun();
+  paintMain(mainHd("",`<span class="hd-ic">${lu("scroll-text")}</span>${i18n("Журнал событий")}`,"")+
+  `<div class="pj">
+    <div class="pj-top">
+      <div class="pjb-q">${lu("search")}<input id="pjbIn" type="text" autocomplete="off" spellcheck="false" placeholder="Текст события: имя, адрес, значение. «|» — или, кавычки — точная фраза" aria-label="Текст события" ${onEv("input",["pjText",onEv.value])}></div>
+      <div class="pj-seg" role="group" aria-label="Период">${PJ.RANGES.map(([id,n])=>`<button type="button" class="${pjQ.range===id?"on":""}" ${onEv("click",["pjSetRange",id])}>${n}</button>`).join("")}</div>
+    </div>
+    <div class="pjb-chips">${pjbChips()}</div>
+    <div class="pj-sum" id="pjSum"></div>
+    <div class="pj-histbox" id="pjHist"></div>
+    <div class="pj-body"><div class="pj-main"><div class="pj-listbox" id="pjList"></div></div><aside class="pj-side" id="pjDet" aria-label="Подробности события"></aside></div>
+  </div>`);
+  const inp=document.getElementById("pjbIn");if(inp&&document.activeElement!==inp)inp.value=pjQ.text;
+  const sum=document.getElementById("pjSum");if(sum)sum.innerHTML=pjSum();
+  pjbHist();
+  pjMountList(document.getElementById("pjList"),{onFilter:(f,v)=>pjOnly(f==="obj"?"objs":"users",v)});
+  pjMountDet();
+}
+// Выбранные значения — чипами над списком: видно, что сужает список, даже при свёрнутой панели
+function pjbChips(){
+  const S=PJ.S,out=[];
+  const chip=(lab,val,ev)=>out.push(`<span class="pj-chip"><i>${escHtml(lab)}:</i> ${escHtml(val)}<button type="button" aria-label="Убрать условие" title="Убрать условие" ${onEv("click",ev)}>×</button></span>`);
+  if(pjQ.cats)chip("Категория",[...pjQ.cats].map(i=>PJ.CATS[i].n).join(", "),["pjClear","cats"]);
+  if(pjQ.kinds)chip("Событие",[...pjQ.kinds].map(i=>PJ.KINDS[i].n).join(", "),["pjClear","kinds"]);
+  if(pjQ.objs)chip("Объект",[...pjQ.objs].map(i=>S.objs[i]?.name).join(", "),["pjClear","objs"]);
+  if(pjQ.users)chip("Пользователь",[...pjQ.users].map(i=>S.users[i]?.login).join(", "),["pjClear","users"]);
+  if(pjQ.range==="custom")chip("Период",PJ.fmtSpan(pjQ.from,pjQ.to),["pjSetRange","24h"]);
+  return out.length?out.join("")+`<button type="button" class="lk" ${onEv("click",["pjResetAll"])}>Сбросить всё</button>`:`<span class="pj-mu">Условия — в панели слева. Щелчок по объекту или пользователю в строке оставит только его события.</span>`;
+}
+function pjbHist(){
+  const host=document.getElementById("pjHist");if(!host)return;
+  const r=pjRange(),h=PJ.hist(pjQ,r.from,r.to,72);
+  host.innerHTML=PJ.histSvg(h,{height:44})+PJ.histAxis(h);
+  host.onclick=e=>{const b=e.target.closest("[data-b]");if(!b)return;const k=+b.dataset.b,from=h.from+k*h.step,to=from+h.step;
+    if(to-from<PJ.MIN*2){toast("Отрезок уже меньше двух минут");return}
+    pjQ={...pjQ,range:"custom",from,to};pjRefresh()};
+}
+// ── Фасеты в левой панели ──
+const PJB_TYPE={cam:"камера",srv:"сервер",rule:"правило"};
+function pjbItems(f){
+  const S=PJ.S,r=pjRes;
+  if(f==="cats")return PJ.CATS.map((c,i)=>({v:i,label:c.n,n:r.cc[i],dot:c.id}));
+  if(f==="kinds")return PJ.KINDS.map(k=>({v:k.i,label:k.n,n:r.kc[k.i],dot:PJ.CATS[k.ci].id}));
+  if(f==="objs")return S.objs.map(o=>({v:o.i,label:o.name,n:r.oc[o.i],sub:PJB_TYPE[o.type]}));
+  return S.users.map(u=>({v:u.i,label:u.login,n:r.uc[u.i]}));
+}
+// Категории без выбора — все, кроме служебных
+function pjbCatOn(i){return pjQ.cats?pjQ.cats.has(i):PJ.CATS[i].id!=="debug"||pjQ.showDebug}
+function pjbOn(f,v){return f==="cats"?pjbCatOn(v):!!pjQ[f]?.has(v)}
+function pjbRows(f){
+  const all=pjbItems(f),q=(pjbFind[f]||"").toLowerCase();
+  let list=f==="cats"?all:all.filter(x=>!q||x.label.toLowerCase().includes(q)).sort((a,b)=>pjbOn(f,b.v)-pjbOn(f,a.v)||b.n-a.n);
+  const lim=f==="cats"?99:pjbMore[f]?60:6,shown=list.slice(0,lim),rest=list.length-shown.length;
+  return shown.map(x=>{const on=pjbOn(f,x.v);
+    return`<label class="pjb-r${on?" on":""}${x.n?"":" z"}"><input type="checkbox" ${on?"checked":""} ${onEv("change",["pjbToggle",f,x.v])}>
+      ${x.dot?`<i class="pj-dot pj-c-${x.dot}"></i>`:""}<span class="pjb-l" title="${escHtml(x.label)}">${PJ.hl(x.label,q?[q]:[])}${x.sub?`<span class="pj-mu"> · ${escHtml(x.sub)}</span>`:""}</span>
+      <span class="pjb-n">${PJ.num(x.n)}</span><span class="pjb-only" role="button" tabindex="0" title="Только это значение" ${onEv("click",["pjbOnly",onEv.event,f,x.v])}>только</span></label>`}).join("")
+    +(rest>0?`<button type="button" class="lk pjb-more" ${onEv("click",["pjbMoreSet",f,true])}>Ещё ${PJ.num(rest)}${q?"":" · или найдите по имени"}</button>`:pjbMore[f]&&f!=="cats"?`<button type="button" class="lk pjb-more" ${onEv("click",["pjbMoreSet",f,false])}>Свернуть</button>`:"");
+}
+function pjbSec(title,f,find){
+  const act=f==="cats"?!!pjQ.cats:!!pjQ[f];
+  return`<div class="pjb-sec"><div class="pjb-h"><span>${escHtml(title)}</span>${act?`<button type="button" class="lk" ${onEv("click",["pjClear",f])}>сбросить</button>`:""}</div>
+    ${find?`<input class="pjb-find" type="text" placeholder="Найти" aria-label="Найти: ${escHtml(title)}" value="${escHtml(pjbFind[f])}" ${onEv("input",["pjbFindSet",f,onEv.value])}>`:""}
+    <div id="pjbL-${f}">${pjbRows(f)}</div></div>`;
+}
+function treeLog(){
+  if(!PJ.ready())return pjTreeOps();
+  if(!pjRes)pjRun();
+  return`${pjTreeRow("Журнал событий",logFilt!=="ops",["logGo","all"],"scroll-text")}
+    ${pjbSec("Категория","cats",false)}${pjbSec("Событие","kinds",true)}${pjbSec("Объект","objs",true)}${pjbSec("Пользователь","users",true)}${pjTreeOps()}`;
+}
+function pjbToggle(f,v){
+  logFilt="all";
+  if(f==="cats"){const eff=new Set(PJ.CATS.map((c,i)=>i).filter(pjbCatOn));eff.has(v)?eff.delete(v):eff.add(v);
+    const def=PJ.CATS.every((c,i)=>eff.has(i)===(c.id!=="debug"));pjQ={...pjQ,cats:def?null:eff,showDebug:false};pjRefresh();return}
+  pjToggle(f,v);
+}
+function pjbOnly(e,f,v){e.preventDefault();e.stopPropagation();logFilt="all";pjOnly(f,v)}
+function pjbMoreSet(f,on){pjbMore={...pjbMore,[f]:on};const el=document.getElementById("pjbL-"+f);if(el)el.innerHTML=pjbRows(f)}
+// Поиск по значениям меняет только свой список: поле ввода остаётся в фокусе
+function pjbFindSet(f,v){pjbFind={...pjbFind,[f]:v};const el=document.getElementById("pjbL-"+f);if(el)el.innerHTML=pjbRows(f)}
+(function pjbCss(){const st=document.createElement("style");st.textContent=`
+.pjb-q{flex:1;min-width:300px;display:flex;align-items:center;gap:8px;height:36px;padding:0 10px;border:1px solid var(--ln);border-radius:8px;background:var(--p)}
+.pjb-q:focus-within{border-color:var(--bl);box-shadow:0 0 0 2px color-mix(in srgb,var(--bl) 30%,transparent)}
+.pjb-q svg{width:16px;height:16px;color:var(--mu)}.pjb-q input{flex:1;border:0;background:transparent;outline:none;color:var(--tx);font:inherit;font-size:14px}
+.pjb-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:26px;font-size:13px}
+.pjb-sec{padding:4px 8px 10px 12px;border-bottom:1px solid var(--ln)}
+.pjb-h{display:flex;justify-content:space-between;align-items:center;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--mu);padding:8px 0 4px}
+.pjb-h .lk{text-transform:none;letter-spacing:0;font-size:12px}
+.pjb-find{width:100%;box-sizing:border-box;height:26px;margin:2px 0 4px;font-size:12px}
+.pjb-r{display:flex;align-items:center;gap:6px;height:26px;font-size:13px;cursor:pointer;border-radius:4px;padding:0 4px;margin:0 -4px}
+.pjb-r:hover{background:var(--p2)}.pjb-r input{margin:0;flex:none}.pjb-r.z{opacity:.5}
+.pjb-r .pj-dot{margin-right:0}
+.pjb-l{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pjb-n{font-size:12px;color:var(--mu);font-variant-numeric:tabular-nums}
+.pjb-only{display:none;font-size:11px;color:var(--bl);padding:0 2px}.pjb-r:hover .pjb-only,.pjb-only:focus{display:inline}.pjb-r:hover .pjb-n{display:none}
+.pjb-more{font-size:12px;margin-top:2px}
+`;document.head.appendChild(st)})();
+
 
 let ws=1,wizd={};
 // Устройство попадает в общий пул и в выбранную папку расположения

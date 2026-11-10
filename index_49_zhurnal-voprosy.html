@@ -2740,6 +2740,7 @@ html[data-theme="light"] .cp-step{background:var(--one-control-hover);color:var(
   </div>
 </div>
 <div class="tctx" id="tctx" role="menu" data-on-mousedown='[["rcMenuDown",{"$on":"event"}]]'></div>
+<script src="assets/proto-journal-stub.js?v=ec681c23"></script>
 <script>
 // Тема — одна кнопка в шапке; выбор запоминается (ключ кита kit-theme).
 try{const t=localStorage.getItem("kit-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}
@@ -7303,6 +7304,7 @@ function ctxOpenNewTab(id){
   window.open(nodeDeepLink(id),"_blank","noopener");
 }
 function applyDeepLink(){
+  if(pjDeepLink())return true;
   const raw=location.hash.replace(/^#/,"");
   if(!raw)return false;
   const p=new URLSearchParams(raw),id=p.get("node");
@@ -11358,7 +11360,7 @@ function learnUI(){
     </div>
     <div class="lrn-grid">${learnTopics().map(t=>`<div class="card lrn-topic"><button type="button" class="as-link lrn-t" ${onEv("click",["learnLink",t.id])}>${escHtml(i18n(t.title))}</button><p class="sub">${escHtml(i18n(t.why))}</p><div class="lrn-foot"><span class="sub">${learnCount(t.chapters.length,"глава|главы|глав")} · ${learnMins(t.secs)}</span>${learnPlayBtn(t.id,null,"Смотреть")}</div></div>`).join("")}</div></div>`);
 }
-function treeLog(){const q=qval();return logCats.filter(c=>matchesText(q,c.n)).map(c=>`<div class="n ${logFilt===c.id?"on":""}" data-go="log:${c.id}" ${onEv("click",["logGo",c.id])}><span class="tw"></span><span class="ici">${lu("scroll-text")}</span><span class="nm">${hlText(c.n,q)}</span></div>`).join("")}
+// treeLog — в разделе «Журнал» ниже (прототип журнала)
 
 function tabsFor(n){
   if(isSchemaNode(n))return schemaTabs(n);
@@ -11370,7 +11372,7 @@ function tabsForHand(n){
   if(n.type==="domain")return[["flds","Папки"],["gen","Общие"],["cams","Устройства"],["srvs","Серверы"],["lic","Лицензии"],["topo","Топология"]];
   if(n.type==="unalloc")return[];
   if(n.type==="server"&&isUnallocated(n.id))return[["gen","Общие"],["topo","Топология"]];
-  if(n.type==="server")return[["gen","Общие"],["cams","Устройства"],["svc","Службы"],["disk","Хранилище"]].concat(can("feature:serverNetwork")?[["net","Сеть"]]:[],[["topo","Топология"]]);
+  if(n.type==="server")return[["gen","Общие"],["cams","Устройства"],["svc","Службы"],["disk","Хранилище"]].concat(can("feature:serverNetwork")?[["net","Сеть"]]:[],[["topo","Топология"],["jr","Журнал"]]);
   // Хранилище открывают ради камер, что в него пишут: «Устройства» — первая
   // вкладка и открывается по умолчанию, параметры и тома — во второй.
   // Вид, на который камеры не привязываются (карта сервера, инциденты), — только параметры и тома.
@@ -11383,7 +11385,7 @@ function tabsForHand(n){
 
   // У папки одно окно содержимого, как в Проводнике: вложенные — переключателем, а добавление — отдельным шагом
   if(n.type==="folder")return[];
-  if(n.type==="camera")return[["gen","Подключение"]].concat(can("startUnitLive")?[["view","Просмотр"]]:[],[["vid","Видео"],["rec","Архив"],["det","Детекторы"],["io","Периферия"],["acc","Доступ"]]);
+  if(n.type==="camera")return[["gen","Подключение"]].concat(can("startUnitLive")?[["view","Просмотр"]]:[],[["vid","Видео"],["rec","Архив"],["det","Детекторы"],["io","Периферия"],["acc","Доступ"],["jr","Журнал"]]);
   if(n.type==="ipsrv")return ipsrvCameras(n).length?[["gen","Подключение"],["rec","Архив"],["kids","Дочерние"]]:[["gen","Подключение"],["kids","Дочерние"]];
   if(n.type==="channel")return[["gen","Основные"],["kids","Дочерние"]];
   if(n.type==="eventsrc")return[["gen","Подключение"],["overlay","Титры"]];
@@ -17331,6 +17333,7 @@ function formBase(n){
         <p class="sub">Домен: <b>${domName}</b></p>
         <button type="button" class="btn pri" style="margin-top:12px;width:100%" ${onEv("click",["addToDomain",`${n.id}`,`${domId}`])}>${i18n("Добавить в домен")}</button>`);
     }
+    if(tab==="jr")return pjcCardHtml(n);
     if(tab==="stor")return archTableCard(n);
     if(tab==="edges")return eoHtml(n);
     if(tab==="disk"){
@@ -17421,6 +17424,7 @@ function formBase(n){
     <p class="sub">Системный объект сервера. Вызывается из правил автоматизации для SMS-оповещений.</p>`);
   if(n.type==="camera"){
     const a=arch.find(x=>x.id===n.arch)||null;
+    if(tab==="jr")return pjcCardHtml(n);
     if(tab==="view")return camViewHtml(n);
     if(tab==="vid")return camVideoHtml(n);
     if(tab==="det")return camDetectorsHtml(n);
@@ -26432,29 +26436,232 @@ function opRedo(id){
     logOpsLoad();
   })).catch(e=>toast(problemText(e)));
 }
-function logUI(){const cat=logCats.find(x=>x.id===logFilt)||logCats[0];
-  if(cat.id==="ops"){
-    paintMain(mainHd("Журнал",`<span class="hd-ic">${lu("scroll-text")}</span>${cat.n}`,"Диагностика и аудит")+
-      `<div class="sc">${listCard({
-        key:"log:ops",title:"Операции",items:logOps,text:op=>[opTitle(op)],row:opRow,
-        wrap:b=>`<table><tr><th>${i18n("Время")}</th><th>${i18n("Тип")}</th><th>${i18n("Что")}</th><th>${i18n("Итог")}</th><th></th></tr>${b}</table>`,
-        empty:"Операций нет",ph:"Имя устройства…",unit:"операция|операции|операций"
-      })}</div>`);
+// ── Журнал: поиск в большом журнале (ЗАГЛУШКА assets/proto-journal-stub.js) ──
+// 200 000 событий за 30 суток создаёт браузер; отбор, счётчики и гистограмма — тоже он.
+// В контракте этого пока нет: после утверждения вида — правка контракта и отбор на сервере.
+let pjQ={range:"24h",from:null,to:null,cats:null,kinds:null,objs:null,users:null,text:"",showDebug:false},pjRes=null,pjSel=-1,pjList=null,pjTextT=0;
+// Камеры кэш грузит по запросу: перед созданием событий журнал читает их список сам
+let pjBoot=null;
+function pjInit(){
+  if(PJ.ready())return true;
+  if(!pjBoot)pjBoot=API.get("/units",{implements:"vms.camera/1",limit:1000}).then(r=>hwEnsure(r.items.map(x=>x.uid))).catch(()=>{}).then(()=>{pjBuild();if(app==="log")paint()});
+  return false;
+}
+function pjWait(){paintMain(mainHd("",`<span class="hd-ic">${lu("scroll-text")}</span>${i18n("Журнал событий")}`,"")+`<div class="pj"><p class="pj-mu">Консоль готовит журнал…</p></div>`)}
+function pjBuild(){
+  const cams=[],srvs=[],seen=new Set();
+  walkAll(n=>{if(!n||seen.has(n.id))return;seen.add(n.id);
+    if(n.type==="server")srvs.push({id:n.id,name:locName(n)});
+    else if(n.type==="camera"){const s=cameraTreeServer(n.id);cams.push({id:n.id,name:locName(n),srv:s?locName(s):""})}});
+  PJ.init({cams,srvs,rules:(typeof rules!=="undefined"?rules:[]).map(r=>({id:r.id,name:r.name})),users:accUsers().map(u=>u.login),
+    openObj:o=>{if(o.type==="rule"){goApp("rules");ruleOpen(o.id,true)}else{openNode(o.id,{app:"hw",tab:"gen"});hwFlashLanding()}},
+    openUser:l=>{const u=accUsers().find(x=>x.login===l);if(u){goApp("acc");accGo("user:"+u.id)}else toast(`Пользователя ${l} нет в разделе «Права» этой консоли`)},
+    openVideo:o=>{openNode(o.id,{app:"hw",tab:can("startUnitLive")?"view":"rec"});hwFlashLanding()}});
+}
+function pjRange(){return pjQ.range==="custom"&&pjQ.from!=null?{from:pjQ.from,to:pjQ.to}:PJ.range(pjQ.range)}
+function pjRangeName(){if(pjQ.range==="custom")return PJ.fmtSpan(pjQ.from,pjQ.to);const x=PJ.RANGES.find(r=>r[0]===pjQ.range);return`за ${x?x[1]:"24 часа"}`}
+function pjRun(){
+  const r=pjRange();pjRes=PJ.query({...pjQ,from:r.from,to:r.to});
+  if(pjSel>=0&&!pjRes.idx.includes(pjSel))pjSel=-1;
+  return pjRes;
+}
+function pjSetRange(id){pjQ={...pjQ,range:id,from:null,to:null};pjRefresh()}
+function pjToggle(field,v){
+  const s=new Set(pjQ[field]||[]);s.has(v)?s.delete(v):s.add(v);
+  pjQ={...pjQ,[field]:s.size?s:null};pjRefresh();
+}
+function pjOnly(field,v){pjQ={...pjQ,[field]:new Set([v])};pjRefresh()}
+function pjClear(field){pjQ={...pjQ,[field]:null};pjRefresh()}
+function pjShowDebug(on){pjQ={...pjQ,showDebug:!!on};pjRefresh()}
+function pjResetAll(){pjQ={range:"24h",from:null,to:null,cats:null,kinds:null,objs:null,users:null,text:"",showDebug:false};pjSel=-1;pjRefresh()}
+// Текст: список обновляется после паузы в наборе
+function pjText(v){pjQ={...pjQ,text:v};clearTimeout(pjTextT);pjTextT=setTimeout(pjRefresh,160)}
+function pjSum(extra=""){
+  const r=pjRes;if(!r)return"";
+  return`<span><b>${PJ.num(r.total)}</b> ${PJ.plural(r.total,"событие|события|событий")} ${escHtml(pjRangeName())}</span>
+    ${r.hidden&&!pjQ.showDebug?`<span>· служебных скрыто ${PJ.num(r.hidden)} <button type="button" class="lk" ${onEv("click",["pjShowDebug",true])}>Показать</button></span>`:""}
+    ${pjQ.showDebug?`<span>· <button type="button" class="lk" ${onEv("click",["pjShowDebug",false])}>Скрыть служебные</button></span>`:""}
+    <span class="pj-mu">· отбор ${r.ms} мс из ${PJ.num(PJ.S.n)}</span>${extra}`;
+}
+function pjMountList(host,o={}){
+  pjList=PJ.list(host,{idx:pjRes.idx,sel:pjSel,terms:PJ.terms(pjRes.groups),cols:o.cols,empty:o.empty,
+    onPick:i=>{pjSel=i;pjMountDet()},onScroll:o.onScroll,onFilter:o.onFilter||((f,v)=>pjOnly(f==="obj"?"objs":"users",v)),
+    flash:el=>accFlash(()=>[el],true)});
+  return pjList;
+}
+function pjMountDet(){
+  const host=document.getElementById("pjDet");if(!host)return;
+  host.innerHTML=PJ.detailHtml(pjSel);PJ.bindActs(host,pjAct);
+}
+function pjAct(act,v){
+  if(PJ.openAct(act,v))return;
+  if(act==="pick"){
+    pjSel=v;const j=pjRes.idx.indexOf(v);
+    if(j>=0&&pjList){pjList.select(v);pjList.scrollToRow(j,true);pjList.flash(v)}
+    else toast("Это событие не попадает в текущий отбор. Подробности — в панели справа.");
+    pjMountDet();return;
+  }
+  if(act==="similar"){const r=PJ.row(v);pjQ={...pjQ,kinds:new Set([r.kind.i]),objs:r.obj?new Set([r.obj.i]):null,users:null,cats:null,text:"",showDebug:r.cat.id==="debug"};pjSel=v;pjRefresh();return}
+  if(act==="copy"){const url=`${location.origin}${location.pathname}#log=ev:${v}`;(navigator.clipboard?.writeText(url)||Promise.reject()).then(()=>toast("Консоль скопировала ссылку на событие"),()=>toast(url));return}
+}
+// Ссылка #log или #log=ev:N открывает журнал (и событие)
+function pjDeepLink(){
+  const m=/^#log(?:=ev:(\d+))?$/.exec(location.hash);if(!m)return false;
+  goApp("log");
+  if(m[1]){if(!PJ.ready()){(pjBoot||Promise.resolve()).then(()=>setTimeout(pjDeepLink,0));pjInit();return true}const i=+m[1];if(i<PJ.S.n){const t=PJ.S.T[i];pjQ={...pjQ,range:"custom",from:t-PJ.HOUR,to:t+PJ.HOUR,cats:null,kinds:null,objs:null,users:null,text:"",showDebug:true};pjSel=i;pjRefresh();setTimeout(()=>{const j=pjRes.idx.indexOf(i);if(pjList&&j>=0){pjList.scrollToRow(j,true);pjList.flash(i)}},60)}}
+  return true;
+}
+// «Операции» — прежний экран: отмена и повтор групповых правок
+function logOpsUI(){
+  paintMain(mainHd("",`<span class="hd-ic">${lu("refresh-cw")}</span>${i18n("Операции")}`,"Групповые и одиночные правки оборудования. Отменить можно последнюю.")+
+    `<div class="sc">${listCard({
+      key:"log:ops",title:"Операции",items:logOps,text:op=>[opTitle(op)],row:opRow,
+      wrap:b=>`<table><tr><th>${i18n("Время")}</th><th>${i18n("Тип")}</th><th>${i18n("Что")}</th><th>${i18n("Итог")}</th><th></th></tr>${b}</table>`,
+      empty:"Операций нет",ph:"Имя устройства…",unit:"операция|операции|операций"
+    })}</div>`);
+}
+function pjTreeRow(lab,on,ev,ic,sub){return`<div class="n ${on?"on":""}" ${onEv("click",ev)}><span class="tw"></span><span class="ici">${lu(ic)}</span><span class="nm">${escHtml(lab)}</span>${sub!=null?`<span class="pj-tree-n">${escHtml(sub)}</span>`:""}</div>`}
+function pjTreeOps(){return`<div class="pj-tree-h">Ещё</div>${pjTreeRow("Операции",logFilt==="ops",["logGo","ops"],"refresh-cw")}`}
+
+// Вариант C (прототип 49): журнал начинается с вопроса. Человек выбирает вопрос и, если нужно,
+// камеру или пользователя — консоль сразу показывает ответ списком. У камеры и сервера — вкладка «Журнал».
+let pjcView="home",pjcAsk=null,pjcParam=null,pjcPick={},pjcCard={cat:"all",range:"7d"};
+const PJC_ASKS=[
+  {id:"cam-all",q:"Что происходило с камерой?",need:"cam",hint:"Все события камеры за сутки",ic:"cctv",set:o=>({objs:[o],range:"24h"})},
+  {id:"cam-set",q:"Кто менял настройки камеры?",need:"cam",hint:"Изменения, подключение, удаление и PTZ за 30 дней",ic:"settings",set:o=>({objs:[o],kinds:["cam.set","dev.add","dev.del","ptz"],range:"30d"})},
+  {id:"cam-rec",q:"Почему камера не записывала?",need:"cam",hint:"Связь, начало и конец записи, потери за 7 дней",ic:"hard-drive",set:o=>({objs:[o],kinds:["cam.offline","cam.online","rec.lost","rec.start","rec.stop","cam.auth"],range:"7d"})},
+  {id:"cam-view",q:"Кто смотрел или выгружал видео камеры?",need:"cam",hint:"Живое видео, архив и экспорт за 7 дней",ic:"eye",set:o=>({objs:[o],kinds:["live.view","arch.view","export"],range:"7d"})},
+  {id:"user",q:"Что делал пользователь?",need:"user",hint:"Все действия пользователя за 7 дней",ic:"user",set:u=>({users:[u],range:"7d"})},
+  {id:"logins",q:"Кто входил в систему и откуда?",hint:"Входы, выходы и неудачные входы за 7 дней",ic:"lock",set:()=>({kinds:["login","logout","login.fail"],range:"7d"})},
+  {id:"alarms",q:"Какие тревоги были за последний час?",hint:"Тревоги и их оценки",ic:"siren",set:()=>({cats:["alarm"],range:"1h"})},
+  {id:"errors",q:"Какие сбои оборудования были за сутки?",hint:"Связь, запись, хранилища",ic:"triangle-alert",set:()=>({cats:["error"],range:"24h"})}
+];
+const PJC_ALL={id:"all",q:"Все события",hint:"Поиск по тексту во всём журнале",ic:"scroll-text",set:()=>({range:"24h"})};
+function pjcAskById(id){return PJC_ASKS.find(a=>a.id===id)||(id==="all"?PJC_ALL:null)}
+function pjRefresh(){if(app==="log")logUI()}
+function pjcSetQ(a,param){
+  const s=a.set(param),ki=id=>PJ.KINDS.findIndex(k=>k.id===id),ci=id=>PJ.CATS.findIndex(c=>c.id===id);
+  pjQ={range:s.range||"24h",from:null,to:null,text:"",showDebug:false,
+    cats:s.cats?new Set(s.cats.map(ci)):null,kinds:s.kinds?new Set(s.kinds.map(ki)):null,
+    objs:s.objs?new Set(s.objs):null,users:s.users?new Set(s.users):null};
+}
+function pjcGo(id){
+  const a=pjcAskById(id);if(!a)return;
+  const p=a.need?pjcPick[id]:null;
+  if(a.need&&(p==null||p==="")){pjcView="home";logFilt="all";paint();pjcFlashCard(id);toast(a.need==="cam"?"Выберите камеру в карточке вопроса":"Выберите пользователя в карточке вопроса");return}
+  pjcAsk=id;pjcParam=p!=null?+p:null;pjcSetQ(a,pjcParam);pjSel=-1;pjcView="res";logFilt="all";paint();
+  accFlash(()=>[document.querySelector("#main h1")].filter(Boolean),true);
+}
+function pjcHome(){pjcView="home";paint()}
+function pjcPickSet(id,v){pjcPick={...pjcPick,[id]:v};if(pjcView==="res"&&pjcAsk===id)pjcGo(id)}
+function pjcFlashCard(id){accFlash(()=>[document.querySelector(`.pjc-ask[data-ask="${id}"]`)].filter(Boolean))}
+function pjcTitle(){
+  const a=pjcAskById(pjcAsk);if(!a)return"Журнал событий";
+  if(a.id==="custom")return a.q;
+  const S=PJ.S;
+  if(a.need==="cam"&&pjcParam!=null)return a.q.replace("камерой?",`камерой «${S.objs[pjcParam]?.name}»?`).replace("камеры?",`камеры «${S.objs[pjcParam]?.name}»?`);
+  if(a.need==="user"&&pjcParam!=null)return a.q.replace("пользователь?",`пользователь ${S.users[pjcParam]?.login}?`);
+  return a.q;
+}
+function pjcPicker(a,cur){
+  const S=PJ.S;
+  const opts=a.need==="cam"?[["",i18n("Выберите камеру…")],...S.objs.filter(o=>o.type==="cam").sort((x,y)=>x.name.localeCompare(y.name,"ru")).map(o=>[String(o.i),o.name])]
+    :[["",i18n("Выберите пользователя…")],...S.users.map(u=>[String(u.i),u.login])];
+  return selHtml(opts,cur??"",["pjcPickSet",a.id,onEv.value],a.need==="cam"?"Камера":"Пользователь");
+}
+function logUI(){
+  if(logFilt==="ops"){logOpsUI();return}
+  if(!pjInit()){pjWait();return}
+  if(pjcView==="home"){
+    paintMain(mainHd("",`<span class="hd-ic">${lu("scroll-text")}</span>${i18n("Журнал событий")}`,"Выберите вопрос. Консоль покажет события, которые на него отвечают.")+
+      `<div class="sc"><div class="pjc-grid">${PJC_ASKS.map(a=>`<div class="card pjc-ask" data-ask="${a.id}">
+        <div class="pjc-q">${lu(a.ic)}<b>${escHtml(a.q)}</b></div><p class="sub">${escHtml(a.hint)}</p>
+        <div class="pjc-act">${a.need?pjcPicker(a,pjcPick[a.id]):""}<button type="button" class="btn s pri" ${onEv("click",["pjcGo",a.id])}>Показать</button></div></div>`).join("")}</div>
+        <div class="pjc-all"><span class="pj-mu">Другой вопрос?</span> <button type="button" class="lk" ${onEv("click",["pjcGo","all"])}>Открыть все события и искать по тексту</button></div></div>`);
     return;
   }
-  const rows=logRes?logRes.items.map(logRow):LOG_BY_CAT[cat.id]||LOG_ROWS;
-  paintMain(mainHd("Журнал",`<span class="hd-ic">${lu("scroll-text")}</span>${cat.n}`,"Диагностика и аудит")+
-    `<div class="sc">${logFilterHtml()}${listCard({
-      key:"log:"+cat.id,
-      title:"События",
-      items:rows,
-      text:r=>r,
-      row:r=>`<tr><td>${escHtml(r[0])}</td><td>${escHtml(r[1])}</td><td>${escHtml(r[2])}</td><td>${r[1]==="Тревога"?`<button type="button" class="lk" data-t="${escHtml(r[2])}" title="${i18n("Создать правило…")}" ${onEv("click",["ruleFromLog",onEv.data("t")])}>${i18n("Создать правило…")}</button>`:""}</td></tr>`,
-      wrap:b=>`<table><tr><th>${i18n("Время")}</th><th>${i18n("Тип")}</th><th>${i18n("Описание")}</th><th></th></tr>${b}</table>`,
-      empty:"Событий нет",
-      ph:"Время, тип или описание…",
-      unit:"событие|события|событий"
-    })}</div>`)}
+  pjRun();
+  const a=pjcAskById(pjcAsk)||PJC_ALL;
+  paintMain(mainHd(`<button type="button" class="lk" ${onEv("click",["pjcHome"])}>${i18n("Вопросы")}</button>`,`<span class="hd-ic">${lu(a.ic||"scroll-text")}</span>${escHtml(pjcTitle())}`,"")+
+  `<div class="pj">
+    <div class="pj-top">
+      ${a.need?`<div class="pjc-pk">${pjcPicker(a,pjcParam!=null?String(pjcParam):"")}</div>`:""}
+      <div class="pj-seg" role="group" aria-label="Период">${PJ.RANGES.map(([id,n])=>`<button type="button" class="${pjQ.range===id?"on":""}" ${onEv("click",["pjSetRange",id])}>${n}</button>`).join("")}</div>
+      <div class="pjb-q">${lu("search")}<input id="pjcIn" type="text" autocomplete="off" placeholder="${a.id==="all"?"Текст события: имя, адрес, значение":"Искать в ответе"}" aria-label="Искать в ответе" ${onEv("input",["pjText",onEv.value])}></div>
+    </div>
+    ${pjQ.kinds||pjQ.cats?`<div class="pj-sum"><span>Показаны: ${escHtml([...(pjQ.kinds||[])].map(i=>PJ.KINDS[i].n).concat([...(pjQ.cats||[])].map(i=>PJ.CATS[i].n)).join(", "))}.</span> <button type="button" class="lk" ${onEv("click",["pjcWiden"])}>Показать все события${pjQ.objs?" этого объекта":pjQ.users?" этого пользователя":""}</button></div>`:""}
+    <div class="pj-sum" id="pjSum"></div>
+    <div class="pj-histbox" id="pjHist"></div>
+    <div class="pj-body"><div class="pj-main"><div class="pj-listbox" id="pjList"></div></div><aside class="pj-side" id="pjDet" aria-label="Подробности события"></aside></div>
+  </div>`);
+  const inp=document.getElementById("pjcIn");if(inp&&document.activeElement!==inp)inp.value=pjQ.text;
+  const sum=document.getElementById("pjSum");if(sum)sum.innerHTML=pjSum();
+  const host=document.getElementById("pjHist");
+  if(host){const r=pjRange(),h=PJ.hist(pjQ,r.from,r.to,72);host.innerHTML=PJ.histSvg(h,{height:36})+PJ.histAxis(h);
+    host.onclick=e=>{const b=e.target.closest("[data-b]");if(!b)return;const from=h.from+(+b.dataset.b)*h.step;pjQ={...pjQ,range:"custom",from,to:from+h.step};pjRefresh()}}
+  pjMountList(document.getElementById("pjList"),{onFilter:(f,v)=>{pjcAsk="custom";PJC_CUSTOM.q=f==="obj"?`События «${PJ.S.objs[v].name}»`:`Действия ${PJ.S.users[v].login}`;pjOnly(f==="obj"?"objs":"users",v)}});
+  pjMountDet();
+}
+const PJC_CUSTOM={id:"custom",q:"",ic:"scroll-text",set:()=>({})};
+const _pjcAskById=pjcAskById;
+pjcAskById=function(id){return id==="custom"?PJC_CUSTOM:_pjcAskById(id)};
+function pjcWiden(){pjQ={...pjQ,kinds:null,cats:null};pjcAsk="custom";
+  PJC_CUSTOM.q=pjQ.objs?`События «${PJ.S.objs[[...pjQ.objs][0]].name}»`:pjQ.users?`Действия ${PJ.S.users[[...pjQ.users][0]].login}`:"Все события";pjRefresh()}
+// Левая панель: вопросы списком; выбранная камера или пользователь сохраняются
+function treeLog(){
+  if(!PJ.ready())return pjTreeOps();
+  return`${pjTreeRow("Вопросы",logFilt!=="ops"&&pjcView==="home",["pjcHomeGo"],"scroll-text")}<div class="pj-tree-h">Частые вопросы</div>
+    ${PJC_ASKS.map(a=>pjTreeRow(a.q,logFilt!=="ops"&&pjcView==="res"&&pjcAsk===a.id,["pjcGo",a.id],a.ic)).join("")}
+    ${pjTreeRow("Все события",logFilt!=="ops"&&pjcView==="res"&&pjcAsk==="all",["pjcGo","all"],"search")}${pjTreeOps()}`;
+}
+function pjcHomeGo(){logFilt="all";pjcView="home";paint()}
+// ── Вкладка «Журнал» у камеры и сервера ──
+const PJC_CARD_CATS=[["all","Все"],["alarm","Тревоги"],["error","Ошибки"],["audit","Аудит"],["info","Информация"]];
+function pjcCardQ(o){const ci=PJ.CATS.findIndex(c=>c.id===pjcCard.cat);return{...PJ.range(pjcCard.range),objs:new Set([o.i]),cats:pjcCard.cat==="all"?null:new Set([ci]),kinds:null,users:null,text:"",showDebug:false}}
+function pjcCardHtml(n){
+  if(!pjInit())return card("Журнал",`<p class="sub">${i18n("Консоль готовит журнал…")}</p>`);
+  const o=PJ.S.objs.find(x=>x.id===n.id);
+  if(!o)return card("Журнал",`<p class="sub">${i18n("У этого объекта нет событий в журнале прототипа.")}</p>`);
+  queueMicrotask(()=>pjcCardMount(o));
+  return`<div class="card pjc-card"><div class="ch">${i18n("События")} «${escHtml(locName(n))}»<button type="button" class="btn s" style="margin-left:auto" ${onEv("click",["pjcCardOpen",-1])}>${lu("square-arrow-out-up-right")}${i18n("Открыть в журнале")}</button></div>
+    <div class="cb"><div class="pj-top">
+      <div class="pj-seg" role="group" aria-label="Категория">${PJC_CARD_CATS.map(([id,l])=>`<button type="button" class="${pjcCard.cat===id?"on":""}" ${onEv("click",["pjcCardSet","cat",id])}>${l}</button>`).join("")}</div>
+      <div class="pj-seg" role="group" aria-label="Период">${PJ.RANGES.map(([id,l])=>`<button type="button" class="${pjcCard.range===id?"on":""}" ${onEv("click",["pjcCardSet","range",id])}>${l}</button>`).join("")}</div></div>
+      <div class="pj-sum" id="pjcSum"></div><div class="pj-listbox pjc-lb" id="pjcList"></div>
+      <p class="sub">${i18n("Строка события открывает его в журнале: там подробности, видео на это время и события рядом.")}</p></div></div>`;
+}
+function pjcCardSet(k,v){pjcCard={...pjcCard,[k]:v};gear()}
+function pjcCardMount(o){
+  const host=document.getElementById("pjcList");if(!host)return;
+  const res=PJ.query(pjcCardQ(o));
+  const sum=document.getElementById("pjcSum");if(sum)sum.innerHTML=`<span><b>${PJ.num(res.total)}</b> ${PJ.plural(res.total,"событие|события|событий")} за ${PJ.RANGES.find(r=>r[0]===pjcCard.range)[1]}</span>`;
+  PJ.list(host,{idx:res.idx,cols:"compact",empty:"За этот период событий нет. Выберите период длиннее.",onPick:i=>pjcCardOpen(i),onFilter:(f,v)=>{}});
+}
+function pjcCardOpen(i){
+  const n=find(sel)?.n;const o=n&&PJ.S.objs.find(x=>x.id===n.id);if(!o)return;
+  pjQ={...pjcCardQ(o),range:pjcCard.range,from:null,to:null};
+  pjcAsk="custom";PJC_CUSTOM.q=`События «${o.name}»`;PJC_CUSTOM.ic=o.type==="cam"?"cctv":"server";pjcView="res";pjSel=i;logFilt="all";
+  navMark();goApp("log");
+  setTimeout(()=>{const els=[document.querySelector("#main h1")];const j=i>=0?pjRes.idx.indexOf(i):-1;
+    if(j>=0&&pjList){pjList.scrollToRow(j,true);setTimeout(()=>{const r=document.querySelector(`#pjList .pj-r[data-i="${i}"]`);if(r)els.push(r);accFlash(()=>els.filter(Boolean),true)},60)}
+    else accFlash(()=>els.filter(Boolean),true)},40);
+}
+(function pjcCss(){const st=document.createElement("style");st.textContent=`
+.pjc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.pjc-ask{display:flex;flex-direction:column;gap:6px;padding:14px;margin:0}
+.pjc-ask .sub{margin:0}
+.pjc-q{display:flex;gap:8px;align-items:flex-start;font-size:15px}.pjc-q svg{width:18px;height:18px;flex:none;color:var(--bl);margin-top:1px}
+.pjc-act{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:auto;padding-top:6px}
+.pjc-act select{field-sizing:content;max-width:100%}
+.pjc-all{margin-top:16px;font-size:13px}
+.pjc-pk select{field-sizing:content;height:32px}
+.pjb-q{flex:1;min-width:240px;display:flex;align-items:center;gap:8px;height:34px;padding:0 10px;border:1px solid var(--ln);border-radius:8px;background:var(--p)}
+.pjb-q:focus-within{border-color:var(--bl)}.pjb-q svg{width:16px;height:16px;color:var(--mu)}.pjb-q input{flex:1;border:0;background:transparent;outline:none;color:var(--tx);font:inherit;font-size:14px}
+.pjc-card .cb{display:flex;flex-direction:column;gap:8px}
+.pjc-card .ch{display:flex;align-items:center;gap:8px}
+.pjc-lb{height:420px;flex:none}
+`;document.head.appendChild(st)})();
+
 
 let ws=1,wizd={};
 // Устройство попадает в общий пул и в выбранную папку расположения
