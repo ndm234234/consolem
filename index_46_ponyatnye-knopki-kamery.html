@@ -2633,6 +2633,7 @@ html[data-theme="light"] .cp-step{background:var(--one-control-hover);color:var(
 <!-- ONE PSIM: мост по ONE.PSIM.PrototypeKit, подключён после стилей прототипа -->
 <link rel="stylesheet" href="assets/one-psim/bridge.css">
 <script src="assets/i18n-en.js"></script>
+<script src="assets/i18n-en-46.js"></script>
 <!-- API: контракт, эталонный набор, встроенный сервер и клиент (api/README.md) -->
 <script src="api/openapi.js"></script>
 <script src="api/fixture.js"></script>
@@ -12780,10 +12781,12 @@ function csAnim(k,paint){
 // «Размещение и тревоги» меняет метки и тревоги объекта сразу (черновик карточки): «Отменить» возвращает их по снимку
 const csPlaceSnap=new Map();
 function csEditSet(id,k,on){
+  if(k==="ident")csIdentDrvEdit(id,on?"start":"done");
   if(k==="place"){const n=find(id)?.n;if(on&&n&&!csPlaceSnap.has(id))csPlaceSnap.set(id,cardClone({labels:n.labels,alarmKinds:n.alarmKinds}));else if(!on)csPlaceSnap.delete(id)}
   if(on)csEdit.add(id+":"+k);else csEdit.delete(id+":"+k);csAnim(k,gear);setTimeout(()=>csFocus(k,on),30)}
 function csEditCancel(id,k){
   if(cardDraft&&cardDraft.id===id)(CS_SEC_FIELDS[k]||[]).forEach(l=>delete cardDraft.fields[l]);
+  if(k==="ident")csIdentDrvEdit(id,"cancel");
   const ps=k==="place"&&csPlaceSnap.get(id),pn=find(id)?.n;
   if(ps&&pn)["labels","alarmKinds"].forEach(f=>{if(ps[f]===undefined)delete pn[f];else pn[f]=ps[f]});
   setD(true);csEditSet(id,k,false);
@@ -12796,6 +12799,30 @@ function csEditBtns(n,k){
     ?`<button type="button" class="btn s" ${onEv("click",["csEditCancel",`${n.id}`,`${k}`])}>${i18n("Отменить")}</button><button type="button" class="btn pri s" ${onEv("click",["csEditSet",`${n.id}`,`${k}`,false])}>${i18n("Добавить в план")}</button>`
     :`<button type="button" class="btn s" ${onEv("click",["csEditSet",`${n.id}`,`${k}`,true])}>${i18n("Изменить")}</button>`;
 }
+// Параметры драйвера в «Идентификации»: тип камеры, прошивка, версия драйвера, серийный номер, комментарий.
+// ЗАГЛУШКА: их значения живут в drvStore, поэтому подвал «Не применено» их не считает; в API они придут свойствами
+// объекта (GET /units/{uid}/schema) и пойдут в тот же план. «Отменить» возвращает их, «Добавить в план» отмечает «изменено».
+// ЗАГЛУШКА: «Сбросить» и «Применить» в подвале их не трогают — значения и отметки «изменено» остаются, как у других блоков драйвера
+function csIdentDrv(n){return drvGroups(n,"gen").get(DRV_IDENT)||[]}
+function csIdentDrvRows(n){
+  const st=drvState(n);
+  return csIdentDrv(n).filter(([f,p])=>!(p.readOnly&&(st.vals[f]===""||st.vals[f]==null))).map(([f,p])=>{const t=sfText(p,st.vals[f]);
+    return[propLabel(p,f),t==="—"||t===""?`<span class="cs-empty">—</span>`:escHtml(t),st.chg.has(f)]});
+}
+function csIdentDrvFields(n){
+  const st=drvState(n),fs=csIdentDrv(n).filter(([f,p])=>!(p.readOnly&&(st.vals[f]===""||st.vals[f]==null)));if(!fs.length)return"";
+  return`<div class="g" style="margin-top:10px">${fs.map(([f,p])=>sfFieldHtml("drv",n.id,f,p,st.vals[f],{ro:sfReadOnly(p)})).join("")}</div>`;
+}
+// Снимок и итог правки этой группы — вместе с «Изменить», «Отменить», «Добавить в план» блока «Идентификация»
+function csIdentDrvEdit(id,mode){
+  const n=find(id)?.n;if(!n||n.type!=="camera"||isSchemaNode(n))return;
+  const st=drvState(n),g=DRV_IDENT;
+  if(mode==="start"){if(!st.snap[g]){const snap={};drvGroupProps(n,g).forEach((p,f)=>{if(f in st.vals)snap[f]=cardClone({v:st.vals[f]}).v});st.snap[g]=snap}return}
+  const snap=st.snap[g];if(!snap)return;
+  if(mode==="cancel")drvGroupProps(n,g).forEach((p,f)=>{if(f in snap)st.vals[f]=snap[f];else delete st.vals[f]});
+  else drvGroupProps(n,g).forEach((p,f)=>{if(JSON.stringify(st.vals[f])!==JSON.stringify(snap[f]))st.chg.add(f)});
+  delete st.snap[g];
+}
 function camGenLayout(n,p,ips){
   const val=(l,v)=>camConnVal(n,l,v);
   const txt=v=>v===""||v==null?`<span class="cs-empty">—</span>`:escHtml(String(v));
@@ -12803,8 +12830,9 @@ function camGenLayout(n,p,ips){
   if(!csEditOn(n.id,"ident")){
     const rows=[["Имя",txt(val("Имя",n.name)),csChanged("Имя")],["Короткое имя",txt(val("Короткое имя",n.short??"")),csChanged("Короткое имя")],["ID",txt(deviceIdentifierValue(n)||"—")]];
     if(ips)rows.push(["Номер видеоканала",txt(ipsrvCameraVideoChannel(n,ips))]);
+    rows.push(...csIdentDrvRows(n));
     ident=card("Идентификация объекта",`${bdg(n)}${enabledToggleHtml(n)}<div style="margin-top:10px">${csDl(rows)}</div>`);
-  }
+  }else ident=ident.replace(/<\/div><\/div>$/,`${csIdentDrvFields(n)}</div></div>`);
   ident=csHead(csWrap("ident",ident),csEditBtns(n,"ident"));
   if(!(ips&&!n.ip)){
     if(!csEditOn(n.id,"conn")){
@@ -12834,6 +12862,8 @@ function camGenLayout(n,p,ips){
 // minimum/maximum, readOnly и ветками if/then. В наборе demo.json такой камеры нет, поэтому страница строит схему
 // сам (camDrvSchema) по образцу свойств Axxon One (DeviceIpint, VideoChannel, Microphone, Telemetry, EmbeddedStorage).
 // Значения живут только в браузере (drvStore) и на сервер не уходят.
+// Группа параметров драйвера, которую рисует блок «Идентификация объекта», а не отдельный блок
+const DRV_IDENT="Идентификация объекта";
 function camDriver(n){const v=camConnVal(n,"Производитель",n.vendor||"");return isRtspVendor(v)?"rtsp":/onvif|generic/i.test(v)?"onvif":"native"}
 function drvP(tab,group,order,label,type,x={}){return{type,"x-ui-tab":tab,"x-ui-group":group,"x-ui-order":order,"x-label":label,...x}}
 function drvE(labels,def){return{enum:Object.keys(labels),"x-enum-labels":labels,default:def}}
@@ -12846,13 +12876,15 @@ function camDrvSchema(n){
 }
 function camDrvSchema0(n){
   const d=camDriver(n),P={},allOf=[],when=(cond,props)=>allOf.push({if:{properties:cond,required:Object.keys(cond)},then:{properties:props}}),on=(f,v,props)=>when({[f]:{const:v}},props);
-  const G="Характеристики объекта",B="Буферизация видео",GEO="Геолокация",O="Другое",ALT="Резервное отображение";
-  // Характеристики объекта: только для чтения то, что сообщает камера или драйвер (Axxon One: DeviceIpint)
+  // Группы по смыслу: то, что называет камеру, — в «Идентификации» (DRV_IDENT, блок рисует camGenLayout);
+  // как консоль обменивается данными с камерой — «Обмен с камерой»; «Геолокация» — отдельно; «Резервное отображение» — на «Видео»
+  const G=DRV_IDENT,C="Обмен с камерой",B=C,GEO="Геолокация",O=C,ALT="Резервное отображение";
+  // Что сообщает камера или драйвер (Axxon One: DeviceIpint): только для чтения, кроме типа камеры
   P.cameraType=drvP("gen",G,9,"Тип камеры","string",drvE({"":"Не определено",bullet:"Bullet",speed_dome:"PTZ/SpeedDome",fix_dome:"FixDome"},""));
   P.firmware=drvP("gen",G,10,"Прошивка","string",{readOnly:true,default:d==="rtsp"?"":d==="onvif"?"2.6.1":"V5.7.3 build 220112"});
   P.driverVersion=drvP("gen",G,11,"Версия драйвера","string",{readOnly:true,default:d==="rtsp"?"1.4":d==="onvif"?"3.92":"3.92.1"});
   if(d==="native"&&/axis/i.test(camConnVal(n,"Производитель",n.vendor||"")))P.deviceSerialNumber=drvP("gen",G,12,"Серийный номер устройства","string",{readOnly:true,default:"ACCC8E7F3B21"});
-  P.breakUnusedConnections=drvP("gen",G,20,"Прервать неиспользуемое соединение","boolean",{default:false});
+  P.breakUnusedConnections=drvP("gen",C,23,"Прервать неиспользуемое соединение","boolean",{default:false});
   if(d==="rtsp"){
     const RS="Поток RTSP";
     P.transport=drvP("vid",RS,40,"Транспортный протокол","string",drvE({tcp:"TCP",udp:"UDP",http:"Туннелирование RTSP через HTTP"},"tcp"));
@@ -12860,7 +12892,7 @@ function camDrvSchema0(n){
     P.ssrcCheck=drvP("vid",RS,42,"Проверять идентификатор SSRC","boolean",{default:false});
   }
   // Буферизация видео (Axxon One: isVideoBufferOn, videoBufferSize)
-  P.isVideoBufferOn=drvP("gen",B,30,"Включить","boolean",{default:false});
+  P.isVideoBufferOn=drvP("gen",B,30,"Буферизация видео","boolean",{default:false});
   on("isVideoBufferOn",true,{videoBufferSize:drvP("gen",B,31,"Размер буфера","integer",{minimum:50,maximum:3000,default:50,"x-ui-unit":"мс"})});
   P.geoLocationLatitude=drvP("gen",GEO,40,"Широта","number",{minimum:-90,maximum:90,default:0});
   P.geoLocationLongitude=drvP("gen",GEO,41,"Долгота","number",{minimum:-180,maximum:180,default:0});
@@ -12869,15 +12901,15 @@ function camDrvSchema0(n){
   // CameraDataSource — список камер домена; NodeName список не сужает)
   const dom=nodeDomainId(n),alt={"":"Не выбрано"};
   walkAll(c=>{if(c.type==="camera"&&c.id!==n.id&&nodeDomainId(c)===dom)alt[c.id]=locName(c)});
-  const altP=(o,l)=>drvP("gen",ALT,o,l,"string",{...drvE(alt,""),"x-hint":"Камера показывает своё видео в раскладках, пока нет сигнала с этой камеры"});
-  P.alternativeCameraName=altP(25,"Резервная камера 1");
-  P.secondAlternativeCameraName=altP(26,"Резервная камера 2");
+  const altP=(o,l)=>drvP("vid",ALT,o,l,"string",{...drvE(alt,""),"x-hint":"Камера показывает своё видео в раскладках, пока нет сигнала с этой камеры"});
+  P.alternativeCameraName=altP(45,"Резервная камера 1");
+  P.secondAlternativeCameraName=altP(46,"Резервная камера 2");
   // Другое (Axxon One: группа «Другое»)
-  if(d!=="native")P.profile=drvP("gen",O,49,"Профиль","string",drvE({basic:"Базовый",high:"Высокий"},"basic"));
-  P.timeout=drvP("gen",O,50,"Тайм-аут","integer",{minimum:1,maximum:60,default:10,"x-ui-unit":"с"});
-  P.reconnectTimeout=drvP("gen",O,51,"Тайм-аут повторного подключения","integer",{minimum:1,maximum:300,default:10,"x-ui-unit":"с"});
-  if(d!=="native")P.rtpReorder=drvP("gen",O,52,"Переупорядочивать пакеты RTP","boolean",{default:true});
-  P.comment=drvP("gen",O,53,"Комментарий","string",{"x-ui-widget":"textarea",default:""});
+  P.timeout=drvP("gen",O,21,"Тайм-аут","integer",{minimum:1,maximum:60,default:10,"x-ui-unit":"с"});
+  P.reconnectTimeout=drvP("gen",O,22,"Тайм-аут повторного подключения","integer",{minimum:1,maximum:300,default:10,"x-ui-unit":"с"});
+  if(d!=="native")P.rtpReorder=drvP("gen",O,24,"Переупорядочивать пакеты RTP","boolean",{default:true});
+  if(d!=="native")P.profile=drvP("gen",O,25,"Профиль","string",drvE({basic:"Базовый",high:"Высокий"},"basic"));
+  P.comment=drvP("gen",G,13,"Комментарий","string",{"x-ui-widget":"textarea",default:""});
   // Панорамный обзор — свойство видеоканала у камеры любого драйвера (Axxon One: isPanomorphOn…)
   const PAN="Панорамный обзор",IV=["A0**V","A1UST","A8TRT","B0QQV","B4QQV","B5SST","B6SST","B72YV","B8QQT","B9VVT","C1ZZV","C2TTV","C322V","C4VVV","C7SST","C8WWT","C9VVT","D1SST","D2WWV","D4SST","D9SSV","E3VVV"];
   const lens={FISH_EYE_LENS:"Стандартный объектив «рыбий глаз»",DoubleSphere:"Бисферический объектив «рыбий глаз»"};IV.forEach(x=>lens[x]=x);
@@ -13050,6 +13082,7 @@ function drvSecsHtml(n,tabId){
   const groups=drvGroups(n,tabId),st=drvState(n),d=camDriver(n);
   let out="";
   groups.forEach((fs,g)=>{
+    if(g===DRV_IDENT)return;
     const k=drvKey(g),lock=!drvSend(n)&&fs.some(([,p])=>p["x-dev"]),ed=csEditOn(n.id,k)&&!lock;
     const acts=lock?"":ed?`<button type="button" class="btn s" ${onEv("click",["drvEditCancel",`${n.id}`,g])}>${i18n("Отменить")}</button><button type="button" class="btn pri s" ${onEv("click",["drvEditDone",`${n.id}`,g])}>${i18n("Сохранить")}</button>`
       :`<button type="button" class="btn s" ${onEv("click",["drvEditStart",`${n.id}`,g])}>${i18n("Изменить")}</button>`;
