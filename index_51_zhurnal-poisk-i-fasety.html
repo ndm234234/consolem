@@ -26545,14 +26545,15 @@ function logOpsUI(){
 function pjTreeRow(lab,on,ev,ic,sub){return`<div class="n ${on?"on":""}" ${onEv("click",ev)}><span class="tw"></span><span class="ici">${lu(ic)}</span><span class="nm">${escHtml(lab)}</span>${sub!=null?`<span class="pj-tree-n">${escHtml(sub)}</span>`:""}</div>`}
 function pjTreeOps(){return`<div class="pj-tree-h">Ещё</div>${pjTreeRow("Операции",logFilt==="ops",["logGo","ops"],"refresh-cw")}`}
 
-// Вариант A (прототип 47): одна строка поиска. Человек пишет, что помнит, — консоль предлагает
+// Вариант A+B (прототип 51): строка поиска из A и фасеты слева из B — одни и те же условия.
+// Часть A (прототип 47): одна строка поиска. Человек пишет, что помнит, — консоль предлагает
 // «объект», «пользователь», «событие», «категория» со счётчиками; выбор становится чипом.
 // Ячейка «Объект» или «Пользователь» в строке — тоже чип: «только такие».
 let pjaIn="",pjaTexts=[],pjaSugOpen=false,pjaAt=0,pjaItems=[],pjaFocus=false;
-const PJA_KEY="pj47.saved";
+const PJA_KEY="pj51.saved";
 function pjaSaved(){try{return JSON.parse(localStorage.getItem(PJA_KEY)||"[]")}catch(e){return[]}}
 function pjaSaveList(a){try{localStorage.setItem(PJA_KEY,JSON.stringify(a.slice(0,8)))}catch(e){}}
-function pjRefresh(){pjQ.text=[...pjaTexts,pjaIn].filter(Boolean).join(" ");if(app==="log")logUI()}
+// pjRefresh — в разделе «Объединение» ниже
 const PJA_TYPE={cam:"Камера",srv:"Сервер",rule:"Правило"};
 // Чип условия: «=» — только такие, «≠» — скрыть такие; щелчок по чипу меняет одно на другое
 function pjaChips(){
@@ -26606,18 +26607,14 @@ function pjaMount(){
   pjMountDet();
   if(pjaSugOpen)pjaSugPaint();
 }
-// Левая панель: журнал, частые вопросы, сохранённые поиски, операции
-function treeLog(){
-  if(!PJ.ready())return"";
-  const sv=pjaSaved(),j=logFilt!=="ops";
-  return`${pjTreeRow("Журнал событий",j,["logGo","all"],"scroll-text")}<div class="pj-tree-h">Частые вопросы</div>${pjaExamples().map((e,k)=>pjTreeRow(e.label,false,["pjaExampleGo",k],"search")).join("")}
-    <div class="pj-tree-h">Мои поиски</div>${sv.length?sv.map((s,k)=>pjTreeRow(s.name,false,["pjaLoadGo",k],"star")).join(""):`<p class="pj-tree-p">Кнопка «Сохранить поиск» над списком добавит поиск сюда.</p>`}${pjTreeOps()}`;
-}
 function pjaExampleGo(j){logFilt="all";pjaExample(j);paint()}
 function pjaLoadGo(j){logFilt="all";pjaLoad(j);paint()}
 function pjaBarDown(e){if(e.target.closest("button"))return;e.preventDefault();pjaFocus=true;document.getElementById("pjaIn")?.focus()}
 function pjaFocusOn(){pjaFocus=true;pjaSugOpen=true;pjaAt=0;pjaSugPaint()}
 function pjaFocusOff(){pjaFocus=false;setTimeout(()=>{if(!pjaFocus){pjaSugOpen=false;const s=document.getElementById("pjaSug");if(s)s.hidden=true}},120)}
+// Щелчок вне строки поиска закрывает подсказки: список и панель не всегда забирают фокус у поля
+document.addEventListener("pointerdown",e=>{if(!pjaSugOpen||e.target.closest?.(".pja-wrap"))return;
+  pjaSugOpen=false;pjaFocus=false;const s=document.getElementById("pjaSug");if(s)s.hidden=true;document.getElementById("pjaIn")?.blur()},true);
 function pjaSugDown(e){e.preventDefault();const it=e.target.closest("[data-k]");if(it)pjaApply(+it.dataset.k)}
 function pjaType(v){pjaIn=v;pjaSugOpen=true;pjaAt=0;pjaSugPaint();clearTimeout(pjTextT);pjTextT=setTimeout(pjRefresh,180)}
 function pjaKey(e){
@@ -26699,7 +26696,7 @@ function pjaName(q){
   (q.cats||[]).forEach(i=>p.push(PJ.CATS[i].n));(q.texts||[]).forEach(t=>p.push(`«${t}»`));
   return p.filter(Boolean).join(", ");
 }
-const PJA_RKEY="pj47.recent";
+const PJA_RKEY="pj51.recent";
 function pjaRecent(){try{return JSON.parse(localStorage.getItem(PJA_RKEY)||"[]")}catch(e){return[]}}
 function pjaRemember(){const q=pjaSnap(),name=pjaName(q);if(!name)return;
   try{localStorage.setItem(PJA_RKEY,JSON.stringify([{name,q},...pjaRecent().filter(s=>s.name!==name)].slice(0,5)))}catch(e){}}
@@ -26736,6 +26733,86 @@ function pjaLoad(j){const s=pjaSaved()[j];if(s)pjaLoadQ(s.q)}
 .pja-cv b{font-weight:600;color:var(--bl)}.pj-chip.ex .pja-cv b{color:var(--rd,#e5484d)}.pj-chip.ex .pja-cv{text-decoration:none}
 .pj-sum .lk svg{width:13px;height:13px;vertical-align:-2px}
 `;document.head.appendChild(st)})();
+
+// ── Часть B (прототип 48): фасеты со счётчиками в левой панели ──
+let pjbFind={kinds:"",objs:"",users:""},pjbMore={kinds:false,objs:false,users:false},pjbShut=new Set();
+// ── Фасеты в левой панели ──
+const PJB_TYPE={cam:"камера",srv:"сервер",rule:"правило"};
+function pjbItems(f){
+  const S=PJ.S,r=pjRes;
+  if(f==="cats")return PJ.CATS.map((c,i)=>({v:i,label:c.n,n:r.cc[i],dot:c.id}));
+  if(f==="kinds")return PJ.KINDS.map(k=>({v:k.i,label:k.n,n:r.kc[k.i],dot:PJ.CATS[k.ci].id}));
+  if(f==="objs")return S.objs.map(o=>({v:o.i,label:o.name,n:r.oc[o.i],sub:PJB_TYPE[o.type]}));
+  return S.users.map(u=>({v:u.i,label:u.login,n:r.uc[u.i]}));
+}
+// Категории без выбора — все, кроме служебных
+function pjbCatOn(i){return pjQ.cats?pjQ.cats.has(i):PJ.CATS[i].id!=="debug"||pjQ.showDebug}
+function pjbOn(f,v){return f==="cats"?pjbCatOn(v):!!pjQ[f]?.has(v)}
+function pjbEx(f,v){return f!=="cats"&&!!pjQ[PJ_NF[f]]?.has(v)}
+function pjbClearEx(f){pjQ={...pjQ,[PJ_NF[f]]:null};pjRefresh()}
+function pjbRows(f){
+  const all=pjbItems(f),q=(pjbFind[f]||"").toLowerCase();
+  let list=f==="cats"?all:all.filter(x=>!q||x.label.toLowerCase().includes(q)).sort((a,b)=>pjbOn(f,b.v)-pjbOn(f,a.v)||pjbEx(f,b.v)-pjbEx(f,a.v)||b.n-a.n);
+  const lim=f==="cats"?99:pjbMore[f]?60:6,shown=list.slice(0,lim),rest=list.length-shown.length;
+  return shown.map(x=>{const on=pjbOn(f,x.v),ex=pjbEx(f,x.v);
+    return`<label class="pjb-r${on?" on":""}${ex?" ex":""}${x.n||ex?"":" z"}"${ex?` title="Такие события скрыты. Флажок вернёт их"`:""}><input type="checkbox" ${on?"checked":""} ${onEv("change",["pjbToggle",f,x.v])}>${ex?`<b class="pjb-ne">≠</b>`:""}
+      ${x.dot?`<i class="pj-dot pj-c-${x.dot}"></i>`:""}<span class="pjb-l" title="${escHtml(x.label)}">${PJ.hl(x.label,q?[q]:[])}${x.sub?`<span class="pj-mu"> · ${escHtml(x.sub)}</span>`:""}</span>
+      <span class="pjb-n">${PJ.num(x.n)}</span><span class="pjb-acts"><span class="pjb-only" role="button" tabindex="0" title="Только это значение" ${onEv("click",["pjbOnly",onEv.event,f,x.v])}>только</span>${f!=="cats"&&!ex?`<span class="pjb-only" role="button" tabindex="0" title="Скрыть такие события" ${onEv("click",["pjbNot",onEv.event,f,x.v])}>без</span>`:""}</span></label>`}).join("")
+    +(rest>0?`<button type="button" class="lk pjb-more" ${onEv("click",["pjbMoreSet",f,true])}>Ещё ${PJ.num(rest)}${q?"":" · или найдите по имени"}</button>`:pjbMore[f]&&f!=="cats"?`<button type="button" class="lk pjb-more" ${onEv("click",["pjbMoreSet",f,false])}>Свернуть</button>`:"");
+}
+function pjbSec(title,f,find){
+  const act=f==="cats"?!!pjQ.cats:!!(pjQ[f]||pjQ[PJ_NF[f]]),shut=pjbShut.has(f),n=f==="cats"?0:(pjQ[f]?.size||0)+(pjQ[PJ_NF[f]]?.size||0);
+  return`<div class="pjb-sec${shut?" shut":""}"><div class="pjb-h"><button type="button" class="pjb-tg" aria-expanded="${!shut}" ${onEv("click",["pjbShutSet",f])}>${lu("chevron-right")}${escHtml(title)}${shut&&n?` <span class="pjb-cnt">${n}</span>`:""}</button>${act?`<button type="button" class="lk" ${onEv("click",["pjClear",f])}>сбросить</button>`:""}</div>
+    ${shut?"":find?`<input class="pjb-find" type="text" placeholder="Найти" aria-label="Найти: ${escHtml(title)}" value="${escHtml(pjbFind[f])}" ${onEv("input",["pjbFindSet",f,onEv.value])}>`:""}
+    ${shut?"":`<div id="pjbL-${f}">${pjbRows(f)}</div>`}</div>`;
+}
+function pjbToggle(f,v){
+  logFilt="all";
+  if(f==="cats"){const eff=new Set(PJ.CATS.map((c,i)=>i).filter(pjbCatOn));eff.has(v)?eff.delete(v):eff.add(v);
+    const def=PJ.CATS.every((c,i)=>eff.has(i)===(c.id!=="debug"));pjQ={...pjQ,cats:def?null:eff,showDebug:false};pjRefresh();return}
+  if(pjbEx(f,v)){pjUnEx(f,v);return}
+  pjToggle(f,v);
+}
+function pjbNot(e,f,v){e.preventDefault();e.stopPropagation();logFilt="all";pjSetVal(f,v,true)}
+function pjbShutSet(f){const s=new Set(pjbShut);s.has(f)?s.delete(f):s.add(f);pjbShut=s;renderTree()}
+function pjbOnly(e,f,v){e.preventDefault();e.stopPropagation();logFilt="all";pjOnly(f,v)}
+function pjbMoreSet(f,on){pjbMore={...pjbMore,[f]:on};const el=document.getElementById("pjbL-"+f);if(el)el.innerHTML=pjbRows(f)}
+// Поиск по значениям меняет только свой список: поле ввода остаётся в фокусе
+function pjbFindSet(f,v){pjbFind={...pjbFind,[f]:v};const el=document.getElementById("pjbL-"+f);if(el)el.innerHTML=pjbRows(f)}
+(function pjbCss(){const st=document.createElement("style");st.textContent=`
+.pjb-q{flex:1;min-width:300px;display:flex;align-items:center;gap:8px;height:36px;padding:0 10px;border:1px solid var(--ln);border-radius:8px;background:var(--p)}
+.pjb-q:focus-within{border-color:var(--bl);box-shadow:0 0 0 2px color-mix(in srgb,var(--bl) 30%,transparent)}
+.pjb-q svg{width:16px;height:16px;color:var(--mu)}.pjb-q input{flex:1;border:0;background:transparent;outline:none;color:var(--tx);font:inherit;font-size:14px}
+.pjb-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:26px;font-size:13px}
+.pjb-sec{padding:4px 8px 10px 12px;border-bottom:1px solid var(--ln)}
+.pjb-h{display:flex;justify-content:space-between;align-items:center;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--mu);padding:8px 0 4px}
+.pjb-h .lk{text-transform:none;letter-spacing:0;font-size:12px}
+.pjb-find{width:100%;box-sizing:border-box;height:26px;margin:2px 0 4px;font-size:12px}
+.pjb-r{display:flex;align-items:center;gap:6px;height:26px;font-size:13px;cursor:pointer;border-radius:4px;padding:0 4px;margin:0 -4px}
+.pjb-r:hover{background:var(--p2)}.pjb-r input{margin:0;flex:none}.pjb-r.z{opacity:.5}
+.pjb-r .pj-dot{margin-right:0}
+.pjb-l{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pjb-n{font-size:12px;color:var(--mu);font-variant-numeric:tabular-nums}
+.pjb-acts{display:none;gap:6px}.pjb-r:hover .pjb-acts,.pjb-acts:focus-within{display:inline-flex}.pjb-r:hover .pjb-n{display:none}
+.pjb-only{font-size:11px;color:var(--bl);padding:0 2px;cursor:pointer}.pjb-only:hover{text-decoration:underline}
+.pjb-r.ex .pjb-l{text-decoration:line-through;color:var(--mu)}.pjb-ne{color:var(--rd,#e5484d);font-size:12px;margin-left:-2px}
+.pjb-tg{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:4px}.pjb-tg svg{width:12px;height:12px}.pjb-tg[aria-expanded="true"] svg{transform:rotate(90deg)}
+.pjb-cnt{font-size:11px;background:var(--bl);color:#fff;border-radius:8px;padding:0 5px;text-transform:none}
+.pjb-sec.shut{padding-bottom:4px}
+.pjb-more{font-size:12px;margin-top:2px}
+`;document.head.appendChild(st)})();
+
+// ── Объединение: строка и фасеты читают и меняют одни условия ──
+// Выбор в фасете сразу виден чипом в строке; чип из строки отмечает значение в фасете
+function pjRefresh(){pjQ.text=[...pjaTexts,pjaIn].filter(Boolean).join(" ");if(app!=="log")return;logUI();renderTree()}
+function treeLog(){
+  if(!PJ.ready())return pjTreeOps();
+  if(!pjRes)pjRun();
+  const sv=pjaSaved();
+  return`${pjTreeRow("Журнал событий",logFilt!=="ops",["logGo","all"],"scroll-text")}
+    ${pjbSec("Категория","cats",false)}${pjbSec("Событие","kinds",true)}${pjbSec("Объект","objs",true)}${pjbSec("Пользователь","users",true)}
+    <div class="pj-tree-h">Мои поиски</div>${sv.length?sv.map((s,k)=>pjTreeRow(s.name,false,["pjaLoadGo",k],"star")).join(""):`<p class="pj-tree-p">Кнопка «Сохранить поиск» над списком добавит поиск сюда.</p>`}${pjTreeOps()}`;
+}
 
 
 let ws=1,wizd={};
