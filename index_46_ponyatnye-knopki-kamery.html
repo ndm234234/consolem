@@ -6651,6 +6651,8 @@ function cardRestore(){
   if(!cardDraft)return;
   const n=find(cardDraft.id)?.n;if(n){cardRestoreNode(n,cardDraft.snap);if(cardDraft.folders)cardSetFolders(n.id,cardDraft.folders)}
   Object.keys(edits).forEach(k=>{if(splitEditKey(k)[0]===cardDraft.id)delete edits[k]});
+  // Снимок «Размещения и тревог» верен только для этого черновика: после «Сбросить» или «Применить» блок закрывается
+  csPlaceSnap.delete(cardDraft.id);csEdit.delete(cardDraft.id+":place");
   cardDraft=null;cardBase=null;dirty=false;
   treeMatchCache.clear();searchMatchCache.clear();
 }
@@ -6669,6 +6671,7 @@ function cardFootHtml(){
 }
 function cardFootRefresh(){
   const el=document.getElementById("cardFoot");if(el)el.outerHTML=cardFootHtml();
+  csTocFit();   // подвал «Не применено» меняет высоту области прокрутки
   decorateTreeSel();
 }
 function cardPlan(){
@@ -12777,7 +12780,7 @@ function csAnim(k,paint){
 // «Размещение и тревоги» меняет метки и тревоги объекта сразу (черновик карточки): «Отменить» возвращает их по снимку
 const csPlaceSnap=new Map();
 function csEditSet(id,k,on){
-  if(k==="place"){const n=find(id)?.n;if(on&&n)csPlaceSnap.set(id,cardClone({labels:n.labels,alarmKinds:n.alarmKinds}));else if(!on)csPlaceSnap.delete(id)}
+  if(k==="place"){const n=find(id)?.n;if(on&&n&&!csPlaceSnap.has(id))csPlaceSnap.set(id,cardClone({labels:n.labels,alarmKinds:n.alarmKinds}));else if(!on)csPlaceSnap.delete(id)}
   if(on)csEdit.add(id+":"+k);else csEdit.delete(id+":"+k);csAnim(k,gear);setTimeout(()=>csFocus(k,on),30)}
 function csEditCancel(id,k){
   if(cardDraft&&cardDraft.id===id)(CS_SEC_FIELDS[k]||[]).forEach(l=>delete cardDraft.fields[l]);
@@ -13150,9 +13153,11 @@ function csSecSet(c,open){
 }
 // Оглавление не выше видимой части области прокрутки (.sc): иначе его низ с «Развернуть всё» виден только в конце страницы
 function csTocFit(){
-  const sc=document.querySelector("#main .cs-toc")?.closest(".sc");if(!sc)return;
-  const pad=parseFloat(getComputedStyle(sc).paddingTop)||0;
-  sc.style.setProperty("--cs-toc-max",Math.max(160,sc.clientHeight-pad*2)+"px");
+  const toc=document.querySelector("#main .cs-toc"),sc=toc?.closest(".sc");if(!sc)return;
+  // Над оглавлением бывают строки (режим устройства, заметки о состоянии): низ оглавления виден уже без прокрутки
+  const st=getComputedStyle(sc),padB=parseFloat(st.paddingBottom)||0,box=toc.parentElement||toc;
+  const off=box.getBoundingClientRect().top-sc.getBoundingClientRect().top+sc.scrollTop;
+  sc.style.setProperty("--cs-toc-max",Math.max(160,sc.clientHeight-off-padB)+"px");
   if(!csTocFit.on){csTocFit.on=true;addEventListener("resize",()=>csTocFit())}
 }
 function csSecEl(k){return[...document.querySelectorAll("#main .cs-sec")].find(c=>c.dataset.sec===k)}
