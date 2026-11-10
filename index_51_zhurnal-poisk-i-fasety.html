@@ -26804,19 +26804,19 @@ function pjbFindSet(f,v){pjbFind={...pjbFind,[f]:v};const el=document.getElement
 // ── Объединение: строка и фасеты читают и меняют одни условия ──
 // Выбор в фасете сразу виден чипом в строке; чип из строки отмечает значение в фасете
 function pjRefresh(){pjQ.text=[...pjaTexts,pjaIn].filter(Boolean).join(" ");if(app!=="log")return;logUI();renderTree()}
+// Без строки «Журнал событий» и без «Операций»: панель — только условия поиска и сохранённые поиски
 function treeLog(){
-  if(!PJ.ready())return pjTreeOps();
+  if(!PJ.ready())return"";
   if(!pjRes)pjRun();
   const sv=pjaSaved();
-  return`${pjTreeRow("Журнал событий",logFilt!=="ops",["logGo","all"],"scroll-text")}
-    ${pjbSec("Категория","cats",false)}${pjbSec("Событие","kinds",true)}${pjbSec("Объект","objs",true)}${pjbSec("Пользователь","users",true)}
-    <div class="pj-tree-h">Мои поиски</div>${sv.length?sv.map((s,k)=>pjTreeRow(s.name,false,["pjaLoadGo",k],"star")).join(""):`<p class="pj-tree-p">Кнопка «Сохранить поиск» над списком добавит поиск сюда.</p>`}${pjTreeOps()}`;
+  return`${pjbSec("Категория","cats",false)}${pjbSec("Событие","kinds",true)}${pjbSec("Объект","objs",true)}${pjbSec("Пользователь","users",true)}
+    <div class="pj-tree-h">Мои поиски</div>${sv.length?sv.map((s,k)=>pjTreeRow(s.name,false,["pjaLoadGo",k],"star")).join(""):`<p class="pj-tree-p">Кнопка «Сохранить поиск» над списком добавит поиск сюда.</p>`}`;
 }
 // ── Одно поле поиска: в «Журнале» поле в шапке ищет по журналу ──
 // Строка журнала встаёт на место общего поиска (#gojump); Ctrl K ставит курсор в неё.
-// В других разделах и в «Операциях» шапка прежняя. Поиск по консоли — пунктом «Вся консоль» в подсказках.
+// В других разделах шапка прежняя. Поиск по консоли — пунктом «Вся консоль» в подсказках.
 let pjaHdCache="";
-function pjaHdOn(){return app==="log"&&logFilt!=="ops"&&PJ.ready()}
+function pjaHdOn(){return app==="log"&&PJ.ready()}
 function pjaBarHtml(){
   const chips=pjaChips(),has=!!chips;
   return`<div class="pja-wrap pja-hd">
@@ -26837,13 +26837,13 @@ function pjaHdSync(){
   const h=pjaBarHtml();if(h!==pjaHdCache){slot.innerHTML=h;pjaHdCache=h}
 }
 function logUI(){
-  if(logFilt==="ops"){pjaHdSync();logOpsUI();return}
+  logFilt="all";
   if(!pjInit()){pjWait();return}
   pjRun();
   pjaHdSync();
   const has=!!pjaChips();
-  paintMain(mainHd("",`<span class="hd-ic">${lu("scroll-text")}</span>${i18n("Журнал событий")}`,"")+
-  `<div class="pj">
+  // Без заголовка раздела: имя раздела уже на рельсе, а место отдано списку
+  paintMain(`<div class="pj pj-nohd">
     <div class="pj-top">
       ${has||pjaIn?`<span class="pj-mu pja-tip">Условия — в поле поиска вверху и в панели слева.</span>`:`<div class="pja-ex"><span class="pj-mu">Например:</span>${pjaExamples().map((e,j)=>`<button type="button" class="lk lk-act" ${onEv("click",["pjaExample",j])}>${escHtml(e.label)}</button>`).join("")}</div>`}
       <div class="pj-seg" role="group" aria-label="Период" style="margin-left:auto">${PJ.RANGES.map(([id,n])=>`<button type="button" class="${pjQ.range===id?"on":""}" ${onEv("click",["pjSetRange",id])}>${n}</button>`).join("")}</div>
@@ -26879,6 +26879,7 @@ body.pj-hdlog .gojump{display:none}
 /* Подсказка клавиши — тот же ярлык, что у общего поиска (.gojump-hint моста). */
 .pja-hint{flex:none;font:var(--one-type-caption);letter-spacing:var(--one-type-caption-tracking);color:var(--one-fg-muted);border:1px solid var(--one-border);border-radius:var(--one-radius-control);padding:0 4px}
 .pja-hd .pja-sug{min-width:min(560px,90vw)}
+.pj.pj-nohd{padding-top:12px}
 .pja-tip{font:var(--one-type-body-sm);letter-spacing:var(--one-type-body-sm-tracking)}
 `;document.head.appendChild(st)})();
 
