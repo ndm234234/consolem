@@ -259,7 +259,7 @@ PJ.list=function(host,o){
   function mode(){
     const two=(host.clientWidth||900)<(compact?620:860);
     if(two===st.two)return false;
-    st.two=two;st.rh=two?48:32;box.classList.toggle("pj-two",two);
+    st.two=two;st.rh=two?52:32;box.classList.toggle("pj-two",two);
     hd.innerHTML=`<span>Время</span><span>Событие</span>${compact?"":"<span>Объект</span>"}<span>Кто</span>${two?"":"<span>Описание</span>"}`;
     sp.style.height=`${st.idx.length*st.rh}px`;return true;
   }
@@ -271,7 +271,7 @@ PJ.list=function(host,o){
     let h="";
     for(let j=a;j<b;j++){
       const r=PJ.row(st.idx[j]);
-      h+=`<div class="pj-r${r.i===st.sel?" on":""}" data-i="${r.i}" role="row">
+      h+=`<div class="pj-r pj-c-${r.cat.id}${r.i===st.sel?" on":""}" data-i="${r.i}" role="row">
         <span class="pj-t" title="${esc(PJ.fmtFull(r.t))}">${esc(PJ.fmt(r.t))}</span>
         <span class="pj-k" title="${esc(r.cat.n)}"><i class="pj-dot pj-c-${r.cat.id}"></i>${PJ.hl(r.kind.n,st.terms)}</span>
         ${compact?"":`<span>${r.obj?`<button type="button" class="pj-cell" data-f="obj" data-v="${r.obj.i}" title="Только события объекта «${esc(r.obj.name)}»">${PJ.hl(r.obj.name,st.terms)}</button>`:'<span class="pj-mu">—</span>'}</span>`}
@@ -361,77 +361,103 @@ PJ.openAct=function(act,v){
 function injectCss(){
   if(document.getElementById("pj-css"))return;
   const st=document.createElement("style");st.id="pj-css";st.textContent=`
-.pj{flex:1;min-height:0;display:flex;flex-direction:column;padding:0 var(--pad,16px) var(--pad,16px);gap:10px}
+/* Сверено с ONE PSIM (assets/one-psim/bridge.css, кит @ ac61f2b): токены --one-*, кегли лестницы DS. */
+.pj{flex:1;min-height:0;display:flex;flex-direction:column;padding:0 var(--pad,16px) var(--pad,16px);gap:12px}
 .pj-top{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .pj-body{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:12px}
 .pj-body.pj-nodet{grid-template-columns:minmax(0,1fr)}
 .pj-main{min-height:0;display:flex;flex-direction:column;gap:8px}
-.pj-listbox{flex:1;min-height:0;border:1px solid var(--ln);border-radius:8px;background:var(--p);overflow:hidden}
+.pj-listbox,.pj-side{min-height:0;border:1px solid var(--ln);border-radius:var(--one-radius-container);background:var(--one-surface)}
+.pj-listbox{flex:1;overflow:hidden}
+.pj-side{overflow:auto;scrollbar-gutter:stable}
 .pj-l{height:100%;display:flex;flex-direction:column}
-.pj-lh,.pj-r{display:grid;grid-template-columns:128px minmax(150px,200px) minmax(120px,190px) 88px minmax(0,1fr);gap:8px;align-items:center;padding:0 10px}
-.pj-l-c .pj-lh,.pj-l-c .pj-r{grid-template-columns:128px minmax(150px,200px) 88px minmax(0,1fr)}
-.pj-two .pj-lh,.pj-two .pj-r{grid-template-columns:116px minmax(0,1.2fr) minmax(0,1fr) 84px}
-.pj-l-c.pj-two .pj-lh,.pj-l-c.pj-two .pj-r{grid-template-columns:116px minmax(0,1fr) 84px}
-.pj-two .pj-r{height:48px;grid-template-rows:20px 18px;align-content:center;row-gap:2px}
-.pj-two .pj-x{grid-column:1/-1;font-size:12px;color:var(--mu)}
-.pj-lh{height:30px;font-size:12px;color:var(--mu);border-bottom:1px solid var(--ln);background:var(--p2)}
+/* Список — таблица (D-052): ячейка и заголовок одного кегля, заголовок 500 fg-muted. */
+.pj-lh,.pj-r{display:grid;grid-template-columns:136px minmax(150px,200px) minmax(120px,190px) 88px minmax(0,1fr);gap:12px;align-items:center;padding:0 12px;font:var(--one-type-body-md);letter-spacing:var(--one-type-body-md-tracking)}
+.pj-l-c .pj-lh,.pj-l-c .pj-r{grid-template-columns:136px minmax(150px,200px) 88px minmax(0,1fr)}
+.pj-two .pj-lh,.pj-two .pj-r{grid-template-columns:124px minmax(0,1.2fr) minmax(0,1fr) 84px}
+.pj-l-c.pj-two .pj-lh,.pj-l-c.pj-two .pj-r{grid-template-columns:124px minmax(0,1fr) 84px}
+.pj-two .pj-r{height:52px;grid-template-rows:20px 16px;align-content:center;row-gap:4px}
+.pj-two .pj-x{grid-column:1/-1;font:var(--one-type-body-sm);letter-spacing:var(--one-type-body-sm-tracking);color:var(--one-fg-muted)}
+.pj-lh{height:32px;font-weight:500;color:var(--one-fg-muted);border-bottom:1px solid var(--one-table-row-divider);background:var(--one-surface-muted)}
 .pj-ls{flex:1;min-height:0;overflow:auto;position:relative;scrollbar-gutter:stable;outline:none}
 .pj-lr{position:absolute;left:0;right:0;top:0}
-.pj-r{height:32px;box-sizing:border-box;font-size:13px;border-bottom:1px solid color-mix(in srgb,var(--ln) 55%,transparent);cursor:pointer;white-space:nowrap}
+.pj-r{height:32px;box-sizing:border-box;border-bottom:1px solid var(--one-table-row-divider);cursor:pointer;white-space:nowrap}
 .pj-r>span{overflow:hidden;text-overflow:ellipsis;min-width:0}
-.pj-r:hover{background:var(--p2)}.pj-r.on{background:color-mix(in srgb,var(--bl) 16%,transparent)}
-.pj-ls:focus-visible .pj-r.on{outline:2px solid var(--bl);outline-offset:-2px}
-.pj-t{font-variant-numeric:tabular-nums;color:var(--mu)}
-.pj-k{font-weight:500}.pj-mu{color:var(--mu)}
-.pj-cell{all:unset;cursor:pointer;max-width:100%;overflow:hidden;text-overflow:ellipsis;display:inline-block;vertical-align:middle;border-radius:4px;padding:0 3px;margin:0 -3px}
-.pj-cell:hover{background:color-mix(in srgb,var(--bl) 18%,transparent);color:var(--tx)}
-.pj-cell:focus-visible{outline:2px solid var(--bl)}
-.pj-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle;background:var(--mu)}
-.pj-c-alarm.pj-dot,.pj-tag.pj-c-alarm{background:var(--rd)}.pj-c-error.pj-dot,.pj-tag.pj-c-error{background:var(--one-warning-icon,#d89614)}
-.pj-c-audit.pj-dot,.pj-tag.pj-c-audit{background:var(--bl)}.pj-c-info.pj-dot,.pj-tag.pj-c-info{background:var(--mu)}.pj-c-debug.pj-dot,.pj-tag.pj-c-debug{background:var(--one-fg-subtle,#888)}
-.pj-tag{color:#fff;font-size:11px;border-radius:4px;padding:1px 6px}
-.pj-empty{padding:24px;color:var(--mu);text-align:center}
-mark{background:color-mix(in srgb,var(--one-warning-icon,#d89614) 40%,transparent);color:inherit;border-radius:2px}
-.pj-sum{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;font-size:13px;color:var(--mu);min-height:24px}
-.pj-sum b{color:var(--tx)}
+/* Уровень в списке несёт заливка строки (D-070): тревога и ошибка — подмес плашки во всю ширину,
+   разделитель — полупрозрачный от цвета текста. Выбор — одна плашка accent-soft (D-079). */
+.pj-r.pj-c-alarm{background:var(--one-danger-bg)}.pj-r.pj-c-error{background:var(--one-warning-bg)}
+.pj-r:is(.pj-c-alarm,.pj-c-error){border-bottom-color:color-mix(in srgb,var(--one-fg) 8%,transparent)}
+.pj-r:hover{background:var(--one-control-hover)}
+.pj-r.on{background:var(--one-accent-soft)}.pj-r.on:hover{background:var(--one-accent-soft-hover)}
+.pj-ls:focus-visible .pj-r.on{outline:2px solid var(--one-focus-ring);outline-offset:-2px}
+.pj-t{font-variant-numeric:tabular-nums;color:var(--one-fg-muted)}
+.pj-k{font-weight:500}.pj-mu{color:var(--one-fg-muted)}
+.pj-cell{all:unset;cursor:pointer;max-width:100%;overflow:hidden;text-overflow:ellipsis;display:inline-block;vertical-align:middle;border-radius:var(--one-radius-control);padding:0 4px;margin:0 -4px}
+.pj-cell:hover{background:var(--one-control-hover);color:var(--one-fg)}
+.pj-cell:focus-visible{outline:2px solid var(--one-focus-ring);outline-offset:-2px}
+/* Точка статуса (D-062): 8 px; категория — цвет, которого нет у статусов экрана (D-039). */
+.pj-dot{display:inline-block;width:8px;height:8px;border-radius:var(--one-radius-pill);margin-right:8px;vertical-align:middle;background:var(--one-fg-muted)}
+.pj-c-alarm.pj-dot{background:var(--one-danger-icon)}.pj-c-error.pj-dot{background:var(--one-warning-icon)}
+.pj-c-audit.pj-dot{background:var(--one-palette-purple)}.pj-c-info.pj-dot{background:var(--one-info-icon)}.pj-c-debug.pj-dot{background:var(--one-fg-subtle)}
+/* Ярлык категории — .bd кита: пилюля, поля 2/8, роль label, пара bg/text статуса. */
+.pj-tag{font:var(--one-type-label);letter-spacing:var(--one-type-label-tracking);border-radius:var(--one-radius-pill);padding:2px 8px;background:var(--one-selected-neutral);color:var(--one-fg-muted)}
+.pj-tag.pj-c-alarm{background:var(--one-danger-bg);color:var(--one-danger-text)}.pj-tag.pj-c-error{background:var(--one-warning-bg);color:var(--one-warning-text)}
+.pj-tag.pj-c-info{background:var(--one-info-bg);color:var(--one-info-text)}
+.pj-empty{padding:24px;color:var(--one-fg-muted);text-align:center;font:var(--one-type-body-md)}
+.pj-sum{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;font:var(--one-type-body-sm);letter-spacing:var(--one-type-body-sm-tracking);color:var(--one-fg-muted);min-height:24px}
+.pj-sum b{color:var(--one-fg);font-weight:600}
+.pj-sum .lk{white-space:nowrap}.pj-sum .lk svg{width:16px;height:16px;vertical-align:-4px;display:inline}
 .pj-histbox{position:relative;padding-bottom:16px;cursor:crosshair;user-select:none;touch-action:none}
-.pj-brush{display:none;position:absolute;top:0;bottom:16px;background:color-mix(in srgb,var(--bl) 28%,transparent);border-left:1px solid var(--bl);border-right:1px solid var(--bl);pointer-events:none}
-.pj-sum .lk{white-space:nowrap}.pj-sum .lk svg{width:13px;height:13px;vertical-align:-2px;display:inline}
-.pj-fx{display:inline-flex;gap:2px;margin-left:6px;vertical-align:1px}
-.pj-fx button{all:unset;cursor:pointer;font-size:12px;line-height:18px;width:20px;text-align:center;border:1px solid var(--ln);border-radius:4px;color:var(--mu)}
-.pj-fx button:hover,.pj-fx button:focus-visible{color:var(--tx);border-color:var(--bl)}
-.pj-seg.pj-seg-s button{height:22px;line-height:22px;font-size:11px;padding:0 6px}
-.pj-chip.ex{border-style:dashed}.pj-chip.ex b{color:var(--rd,#e5484d);font-weight:600}
+.pj-brush{display:none;position:absolute;top:0;bottom:16px;background:var(--one-accent-soft);border-left:1px solid var(--one-accent);border-right:1px solid var(--one-accent);pointer-events:none}
 .pj-hist{width:100%;display:block}
-.pj-h-alarm{fill:var(--rd)}.pj-h-audit{fill:var(--bl)}.pj-h-info{fill:color-mix(in srgb,var(--mu) 55%,transparent)}
-.pj-h-off{opacity:.25}.pj-h-hit{fill:transparent;cursor:pointer}.pj-h-hit:hover{fill:color-mix(in srgb,var(--tx) 10%,transparent)}
-.pj-axis{position:absolute;left:0;right:0;bottom:0;height:14px;font-size:11px;color:var(--mu)}
+.pj-h-alarm{fill:var(--one-danger-icon)}.pj-h-audit{fill:var(--one-palette-purple)}.pj-h-info{fill:color-mix(in srgb,var(--one-fg-muted) 55%,transparent)}
+.pj-h-off{opacity:.25}.pj-h-hit{fill:transparent;cursor:pointer}.pj-h-hit:hover{fill:var(--one-control-hover)}
+.pj-axis{position:absolute;left:0;right:0;bottom:0;height:16px;font:var(--one-type-caption);letter-spacing:var(--one-type-caption-tracking);color:var(--one-fg-muted)}
 .pj-axis span{position:absolute;transform:translateX(-50%);white-space:nowrap}.pj-axis span:first-child{transform:none}.pj-axis span:last-child{transform:translateX(-100%)}
-.pj-side{min-height:0;overflow:auto;border:1px solid var(--ln);border-radius:8px;background:var(--p);scrollbar-gutter:stable}
-.pj-det{padding:12px 14px;display:flex;flex-direction:column;gap:10px;font-size:13px}
-.pj-det-hd{display:flex;gap:8px;align-items:center;font-size:15px}
-.pj-det-t{color:var(--mu)}.pj-det-x{margin:0;line-height:1.45}
+/* Карточка события — тело body-md, заголовок heading-sm (как .cp-h). */
+.pj-det{padding:12px 16px 16px;display:flex;flex-direction:column;gap:12px;font:var(--one-type-body-md);letter-spacing:var(--one-type-body-md-tracking)}
+.pj-det-hd{display:flex;gap:8px;align-items:center;font:var(--one-type-heading-sm);letter-spacing:var(--one-type-heading-sm-tracking)}
+.pj-det-t{color:var(--one-fg-muted)}.pj-det-x{margin:0}
 .pj-kv{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:4px 12px;margin:0}
-.pj-kv dt{color:var(--mu)}.pj-kv dd{margin:0;overflow-wrap:anywhere}
-.pj-diff{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;border:1px solid var(--ln);border-radius:6px;padding:8px 10px}
-.pj-diff-p{grid-column:1/-1;font-weight:500}.pj-diff span{display:block;font-size:11px}.pj-diff s{color:var(--mu)}
-.pj-acts{display:flex;flex-wrap:wrap;gap:6px}
-.pj-near{display:flex;flex-direction:column;gap:2px;border-top:1px solid var(--ln);padding-top:8px}
-.pj-near-h{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;color:var(--mu);margin-bottom:4px}
-.pj-nr{all:unset;cursor:pointer;display:grid;grid-template-columns:118px 14px minmax(0,1fr);align-items:center;padding:3px 6px;border-radius:4px;font-size:12px;white-space:nowrap}
-.pj-nr>span{overflow:hidden;text-overflow:ellipsis}.pj-nr:hover{background:var(--p2)}.pj-nr.on{background:color-mix(in srgb,var(--bl) 16%,transparent)}
-.pj-seg{display:inline-flex;border:1px solid var(--ln);border-radius:6px;overflow:hidden}
-.pj-seg button{all:unset;cursor:pointer;padding:0 10px;height:30px;line-height:30px;font-size:13px;white-space:nowrap;border-right:1px solid var(--ln)}
-.pj-seg button:last-child{border-right:0}.pj-seg button:hover{background:var(--p2)}
-.pj-seg button.on{background:color-mix(in srgb,var(--bl) 22%,transparent);color:var(--tx)}
-.pj-seg button:focus-visible{outline:2px solid var(--bl);outline-offset:-2px}
-.pj-chip{display:inline-flex;align-items:center;gap:4px;height:26px;padding:0 4px 0 9px;border-radius:13px;font-size:13px;white-space:nowrap;background:color-mix(in srgb,var(--bl) 18%,transparent);border:1px solid color-mix(in srgb,var(--bl) 45%,transparent)}
-.pj-chip i{font-style:normal;color:var(--mu)}
-.pj-chip button{all:unset;cursor:pointer;width:18px;height:18px;border-radius:50%;text-align:center;line-height:18px;color:var(--mu)}
-.pj-chip button:hover{background:var(--p2);color:var(--tx)}
-.pj-tree-h{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--mu);padding:12px 12px 4px}
-.pj-tree-p{font-size:12px;color:var(--mu);padding:0 12px;margin:0}
-.pj-tree-n{margin-left:auto;padding-right:8px;font-size:12px;color:var(--mu);font-variant-numeric:tabular-nums}
+.pj-kv dt{color:var(--one-fg-muted)}.pj-kv dd{margin:0;overflow-wrap:anywhere}
+/* «=» и «≠» у значения — кнопки-значки dense 24, лестница subtle; поле -4 px держит строку 20. */
+.pj-fx{display:inline-flex;gap:0;margin:-2px 0 -2px 4px;vertical-align:middle}
+.pj-fx button{all:unset;cursor:pointer;display:inline-grid;place-items:center;width:var(--ctl-dense,24px);height:var(--ctl-dense,24px);border-radius:var(--one-radius-control);font:var(--one-type-label);color:var(--one-fg-muted)}
+.pj-fx button:hover{background:var(--one-control-hover);color:var(--one-fg)}
+.pj-fx button:active{background:var(--one-control-pressed)}
+.pj-fx button:focus-visible{outline:2px solid var(--one-focus-ring);outline-offset:-2px}
+.pj-diff{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;border:1px solid var(--one-border);border-radius:var(--one-radius-container);padding:8px 12px}
+.pj-diff-p{grid-column:1/-1;font-weight:500}.pj-diff span{display:block;font:var(--one-type-caption);color:var(--one-fg-muted)}.pj-diff s{color:var(--one-fg-muted)}
+.pj-acts{display:flex;flex-wrap:wrap;gap:8px}
+.pj-near{display:flex;flex-direction:column;gap:0;border-top:1px solid var(--one-divider);padding-top:12px}
+.pj-near-h{display:flex;align-items:center;justify-content:space-between;gap:8px;font:var(--one-type-label-strong);color:var(--one-fg);margin-bottom:4px}
+.pj-nr{all:unset;cursor:pointer;display:grid;grid-template-columns:120px 16px minmax(0,1fr);align-items:center;min-height:28px;padding:0 8px;margin:0 -8px;border-radius:var(--one-radius-control);font:var(--one-type-body-sm);letter-spacing:var(--one-type-body-sm-tracking);white-space:nowrap}
+.pj-nr>span{overflow:hidden;text-overflow:ellipsis}.pj-nr:hover{background:var(--one-control-hover)}
+.pj-nr.on{background:var(--one-accent-soft)}.pj-nr.on:hover{background:var(--one-accent-soft-hover)}
+.pj-nr:focus-visible{outline:2px solid var(--one-focus-ring);outline-offset:-2px}
+/* Группа переключателей — рецепт .acc-seg моста (D-078): одна обводка editor-border, дорожка
+   surface-muted, деление — граница соседа; ячейка compact 28, роль label; выбранная — accent-soft. */
+.pj-seg{display:inline-flex;border:1px solid var(--one-editor-border);border-radius:var(--one-radius-control);background:var(--one-surface-muted);overflow:hidden}
+.pj-seg button{all:unset;cursor:pointer;box-sizing:border-box;display:inline-flex;align-items:center;padding:0 12px 1.5px;height:var(--ctl-compact,28px);font:var(--one-type-label);letter-spacing:var(--one-type-label-tracking);white-space:nowrap;color:var(--one-fg-muted)}
+.pj-seg button+button{border-left:1px solid var(--one-editor-border)}
+.pj-seg button:not(.on):hover{background:var(--one-control-hover);color:var(--one-fg)}
+.pj-seg button.on{background:var(--one-accent-soft);color:var(--x-sel)}
+.pj-seg button.on:is(:hover,:active){background:var(--one-nav-selected-hover)}
+.pj-seg button:focus-visible{outline:2px solid var(--one-focus-ring);outline-offset:-2px}
+.pj-seg.pj-seg-s button{height:var(--ctl-dense,24px);padding:0 8px 1.5px}
+/* Условие отбора — как .ftag консоли: плашка selected-neutral, подпись fg; внутри поля — ступень
+   dense 24 (D-077), пилюля, роль body-sm; «×» — значок Lucide 16 в коробке 20. */
+.pj-chip{display:inline-flex;align-items:center;gap:4px;height:var(--ctl-dense,24px);box-sizing:border-box;padding:0 2px 0 8px;border-radius:var(--one-radius-pill);border:1px solid transparent;background:var(--one-selected-neutral);color:var(--one-fg);font:var(--one-type-body-sm);letter-spacing:var(--one-type-body-sm-tracking);white-space:nowrap}
+.pj-chip i{font-style:normal;color:var(--one-fg-muted)}
+.pj-chip.ex i b,.pj-chip b{font-weight:600;color:var(--one-fg-muted)}
+.pj-chip>button{all:unset;cursor:pointer;width:20px;height:20px;border-radius:var(--one-radius-pill);display:inline-grid;place-items:center;color:var(--one-fg-muted)}
+.pj-chip>button svg{width:14px;height:14px}
+.pj-chip>button:hover{background:var(--one-selected-neutral-hover);color:var(--one-fg)}
+.pj-chip>button:focus-visible{outline:2px solid var(--one-focus-ring);outline-offset:-2px}
+/* Подписи панели (оснастка, D-067): заголовок — label-strong без капса, пояснение body-sm, счётчик caption. */
+.pj-tree-h{font:var(--one-type-label-strong);letter-spacing:var(--one-type-label-strong-tracking);color:var(--one-fg);padding:12px 12px 4px}
+.pj-tree-p{font:var(--one-type-body-sm);letter-spacing:var(--one-type-body-sm-tracking);color:var(--one-fg-muted);padding:0 12px;margin:0}
+.pj-tree-n{margin-left:auto;padding-right:8px;font:var(--one-type-caption);letter-spacing:var(--one-type-caption-tracking);color:var(--one-fg-muted);font-variant-numeric:tabular-nums}
 @media (prefers-reduced-motion:reduce){.pj *{transition:none!important;animation:none!important}}
 `;document.head.appendChild(st)}
 window.PJ=PJ;

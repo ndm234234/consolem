@@ -2740,7 +2740,7 @@ html[data-theme="light"] .cp-step{background:var(--one-control-hover);color:var(
   </div>
 </div>
 <div class="tctx" id="tctx" role="menu" data-on-mousedown='[["rcMenuDown",{"$on":"event"}]]'></div>
-<script src="assets/proto-journal-stub.js?v=d40f47a3"></script>
+<script src="assets/proto-journal-stub.js?v=9e160e09"></script>
 <script>
 // Тема — одна кнопка в шапке; выбор запоминается (ключ кита kit-theme).
 try{const t=localStorage.getItem("kit-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}
@@ -26498,9 +26498,9 @@ function pjText(v){pjQ={...pjQ,text:v};clearTimeout(pjTextT);pjTextT=setTimeout(
 function pjSum(extra=""){
   const r=pjRes;if(!r)return"";
   return`<span><b>${PJ.num(r.total)}</b> ${PJ.plural(r.total,"событие|события|событий")} ${escHtml(pjRangeName())}</span>
-    ${r.hidden&&!pjQ.showDebug?`<span>· служебных скрыто ${PJ.num(r.hidden)} <button type="button" class="lk" ${onEv("click",["pjShowDebug",true])}>Показать</button></span>`:""}
-    ${pjQ.showDebug?`<span>· <button type="button" class="lk" ${onEv("click",["pjShowDebug",false])}>Скрыть служебные</button></span>`:""}
-    ${pjZoom.length?`<span>· <button type="button" class="lk" ${onEv("click",["pjZoomBack"])}>${lu("chevron-left")} Вернуть период</button></span>`:""}
+    ${r.hidden&&!pjQ.showDebug?`<span>· служебных скрыто ${PJ.num(r.hidden)} <button type="button" class="lk lk-act" ${onEv("click",["pjShowDebug",true])}>Показать</button></span>`:""}
+    ${pjQ.showDebug?`<span>· <button type="button" class="lk lk-act" ${onEv("click",["pjShowDebug",false])}>Скрыть служебные</button></span>`:""}
+    ${pjZoom.length?`<span>· <button type="button" class="lk lk-act" ${onEv("click",["pjZoomBack"])}>${lu("chevron-left")} Вернуть период</button></span>`:""}
     <span class="pj-mu">· отбор ${r.ms} мс из ${PJ.num(PJ.S.n)}</span>${extra}`;
 }
 function pjMountList(host,o={}){
@@ -26558,7 +26558,7 @@ const PJA_TYPE={cam:"Камера",srv:"Сервер",rule:"Правило"};
 // Чип условия: «=» — только такие, «≠» — скрыть такие; щелчок по чипу меняет одно на другое
 function pjaChips(){
   const S=PJ.S,ch=[];
-  const add=(lab,val,rm,o={})=>ch.push(`<span class="pj-chip${o.ex?" ex":""}">${o.flip?`<button type="button" class="pja-cv" title="${o.ex?"Скрыты такие события. Щелчок — показать только такие":"Показаны только такие события. Щелчок — скрыть такие"}" ${onEv("click",o.flip)}><i>${escHtml(lab)}</i> <b>${o.ex?"≠":"="}</b> ${escHtml(val)}</button>`:`<i>${escHtml(lab)}:</i> ${escHtml(val)}`}<button type="button" aria-label="Убрать условие" title="Убрать условие" ${onEv("click",rm)}>×</button></span>`);
+  const add=(lab,val,rm,o={})=>ch.push(`<span class="pj-chip${o.ex?" ex":""}">${o.flip?`<button type="button" class="pja-cv" title="${o.ex?"Скрыты такие события. Щелчок — показать только такие":"Показаны только такие события. Щелчок — скрыть такие"}" ${onEv("click",o.flip)}><i>${escHtml(lab)}</i> <b>${o.ex?"≠":"="}</b> ${escHtml(val)}</button>`:`<i>${escHtml(lab)}:</i> ${escHtml(val)}`}<button type="button" aria-label="Убрать условие" title="Убрать условие" ${onEv("click",rm)}>${lu("x")}</button></span>`);
   const L={objs:i=>PJA_TYPE[S.objs[i]?.type]||"Объект",users:()=>"Пользователь",kinds:()=>"Событие"};
   const V={objs:i=>S.objs[i]?.name||"—",users:i=>S.users[i]?.login||"—",kinds:i=>PJ.KINDS[i].n};
   ["objs","users","kinds"].forEach(f=>{
@@ -26577,7 +26577,7 @@ function pjaMount(){
   if(inp&&inp.value!==pjaIn)inp.value=pjaIn;
   if(pjaFocus&&inp&&document.activeElement!==inp){inp.focus();inp.setSelectionRange(pjaIn.length,pjaIn.length)}
   const sum=document.getElementById("pjSum");
-  if(sum)sum.innerHTML=pjSum(`<span class="pja-save"><button type="button" class="lk" ${onEv("click",["pjaSave"])}>${lu("star")} Сохранить поиск</button></span>`);
+  if(sum)sum.innerHTML=pjSum(`<span class="pja-save"><button type="button" class="lk lk-act" ${onEv("click",["pjaSave"])}>${lu("star")} Сохранить поиск</button></span>`);
   pjHistMount(document.getElementById("pjHist"),44);
   pjMountList(document.getElementById("pjList"),{onFilter:(f,v)=>pjToggle(f==="obj"?"objs":"users",v)});
   pjMountDet();
@@ -26690,24 +26690,34 @@ function pjaSave(){
 function pjaLoad(j){const s=pjaSaved()[j];if(s)pjaLoadQ(s.q)}
 (function pjaCss(){const st=document.createElement("style");st.textContent=`
 .pja-wrap{position:relative;flex:1;min-width:320px}
-.pja-bar{display:flex;flex-wrap:wrap;align-items:center;gap:6px;min-height:36px;padding:4px 8px;border:1px solid var(--ln);border-radius:8px;background:var(--p);cursor:text}
-.pja-bar:focus-within{border-color:var(--bl);box-shadow:0 0 0 2px color-mix(in srgb,var(--bl) 30%,transparent)}
-.pja-bar>svg{width:16px;height:16px;color:var(--mu);flex:none}
-.pja-bar input{flex:1;min-width:180px;border:0;background:transparent;outline:none;color:var(--tx);font:inherit;font-size:14px;height:26px;padding:0}
-.pja-clr{all:unset;cursor:pointer;width:22px;height:22px;display:grid;place-items:center;border-radius:4px;color:var(--mu)}.pja-clr:hover{background:var(--p2)}.pja-clr svg{width:14px;height:14px}
-.pja-sug{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:40;max-height:420px;overflow:auto;background:var(--p);border:1px solid var(--ln);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.25);padding:4px 0}
-.pja-g{font-size:11px;color:var(--mu);padding:6px 12px 2px;text-transform:uppercase;letter-spacing:.04em}
-.pja-it{display:flex;align-items:center;gap:8px;padding:6px 12px;cursor:pointer;font-size:13px}
-.pja-it.on,.pja-it:hover{background:color-mix(in srgb,var(--bl) 16%,transparent)}
+/* Строка поиска — поле-обёртка моста (.sq, .gojump): рамка и halo на обёртке, input прозрачный. */
+.pja-bar{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;min-height:var(--ctrl-h,32px);box-sizing:border-box;padding:3px 4px 3px 8px;border:1px solid var(--one-editor-border);border-radius:var(--one-radius-control);background:var(--one-editor-bg);cursor:text}
+.pja-bar:hover:not(:focus-within){background:var(--one-editor-hover);border-color:var(--one-editor-border-hover)}
+.pja-bar:focus-within{background:var(--one-editor-focus);border-color:var(--one-editor-border-focus);box-shadow:0 0 0 2px var(--one-focus-halo)}
+.pja-bar>svg{width:16px;height:16px;color:var(--one-fg-muted);flex:none}
+.pja-bar input{flex:1;min-width:180px;border:0;background:transparent;outline:none;box-shadow:none;color:var(--one-fg);font:var(--one-type-body-md);letter-spacing:var(--one-type-body-md-tracking);height:24px;padding:0}
+.pja-bar input:is(:hover,:focus){background:transparent;box-shadow:none}
+/* Кнопка-значок dense 24, лестница subtle. */
+.pja-clr{all:unset;cursor:pointer;flex:none;width:var(--ctl-dense,24px);height:var(--ctl-dense,24px);display:grid;place-items:center;border-radius:var(--one-radius-control);color:var(--one-fg-muted)}
+.pja-clr:hover{background:var(--one-control-hover);color:var(--one-fg)}.pja-clr:active{background:var(--one-control-pressed)}
+.pja-clr:focus-visible{outline:2px solid var(--one-focus-ring);outline-offset:-2px}.pja-clr svg{width:16px;height:16px}
+/* Подсказки — всплывающее popup + border + shadow (как .gopop); пункты — ритм меню 32 / 16 / 12. */
+.pja-sug{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:40;max-height:420px;overflow:auto;background:var(--one-popup);border:1px solid var(--one-border);border-radius:var(--one-radius-container);box-shadow:var(--one-shadow);padding:4px 0}
+.pja-g{font:var(--one-type-overline);letter-spacing:var(--one-type-overline-tracking);text-transform:uppercase;color:var(--one-fg-muted);padding:8px 16px 4px}
+.pja-it{display:flex;align-items:center;gap:12px;min-height:32px;padding-inline:16px 12px;cursor:pointer;font:var(--one-type-body-md);letter-spacing:var(--one-type-body-md-tracking);color:var(--one-fg)}
+.pja-it:is(:hover,.on){background:var(--one-control-hover)}
 .pja-l{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pja-n{font-variant-numeric:tabular-nums;color:var(--mu);font-size:12px}.pja-n.z{opacity:.5}
-.pja-none{padding:10px 12px;color:var(--mu);font-size:13px}
-.pja-foot{font-size:11px;padding:6px 12px;border-top:1px solid var(--ln);margin-top:4px}
-.pja-ex{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:13px;align-items:center}
+/* Счётчик (D-062): caption fg-muted без плашки; нулевой — тоном, а не прозрачностью. */
+.pja-n{font:var(--one-type-caption);letter-spacing:var(--one-type-caption-tracking);font-variant-numeric:tabular-nums;color:var(--one-fg-muted)}.pja-n.z{color:var(--one-fg-disabled)}
+.pja-none{padding:8px 16px;color:var(--one-fg-muted);font:var(--one-type-body-md)}
+.pja-foot{font:var(--one-type-caption);letter-spacing:var(--one-type-caption-tracking);color:var(--one-fg-muted);padding:8px 16px 4px;border-top:1px solid var(--one-divider);margin-top:4px}
+.pja-ex{display:flex;flex-wrap:wrap;gap:4px 16px;font:var(--one-type-body-sm);letter-spacing:var(--one-type-body-sm-tracking);align-items:center}
 .pja-save{margin-left:auto}
-.pj-chip .pja-cv{width:auto;height:auto;border-radius:0;line-height:inherit;color:var(--tx);display:inline-flex;gap:4px;align-items:baseline}.pj-chip .pja-cv:hover{background:transparent}.pja-cv:hover b,.pja-cv:focus-visible b{text-decoration:underline}
-.pja-cv b{font-weight:600;color:var(--bl)}.pj-chip.ex .pja-cv b{color:var(--rd,#e5484d)}.pj-chip.ex .pja-cv{text-decoration:none}
-.pj-sum .lk svg{width:13px;height:13px;vertical-align:-2px}
+/* Значение условия «=»/«≠» — кнопка внутри чипа: знак fg-muted, под курсором подпись подчёркнута. */
+.pj-chip .pja-cv{all:unset;cursor:pointer;display:inline-flex;gap:4px;align-items:baseline;color:var(--one-fg);border-radius:var(--one-radius-control)}
+.pja-cv b{font-weight:600;color:var(--one-fg-muted)}
+.pja-cv:hover{text-decoration:underline;text-underline-offset:2px}
+.pja-cv:focus-visible{outline:2px solid var(--one-focus-ring);outline-offset:2px}
 `;document.head.appendChild(st)})();
 
 // ── Часть B (прототип 48): фасеты со счётчиками в левой панели ──
@@ -26734,11 +26744,11 @@ function pjbRows(f){
     return`<label class="pjb-r${on?" on":""}${ex?" ex":""}${x.n||ex?"":" z"}"${ex?` title="Такие события скрыты. Флажок вернёт их"`:""}><input type="checkbox" ${on?"checked":""} ${onEv("change",["pjbToggle",f,x.v])}>${ex?`<b class="pjb-ne">≠</b>`:""}
       ${x.dot?`<i class="pj-dot pj-c-${x.dot}"></i>`:""}<span class="pjb-l" title="${escHtml(x.label)}">${PJ.hl(x.label,q?[q]:[])}${x.sub?`<span class="pj-mu"> · ${escHtml(x.sub)}</span>`:""}</span>
       <span class="pjb-n">${PJ.num(x.n)}</span><span class="pjb-acts"><span class="pjb-only" role="button" tabindex="0" title="Только это значение" ${onEv("click",["pjbOnly",onEv.event,f,x.v])}>только</span>${f!=="cats"&&!ex?`<span class="pjb-only" role="button" tabindex="0" title="Скрыть такие события" ${onEv("click",["pjbNot",onEv.event,f,x.v])}>без</span>`:""}</span></label>`}).join("")
-    +(rest>0?`<button type="button" class="lk pjb-more" ${onEv("click",["pjbMoreSet",f,true])}>Ещё ${PJ.num(rest)}${q?"":" · или найдите по имени"}</button>`:pjbMore[f]&&f!=="cats"?`<button type="button" class="lk pjb-more" ${onEv("click",["pjbMoreSet",f,false])}>Свернуть</button>`:"");
+    +(rest>0?`<button type="button" class="lk lk-act pjb-more" ${onEv("click",["pjbMoreSet",f,true])}>Ещё ${PJ.num(rest)}${q?"":" · или найдите по имени"}</button>`:pjbMore[f]&&f!=="cats"?`<button type="button" class="lk lk-act pjb-more" ${onEv("click",["pjbMoreSet",f,false])}>Свернуть</button>`:"");
 }
 function pjbSec(title,f,find){
   const act=f==="cats"?!!pjQ.cats:!!(pjQ[f]||pjQ[PJ_NF[f]]),shut=pjbShut.has(f),n=f==="cats"?0:(pjQ[f]?.size||0)+(pjQ[PJ_NF[f]]?.size||0);
-  return`<div class="pjb-sec${shut?" shut":""}"><div class="pjb-h"><button type="button" class="pjb-tg" aria-expanded="${!shut}" ${onEv("click",["pjbShutSet",f])}>${lu("chevron-right")}${escHtml(title)}${shut&&n?` <span class="pjb-cnt">${n}</span>`:""}</button>${act?`<button type="button" class="lk" ${onEv("click",["pjClear",f])}>сбросить</button>`:""}</div>
+  return`<div class="pjb-sec${shut?" shut":""}"><div class="pjb-h"><button type="button" class="pjb-tg" aria-expanded="${!shut}" ${onEv("click",["pjbShutSet",f])}>${lu("chevron-right")}${escHtml(title)}${shut&&n?` <span class="pjb-cnt">${n}</span>`:""}</button>${act?`<button type="button" class="lk lk-act" ${onEv("click",["pjClear",f])}>сбросить</button>`:""}</div>
     ${shut?"":find?`<input class="pjb-find" type="text" placeholder="Найти" aria-label="Найти: ${escHtml(title)}" value="${escHtml(pjbFind[f])}" ${onEv("input",["pjbFindSet",f,onEv.value])}>`:""}
     ${shut?"":`<div id="pjbL-${f}">${pjbRows(f)}</div>`}</div>`;
 }
@@ -26756,26 +26766,39 @@ function pjbMoreSet(f,on){pjbMore={...pjbMore,[f]:on};const el=document.getEleme
 // Поиск по значениям меняет только свой список: поле ввода остаётся в фокусе
 function pjbFindSet(f,v){pjbFind={...pjbFind,[f]:v};const el=document.getElementById("pjbL-"+f);if(el)el.innerHTML=pjbRows(f)}
 (function pjbCss(){const st=document.createElement("style");st.textContent=`
-.pjb-q{flex:1;min-width:300px;display:flex;align-items:center;gap:8px;height:36px;padding:0 10px;border:1px solid var(--ln);border-radius:8px;background:var(--p)}
-.pjb-q:focus-within{border-color:var(--bl);box-shadow:0 0 0 2px color-mix(in srgb,var(--bl) 30%,transparent)}
-.pjb-q svg{width:16px;height:16px;color:var(--mu)}.pjb-q input{flex:1;border:0;background:transparent;outline:none;color:var(--tx);font:inherit;font-size:14px}
-.pjb-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:26px;font-size:13px}
-.pjb-sec{padding:4px 8px 10px 12px;border-bottom:1px solid var(--ln)}
-.pjb-h{display:flex;justify-content:space-between;align-items:center;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--mu);padding:8px 0 4px}
-.pjb-h .lk{text-transform:none;letter-spacing:0;font-size:12px}
-.pjb-find{width:100%;box-sizing:border-box;height:26px;margin:2px 0 4px;font-size:12px}
-.pjb-r{display:flex;align-items:center;gap:6px;height:26px;font-size:13px;cursor:pointer;border-radius:4px;padding:0 4px;margin:0 -4px}
-.pjb-r:hover{background:var(--p2)}.pjb-r input{margin:0;flex:none}.pjb-r.z{opacity:.5}
+/* Поле поиска — обёртка моста (.sq): рамка и halo на обёртке. */
+.pjb-q{flex:1;min-width:300px;display:flex;align-items:center;gap:8px;height:var(--ctrl-h,32px);box-sizing:border-box;padding:0 8px;border:1px solid var(--one-editor-border);border-radius:var(--one-radius-control);background:var(--one-editor-bg)}
+.pjb-q:hover:not(:focus-within){background:var(--one-editor-hover);border-color:var(--one-editor-border-hover)}
+.pjb-q:focus-within{background:var(--one-editor-focus);border-color:var(--one-editor-border-focus);box-shadow:0 0 0 2px var(--one-focus-halo)}
+.pjb-q svg{width:16px;height:16px;color:var(--one-fg-muted)}.pjb-q input{flex:1;border:0;background:transparent;outline:none;box-shadow:none;color:var(--one-fg);font:var(--one-type-body-md);padding:0}
+.pjb-chips{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center;min-height:24px;font:var(--one-type-body-sm)}
+/* Фасеты в панели дерева — оснастка, один размер 12/16 (D-067). */
+.pjb-sec{padding:4px 8px 8px 12px;border-bottom:1px solid var(--one-divider)}
+.pjb-h{display:flex;justify-content:space-between;align-items:center;gap:8px;min-height:28px;font:var(--one-type-label-strong);letter-spacing:var(--one-type-label-strong-tracking);color:var(--one-fg);padding:4px 0}
+.pjb-h .lk{font:var(--one-type-label);letter-spacing:var(--one-type-label-tracking)}
+.pjb-find{width:100%;box-sizing:border-box;height:var(--ctl-dense,24px);margin:0 0 4px;font:var(--one-type-body-sm)}
+/* Строка значения — как строка дерева: hover nav-hover, радиус control; флажок 16. */
+.pjb-r{display:flex;align-items:center;gap:8px;min-height:var(--ctl-compact,28px);font:var(--one-type-body-sm);letter-spacing:var(--one-type-body-sm-tracking);color:var(--one-fg);cursor:pointer;border-radius:var(--one-radius-control);padding:0 8px;margin:0 -8px}
+.pjb-r:hover{background:var(--one-nav-hover)}
+.pjb-r input{margin:0;flex:none;width:16px;height:16px}
+.pjb-r:focus-within:has(input:focus-visible){outline:2px solid var(--one-focus-ring);outline-offset:-2px}
+/* Пустое значение отступает тоном, а не прозрачностью (как .n-slice-empty). */
+.pjb-r.z:not(:hover) :is(.pjb-l,.pjb-n,.pj-dot){color:var(--one-fg-disabled)}
+.pjb-r.z:not(:hover) .pj-dot{background:var(--one-fg-disabled)}
 .pjb-r .pj-dot{margin-right:0}
 .pjb-l{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pjb-n{font-size:12px;color:var(--mu);font-variant-numeric:tabular-nums}
-.pjb-acts{display:none;gap:6px}.pjb-r:hover .pjb-acts,.pjb-acts:focus-within{display:inline-flex}.pjb-r:hover .pjb-n{display:none}
-.pjb-only{font-size:11px;color:var(--bl);padding:0 2px;cursor:pointer}.pjb-only:hover{text-decoration:underline}
-.pjb-r.ex .pjb-l{text-decoration:line-through;color:var(--mu)}.pjb-ne{color:var(--rd,#e5484d);font-size:12px;margin-left:-2px}
-.pjb-tg{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:4px}.pjb-tg svg{width:12px;height:12px}.pjb-tg[aria-expanded="true"] svg{transform:rotate(90deg)}
-.pjb-cnt{font-size:11px;background:var(--bl);color:#fff;border-radius:8px;padding:0 5px;text-transform:none}
+.pjb-n{font:var(--one-type-caption);letter-spacing:var(--one-type-caption-tracking);color:var(--one-fg-muted);font-variant-numeric:tabular-nums}
+.pjb-acts{display:none;gap:8px}.pjb-r:hover .pjb-acts,.pjb-acts:focus-within{display:inline-flex}.pjb-r:hover .pjb-n{display:none}
+/* «только» и «без» — отдельно стоящие ссылки (.lk.lk-act): 500, без подчёркивания, под курсором — с ним. */
+.pjb-only{font:var(--one-type-label);letter-spacing:var(--one-type-label-tracking);color:var(--x-link);cursor:pointer;border-radius:var(--one-radius-control)}
+.pjb-only:hover{color:var(--x-link-hover);text-decoration:underline;text-underline-offset:2px}
+.pjb-r.ex .pjb-l{text-decoration:line-through;color:var(--one-fg-muted)}.pjb-ne{color:var(--one-fg-muted);font:var(--one-type-label-strong);margin-left:-4px}
+.pjb-tg{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:4px;border-radius:var(--one-radius-control)}.pjb-tg svg{width:16px;height:16px;color:var(--one-fg-muted);transition:transform .15s}.pjb-tg[aria-expanded="true"] svg{transform:rotate(90deg)}
+/* Число выбранных у свёрнутого раздела — бейдж строки дерева (.n .tag): selected-neutral, label. */
+.pjb-cnt{font:var(--one-type-label);font-variant-numeric:tabular-nums;background:var(--one-selected-neutral);color:var(--one-fg-muted);border-radius:var(--one-radius-control);padding:0 4px}
 .pjb-sec.shut{padding-bottom:4px}
-.pjb-more{font-size:12px;margin-top:2px}
+.pjb-more{font:var(--one-type-label);margin-top:4px}
+@media (prefers-reduced-motion:reduce){.pjb-tg svg{transition:none}}
 `;document.head.appendChild(st)})();
 
 // ── Объединение: строка и фасеты читают и меняют одни условия ──
@@ -26822,7 +26845,7 @@ function logUI(){
   paintMain(mainHd("",`<span class="hd-ic">${lu("scroll-text")}</span>${i18n("Журнал событий")}`,"")+
   `<div class="pj">
     <div class="pj-top">
-      ${has||pjaIn?`<span class="pj-mu pja-tip">Условия — в поле поиска вверху и в панели слева.</span>`:`<div class="pja-ex"><span class="pj-mu">Например:</span>${pjaExamples().map((e,j)=>`<button type="button" class="lk" ${onEv("click",["pjaExample",j])}>${escHtml(e.label)}</button>`).join("")}</div>`}
+      ${has||pjaIn?`<span class="pj-mu pja-tip">Условия — в поле поиска вверху и в панели слева.</span>`:`<div class="pja-ex"><span class="pj-mu">Например:</span>${pjaExamples().map((e,j)=>`<button type="button" class="lk lk-act" ${onEv("click",["pjaExample",j])}>${escHtml(e.label)}</button>`).join("")}</div>`}
       <div class="pj-seg" role="group" aria-label="Период" style="margin-left:auto">${PJ.RANGES.map(([id,n])=>`<button type="button" class="${pjQ.range===id?"on":""}" ${onEv("click",["pjSetRange",id])}>${n}</button>`).join("")}</div>
     </div>
     <div class="pj-sum" id="pjSum"></div>
@@ -26848,13 +26871,15 @@ function pjaGlobal(q){pjaIn="";pjaSugOpen=false;pjaFocus=false;goApp("hw");
 body.pj-hdlog .pja-slot{display:block}
 body.pj-hdlog .gojump{display:none}
 .pja-hd{min-width:0}
-.pja-hd .pja-bar{flex-wrap:nowrap;height:var(--ctrl-h,34px);min-height:0;padding:0 8px 0 10px;overflow-x:auto;scrollbar-width:none;background:var(--p2)}
+/* В шапке — то же поле, что общий поиск (.gojump): ступень regular 32, чипы внутри — dense 24 (D-077). */
+.pja-hd .pja-bar{flex-wrap:nowrap;height:var(--ctrl-h,32px);min-height:0;padding:0 4px 0 8px;overflow-x:auto;scrollbar-width:none}
 .pja-hd .pja-bar::-webkit-scrollbar{display:none}
-.pja-hd .pja-bar input{min-width:160px;height:24px}
-.pja-hd .pj-chip{flex:none;height:22px}
-.pja-hint{flex:none;font-size:11px;color:var(--mu);border:1px solid var(--ln);border-radius:4px;padding:0 5px;line-height:18px}
+.pja-hd .pja-bar input{min-width:160px}
+.pja-hd .pj-chip{flex:none}
+/* Подсказка клавиши — тот же ярлык, что у общего поиска (.gojump-hint моста). */
+.pja-hint{flex:none;font:var(--one-type-caption);letter-spacing:var(--one-type-caption-tracking);color:var(--one-fg-muted);border:1px solid var(--one-border);border-radius:var(--one-radius-control);padding:0 4px}
 .pja-hd .pja-sug{min-width:min(560px,90vw)}
-.pja-tip{font-size:13px}
+.pja-tip{font:var(--one-type-body-sm);letter-spacing:var(--one-type-body-sm-tracking)}
 `;document.head.appendChild(st)})();
 
 
