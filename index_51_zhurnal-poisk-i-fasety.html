@@ -26571,31 +26571,7 @@ function pjaChips(){
   return ch.join("");
 }
 function pjaTextDel(j){pjaTexts=pjaTexts.filter((x,k)=>k!==j);pjRefresh()}
-function logUI(){
-  if(logFilt==="ops"){logOpsUI();return}
-  if(!pjInit()){pjWait();return}
-  pjRun();
-  const chips=pjaChips(),has=!!chips;
-  paintMain(mainHd("",`<span class="hd-ic">${lu("scroll-text")}</span>${i18n("Журнал событий")}`,"")+
-  `<div class="pj">
-    <div class="pj-top">
-      <div class="pja-wrap">
-        <div class="pja-bar" ${onEv("mousedown",["pjaBarDown",onEv.event])}>${lu("search")}${chips}
-          <input id="pjaIn" type="text" autocomplete="off" spellcheck="false" placeholder="${has?"Добавить условие":"Камера, пользователь, вид события или текст"}" aria-label="Поиск в журнале" aria-autocomplete="list" aria-controls="pjaSug"
-            ${onEv("input",["pjaType",onEv.value])} ${onEv("keydown",["pjaKey",onEv.event])} ${onEv("focus",["pjaFocusOn"])} ${onEv("blur",["pjaFocusOff"])}>
-          ${has?`<button type="button" class="pja-clr" title="Убрать все условия" ${onEv("click",["pjaClearAll"])}>${lu("x")}</button>`:""}
-        </div>
-        <div class="pja-sug" id="pjaSug" role="listbox" hidden ${onEv("mousedown",["pjaSugDown",onEv.event])}></div>
-      </div>
-      <div class="pj-seg" role="group" aria-label="Период">${PJ.RANGES.map(([id,n])=>`<button type="button" class="${pjQ.range===id?"on":""}" ${onEv("click",["pjSetRange",id])}>${n}</button>`).join("")}</div>
-    </div>
-    ${has||pjaIn?"":`<div class="pja-ex"><span class="pj-mu">Например:</span>${pjaExamples().map((e,j)=>`<button type="button" class="lk" ${onEv("click",["pjaExample",j])}>${escHtml(e.label)}</button>`).join("")}</div>`}
-    <div class="pj-sum" id="pjSum"></div>
-    <div class="pj-histbox" id="pjHist"></div>
-    <div class="pj-body"><div class="pj-main"><div class="pj-listbox" id="pjList"></div></div><aside class="pj-side" id="pjDet" aria-label="Подробности события"></aside></div>
-  </div>`);
-  pjaMount();
-}
+// logUI — в разделе «Одно поле поиска» ниже
 function pjaMount(){
   const inp=document.getElementById("pjaIn");
   if(inp&&inp.value!==pjaIn)inp.value=pjaIn;
@@ -26813,6 +26789,73 @@ function treeLog(){
     ${pjbSec("Категория","cats",false)}${pjbSec("Событие","kinds",true)}${pjbSec("Объект","objs",true)}${pjbSec("Пользователь","users",true)}
     <div class="pj-tree-h">Мои поиски</div>${sv.length?sv.map((s,k)=>pjTreeRow(s.name,false,["pjaLoadGo",k],"star")).join(""):`<p class="pj-tree-p">Кнопка «Сохранить поиск» над списком добавит поиск сюда.</p>`}${pjTreeOps()}`;
 }
+// ── Одно поле поиска: в «Журнале» поле в шапке ищет по журналу ──
+// Строка журнала встаёт на место общего поиска (#gojump); Ctrl K ставит курсор в неё.
+// В других разделах и в «Операциях» шапка прежняя. Поиск по консоли — пунктом «Вся консоль» в подсказках.
+let pjaHdCache="";
+function pjaHdOn(){return app==="log"&&logFilt!=="ops"&&PJ.ready()}
+function pjaBarHtml(){
+  const chips=pjaChips(),has=!!chips;
+  return`<div class="pja-wrap pja-hd">
+    <div class="pja-bar" ${onEv("mousedown",["pjaBarDown",onEv.event])}>${lu("search")}${chips}
+      <input id="pjaIn" type="text" autocomplete="off" spellcheck="false" placeholder="${has?"Добавить условие":"Искать в журнале: камера, пользователь, событие или текст"}" aria-label="Поиск в журнале" aria-autocomplete="list" aria-controls="pjaSug"
+        ${onEv("input",["pjaType",onEv.value])} ${onEv("keydown",["pjaKey",onEv.event])} ${onEv("focus",["pjaFocusOn"])} ${onEv("blur",["pjaFocusOff"])}>
+      ${has?`<button type="button" class="pja-clr" title="Убрать все условия" ${onEv("click",["pjaClearAll"])}>${lu("x")}</button>`:""}<span class="pja-hint" aria-hidden="true">Ctrl K</span>
+    </div>
+    <div class="pja-sug" id="pjaSug" role="listbox" hidden ${onEv("mousedown",["pjaSugDown",onEv.event])}></div>
+  </div>`;
+}
+function pjaHdSync(){
+  const gj=document.getElementById("gojump");if(!gj)return;
+  const on=pjaHdOn();document.body.classList.toggle("pj-hdlog",on);
+  let slot=document.getElementById("pjaHdSlot");
+  if(!slot){slot=document.createElement("div");slot.id="pjaHdSlot";slot.className="pja-slot";gj.after(slot)}
+  if(!on){if(pjaHdCache){slot.innerHTML="";pjaHdCache=""}return}
+  const h=pjaBarHtml();if(h!==pjaHdCache){slot.innerHTML=h;pjaHdCache=h}
+}
+function logUI(){
+  if(logFilt==="ops"){pjaHdSync();logOpsUI();return}
+  if(!pjInit()){pjWait();return}
+  pjRun();
+  pjaHdSync();
+  const has=!!pjaChips();
+  paintMain(mainHd("",`<span class="hd-ic">${lu("scroll-text")}</span>${i18n("Журнал событий")}`,"")+
+  `<div class="pj">
+    <div class="pj-top">
+      ${has||pjaIn?`<span class="pj-mu pja-tip">Условия — в поле поиска вверху и в панели слева.</span>`:`<div class="pja-ex"><span class="pj-mu">Например:</span>${pjaExamples().map((e,j)=>`<button type="button" class="lk" ${onEv("click",["pjaExample",j])}>${escHtml(e.label)}</button>`).join("")}</div>`}
+      <div class="pj-seg" role="group" aria-label="Период" style="margin-left:auto">${PJ.RANGES.map(([id,n])=>`<button type="button" class="${pjQ.range===id?"on":""}" ${onEv("click",["pjSetRange",id])}>${n}</button>`).join("")}</div>
+    </div>
+    <div class="pj-sum" id="pjSum"></div>
+    <div class="pj-histbox" id="pjHist"></div>
+    <div class="pj-body"><div class="pj-main"><div class="pj-listbox" id="pjList"></div></div><aside class="pj-side" id="pjDet" aria-label="Подробности события"></aside></div>
+  </div>`);
+  pjaMount();
+}
+// Каждая перерисовка решает, чьё поле в шапке: уход из «Журнала» возвращает общий поиск
+const _pjaPaint=paint;
+paint=function(){const r=_pjaPaint.apply(this,arguments);pjaHdSync();return r};
+const _pjaFocusGo=focusGo;
+focusGo=function(){if(pjaHdOn()){const i=document.getElementById("pjaIn");if(i){pjaFocus=true;i.focus();i.select();return}}return _pjaFocusGo.apply(this,arguments)};
+// Поиск по всей консоли из строки журнала: общий поиск с тем же текстом в «Оборудовании»
+const _pjaSugBuild=pjaSugBuild;
+pjaSugBuild=function(){const it=_pjaSugBuild(),raw=pjaIn.trim();
+  if(raw&&!/^(?:-|не\s)/i.test(raw))it.push({g:"Вся консоль",label:`Искать «${raw}» в оборудовании, разделах и настройках`,sub:"",run:()=>pjaGlobal(raw)});
+  return it};
+function pjaGlobal(q){pjaIn="";pjaSugOpen=false;pjaFocus=false;goApp("hw");
+  setTimeout(()=>{const i=document.getElementById("gq");if(!i)return;i.value=q;i.focus();goType(q)},0)}
+(function pjaHdCss(){const st=document.createElement("style");st.textContent=`
+.pja-slot{display:none;flex:1 1 auto;min-width:0;max-width:860px}
+body.pj-hdlog .pja-slot{display:block}
+body.pj-hdlog .gojump{display:none}
+.pja-hd{min-width:0}
+.pja-hd .pja-bar{flex-wrap:nowrap;height:var(--ctrl-h,34px);min-height:0;padding:0 8px 0 10px;overflow-x:auto;scrollbar-width:none;background:var(--p2)}
+.pja-hd .pja-bar::-webkit-scrollbar{display:none}
+.pja-hd .pja-bar input{min-width:160px;height:24px}
+.pja-hd .pj-chip{flex:none;height:22px}
+.pja-hint{flex:none;font-size:11px;color:var(--mu);border:1px solid var(--ln);border-radius:4px;padding:0 5px;line-height:18px}
+.pja-hd .pja-sug{min-width:min(560px,90vw)}
+.pja-tip{font-size:13px}
+`;document.head.appendChild(st)})();
 
 
 let ws=1,wizd={};
