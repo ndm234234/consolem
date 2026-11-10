@@ -15,4 +15,14 @@ Object.assign(window.I18N_EN,{
 "Обмен с камерой":"Data exchange with camera","Изменения не сохранены":"Changes not saved","Сбросить и перейти":"Discard and go","Остаться":"Stay",
 "Камера может перезапустить поток. Тогда видео и запись прервутся на несколько секунд.":"The camera can restart the stream. Then video and recording stop for a few seconds.",
 "Включить «Отправлять настройки устройству»?":"Turn on “Send settings to device”?",
+// Все правки окна камеры — через план: блоки драйвера, потоки, туры, «Сервер записи»
+"«Сервер записи» и потоки консоль запишет отдельными запросами до операции. «Отменить» после применения их не вернёт.":"The console writes “Recording server” and the streams in separate requests before the operation. “Undo” after applying does not bring them back.",
+"Прототип: параметры драйвера, кодек и битрейт потоков и туры живут только в этой странице. «Применить» оставит их как есть.":"Prototype: the driver parameters, the stream codec and bitrate and the tours exist only in this page. “Apply” keeps them as they are.",
+"поток":"stream","разрешение":"resolution","прежний":"previous","изменён":"changed","будет добавлен":"will be added","будет удалён":"will be deleted","переменный":"variable","копий":"copies",
+"Тур, когда камерой не управляют":"Tour when nobody controls the camera","Закрыть без правок?":"Close without the changes?",
+"Консоль не добавит правки тура в план":"The console does not add the tour changes to the plan","Консоль добавила в план тур":"The console added to the plan the tour",
+"после «Применить»":"after “Apply”","Консоль удалит поток":"The console will delete the stream",
+"До «Применить» тур вернёт «Сбросить» внизу":"Until “Apply”, “Reset” at the bottom brings the tour back",
+"До «Применить» поток вернут «Отменить» в блоке и «Сбросить» внизу":"Until “Apply”, “Cancel” in the block and “Reset” at the bottom bring the stream back",
+"Итог будет в отчёте. «Отменить» после применения нет: на сервере нет операции, которую можно отменить.":"The result will be in the report. There is no “Undo” after applying: the server has no operation to undo.",
 });

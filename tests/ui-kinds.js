@@ -1,5 +1,14 @@
 /* Сценарии интерфейса: виды устройств, которые находит сервер, карточки только для чтения. Запуск — tools/check_ui.py. */
 UiCheck(async ({ ok, until, confirmWith }) => {
+  // Прототип с планом камеры (camPlanRows): правка ждёт «Применить» — сценарий применяет план и ждёт итога.
+  // В index.html правка уже на сервере, и planApply ничего не делает
+  const planApply = async () => {
+    if (typeof camPlanRows !== "function" || !cardDraft || !cardDiff().length) return;
+    const was = bq;
+    cardApply();
+    await until(() => bq && bq !== was && bq.finished);
+    if (document.getElementById("bmodal")?.classList.contains("open")) closeBulkModal();
+  };
   const devices = (await uiDevices());
   const of = (t, more) => devices.find((d) => d.type === t && (!more || more(d)));
   const main = () => document.getElementById("main");
@@ -78,8 +87,11 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   ok(await until(() => main().querySelectorAll("[data-stream]").length === rowsBefore + 1), "поток добавлен строкой");
   const added = find(video.id).n.streams.at(-1);
   streamDel(video.id, added.id);
-  ok(await until(() => document.getElementById("confirmCountInp")), "удаление потока — с вводом числа");
-  await confirmWith(1);
+  // Прототип с планом камеры: новый поток есть только в черновике, поэтому он уходит без вопроса — на сервере удалять нечего
+  if (!added._new) {
+    ok(await until(() => document.getElementById("confirmCountInp")), "удаление потока — с вводом числа");
+    await confirmWith(1);
+  }
   ok(await until(() => find(video.id).n.streams.length === rowsBefore), "поток удалён после отсчёта");
   open(video.id, "rec");
   ok(!main().querySelector("select") || [...main().querySelectorAll("option")].some((o) => o.textContent === "Второй") || !camArchs(find(video.id).n).length, "поток записи — из потоков камеры");
@@ -97,8 +109,10 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   ok(await until(() => streamOf(multi.id, sub.id)?.name === "Второй поток") && (await onServer(sub.uid)) === "Второй поток" && !errs.length, "существующий поток переименован: " + (errs[0] || "без отказа"));
   streamSet(multi.id, sub.id, "fps", "12");
   ok(await until(() => streamOf(multi.id, sub.id)?.fps === 12) && !errs.length, "существующий поток: вторая правка проходит: " + (errs[0] || "без отказа"));
+  open(video.id, "vid");
   const before2 = find(video.id).n.streams.length;
   streamAdd(video.id);
+  await planApply();
   ok(await until(() => find(video.id).n.streams.length === before2 + 1), "новый поток добавлен");
   const fresh = find(video.id).n.streams.at(-1);
   streamSet(video.id, fresh.id, "name", "Поток А");
@@ -108,6 +122,7 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   streamDel(video.id, fresh.id);
   ok(await until(() => document.getElementById("confirmCountInp")), "удаление правленого потока — с вводом числа");
   await confirmWith(1);
+  await planApply();
   ok(await until(() => find(video.id).n.streams.length === before2) && !errs.length, "правленый поток удалён: " + (errs[0] || "без отказа"));
   window.toast = realToast;
 

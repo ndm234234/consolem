@@ -1,5 +1,14 @@
 /* Сценарий интерфейса: домен шире кластера — приём с отпечатком, камера без закреплённого сервера, приёмник записи, камера за NAT, домен без серверов. */
 UiCheck(async ({ ok, until, confirmWith }) => {
+  // Прототип с планом камеры (camPlanRows): правка ждёт «Применить» — сценарий применяет план и ждёт итога.
+  // В index.html правка уже на сервере, и planApply ничего не делает
+  const planApply = async () => {
+    if (typeof camPlanRows !== "function" || !cardDraft || !cardDiff().length) return;
+    const was = bq;
+    cardApply();
+    await until(() => bq && bq !== was && bq.finished);
+    if (document.getElementById("bmodal")?.classList.contains("open")) closeBulkModal();
+  };
   const d = domains[0];
   goApp("hw");
   // Приём: сверка отпечатка до «Добавить»
@@ -28,6 +37,7 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   const server = d.servers.find((s) => s.online !== false && s.id !== cam.srvId);
   recTargetSet(cam.id, server.id);
   ok(await until(() => cam.recordingTarget?.serverId === server.id), "назначение в кэше");
+  await planApply();
   ok((await uiRec(cam.id)).recordingTarget.serverId === server.id, "на сервере");
   await API.put(`/units/${cam.id}/recording-target`, { serverId: null, copies: [] });
 
@@ -45,6 +55,7 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   await API.put(`/units/${cam.id}/recording-target`, { serverId: null, copies: [] }).then((r) => { hwApplyUnit(r); gear(); });
   ok(!document.getElementById("recCopies"), "нет приёмника — копий нет");
   await recTargetSet(cam.id, office.id);
+  await planApply();
   ok(await until(() => document.getElementById("recCopyQ")), "приёмник назначен — выбор копий на месте");
   ok(document.getElementById("recNoCopies"), "копий нет — словами");
   ok(/кластер Центр/.test(document.getElementById("recTarget").selectedOptions[0].textContent), "кластер рядом с сервером: " + document.getElementById("recTarget").selectedOptions[0].textContent);
@@ -57,6 +68,7 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   ok(pickBtn(hangar) && !pickBtn(park), "поиск сужает список");
   press(pickBtn(hangar));
   ok(await until(() => copyRows().join() === hangar.id), "копия выбрана мышью");
+  await planApply();
   ok((await rec()).copies.join() === hangar.id, "на сервере");
   ok(document.getElementById("recCopyQ").value === "", "поиск очищен");
   ok(!pickBtn(gate), "второй сервер кластера копии не предлагается");
@@ -68,18 +80,22 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   ok(await until(() => copyRows().join() === [hangar.id, park.id].join()), "вторая копия");
   press(document.querySelector(`[data-rec-copy="${park.id}"] [data-rec-up]`));
   ok(await until(() => copyRows().join() === [park.id, hangar.id].join()), "порядок меняется");
+  await planApply();
   ok((await rec()).copies.join() === [park.id, hangar.id].join(), "порядок на сервере");
   // Смена приёмника копии не теряет
   await recTargetSet(cam.id, hall.id);
+  await planApply();
   ok(await until(() => cam.recordingTarget?.serverId === hall.id) && (await rec()).copies.length === 2, "смена приёмника копии сохранила");
   // Отказ сервера — тостом, копии как были. Форма занятого не предлагает, отказ — на случай чужой правки
   const put0 = API.put;
   API.put = () => Promise.reject({ status: 422, problem: { code: "VALIDATION_FAILED", field: "copies" } });
   await recCopyDrop(cam.id, 0);
+  await planApply();
   API.put = put0;
   ok(copyRows().length === 2, "отказ: копии как были");
   press(document.querySelector(`[data-rec-copy="${park.id}"] [data-rec-drop]`));
   ok(await until(() => copyRows().join() === hangar.id), "копия убрана");
+  await planApply();
   // На чтении вернулся другой сервер того же кластера: это не чужая правка
   const recBefore = await uiRec(cam.id);
   hwApplyDevice(Object.assign({}, recBefore, { recordingTarget: { serverId: office.id, copies: [gate.id] } }));

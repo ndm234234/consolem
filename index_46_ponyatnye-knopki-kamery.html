@@ -3807,8 +3807,9 @@ function hwApplyUnit(u){
   if(t==="archive")return hwApplyArchive(r);
   if(t==="vol")return hwApplyVolume(r);
   // Потоки камеры — отдельные объекты: в записи без них кэш держит прочитанные
-  const n=find(u.uid)?.n;
-  if(n&&!("streams" in r)&&n.streams)r.streams=n.streams;
+  // Потоки черновика карточки — не серверные: в запись идут потоки снимка «до»
+  const n=find(u.uid)?.n,sb=cardBase&&cardBase.id===u.uid?cardBase.snap:null,ks=sb?sb.streams:n?.streams;
+  if(n&&!("streams" in r)&&ks)r.streams=cardClone({v:ks}).v;
   return hwApplyDevice(r);
 }
 const KEEP_SCHEMA=new Set(["devices","_more","_nf","_nr","_row","_schemaOwn","props"]);
@@ -3842,6 +3843,18 @@ function hwSetStreams(id,list){
   const n=find(id)?.n;if(!n)return;
   const base=cardBase&&cardBase.id===id?cardBase.snap:null;
   const touched=!!base&&JSON.stringify(n.streams)!==JSON.stringify(base.streams);
+  if(touched){
+    // Черновик потоков: тронутый поток остаётся как в черновике, нетронутый — как на сервере; поток, который добавили
+    // или удалили в другом месте, появляется или пропадает, а не становится строкой «Удалить: поток» плана
+    const was=new Map((base.streams||[]).map(x=>[x.id,x])),srvM=new Map(list.map(x=>[x.id,x])),live=[];
+    (n.streams||[]).forEach(x=>{const w=was.get(x.id),f=srvM.get(x.id);
+      if(x._new){live.push(x);return}
+      if(!f)return;
+      live.push(w&&JSON.stringify(x)===JSON.stringify(w)?cardClone(f):x)});
+    const at=live.findIndex(x=>x._new);
+    list.forEach(f=>{if(!was.has(f.id)&&!live.some(x=>x.id===f.id))live.splice(at<0?live.length:at,0,cardClone(f))});
+    n.streams=live;
+  }
   if(base){if(list.length)base.streams=cardClone({v:list}).v;else delete base.streams}
   if(touched)return;
   if(list.length)n.streams=list;else delete n.streams;
@@ -6581,7 +6594,7 @@ const CARD_PROP={overlays:"Камеры титров",overlayFont:"Шрифт т
   recordScheduleId:"Расписание записи",retentionDays:"Срок записи, дней",minDepthDays:"Глубина не меньше, дней",audioDeviceId:"Микрофон записи",replicaFrom:"Откуда забирать",size:"Объём",recordMode:"Когда писать",admits:"Принимает записи",zone:"Зона",labels:"Метки",alarmKinds:"Тревожные виды",enabled:"Включено",rec:"Режим записи",arch:"Архив",archx:"Дополнительные архивы",pre:"Предзапись, с",srvId:"Сервер",
   recDets:"Запись по детекторам",name:"Имя",short:"Короткое имя",ip:"IP",port:"Порт",vendor:"Производитель",model:"Модель",
   days:"Глубина, дней",enc:"Шифрование",storage:"Тип хранения",vols:"Тома",kind:"Тип",sens:"Чувствительность",license:"Лицензия",
-  codec:"Кодек",res:"Разрешение",fps:"к/с",stream:"Поток",lat:"Широта",lon:"Долгота",azimuth:"Азимут",user:"Имя пользователя",pass:"Пароль"};
+  codec:"Кодек",res:"Разрешение",fps:"к/с",stream:"Поток",recordingTarget:"Сервер записи",lat:"Широта",lon:"Долгота",azimuth:"Азимут",user:"Имя пользователя",pass:"Пароль"};
 // Поле карточки → свойство объекта, куда его запишет «Применить».
 const CARD_FLD_PROP={"Имя пользователя":"user","Пароль":"pass","Имя":"name","Короткое имя":"short","IP":"ip","Порт":"port","Производитель":"vendor","Модель":"model",
   "Широта":"lat","Долгота":"lon","Азимут":"azimuth","MAC":"mac","Адрес кассы или сервера":"ip","Адрес":"path","Номер канала":"ch","Роль":"role",
@@ -6601,6 +6614,7 @@ function cardFmt(k,v){
   if(k==="arch"){const a=archById(v);return a?locName(a):String(v)}
   if(k==="srvId"){const s=servers.find(x=>x.id===v);return s?locName(s):String(v)}
   if(k==="pass")return"••••••••";
+  if(k==="recordingTarget")return recTargetText(v);
   if(k==="zone")return zoneText(v);
   if(Array.isArray(v))return v.length?`${v.length} ${i18n("шт.")}`:"—";
   if(typeof v==="object")return"…";
@@ -6612,6 +6626,7 @@ function cardDiffNode(live,snap,owner,out){
     if(CARD_SKIP.has(k)||k.startsWith("_"))return;
     if(k==="props"&&isSchemaNode(live)){schemaDiff(live,snap,owner,out);return}
     if(k==="xprops"&&!isSchemaNode(live)){schemaDiffX(live,snap,owner,out);return}
+    if(k==="streams"&&live.type==="camera"){camStreamsDiff(live,snap,out);return}
     if(JSON.stringify(live[k])===JSON.stringify(snap[k]))return;
     const from=snap[k]===undefined?undefined:cardClone({v:snap[k]}).v,to=live[k]===undefined?undefined:cardClone({v:live[k]}).v;
     out.push({node:live,key:k,from,to,label:(live!==owner?`«${locName(live)}»: `:"")+i18n(CARD_PROP[k]||k),
@@ -6635,6 +6650,7 @@ function cardDiff(){
   Object.entries(cardDraft.fields).forEach(([l,f])=>out.push({node:n,fld:l,prop:CARD_FLD_PROP[l]||null,from:f.from,to:f.to,label:i18n(l),fromT:f.from===""?"—":f.from,toT:f.to===""?"—":f.to}));
   Object.entries(edits).forEach(([k,v])=>{const[id,f]=splitEditKey(k);if(id!==n.id)return;out.push({node:n,edit:k,prop:f,from:n[f],to:v,label:i18n(CARD_PROP[f]||f),fromT:cardFmt(f,n[f]),toT:cardFmt(f,v)})});
   posMergeProto(out,n);
+  camPlanRows(n,out);
   return out;
 }
 // Вернуть объект к снимку «до»: по ключам, начинку — по id, добавленное — убрать.
@@ -6652,8 +6668,9 @@ function cardRestore(){
   if(!cardDraft)return;
   const n=find(cardDraft.id)?.n;if(n){cardRestoreNode(n,cardDraft.snap);if(cardDraft.folders)cardSetFolders(n.id,cardDraft.folders)}
   Object.keys(edits).forEach(k=>{if(splitEditKey(k)[0]===cardDraft.id)delete edits[k]});
-  // Снимок «Размещения и тревог» верен только для этого черновика: после «Сбросить» или «Применить» блок закрывается
-  csPlaceSnap.delete(cardDraft.id);csEdit.delete(cardDraft.id+":place");
+  // Значения в блоках камеры верны только для этого черновика: после «Сбросить» или «Применить» открытые блоки закрываются,
+  // заглушки (параметры драйвера, кодек и битрейт потоков, туры) возвращаются к значениям до плана
+  camPlanRestore(cardDraft.id);
   cardDraft=null;cardBase=null;dirty=false;
   treeMatchCache.clear();searchMatchCache.clear();
 }
@@ -6691,7 +6708,9 @@ function cardPlanOpen(){
   openBulkModal(`${i18n("План")}: «${escHtml(locName(n))}», ${d.length} ${i18n(plural(d.length,"изменение|изменения|изменений"))}`,
     `<table class="bk-table"><thead><tr><th>#</th><th>${i18n("Параметр")}</th><th>${i18n("Было")}</th><th>${i18n("Станет")}</th></tr></thead><tbody>${rows}</tbody></table>
      ${off?`<div class="nt bk-warn">${lu("triangle-alert")} ${i18n("сервер")} «${escHtml(locName(s))}» ${i18n("без связи. Консоль не применит изменения, в отчёте у них будет статус «не применено»")}</div>`:""}
-     <p class="sub" style="margin:10px 0 0">${i18n("Как изменение выборки: консоль отправляет изменения на сервер одной операцией. Итог будет в отчёте. После применения можно нажать «Отменить».")}</p>`,
+     <p class="sub" style="margin:10px 0 0">${i18n(d.some(r=>!r.stub&&!camCallOf(r))?"Как изменение выборки: консоль отправляет изменения на сервер одной операцией. Итог будет в отчёте. После применения можно нажать «Отменить».":"Итог будет в отчёте. «Отменить» после применения нет: на сервере нет операции, которую можно отменить.")}</p>
+     ${d.some(camCallOf)?`<p class="sub" data-plan-rt>${i18n("«Сервер записи» и потоки консоль запишет отдельными запросами до операции. «Отменить» после применения их не вернёт.")}</p>`:""}
+     ${d.some(r=>r.stub)?`<p class="sub" data-plan-stub>${i18n("Прототип: параметры драйвера, кодек и битрейт потоков и туры живут только в этой странице. «Применить» оставит их как есть.")}</p>`:""}`,
     `<button type="button" class="btn" ${onEv("click",["closeBulkModal"])}>${i18n("Назад")}</button><button type="button" class="btn pri" ${onEv("click",["closeBulkModal"],["cardApply"])}>${i18n("Применить")} (${d.length})</button>`,"bbox-wide");
 }
 function cardApply(ok){
@@ -6699,7 +6718,9 @@ function cardApply(ok){
   if(bq&&!bq.finished){toast("Групповая операция ещё не закончена. Подождать её конца");return}
   if(busyRefuse(cardDraft.id))return;
   const n=find(cardDraft.id).n;
-  const items=cardApiItems(n,d);
+  // Не шаги операции: заглушки (остаются как есть) и отдельные запросы — «Сервер записи» и потоки (camCallRun)
+  const isLoc=r=>!!r.stub||camCallOf(r),api=d.filter(r=>!isLoc(r)),loc=d.filter(isLoc);
+  const items=cardApiItems(n,api);
   // Меньший объём тома или карты камеры стирает старое: без второго слова сервер откажет
   const less=(items||[]).filter(x=>x.set?.sizeBytes!=null&&(volById(x.targetId)||find(x.targetId)?.n)?.bytes>x.set.sizeBytes);
   if(less.length&&!ok){
@@ -6708,20 +6729,30 @@ function cardApply(ok){
   }
   less.forEach(x=>{x.set.confirmShrinkBytes=x.set.sizeBytes});
   if(items){
-    cardRestore();
-    const label=r=>r.add?r.label:`${r.label}: ${r.toT}`;
-    const ops=d.map(r=>({...mkOp(r.node||n,label(r),r.folders?"folder":"param"),state:"wait",msg:"",done:false,tempId:r.add?.id}));
-    const targets=[...new Set(items.map(opTarget))];
-    apiQueue([{label:`«${locName(n)}»: ${d.length} ${plural(d.length,"изменение|изменения|изменений")}`,ops}],`«${locName(n)}»`,{undo:true},
-      ()=>API.post("/operations",{idempotencyKey:opKey(),items:opItems(items),expectedVersions:Object.fromEntries(targets.map(x=>[x,hwVer.get(x)]))}));
+    camPlanCommit(n.id);cardRestore();
+    const label=r=>r.add||r.streamAdd||r.streamDel?r.label:`${r.label}: ${r.toT}`;
+    // Заглушки и отдельные запросы — шаги с o.call: очередь выполняет их до операции (apiQueue). Заглушка — сразу «выполнено»
+    const mk=r=>({...mkOp(r.node||n,label(r),r.folders?"folder":"param"),state:"wait",msg:"",done:false,tempId:r.add?.id,
+      call:r.stub?()=>Promise.resolve():isLoc(r)?()=>camCallRun(n,r):undefined});
+    const apiOps=api.map(mk),locOps=loc.map(mk),step={label:`«${locName(n)}»: ${d.length} ${plural(d.length,"изменение|изменения|изменений")}`,ops:[...locOps,...apiOps]};
+    const streams=loc.some(r=>r.streamSet||r.streamAdd||r.streamDel),targets=[...new Set(items.map(opTarget))];
+    // Правка основного потока меняет версию камеры: после потоков камера перечитывается, версии для операции — свежие
+    const afterCalls=streams?()=>hwStreamsRead(n.id).then(()=>API.get(`/units/${n.id}`)).then(u=>{hwApplyUnit(u);hwVer.set(u.uid,u.version)}):null;
+    // Только заглушки и отдельные запросы: операции на сервере нет, «Отменить» после применения тоже
+    apiQueue([step],`«${locName(n)}»`,{undo:!!items.length,afterCalls},
+      items.length?()=>API.post("/operations",{idempotencyKey:opKey(),items:opItems(items),expectedVersions:Object.fromEntries(targets.map(x=>[x,hwVer.get(x)]))}):null,apiOps);
     paint();
     return;
   }
   // Модель возвращается к «до», а «станет» записывает очередь — так сбой
   // сервера оставляет объект как был, а не наполовину изменённым.
-  cardRestore();
+  camPlanCommit(n.id);cardRestore();
   const set=(o,k,v)=>{if(v===undefined)delete o[k];else o[k]=cardClone({v}).v};
   const ops=d.map(r=>{
+    if(r.stub)return mkOp(n,`${r.label}: ${r.toT}`,"param",()=>{});
+    if(r.streamSet)return mkOp(n,`${r.label}: ${r.toT}`,"param",()=>{const x=(n.streams||[]).find(y=>y.uid===r.streamSet.uid);if(x)Object.assign(x,r.streamSet.props)});
+    if(r.streamAdd)return mkOp(n,r.label,"param",()=>{(n.streams||(n.streams=[])).push(cardClone(r.streamAdd))},null,()=>{n.streams=(n.streams||[]).filter(x=>x.id!==r.streamAdd.id)});
+    if(r.streamDel)return mkOp(n,r.label,"param",()=>{n.streams=(n.streams||[]).filter(x=>x.id!==r.streamDel.id)});
     if(r.folders)return mkOp(n,`${r.label}: ${r.toT}`,"folder",()=>cardSetFolders(n.id,r.folders),null,()=>cardSetFolders(n.id,r.fromFolders));
     if(r.add)return mkOp(r.node,r.label,"param",()=>{(r.node.devices||(r.node.devices=[])).push(r.add);hwIdxDrop()},null,()=>{r.node.devices=r.node.devices.filter(x=>x!==r.add);hwIdxDrop()});
     if(r.fld||r.edit){const k=r.prop,prev=k?n[k]:undefined,v=k==="port"||k==="ch"?Number(r.to)||r.to:String(r.to).trim();
@@ -12800,14 +12831,13 @@ function csEditBtns(n,k){
     :`<button type="button" class="btn s" ${onEv("click",["csEditSet",`${n.id}`,`${k}`,true])}>${i18n("Изменить")}</button>`;
 }
 // Параметры драйвера в «Идентификации»: тип камеры, прошивка, версия драйвера, серийный номер, комментарий.
-// ЗАГЛУШКА: их значения живут в drvStore, поэтому подвал «Не применено» их не считает; в API они придут свойствами
-// объекта (GET /units/{uid}/schema) и пойдут в тот же план. «Отменить» возвращает их, «Добавить в план» отмечает «изменено».
-// ЗАГЛУШКА: «Сбросить» и «Применить» в подвале их не трогают — значения и отметки «изменено» остаются, как у других блоков драйвера
+// ЗАГЛУШКА: их значения живут в drvStore; в API они придут свойствами объекта (GET /units/{uid}/schema).
+// Они идут в тот же план, что и другие правки карточки (camPlanRows): «Отменить» возвращает их, «Сбросить» — к значениям до плана
 function csIdentDrv(n){return drvGroups(n,"gen").get(DRV_IDENT)||[]}
 function csIdentDrvRows(n){
   const st=drvState(n);
   return csIdentDrv(n).filter(([f,p])=>!(p.readOnly&&(st.vals[f]===""||st.vals[f]==null))).map(([f,p])=>{const t=sfText(p,st.vals[f]);
-    return[propLabel(p,f),t==="—"||t===""?`<span class="cs-empty">—</span>`:escHtml(t),st.chg.has(f)]});
+    return[propLabel(p,f),t==="—"||t===""?`<span class="cs-empty">—</span>`:escHtml(t),drvChg(st,f)]});
 }
 function csIdentDrvFields(n){
   const st=drvState(n),fs=csIdentDrv(n).filter(([f,p])=>!(p.readOnly&&(st.vals[f]===""||st.vals[f]==null)));if(!fs.length)return"";
@@ -12817,11 +12847,10 @@ function csIdentDrvFields(n){
 function csIdentDrvEdit(id,mode){
   const n=find(id)?.n;if(!n||n.type!=="camera"||isSchemaNode(n))return;
   const st=drvState(n),g=DRV_IDENT;
-  if(mode==="start"){if(!st.snap[g]){const snap={};drvGroupProps(n,g).forEach((p,f)=>{if(f in st.vals)snap[f]=cardClone({v:st.vals[f]}).v});st.snap[g]=snap}return}
+  if(mode==="start"){if(!st.snap[g]){const snap={};drvGroupProps(n,g).forEach((p,f)=>{if(f in st.vals)snap[f]=cardClone({v:st.vals[f]}).v});drvBaseTake(n,g);st.snap[g]=snap}return}
   const snap=st.snap[g];if(!snap)return;
   if(mode==="cancel")drvGroupProps(n,g).forEach((p,f)=>{if(f in snap)st.vals[f]=snap[f];else delete st.vals[f]});
-  else drvGroupProps(n,g).forEach((p,f)=>{if(JSON.stringify(st.vals[f])!==JSON.stringify(snap[f]))st.chg.add(f)});
-  delete st.snap[g];
+  delete st.snap[g];setD(true);
 }
 function camGenLayout(n,p,ips){
   const val=(l,v)=>camConnVal(n,l,v);
@@ -12974,10 +13003,10 @@ function drvResolve(schema,vals){
   });
   return{props,conds};
 }
-const drvStore=new Map();   // uid → {vals, chg:Set, snap:{group:{…}}, send}
+const drvStore=new Map();   // uid → {vals, base:{поле: значение до плана}, snap:{group:{…}}}
 function drvState(n){
   let st=drvStore.get(n.id);
-  if(!st){st={vals:{},chg:new Set(),snap:{}};drvStore.set(n.id,st)}
+  if(!st){st={vals:{},base:{},snap:{}};drvStore.set(n.id,st)}
   const sch=camDrvSchema(n);
   const fill=ps=>Object.entries(ps).forEach(([f,p])=>{if(!(f in st.vals)&&"default"in p)st.vals[f]=p.default});
   fill(sch.properties);(sch.allOf||[]).forEach(b=>fill(b.then.properties));
@@ -12985,7 +13014,11 @@ function drvState(n){
 }
 function drvTarget(id){const n=find(id)?.n;if(!n)return null;const st=drvState(n);return{schema:{properties:drvResolve(camDrvSchema(n),st.vals).props},vals:st.vals}}
 // Поле, от которого зависят другие, перерисовывает карточку: зависимые поля появляются или пропадают
-function drvChanged(id,f){const n=find(id)?.n;if(n&&drvResolve(camDrvSchema(n),drvState(n).vals).conds.has(f))gear()}
+function drvChanged(id,f){const n=find(id)?.n;if(!n)return;setD(true);if(drvResolve(camDrvSchema(n),drvState(n).vals).conds.has(f))gear()}
+// «изменено» у параметра драйвера: значение отличается от значения до плана
+function drvChg(st,f){return Object.prototype.hasOwnProperty.call(st.base,f)&&JSON.stringify(st.vals[f])!==JSON.stringify(st.base[f])}
+// Значения группы до плана: снимаются при первом «Изменить», «Сбросить» возвращает к ним, «Применить» их забывает
+function drvBaseTake(n,g){const st=drvState(n);drvGroupProps(n,g).forEach((p,f)=>{if(!Object.prototype.hasOwnProperty.call(st.base,f))st.base[f]=f in st.vals?cardClone({v:st.vals[f]}).v:undefined})}
 function drvGroups(n,tabId){
   const st=drvState(n),{props}=drvResolve(camDrvSchema(n),st.vals),groups=new Map();
   sfEntries({properties:props}).forEach(([f,p])=>{if(p["x-ui-tab"]!==tabId)return;const g=p["x-ui-group"];(groups.get(g)||groups.set(g,[]).get(g)).push([f,p])});
@@ -13001,18 +13034,17 @@ function drvGroupDev(n,g){return[...drvGroupProps(n,g).values()].some(p=>p["x-de
 function drvEditStart(id,g){
   const n=find(id)?.n;if(!n)return;const st=drvState(n),snap={};
   drvGroupProps(n,g).forEach((p,f)=>{if(f in st.vals)snap[f]=cardClone({v:st.vals[f]}).v});
-  st.snap[g]=snap;csEditSet(id,drvKey(g),true);
+  drvBaseTake(n,g);st.snap[g]=snap;csEditSet(id,drvKey(g),true);
 }
 function drvEditCancel(id,g){
   const n=find(id)?.n;if(!n)return;const st=drvState(n),snap=st.snap[g];
   if(snap)drvGroupProps(n,g).forEach((p,f)=>{if(f in snap)st.vals[f]=snap[f];else delete st.vals[f]});
-  delete st.snap[g];csEditSet(id,drvKey(g),false);
+  delete st.snap[g];setD(true);csEditSet(id,drvKey(g),false);
 }
+// «Добавить в план»: правка остаётся в черновике карточки, «Применить» внизу применяет её вместе с правками других вкладок
 function drvEditDone(id,g){
-  const n=find(id)?.n;if(!n)return;const st=drvState(n),was=st.snap[g]||{};
-  drvGroupProps(n,g).forEach((p,f)=>{if(JSON.stringify(st.vals[f])!==JSON.stringify(was[f]))st.chg.add(f)});
-  delete st.snap[g];csEditSet(id,drvKey(g),false);
-  toast("Заглушка: консоль не отправит эти параметры на сервер");
+  const n=find(id)?.n;if(!n)return;const st=drvState(n);
+  delete st.snap[g];setD(true);csEditSet(id,drvKey(g),false);
 }
 // «Отправлять настройки устройству» и режим «Параметров потоков» — одно и то же: cvCfg.mode ("console" — консоль
 // передаёт настройки в камеру, "device" — консоль только показывает то, что сообщила камера). Включение — с подтверждением
@@ -13064,8 +13096,101 @@ function csLeave(id){
   const n=find(id)?.n,st=drvStore.get(id);
   if(n&&st)Object.keys(st.snap).forEach(g=>{const snap=st.snap[g];drvGroupProps(n,g).forEach((p,f)=>{if(f in snap)st.vals[f]=snap[f];else delete st.vals[f]});delete st.snap[g]});
   if(n&&cvSnap.has(id))cvRestore(n,cvSnap.get(id));
-  cvSnap.delete(id);cvPendM.delete(id);
+  cvSnap.delete(id);csBlkSnap.forEach((v,k)=>{if(k.startsWith(id+":"))csBlkSnap.delete(k)});
   csPlaceSnap.delete(id);[...csEdit].forEach(k=>{if(k.startsWith(id+":"))csEdit.delete(k)});
+}
+// ── Камера: правки всех вкладок — в одном плане ──
+// Ни один блок камеры не пишет сразу: «Добавить в план» оставляет правку в черновике карточки, подвал «Не применено»
+// считает правки всех вкладок, «Применить» отправляет их вместе: «Сервер записи» и потоки — отдельными запросами до
+// операции (camCallOf), остальное — шагами одной операции.
+// ЗАГЛУШКА: параметры драйвера (drvStore), кодек и битрейт потоков (cvCfg) и туры живут только в этой странице
+// (запросы api/requests/2026-11-09-182805Z-mockup-camera-driver-params-request.md и 2026-11-08-174207Z-mockup-camera-video-streams-tours-request.md):
+// их строки плана помечены stub, «Применить» оставляет значения, «Сбросить» возвращает значения до плана
+const camPlanBase=new Map();   // uid камеры → {cv: cvCfg потоков до плана, tours: туры до плана}
+function camPlanTouch(n,part){
+  const b=camPlanBase.get(n.id)||{};
+  if(part==="cv"&&!b.cv)b.cv=cardClone({v:cvCfgOf(n).streams}).v;
+  if(part==="tours"&&!b.tours){const st=cvToursOf(n);b.tours=cardClone({tours:st.tours,idleTour:st.idleTour,idleSec:st.idleSec})}
+  camPlanBase.set(n.id,b);
+}
+const CV_KEY_RU={codec:"Кодек",profile:"Профиль кодека",brc:"Режим битрейта",kbps:"Битрейт",quality:"Качество",gop:"Опорный кадр каждые",live:"В просмотре"};
+function cvValText(k,v){
+  if(v===undefined||v===null||v==="")return"—";
+  if(k==="live")return i18n(v?"да":"нет");
+  if(k==="brc")return i18n(v==="cbr"?"постоянный":"переменный");
+  if(k==="kbps")return cvKbpsText(v);
+  if(k==="quality")return i18n((CV_QUALITY.find(([x])=>x===String(v))||[,String(v)])[1]);
+  if(k==="gop")return`${v} ${i18n("кадров")}`;
+  return String(v);
+}
+function drvValText(p,v){return p.type==="boolean"?i18n(v?"включено":"выключено"):sfText(p,v)||"—"}
+function camStreamText(s,keys){return keys.map(k=>k==="res"?(s.res||"—").replace("x","×"):`${s.fps??"—"} ${i18n("к/с")}`).join(", ")}
+// Потоки камеры в плане: строка на поток — разрешение и к/с одним PATCH потока, новый поток — POST /units, удалённый — DELETE
+function camStreamsDiff(live,snap,out){
+  const was=new Map((snap.streams||[]).map(x=>[x.id,x])),now=live.streams||[];
+  now.forEach(x=>{
+    const w=was.get(x.id);
+    if(!w){const ks=["res","fps"].filter(k=>x[k]!=null&&x[k]!=="");
+      if(x._new)out.push({node:live,streamAdd:x,label:`${i18n("Добавить")}: ${i18n("поток")} «${x.name}»`,fromT:"—",toT:i18n("будет добавлен")+(ks.length?`: ${camStreamText(x,ks)}`:"")});return}
+    if(!x.uid)return;
+    const keys=["res","fps"].filter(k=>JSON.stringify(x[k])!==JSON.stringify(w[k]));if(!keys.length)return;
+    out.push({node:live,streamSet:{uid:x.uid,props:Object.fromEntries(keys.map(k=>[k,x[k]]))},label:`«${x.name}»: ${keys.map(k=>i18n(k==="res"?"разрешение":"к/с")).join(", ")}`,fromT:camStreamText(w,keys),toT:camStreamText(x,keys)});
+  });
+  const ids=new Set(now.map(x=>x.id));
+  (snap.streams||[]).forEach(w=>{if(!ids.has(w.id)&&w.uid)out.push({node:live,streamDel:w,label:`${i18n("Удалить")}: ${i18n("поток")} «${w.name}»`,fromT:"—",toT:i18n("будет удалён")})});
+}
+// Строки плана, которые «Применить» отправляет отдельными запросами, а не шагами операции. «Сервер записи» в /operations нет.
+// Потоки: шаг createUnit потока сервер отклоняет BUSY всегда, patch и delete потока — когда шаг по камере стоит позже в той же
+// операции (хуки потока проверяют блокировку камеры без своей операции) — запрос api/requests/2026-11-10-103516Z-mockup-stream-steps-in-operations-request.md
+function camCallOf(r){return r.key==="recordingTarget"||!!(r.streamSet||r.streamAdd||r.streamDel)}
+function camCallRun(n,r){
+  if(r.key==="recordingTarget")return API.put(`/units/${n.id}/recording-target`,{serverId:r.to?.serverId||null,copies:r.to?.copies||[]}).then(u=>{hwApplyUnit(u);treeMatchCache.clear();searchMatchCache.clear();renderTreeSoon()});
+  if(r.streamSet){const uid=r.streamSet.uid;return API.patch(`/units/${uid}`,{properties:r.streamSet.props},hwVer.get(uid)).then(u=>{if(u?.version!=null)hwVer.set(uid,u.version)})}
+  if(r.streamAdd){
+    const x=r.streamAdd,props=Object.fromEntries(["res","fps"].filter(k=>x[k]!=null&&x[k]!=="").map(k=>[k,x[k]]));
+    return unitsCreate([{kind:"stream",parentId:n.id,name:x.name,properties:props}]).then(([u])=>{
+      const c=cvCfg.get(n.id),sid=u&&streamRec(u).id;if(c&&sid&&c.streams[x.id]){c.streams[sid]=c.streams[x.id];delete c.streams[x.id]}});
+  }
+  if(r.streamDel){const uid=r.streamDel.uid;return API.del(`/units/${uid}`,hwVer.get(uid)).then(()=>hwVer.delete(uid))}
+  return Promise.resolve();
+}
+// Строки плана из заглушек камеры: параметры драйвера, кодек и битрейт потоков, туры
+function camPlanRows(n,out){
+  if(n.type!=="camera"||isSchemaNode(n))return;
+  const st=drvStore.get(n.id);
+  if(st&&Object.keys(st.base).length){
+    const sch=camDrvSchema(n),all=new Map(),add=ps=>Object.entries(ps||{}).forEach(([f,p])=>all.set(f,p));
+    add(sch.properties);(sch.allOf||[]).forEach(b=>add(b.then?.properties));
+    Object.keys(st.base).forEach(f=>{if(!drvChg(st,f))return;const p=all.get(f)||{};
+      out.push({node:n,stub:"drv",label:`${i18n(p["x-ui-group"]||"")}: ${propLabel(p,f)}`,fromT:drvValText(p,st.base[f]),toT:drvValText(p,st.vals[f])})});
+  }
+  const b=camPlanBase.get(n.id);
+  if(b?.cv){
+    const cur=cvCfgOf(n).streams,names=new Map(camStreams(n).map(x=>[x.id,x.name]));
+    Object.entries(cur).forEach(([sid,o])=>{const w=b.cv[sid];if(!w||!names.has(sid))return;   // новый поток — строка «Добавить: поток»
+      Object.keys(CV_KEY_RU).forEach(k=>{if(JSON.stringify(o[k])!==JSON.stringify(w[k]))out.push({node:n,stub:"cv",label:`«${names.get(sid)}»: ${i18n(CV_KEY_RU[k])}`,fromT:cvValText(k,w[k]),toT:cvValText(k,o[k])})})});
+  }
+  if(b?.tours){
+    const st=cvToursOf(n),was=new Map(b.tours.tours.map(t=>[t.id,t])),now=new Map(st.tours.map(t=>[t.id,t])),lb=t=>`${i18n("Тур")} «${t.name}»`;
+    now.forEach((t,id)=>{const w=was.get(id);
+      if(!w)out.push({node:n,stub:"tours",label:lb(t),fromT:"—",toT:i18n("будет добавлен")});
+      else if(JSON.stringify(w)!==JSON.stringify(t))out.push({node:n,stub:"tours",label:lb(t),fromT:i18n("прежний"),toT:i18n("изменён")})});
+    was.forEach((t,id)=>{if(!now.has(id))out.push({node:n,stub:"tours",label:lb(t),fromT:"—",toT:i18n("будет удалён")})});
+    const idle=x=>{const t=x.tours.find(y=>y.id===x.idleTour);return t?`«${t.name}», ${i18n("через")} ${cvDur(x.idleSec)}`:"—"};
+    if(idle(b.tours)!==idle(st))out.push({node:n,stub:"tours",label:i18n("Тур, когда камерой не управляют"),fromT:idle(b.tours),toT:idle(st)});
+  }
+}
+// «Применить»: заглушки остаются как есть, база плана забывается
+function camPlanCommit(id){const st=drvStore.get(id);if(st)st.base={};camPlanBase.delete(id)}
+// «Сбросить» и уход с черновиком: заглушки — к значениям до плана, открытые блоки камеры закрываются
+function camPlanRestore(id){
+  const n=find(id)?.n,st=drvStore.get(id),b=camPlanBase.get(id);
+  if(st){Object.entries(st.base).forEach(([f,v])=>{if(v===undefined)delete st.vals[f];else st.vals[f]=v});st.base={};st.snap={}}
+  if(n&&b?.cv){const cur=cvCfgOf(n).streams;Object.keys(b.cv).forEach(sid=>{cur[sid]=b.cv[sid]})}
+  if(n&&b?.tours){const t=cvToursOf(n);if(t.run&&!b.tours.tours.some(x=>x.id===t.run.tid))cvTourHalt(t);Object.assign(t,b.tours)}
+  camPlanBase.delete(id);cvSnap.delete(id);csPlaceSnap.delete(id);
+  csBlkSnap.forEach((v,k)=>{if(k.startsWith(id+":"))csBlkSnap.delete(k)});
+  [...csEdit].forEach(k=>{if(k.startsWith(id+":"))csEdit.delete(k)});
 }
 // Вкладки камеры, где открыта правка блока: точка у названия вкладки
 function csOpenTabs(n){
@@ -13084,15 +13209,15 @@ function drvSecsHtml(n,tabId){
   groups.forEach((fs,g)=>{
     if(g===DRV_IDENT)return;
     const k=drvKey(g),lock=!drvSend(n)&&fs.some(([,p])=>p["x-dev"]),ed=csEditOn(n.id,k)&&!lock;
-    const acts=lock?"":ed?`<button type="button" class="btn s" ${onEv("click",["drvEditCancel",`${n.id}`,g])}>${i18n("Отменить")}</button><button type="button" class="btn pri s" ${onEv("click",["drvEditDone",`${n.id}`,g])}>${i18n("Сохранить")}</button>`
+    const acts=lock?"":ed?`<button type="button" class="btn s" ${onEv("click",["drvEditCancel",`${n.id}`,g])}>${i18n("Отменить")}</button><button type="button" class="btn pri s" ${onEv("click",["drvEditDone",`${n.id}`,g])}>${i18n("Добавить в план")}</button>`
       :`<button type="button" class="btn s" ${onEv("click",["drvEditStart",`${n.id}`,g])}>${i18n("Изменить")}</button>`;
     const hint=p=>p["x-hint"]?`<small class="sub cs-hint">${escHtml(i18n(p["x-hint"]))}</small>`:"";
     // Главный переключатель группы — поле с подписью «Включить»: в просмотре «Включить: выключено» читается как приказ,
     // поэтому он — строка состояния «Сейчас выключено»; в правке остаётся переключатель «Включить»
     const main=fs.find(([,p])=>p.type==="boolean"&&p["x-label"]==="Включить"),mainOn=main&&!!st.vals[main[0]],rest=main?fs.filter(x=>x!==main):fs;
-    const state=main?`<div class="cs-state">${i18n("Сейчас")} <b>${i18n(mainOn?"включено":"выключено")}</b>${st.chg.has(main[0])?`<span class="cs-chg">${i18n("изменено")}</span>`:""}</div>`:"";
+    const state=main?`<div class="cs-state">${i18n("Сейчас")} <b>${i18n(mainOn?"включено":"выключено")}</b>${drvChg(st,main[0])?`<span class="cs-chg">${i18n("изменено")}</span>`:""}</div>`:"";
     const body=ed?`<div class="g">${fs.map(([f,p])=>drvHint(sfFieldHtml("drv",n.id,f,p,st.vals[f],{ro:sfReadOnly(p)}),hint(p))).join("")}</div>`
-      :state+(rest.length?csDl(rest.map(([f,p])=>[propLabel(p,f),p.type==="boolean"?escHtml(st.vals[f]?i18n("включено"):i18n("выключено")):sfText(p,st.vals[f])==="—"?`<span class="cs-empty">—</span>`:escHtml(sfText(p,st.vals[f])),st.chg.has(f)])):"");
+      :state+(rest.length?csDl(rest.map(([f,p])=>[propLabel(p,f),p.type==="boolean"?escHtml(st.vals[f]?i18n("включено"):i18n("выключено")):sfText(p,st.vals[f])==="—"?`<span class="cs-empty">—</span>`:escHtml(sfText(p,st.vals[f])),drvChg(st,f)])):"");
     const sum=main?i18n(mainOn?"включено":"выключено"):`${fs.length} ${i18n(plural(fs.length,"параметр|параметра|параметров"))}`;
     out+=`<div class="card" data-sec="${escHtml(k)}" data-cs-sum="${escHtml(sum)}"><div class="ch">${escHtml(i18n(g))}${lock?csLockHtml():""}<span class="cs-acts">${acts}</span></div><div class="cb">${body}</div></div>`;
   });
@@ -13130,7 +13255,9 @@ function csBlkLock(n,el,ch,k){
   if(CS_LOCK_SKIP.has(tab)||ch.querySelector(".cs-acts")||!csEditable(el))return;
   const ek="blk:"+tab+":"+k,on=csEditOn(n.id,ek),acts=document.createElement("span"),b=document.createElement("button");
   acts.className="cs-acts";b.type="button";b.className=on?"btn pri s":"btn s";b.textContent=i18n(on?"Добавить в план":"Изменить");
-  b.setAttribute("data-on-click",JSON.stringify([["csBlkEdit",n.id,ek,!on]]));acts.append(b);ch.append(acts);
+  b.setAttribute("data-on-click",JSON.stringify([["csBlkEdit",n.id,ek,!on]]));
+  if(on){const c=document.createElement("button");c.type="button";c.className="btn s";c.textContent=i18n("Отменить");c.setAttribute("data-on-click",JSON.stringify([["csBlkCancel",n.id,ek]]));acts.append(c)}
+  acts.append(b);ch.append(acts);
   if(on){el.classList.add("cs-rw");return}
   el.classList.add("cs-ro");
   el.querySelectorAll("input,select,textarea,button").forEach(c=>{
@@ -13142,7 +13269,35 @@ function csBlkLock(n,el,ch,k){
   });
   el.querySelectorAll('[role=switch],.sw').forEach(c=>{c.setAttribute("aria-disabled","true");c.classList.add("cs-sw-ro");c.removeAttribute("tabindex")});
 }
-function csBlkEdit(id,ek,on){csEditSet(id,ek,on)}
+// Снимок блока при «Изменить»: объект, его серверный снимок и поля карточки. Общий блок открыт один на объект: «Изменить»
+// другого общего блока закрывает прежний с правками в плане, поэтому снимки блоков не вкладываются друг в друга.
+// «Отменить» возвращает только ключи, изменённые за правку: к значению черновика до блока, а если до блока ключ не был
+// тронут, — к значению с сервера (правка с сервера за это время не теряется). Поля карточки — только поля этого блока
+const csBlkSnap=new Map();
+function csBlkEdit(id,ek,on){
+  const n=find(id)?.n,key=id+":"+ek;
+  if(on)[...csEdit].forEach(k=>{if(k.startsWith(id+":blk:")&&k!==key){csEdit.delete(k);csBlkSnap.delete(k)}});
+  if(on&&n)csBlkSnap.set(key,{node:cardClone(n),base:cardBase&&cardBase.id===id?cardClone(cardBase.snap):null,
+    fields:cardClone(cardDraft&&cardDraft.id===id?cardDraft.fields:{})});
+  else csBlkSnap.delete(key);
+  if(!on)setD(true);
+  csEditSet(id,ek,on);
+}
+function csBlkCancel(id,ek){
+  const n=find(id)?.n,key=id+":"+ek,sn=csBlkSnap.get(key);csBlkSnap.delete(key);
+  if(n&&sn){
+    const base=cardBase&&cardBase.id===id?cardBase.snap:null,J=JSON.stringify;
+    new Set([...Object.keys(n),...Object.keys(sn.node)]).forEach(k=>{
+      if(CARD_SKIP.has(k)||k.startsWith("_")||J(n[k])===J(sn.node[k]))return;
+      const v=!base||!sn.base||J(sn.node[k])!==J(sn.base[k])?sn.node[k]:base[k];
+      if(v===undefined)delete n[k];else n[k]=cardClone({v}).v;
+    });
+    hwIdxDrop();
+    const el=document.querySelector(`#main [data-sec="${CSS.escape(csSecOf(ek))}"]`);
+    if(cardDraft&&cardDraft.id===id)[...(el?.querySelectorAll("[data-df]")||[])].forEach(x=>{const l=x.dataset.df;if(l in sn.fields)cardDraft.fields[l]=sn.fields[l];else delete cardDraft.fields[l]});
+  }
+  setD(true);csEditSet(id,ek,false);
+}
 function csTabWrap(n,html){
   const t=document.createElement("template");t.innerHTML=html;
   const secs=[];
@@ -16182,9 +16337,17 @@ function recCopyPaint(id,q){
   const n=find(id)?.n,t=n?.recordingTarget,box=document.getElementById("recCopyList"),dom=domains.find(d=>d.id===deviceDomain(id));
   if(box&&t)box.innerHTML=recCopyListHtml(n,t,dom?.servers||[],q);
 }
+// «Сервер записи» меняется в черновике карточки, как другие блоки. В контракте это отдельный PUT /units/{uid}/recording-target,
+// а не шаг /operations: «Применить» отправляет его отдельным запросом до операции плана (camCallRun)
 function recTargetPut(id,serverId,copies){
-  const n=find(id)?.n;
-  return API.put(`/units/${id}/recording-target`,{serverId:serverId||null,copies}).then(r=>{hwApplyUnit(r);treeMatchCache.clear();searchMatchCache.clear();renderTreeSoon();gear()}).catch(e=>{toast(problemText(e,n));gear()});
+  const n=find(id)?.n;if(!n)return;
+  n.recordingTarget=serverId?{...(n.recordingTarget||{}),serverId,copies}:null;
+  setD(true);gear();
+}
+function recTargetText(t){
+  if(!t?.serverId)return i18n("Не назначен");
+  const s=servers.find(x=>x.id===t.serverId),c=(t.copies||[]).length;
+  return`${s?recServerLabel(s):t.serverId}${c?`, ${i18n("копий")}: ${c}`:""}`;
 }
 function recTargetSet(id,serverId){
   const n=find(id)?.n;
@@ -16412,7 +16575,7 @@ function cvJoyKey(id){
 // Строка: номер, имя (правится на месте), «Перейти», «Запомнить сюда», удалить. Внизу — новый пресет: имя и
 // «Запомнить положение» (следующий свободный номер, нынешнее положение камеры)
 // Пресеты и туры — вкладки одной панели: тур собирают из пресетов, поэтому они рядом.
-// Редактор тура занимает всю боковую панель без вкладок (видео остаётся на экране) и уходит по «Сохранить» или «Отмена».
+// Редактор тура занимает всю боковую панель без вкладок (видео остаётся на экране) и уходит по «Добавить в план» или «Отмена».
 let cvSideTab="pre";
 function cvPresetsHtml(n){
   if(cvTourEdit?.id===n.id)return`<section class="cv-sec cv-pre cv-ed">${cvTourEditorHtml(n,cvTourEdit.t)}</section>`;
@@ -16614,7 +16777,7 @@ function cvTourEditorHtml(n,t){
       </div></div>
     </div>
     ${probs.length?`<ul class="cv-warn">${probs.map(x=>`<li>${escHtml(x)}</li>`).join("")}</ul>`:""}
-    <div class="cv-te-f"><button type="button" class="btn s" ${probs.length?"disabled":""} title="${i18n("Пройти один круг и остановиться. Камера идёт по точкам, видно в кадре")}" ${onEv("click",["cvTourTrial"])}>${trial?lu("square",13):lu("circle-play",14)}${i18n(trial?"Остановить":"Проверить круг")}</button><span class="cv-h-sp"></span><button type="button" class="btn s" ${onEv("click",["cvTourClose"])}>${i18n("Отмена")}</button><button type="button" class="btn s pri" ${probs.length?"disabled":""} ${onEv("click",["cvTourSave"])}>${i18n("Сохранить")}</button></div>
+    <div class="cv-te-f"><button type="button" class="btn s" ${probs.length?"disabled":""} title="${i18n("Пройти один круг и остановиться. Камера идёт по точкам, видно в кадре")}" ${onEv("click",["cvTourTrial"])}>${trial?lu("square",13):lu("circle-play",14)}${i18n(trial?"Остановить":"Проверить круг")}</button><span class="cv-h-sp"></span><button type="button" class="btn s" ${onEv("click",["cvTourClose"])}>${i18n("Отмена")}</button><button type="button" class="btn s pri" ${probs.length?"disabled":""} ${onEv("click",["cvTourSave"])}>${i18n("Добавить в план")}</button></div>
   </div>`;
 }
 // Сам, когда камерой не управляют: так может запускаться только один тур камеры (как AutoStart в ONVIF)
@@ -16660,21 +16823,22 @@ function cvTourClose(){
   const e=cvTE();if(!e){cvTourEdit=null;gear();return}
   const go=()=>{const st=cvToursOf(e.n);if(st.run?.trial)cvTourHalt(st);cvTourEdit=null;cvSidePaint(e.n,true);cvTourOvSync(e.n)};
   if(cvTourEditSnap()===cvTourEdit.orig){go();return}
-  askConfirm("Закрыть без сохранения?",i18n("Консоль не сохранит правки тура"),"",i18n("Закрыть"),go,{cancelLabel:"Вернуться"});
+  askConfirm("Закрыть без правок?",i18n("Консоль не добавит правки тура в план"),"",i18n("Закрыть"),go,{cancelLabel:"Вернуться"});
 }
 function cvTourSave(){
   const e=cvTE();if(!e||cvTourProblems(e.n,e.t).length)return;const st=cvToursOf(e.n);
+  camPlanTouch(e.n,"tours");
   if(st.run?.trial){cvTourHalt(st);cvTourOvSync(e.n)}
   const i=st.tours.findIndex(x=>x.id===e.t.id);if(i<0)st.tours.push(e.t);else st.tours[i]=e.t;
   if(cvTourEdit.idle){st.idleTour=e.t.id;st.idleSec=cvTourEdit.idleSec}else if(st.idleTour===e.t.id)st.idleTour="";
-  cvTourEdit=null;cvSidePaint(e.n,true);toast(`${i18n("Консоль сохранила тур")} «${e.t.name}»`);
+  cvTourEdit=null;setD(true);cvSidePaint(e.n,true);toast(`${i18n("Консоль добавила в план тур")} «${e.t.name}»`);
   requestAnimationFrame(()=>{const li=document.querySelector(`#main [data-tour="${e.t.id}"]`);li?.classList.add("acc-flash")});
 }
 function cvTourDel(id,tid){
   const n=find(id)?.n,st=n&&cvToursOf(n),t=st?.tours.find(x=>x.id===tid);if(!t)return;
-  askConfirm("Удалить тур?",`<ul class="bk-del"><li>${i18n("Консоль удалит тур")} «${escHtml(t.name)}»</li>${st.idleTour===tid?`<li>${i18n("Когда камерой не управляют, камера останется на месте")}</li>`:""}<li>${i18n("Пресеты и другие туры останутся")}</li></ul>`,"",i18n("Удалить"),()=>scheduleDelete([`${id}~${tid}`],{label:`${i18n("Тур")} «${t.name}»`,commit:()=>{
-    if(st.run?.tid===tid)cvTourHalt(st);st.tours=st.tours.filter(x=>x.id!==tid);if(st.idleTour===tid)st.idleTour="";gear();toast(i18n("Консоль удалила тур"));
-  }}),{html:true,typeCount:1});
+  askConfirm("Удалить тур?",`<ul class="bk-del"><li>${i18n("Консоль удалит тур")} «${escHtml(t.name)}» ${i18n("после «Применить»")}</li>${st.idleTour===tid?`<li>${i18n("Когда камерой не управляют, камера останется на месте")}</li>`:""}<li>${i18n("Пресеты и другие туры останутся")}</li><li>${i18n("До «Применить» тур вернёт «Сбросить» внизу")}</li></ul>`,"",i18n("Удалить"),()=>{
+    camPlanTouch(n,"tours");if(st.run?.tid===tid)cvTourHalt(st);st.tours=st.tours.filter(x=>x.id!==tid);if(st.idleTour===tid)st.idleTour="";setD(true);gear();
+  },{html:true,typeCount:1});
 }
 function cvPresetNew(id){
   const n=find(id)?.n;if(!n||n.direct===false||n.online===false)return;
@@ -16696,35 +16860,30 @@ function cvPresetGo(id,no){
 }
 
 // ── Параметры потоков ─────────────────────────────────────────────────────
-// «Параметры потоков» — как другие блоки вкладок: значения текстом, «Изменить» открывает поля.
-// Разрешение и к/с до «Готово» ждут в cvPendM и уходят на сервер только по «Готово»; «Отменить» возвращает всё
-const cvPendM=new Map(),cvSnap=new Map();
-function cvPend(id,sid,k,v){const m=cvPendM.get(id)||{};(m[sid]||(m[sid]={}))[k]=k==="fps"?Number(v):String(v).trim();cvPendM.set(id,m);mainSeen.html=null;gear()}
-function cvPendOf(id,sid,k,v){const x=cvPendM.get(id)?.[sid];return x&&k in x?x[k]:v}
-function cvEditStart(id){const n=find(id)?.n;if(!n)return;cvSnap.set(id,cardClone({v:cvCfgOf(n).streams}).v);cvPendM.delete(id);csEditSet(id,"streams",true)}
-// Возврат по снимку — только для потоков, которые есть и в снимке, и сейчас: новый или удалённый поток консоль уже сохранила
-function cvRestore(n,snap){const cur=cvCfgOf(n).streams;Object.keys(snap).forEach(sid=>{if(sid in cur)cur[sid]=snap[sid]})}
-function cvDirty(n){const snap=cvSnap.get(n.id);if(!snap)return false;const cur=cvCfgOf(n).streams;
-  return cvPendM.has(n.id)||Object.keys(snap).some(sid=>sid in cur&&JSON.stringify(cur[sid])!==JSON.stringify(snap[sid]))}
-function cvEditCancel(id){const n=find(id)?.n;if(n&&cvSnap.has(id))cvRestore(n,cvSnap.get(id));cvSnap.delete(id);cvPendM.delete(id);csEditSet(id,"streams",false)}
-// «Готово»: один PATCH на поток со всеми его значениями. Два PATCH одного потока с той же версией дали бы 412
-function cvEditDone(id){
-  const n=find(id)?.n,m=cvPendM.get(id)||{};cvPendM.delete(id);cvSnap.delete(id);csEditSet(id,"streams",false);
-  if(!n)return;
-  const calls=Object.entries(m).map(([sid,o])=>{
-    const s=camStreams(n).find(x=>x.id===sid),props={};if(!s?.uid)return null;
-    Object.entries(o).forEach(([k,v])=>{const val=k==="fps"?Number(v):String(v).trim();if(k==="fps"?val>0:val)props[k]=val});
-    return Object.keys(props).length?API.patch(`/units/${s.uid}`,{properties:props},hwVer.get(s.uid)).then(u=>{if(u?.version!=null)hwVer.set(s.uid,u.version)}):null;
-  }).filter(Boolean);
-  if(!calls.length)return;
-  const refocus=()=>{if(!document.activeElement||document.activeElement===document.body)setTimeout(()=>csFocus("streams",false),30)};
-  Promise.all(calls).then(()=>hwStreamsRead(id)).then(()=>{gear();refocus()}).catch(e=>{toast(problemText(e,n));hwStreamsRead(id).then(()=>gear(),()=>gear())});
+// «Параметры потоков» — как другие блоки вкладок: значения текстом, «Изменить» открывает поля, «Добавить в план» закрывает.
+// Разрешение и к/с, новый и удалённый поток — правка потоков в черновике карточки (n.streams): «Применить» отправляет их
+// отдельными запросами (camCallRun). Кодек, битрейт и другие — заглушка cvCfg, строки плана из camPlanRows
+const cvSnap=new Map();   // uid камеры → значения при «Изменить»: для «Отменить»
+function cvPend(id,sid,k,v){
+  const n=find(id)?.n;if(!n)return;const val=k==="fps"?Number(v):String(v).trim();
+  if(k==="fps"?!(val>0):!val){mainSeen.html=null;gear();return}
+  const s=(n.streams||[]).find(x=>x.id===sid);if(s)s[k]=val;else n[k]=val;   // без объектов потоков основной поток — это сама камера
+  setD(true);mainSeen.html=null;gear();
 }
+function cvSnapOf(n){return cardClone({cfg:cvCfgOf(n).streams,streams:n.streams,res:n.res,fps:n.fps})}
+function cvEditStart(id){const n=find(id)?.n;if(!n)return;cvSnap.set(id,cvSnapOf(n));camPlanTouch(n,"cv");csEditSet(id,"streams",true)}
+function cvRestore(n,snap){
+  cvCfgOf(n).streams=cardClone({v:snap.cfg}).v;
+  ["streams","res","fps"].forEach(k=>{if(snap[k]===undefined)delete n[k];else n[k]=cardClone({v:snap[k]}).v});
+}
+function cvDirty(n){const snap=cvSnap.get(n.id);return!!snap&&JSON.stringify(cvSnapOf(n))!==JSON.stringify(snap)}
+function cvEditCancel(id){const n=find(id)?.n;if(n&&cvSnap.has(id))cvRestore(n,cvSnap.get(id));cvSnap.delete(id);setD(true);csEditSet(id,"streams",false)}
+function cvEditDone(id){cvSnap.delete(id);setD(true);csEditSet(id,"streams",false)}
 function cvStreamsCardHtml(n){
   const c=cvCfgOf(n),con=drvSend(n),rtsp=camDriver(n)==="rtsp",ed=con&&csEditOn(n.id,"streams");
-  const acts=!con?"":ed?`<button type="button" class="btn s" ${onEv("click",["cvEditCancel",`${n.id}`])}>${i18n("Отменить")}</button><button type="button" class="btn pri s" ${onEv("click",["cvEditDone",`${n.id}`])}>${i18n("Сохранить")}</button>`
+  const acts=!con?"":ed?`<button type="button" class="btn s" ${onEv("click",["cvEditCancel",`${n.id}`])}>${i18n("Отменить")}</button><button type="button" class="btn pri s" ${onEv("click",["cvEditDone",`${n.id}`])}>${i18n("Добавить в план")}</button>`
     :`<button type="button" class="btn s" ${onEv("click",["cvEditStart",`${n.id}`])}>${i18n("Изменить")}</button>`;
-  const note=ed?`<div class="nt cv-push">${lu("triangle-alert",14)}${i18n("После изменения камера может перезапустить поток. Тогда видео и запись прервутся на несколько секунд.")} ${i18n("Новый или удалённый поток консоль сохраняет сразу: «Отменить» его не вернёт.")}</div>`
+  const note=ed?`<div class="nt cv-push">${lu("triangle-alert",14)}${i18n("После изменения камера может перезапустить поток. Тогда видео и запись прервутся на несколько секунд.")}</div>`
     :"";
   const cols=camStreams(n).map((s,i)=>cvStreamColHtml(n,s,i,c,ed)).join("");
   return`<div class="card cv-streams" data-cv-streams data-sec="streams"><div class="ch">${i18n("Параметры потоков")}<span class="sub" style="font-weight:400">${camStreams(n).length}</span>${con?"":csLockHtml()}<span class="cs-acts">${acts}</span></div><div class="cb">
@@ -16735,7 +16894,7 @@ function cvStreamsCardHtml(n){
   </div></div>`;
 }
 function cvStreamColHtml(n,s,i,c,con){
-  const sid=s.id,id=n.id,p=c.streams[sid],res=con?cvPendOf(id,sid,"res",cvStreamRes(n,s,i)):cvStreamRes(n,s,i),fps=con?cvPendOf(id,sid,"fps",cvStreamFps(n,s,i)):cvStreamFps(n,s,i);
+  const sid=s.id,id=n.id,p=c.streams[sid],res=cvStreamRes(n,s,i),fps=cvStreamFps(n,s,i);
   const set=(k)=>["cvStubSet",`${id}`,`${sid}`,k,onEv.value];
   const ro=(l,v)=>`<div class="cv-f"><label>${i18n(l)}</label><div class="cv-ro">${escHtml(v)}</div></div>`;
   const sel=(l,k,opts,cur)=>`<div class="cv-f"><label>${i18n(l)}</label><select ${onEv("change",set(k))}>${opts.map(o=>{const[v,t]=Array.isArray(o)?o:[o,o];return`<option value="${escHtml(v)}" ${String(v)===String(cur)?"selected":""}>${escHtml(i18n(t))}</option>`}).join("")}</select></div>`;
@@ -17281,9 +17440,12 @@ function recStateHtml(x){
   if(!x.state&&!x.reason&&x.lag==null)return"";
   return`<div class="bk-hint" data-rec-state>${x.state?`${i18n("запись")}: ${escHtml(i18n(REC_STATE_RU[x.state]||x.state))}`:""}${x.lag!=null&&x.rec==="replica"?`<span data-rec-lag> · ${i18n("отставание")} ${escHtml(lagText(x.lag))}</span>`:""}${x.reason?` · ${escHtml(x.reason)}`:""}</div>`;
 }
+// Новый поток — в черновике карточки: «Применить» создаст его (camCallRun)
 function streamAdd(id){
   const n=find(id)?.n;if(!n)return;
-  unitsCreate([{kind:"stream",parentId:id,name:`${i18n("Поток")} ${camStreams(n).length+1}`,properties:{}}]).then(()=>hwStreamsRead(id)).then(()=>gear()).catch(e=>toast(problemText(e,n)));
+  const list=n.streams||(n.streams=[]);let k=list.length+1;while(list.some(x=>x.name===`${i18n("Поток")} ${k}`))k++;
+  list.push({id:"new-"+Date.now().toString(36),name:`${i18n("Поток")} ${k}`,_new:true});
+  setD(true);gear();
 }
 function streamSet(id,sid,k,v){
   const n=find(id)?.n;if(!n)return;
@@ -17294,9 +17456,12 @@ function streamSet(id,sid,k,v){
 }
 function streamDel(id,sid){
   const n=find(id)?.n,s=camStreams(n).find(x=>x.id===sid);if(!s)return;
-  askConfirm("Удалить поток?",`<ul class="bk-del"><li>${i18n("Будет удалён поток")} «${escHtml(s.name)}»</li><li>${i18n("Камера и основной поток останутся")}</li></ul>`,"",i18n("Удалить"),()=>scheduleDelete([`${id}/${sid}`],{label:`${i18n("Поток")} «${s.name}»`,commit:()=>{
-    API.del(`/units/${s.uid}`,hwVer.get(s.uid)).then(()=>{hwVer.delete(s.uid);return hwStreamsRead(id)}).then(()=>{gear();toast(i18n("Поток удалён"))}).catch(e=>toast(problemText(e,n)));
-  }}),{html:true,typeCount:1});
+  // Новый поток ещё не создан на сервере: он просто уходит из черновика
+  if(s._new){n.streams=n.streams.filter(x=>x.id!==sid);setD(true);gear();return}
+  // Удаление — в черновике карточки: «Применить» удалит поток (camCallRun), до этого его вернут «Отменить» и «Сбросить»
+  askConfirm("Удалить поток?",`<ul class="bk-del"><li>${i18n("Консоль удалит поток")} «${escHtml(s.name)}» ${i18n("после «Применить»")}</li><li>${i18n("Камера и основной поток останутся")}</li><li>${i18n("До «Применить» поток вернут «Отменить» в блоке и «Сбросить» внизу")}</li></ul>`,"",i18n("Удалить"),()=>{
+    n.streams=(n.streams||[]).filter(x=>x.id!==sid);setD(true);gear();
+  },{html:true,typeCount:1});
 }
 function lanTabOpen(n){
   if(!n)return false;
@@ -33124,6 +33289,8 @@ const opKey=()=>`ui-${Date.now().toString(36)}-${++opKeySeq}`;
 let opEarly=[];
 // Кто ждёт конца операции, которую очередь не показывает (откат по «Отменить»)
 const opWait=new Map();
+// Шаг с o.call — отдельный запрос (не шаг операции): очередь выполняет такие шаги по одному до операции, итог каждого — в
+// его строке. Очередь занята с первого шага, поэтому другая операция не начнётся между ними. call=null — операции нет
 function apiQueue(steps,title,opts,call,apiOps,noopOps){
   startQueue(steps,title,Object.assign({},opts,{api:"pending"}));
   const q=bq;if(!q||q.api!=="pending")return;
@@ -33134,6 +33301,25 @@ function apiQueue(steps,title,opts,call,apiOps,noopOps){
     renderRailStatus();renderTree();
   }
   q.apiOps=apiOps||steps.flatMap(s=>s.ops);
+  const callOps=steps.flatMap(s=>s.ops).filter(o=>o.call&&!o.done);
+  if(callOps.length||!call){
+    (async()=>{
+      for(const o of callOps){
+        if(q.cancelled)break;
+        o.state="run";renderRailStatus();syncQueueModal();
+        try{await o.call();o.state="ok";o.msg="";q.ok++}catch(e){o.state="fail";o.msg=problemText(e,o.n);q.fail++}
+        o.done=true;q.done++;renderRailStatus();syncQueueModal();
+      }
+      if(opts?.afterCalls)await opts.afterCalls().catch(()=>{});
+      if(!call||q.cancelled){q.api=null;if(bq===q)queueFinish();return}
+      const nx=queueNext();if(nx){nx.o.state="run";q.cur=nx.s.label}
+      apiQueueCall(q,call);
+    })();
+    return;
+  }
+  apiQueueCall(q,call);
+}
+function apiQueueCall(q,call){
   opEarly=[];
   call().then(op=>{q.api=op.id;const early=opEarly;opEarly=[];early.forEach(opOnEvent);if(q.cancelled&&!q.finished&&bq===q)apiQueueOp("cancel").catch(e=>toast(problemText(e)))}).catch(e=>{
     // Сервер не принял операцию целиком (план устарел, объект занят, ошибка в поле): ни один шаг не выполнен
@@ -33322,7 +33508,8 @@ function retryFailed(){
   const steps=bq.steps.map(s=>({label:s.label,ops:s.ops.filter(o=>o.state==="fail").map(o=>({...o,state:"wait",done:false,msg:"",retry:true}))})).filter(s=>s.ops.length);
   closeBulkModal();
   const title=bq.title;
-  if(bq.api){const id=bq.api;bq=null;apiQueue(steps,title+` · ${i18n("повтор")}`,{},()=>API.post(`/operations/${id}/retry-failed`));openQueueModal();return}
+  const srv=steps.flatMap(s=>s.ops).filter(o=>!o.call);
+  if(bq.api||srv.length<steps.reduce((a,s)=>a+s.ops.length,0)){const id=bq.api;bq=null;apiQueue(steps,title+` · ${i18n("повтор")}`,{},id&&srv.length?()=>API.post(`/operations/${id}/retry-failed`):null,srv);openQueueModal();return}
   bq=null;
   startQueue(steps,title+` · ${i18n("повтор")}`);
   openQueueModal();
