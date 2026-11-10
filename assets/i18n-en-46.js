@@ -78,4 +78,7 @@ Object.assign(window.I18N_EN,{
 "Основным станет хранилище":"The main storage will be",
 "Запись в другие хранилища камеры продолжится.":"Recording to the other storages of the camera will continue.",
 "Записи, которые уже есть в хранилище, останутся. Консоль отвяжет камеру, когда вы примените изменения.":"The recordings that are already in the storage will stay. The console will unbind the camera when you apply the changes.",
+// Хранилища и запись одной карточкой; потоки под видео списком
+"Хранилища и запись":"Storages and recording",
+"Настройки записи":"Recording settings",
 });
