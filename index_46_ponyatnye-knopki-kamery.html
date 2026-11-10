@@ -665,9 +665,9 @@ div.exp-ln{display:flex;align-items:center;padding:8px 0}
 .cv-sp b{font-weight:500;white-space:nowrap}.cv-sp-t{color:var(--mu);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cv-sp-r{flex:none;width:14px;height:14px;border-radius:50%;border:1px solid var(--mu);box-sizing:border-box}
 .cv-sp[aria-checked="true"] .cv-sp-r{border:4px solid var(--bl)}
-/* Узкая область (оглавление слева): «Поворот» — под видео одной карточкой, джойстик и пресеты рядом, без пустоты под видео */
+/* Узкая область (широкое дерево, узкое окно): «Поворот» — под видео одной карточкой, джойстик и пресеты рядом, без пустоты под видео */
 /* .cv-cq в каждом правиле: запрос контейнера веса не добавляет, а базовые правила .cv-side и .cv-editing стоят ниже */
-@container cv (max-width:760px){
+@container cv (max-width:700px){
   .cv-cq .cv.cv-has-ptz,.cv-cq .cv.cv-has-ptz.cv-editing{grid-template-columns:minmax(0,1fr)}
   .cv-cq .cv-side{min-height:0}
   .cv-cq .cv-side-in{position:static;inset:auto;flex-direction:row;flex-wrap:wrap;align-items:stretch;overflow:visible}
@@ -780,6 +780,22 @@ div.exp-ln{display:flex;align-items:center;padding:8px 0}
 .cv-te .cv-warn{margin:0}
 .cv-te-f{flex:none;display:flex;gap:6px;align-items:center;padding-top:8px;border-top:1px solid var(--ln)}.cv-te-f .btn{white-space:nowrap}
 .cv-tour-ov{position:absolute;left:8px;top:8px;z-index:2;max-width:calc(100% - 16px);background:#000a;color:#fff;font-size:12px;padding:3px 8px;border-radius:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+/* Поворот на видео (ресёрч 2026-11-10, вариант Е, как OnScreen PTZ в Axxon One): тянуть по кадру — поворот, скорость растёт
+   с расстоянием от точки нажатия; колесо и «+ −» в углу — зум. Стрелка от точки нажатия показывает направление */
+.cv-onvid{position:absolute;inset:0;z-index:1;cursor:move;touch-action:none}
+.cv-onvid~.live-acts{z-index:3}.cv-onvid~.live-note{max-width:calc(100% - 64px)}
+.cv-tour-ov:not([hidden])~.cv-onvid .cv-onvid-hint{display:none}
+.cv-onvid-arr{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+.cv-onvid-arr[hidden]{display:none}
+.cv-onvid-arr line{stroke:#fff;stroke-width:2.5;stroke-linecap:round}
+.cv-onvid-arr circle{fill:none;stroke:#fff;stroke-width:2}.cv-onvid-arr polygon{fill:#fff}
+.cv-onvid-arr g{filter:drop-shadow(0 0 2px #000)}
+.cv-onvid-hint{position:absolute;left:50%;top:8px;transform:translateX(-50%);max-width:calc(100% - 16px);font-size:12px;color:#fff;background:#000a;padding:3px 8px;border-radius:6px;pointer-events:none;opacity:0;transition:opacity .2s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cv-onvid:hover .cv-onvid-hint{opacity:1}.cv-onvid.on .cv-onvid-hint{opacity:0}
+.cv-onvid-z{position:absolute;right:8px;bottom:8px;display:flex;flex-direction:column;gap:4px;cursor:default}
+.cv-onvid-z .btn{width:32px;height:32px;padding:0;display:grid;place-items:center;background:#000a;color:#fff;border-color:#fff5}
+.cv-onvid-z .btn:hover{background:#000d}.cv-onvid-z .btn.on{background:var(--bl);border-color:var(--bl)}
+@media(prefers-reduced-motion:reduce){.cv-onvid-hint{transition:none}}
 .cv-tour-ov.pause{background:color-mix(in srgb,#000 55%,var(--one-warning-text))}
 @media(prefers-reduced-motion:reduce){.cv-ts li{transition:none}.cv{transition:none}.cv-side-in.cv-in,.cv-tab-body.cv-in{animation:none}.cv-te-mb,.cv-te-mh svg{transition:none}.cv-tabs button{transition:none}}
 .mx{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}.mc{padding:10px;background:var(--p2);border:1px solid var(--ln);border-radius:8px;font-size:12px;text-align:left}.mc span{color:var(--mu);display:block}.mc b{font-size:18px;font-weight:700;display:block;margin-top:4px}
@@ -910,16 +926,19 @@ html[data-theme="light"] .cp.done{border-color:var(--one-success-icon);color:var
 .cs-mode>svg{flex:0 0 auto;margin-top:2px;color:var(--mu)}
 .cs-lock{display:inline-flex;align-items:center;margin-left:6px;color:var(--mu)}.cs-lock svg{width:13px;height:13px}
 .tab-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--one-warning-icon);margin-left:6px;vertical-align:middle}
-.cs-tocw{display:grid;grid-template-columns:210px minmax(0,1fr);gap:14px;align-items:start}
-.cs-toc{position:sticky;top:0;display:flex;flex-direction:column;gap:2px;padding:8px;border:1px solid var(--ln);border-radius:8px;background:var(--p);max-height:var(--cs-toc-max,none);min-height:0}
-.cs-toc-list{display:flex;flex-direction:column;gap:2px;min-height:0;overflow-y:auto;scrollbar-gutter:stable}
+/* Оглавление — строка над разделами, а не третий столбец: слева уже дерево (ресёрч 2026-11-10, вариант А). Строка не
+   прилипает: прилипшую строку ссылок под вкладками легко принять за вторые вкладки (NN/g) */
+.cs-tocw{display:flex;flex-direction:column;gap:12px;min-width:0}
+/* Подпись, ссылки и «Развернуть всё» — одна строка; ссылки переносятся внутри своей части, а не под подпись */
+.cs-toc{display:flex;flex-wrap:wrap;align-items:flex-start;gap:6px 12px;min-width:0}
+.cs-toc-list{display:flex;flex-wrap:wrap;gap:6px;min-width:0;flex:1 1 320px}
 .cs-state{font-size:13px;margin:2px 0 8px}.cs-state b{font-weight:600}
-.cs-toc-h{font-size:12px;color:var(--mu);padding:4px 8px}
-.cs-toc-i{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;min-width:0;padding:6px 8px;border:0;border-radius:6px;background:none;font:inherit;font-size:13px;color:inherit;text-align:left;cursor:pointer}
-.cs-toc-i:hover{background:var(--p2)}
-.cs-toc-i span,.cs-toc-i small{max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cs-toc-h{font-size:12px;line-height:28px;color:var(--mu);white-space:nowrap}
+.cs-toc-i{display:inline-flex;align-items:baseline;gap:6px;max-width:100%;min-width:0;height:28px;padding:0 10px;border:1px solid var(--ln);border-radius:14px;background:var(--p);font:inherit;font-size:13px;line-height:26px;color:inherit;cursor:pointer;white-space:nowrap}
+.cs-toc-i:hover{background:var(--p2)}.cs-toc-i:focus-visible{outline:2px solid var(--bl);outline-offset:1px}
+.cs-toc-i span{min-width:0;overflow:hidden;text-overflow:ellipsis}
 .cs-toc-i small{color:var(--mu);font-size:12px}
-.cs-toc-acts{display:flex;flex-wrap:wrap;gap:4px 12px;padding:8px 8px 2px;border-top:1px solid var(--ln);margin-top:4px;font-size:12px;flex:0 0 auto}
+.cs-toc-acts{display:flex;gap:12px;margin-left:auto;font-size:12px;line-height:28px;white-space:nowrap}
 .cs-sec>.ch{flex-wrap:nowrap;justify-content:flex-start}
 .cs-chev{display:inline-flex;align-items:center;justify-content:center;flex:none;width:24px;height:24px;margin:-4px 4px -4px -6px;padding:0;border:0;border-radius:6px;background:none;color:inherit;cursor:pointer}
 .cs-chev:hover{background:var(--p2)}.cs-chev:focus-visible{outline:2px solid var(--bl)}
@@ -930,7 +949,6 @@ html[data-theme="light"] .cp.done{border-color:var(--one-success-icon);color:var
 .cs-bin{min-height:0;overflow:hidden}
 .cs-sec.closed .cs-body{grid-template-rows:0fr}
 @media (prefers-reduced-motion:reduce){.cs-body,.cs-chev svg{transition:none}}
-@container (max-width:760px){.cs-tocw{grid-template-columns:minmax(0,1fr)}.cs-toc{display:none}}
 .cs-acts{display:flex;gap:6px;margin-left:auto;font-weight:400}
 .cs-dl{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px 16px;margin:0}
 .cs-dl>div{min-width:0}
@@ -2943,7 +2961,7 @@ onEv.key=(...keys)=>[".key",...keys];
   }
   // Перехват на документе: шаги идут раньше слушателей ниже по дереву и раньше «клика снаружи» на
   // документе — как шли атрибуты onclick; stopPropagation останавливает и тех, и других
-  ["click","dblclick","change","input","keydown","mousedown","contextmenu","dragover","dragleave","drop","focus","blur","mouseenter","mouseleave"].forEach(type=>
+  ["click","dblclick","change","input","keydown","mousedown","pointerdown","contextmenu","dragover","dragleave","drop","focus","blur","mouseenter","mouseleave"].forEach(type=>
     document.addEventListener(type,ev=>{
       const attr="data-on-"+type;
       // Невсплывающее (focus, mouseenter, input из dispatchEvent без bubbles) — только у самого элемента
@@ -6741,7 +6759,6 @@ function cardFootHtml(){
 }
 function cardFootRefresh(){
   const el=document.getElementById("cardFoot");if(el)el.outerHTML=cardFootHtml();
-  csTocFit();   // подвал «Не применено» меняет высоту области прокрутки
   decorateTreeSel();
 }
 function cardPlan(){
@@ -8940,7 +8957,7 @@ function paintMain(html){
   const host=document.getElementById("main");
   const snap=bulkScopeSnap();
   if(host)paintInto(host,html,mainKey(),mainSeen);
-  bulkScopeFlip(snap);tsFixInd(host);csTocFit();
+  bulkScopeFlip(snap);tsFixInd(host);
   liveSync();
   navRecord();
   fitCrumbs();
@@ -13385,25 +13402,18 @@ function csTabWrap(n,html){
       if(ch){el.dataset.sec=el.dataset.sec||("t:"+csTitleOf(ch));csBlkLock(n,el,ch,el.dataset.sec)}});
     const b=document.createElement("div");b.append(t2.content);return b.innerHTML;
   }
-  const toc=`<nav class="cs-toc" aria-label="${i18n("На этой странице")}"><div class="cs-toc-h">${i18n("На этой странице")}</div>
-    <div class="cs-toc-list">${secs.map(x=>`<button type="button" class="cs-toc-i" ${onEv("click",["csGo",x.k])}><span>${escHtml(x.title)}</span>${x.sum?`<small>${escHtml(x.sum)}</small>`:""}</button>`).join("")}</div>
-    <div class="cs-toc-acts"><button type="button" class="lk" ${onEv("click",["csAll",true])}>${i18n("Развернуть всё")}</button><button type="button" class="lk" ${onEv("click",["csAll",false])}>${i18n("Свернуть всё")}</button></div></nav>`;
   const box=document.createElement("div");box.append(t.content.cloneNode(true));
+  // «Видео» — рабочее место, а не длинная страница: строки нет, видео и «Поворот» сразу под вкладками (вариант Д)
+  if(tab==="vid")return`<div class="cs-tocw"><div class="cs-secs">${box.innerHTML}</div></div>`;
+  const toc=`<nav class="cs-toc" aria-label="${i18n("На этой странице")}"><div class="cs-toc-h">${i18n("На этой странице")}:</div>
+    <div class="cs-toc-list">${secs.map(x=>`<button type="button" class="cs-toc-i" title="${escHtml(x.sum?`${x.title}: ${x.sum}`:x.title)}" ${onEv("click",["csGo",x.k])}><span>${escHtml(x.title)}</span>${x.sum?`<small>${escHtml(x.sum)}</small>`:""}</button>`).join("")}</div>
+    <div class="cs-toc-acts"><button type="button" class="lk" ${onEv("click",["csAll",true])}>${i18n("Развернуть всё")}</button><button type="button" class="lk" ${onEv("click",["csAll",false])}>${i18n("Свернуть всё")}</button></div></nav>`;
   return`<div class="cs-tocw">${toc}<div class="cs-secs">${box.innerHTML}</div></div>`;
 }
 function csSecSet(c,open){
   const k=c.dataset.sec;c.classList.toggle("closed",!open);
   if(open)csClosed.delete(tab+"|"+k);else csClosed.add(tab+"|"+k);
   c.querySelector(":scope>.ch>.cs-chev")?.setAttribute("aria-expanded",String(open));
-}
-// Оглавление не выше видимой части области прокрутки (.sc): иначе его низ с «Развернуть всё» виден только в конце страницы
-function csTocFit(){
-  const toc=document.querySelector("#main .cs-toc"),sc=toc?.closest(".sc");if(!sc)return;
-  // Над оглавлением бывают строки (режим устройства, заметки о состоянии): низ оглавления виден уже без прокрутки
-  const st=getComputedStyle(sc),padB=parseFloat(st.paddingBottom)||0,box=toc.parentElement||toc;
-  const off=box.getBoundingClientRect().top-sc.getBoundingClientRect().top+sc.scrollTop;
-  sc.style.setProperty("--cs-toc-max",Math.max(160,sc.clientHeight-off-padB)+"px");
-  if(!csTocFit.on){csTocFit.on=true;addEventListener("resize",()=>csTocFit())}
 }
 function csSecEl(k){return[...document.querySelectorAll("#main .cs-sec")].find(c=>c.dataset.sec===k)}
 function csSecToggle(k){const c=csSecEl(k);if(c)csSecSet(c,c.classList.contains("closed"))}
@@ -16490,9 +16500,9 @@ function camVideoHtml(n){
   // «Авто» нет: в превью одного размера оно прячет, какой поток на экране (как вкладки Main / Second stream в Axxon One)
   const cur=(lv?.id===n.id&&lv.stream)||camStreams(n)[0]?.id||"";
   const main=`<div class="card cv-main"><div class="ch cv-h"><span>${i18n("Видео")}</span>${bdg(n)}</div>
-    <div class="cb">${liveFrameHtml(n,ptz?cvTourOvHtml(n):"")}${cvStreamPickHtml(n,cur)}</div></div>`;
+    <div class="cb">${liveFrameHtml(n,ptz?cvTourOvHtml(n)+cvOnVidHtml(n):"")}${cvStreamPickHtml(n,cur)}</div></div>`;
   const side=ptz?`<aside class="card cv-side" data-cv-side><div class="cv-side-in">${cvTourEdit?.id===n.id?"":cvPtzHtml(n)}${cvPresetsHtml(n)}</div></aside>`:"";
-  // .cv-cq — контейнер: узкая область (оглавление слева) ставит «Поворот» под видео, широкая — рядом
+  // .cv-cq — контейнер: узкая область ставит «Поворот» под видео, широкая — рядом. Оглавления на «Видео» нет (csTabWrap)
   return`<div class="cv-cq"><div class="cv ${ptz?"cv-has-ptz":""} ${ptz&&cvTourEdit?.id===n.id?"cv-editing":""}">${main}${side}</div></div>${cvStreamsCardHtml(n)}`;
 }
 // Под видео — потоки камеры списком: строка на поток (имя, разрешение, к/с, кодек, битрейт), выбранная строка — поток
@@ -16562,8 +16572,11 @@ function cvPut(){
 }
 // Начать или сменить движение; при перетаскивании PUT уходит не чаще раза в 200 мс
 function cvRun(id,body){
+  // Короткий зум колесом кончается по таймеру; новое движение (кнопка, ручка, тяга по видео) этот таймер снимает
+  clearTimeout(cvWheelT);cvWheelT=0;
   cvTourManual(id);
-  if(cvMove&&cvMove.id===id){cvMove.body=body;cvSay(body);if(Date.now()-cvMove.sent>200)cvPut();return}
+  // Сменилась ось (зум колесом → фокус кнопкой): PUT сразу, без паузы в 200 мс — иначе камера ещё секунду делала бы прежнее
+  if(cvMove&&cvMove.id===id){const axes=Object.keys(body).join()!==Object.keys(cvMove.body).join();cvMove.body=body;cvSay(body);if(axes||Date.now()-cvMove.sent>200)cvPut();return}
   ptzStop();cvLeaseEnd();
   cvMove={id,body,sent:0,timer:setInterval(cvPut,PTZ_RENEW_MS)};
   cvSay(body);cvPut();
@@ -16575,6 +16588,7 @@ let cvHoldEl=null;
 function cvHoldWatch(el){if(!el)return;cvHoldEl=el;el.addEventListener("mouseleave",cvStop,{once:true})}
 function cvStop(){
   document.removeEventListener("mousemove",cvKnobMove);
+  cvVidEnd();
   if(cvHoldEl){cvHoldEl.removeEventListener("mouseleave",cvStop);cvHoldEl=null}
   const k=document.querySelector("#main [data-joy-knob]");if(k){k.style.transform="";k.classList.remove("on")}
   document.querySelectorAll("#main .joy-dir.on,#main .cv-hold.on").forEach(b=>b.classList.remove("on"));
@@ -16618,6 +16632,75 @@ function cvKnobMove(e){
   if(!pan&&!tilt){if(cvMove){cvMove.body={pan:0,tilt:0};cvSay(null);cvPut()}return}
   cvRun(cvKnob.id,{pan,tilt});
 }
+// ── Поворот на видео ──────────────────────────────────────────────────────
+// Нажать на кадр и тянуть: направление и скорость — от точки нажатия до курсора (r — половина меньшей стороны кадра),
+// как ручка джойстика. Нажатие без движения камеру не двигает. Колесо — короткий зум, пока крутят; «+ −» в углу держат,
+// как кнопки «Зум». Путь к камере тот же, что у джойстика: cvRun и аренда, отпустили — cvStop
+let cvVid=null,cvWheelT=0;
+function cvOnVidHtml(n){
+  if(n.online===false||n.direct===false)return"";
+  const z=(sign,label,ic)=>`<button type="button" class="btn s cv-hold" tabindex="-1" title="${i18n(label)}" aria-label="${i18n(label)}" ${onEv("mousedown",["cvHoldDown",`${n.id}`,"zoom",sign])}>${lu(ic,16)}</button>`;
+  return`<div class="cv-onvid" data-cv-onvid="${escHtml(n.id)}" ${onEv("pointerdown",["cvVidDown",`${n.id}`])}>
+    <svg class="cv-onvid-arr" data-cv-onvid-arr hidden aria-hidden="true"><g><circle r="7"/><line/><polygon/></g></svg>
+    <span class="cv-onvid-hint">${i18n("Тянуть по видео, чтобы повернуть камеру. Колесо мыши меняет зум.")}</span>
+    <span class="cv-onvid-z">${z(1,"Приблизить","plus")}${z(-1,"Отдалить","minus")}</span>
+  </div>`;
+}
+function cvVidDown(id){
+  const e=onEv.now;if(!e||e.button!==0||e.target.closest("button"))return;
+  // Без preventDefault: иначе нет mousedown, и меню, которые закрывает щелчок снаружи, остались бы открытыми.
+  // Выделение текста и прокрутку пальцем уже запрещают user-select и touch-action у кадра
+  clearTimeout(cvWheelT);cvWheelT=0;
+  const r=this.getBoundingClientRect();
+  cvVid={id,x0:e.clientX,y0:e.clientY,r:Math.max(40,Math.min(r.width,r.height)/2)};
+  this.classList.add("on");
+  document.addEventListener("pointermove",cvVidMove);
+  window.addEventListener("pointerup",cvStop,{once:true});window.addEventListener("pointercancel",cvStop,{once:true});
+  cvVidArrow(e.clientX,e.clientY);
+}
+function cvVidMove(e){
+  if(!cvVid)return;
+  cvVidArrow(e.clientX,e.clientY);
+  // Скорость ограничена кругом, как ход ручки джойстика: по диагонали не быстрее, чем по прямой
+  const{r}=cvVid;let dx=e.clientX-cvVid.x0,dy=e.clientY-cvVid.y0;const d=Math.hypot(dx,dy);if(d>r){dx*=r/d;dy*=r/d}
+  const dead=.08,pan=Math.abs(dx/r)<dead?0:+(dx/r).toFixed(2),tilt=Math.abs(dy/r)<dead?0:+(-dy/r).toFixed(2);
+  if(!pan&&!tilt){if(cvMove){cvMove.body={pan:0,tilt:0};cvSay(null);cvPut()}return}
+  cvRun(cvVid.id,{pan,tilt});
+}
+// Стрелка в координатах кадра: кадр могли перерисовать, поэтому его ищем при каждом движении
+function cvVidArrow(x,y){
+  const ov=document.querySelector("#main [data-cv-onvid]"),svg=ov?.querySelector("[data-cv-onvid-arr]");if(!svg)return;
+  const b=ov.getBoundingClientRect(),x0=cvVid.x0-b.left,y0=cvVid.y0-b.top,x1=x-b.left,y1=y-b.top,d=Math.hypot(x1-x0,y1-y0);
+  svg.hidden=false;
+  svg.querySelector("circle").setAttribute("cx",x0);svg.querySelector("circle").setAttribute("cy",y0);
+  const ln=svg.querySelector("line"),pg=svg.querySelector("polygon");
+  if(d<10){ln.setAttribute("x1",x0);ln.setAttribute("y1",y0);ln.setAttribute("x2",x0);ln.setAttribute("y2",y0);pg.setAttribute("points","");return}
+  const ux=(x1-x0)/d,uy=(y1-y0)/d,h=10;
+  ln.setAttribute("x1",x0+ux*7);ln.setAttribute("y1",y0+uy*7);ln.setAttribute("x2",x1-ux*h);ln.setAttribute("y2",y1-uy*h);
+  pg.setAttribute("points",`${x1},${y1} ${x1-ux*h*1.4-uy*h*.8},${y1-uy*h*1.4+ux*h*.8} ${x1-ux*h*1.4+uy*h*.8},${y1-uy*h*1.4-ux*h*.8}`);
+}
+function cvVidEnd(){
+  document.removeEventListener("pointermove",cvVidMove);
+  window.removeEventListener("pointerup",cvStop);window.removeEventListener("pointercancel",cvStop);
+  cvVid=null;clearTimeout(cvWheelT);cvWheelT=0;
+  const ov=document.querySelector("#main [data-cv-onvid]");if(!ov)return;
+  ov.classList.remove("on");const a=ov.querySelector("[data-cv-onvid-arr]");if(a)a.hidden=true;
+}
+// Колесо над кадром: вверх — приблизить, вниз — отдалить; зум идёт, пока крутят, и стоит через 350 мс после последнего
+// щелчка. Слушатель не пассивный: иначе колесо прокрутило бы страницу. Пока держат другой орган поворота, колесо молчит
+// Колесо, которое только что прокручивало страницу и доехало до кадра, прокручивает дальше, а не зумит
+let cvScrollAt=0;
+document.addEventListener("scroll",()=>{cvScrollAt=performance.now()},{capture:true,passive:true});
+document.addEventListener("wheel",e=>{
+  const ov=e.target.closest?.("#main [data-cv-onvid]");if(!ov||!e.deltaY)return;
+  if(!cvWheelT&&performance.now()-cvScrollAt<300)return;
+  e.preventDefault();
+  if(cvVid||(cvMove&&!cvWheelT))return;
+  clearTimeout(cvWheelT);
+  cvRun(ov.dataset.cvOnvid,{zoom:(e.deltaY<0?1:-1)*Math.max(.3,cvSpeed/10)});
+  cvWheelT=setTimeout(cvStop,350);
+},{passive:false});
+// ── Джойстик: клавиатура ──────────────────────────────────────────────────
 // Клавиатура: стрелка — движение, пока клавиша нажата; + и − — зум; отпустили или ушли с круга — стоп
 // Как горячие клавиши Axxon One: NumPad 8/2/4/6 — поворот, 9/3 — зум, Home/End — фокус
 const CV_KEYS={ArrowUp:[0,1],ArrowDown:[0,-1],ArrowLeft:[-1,0],ArrowRight:[1,0],Numpad8:[0,1],Numpad2:[0,-1],Numpad4:[-1,0],Numpad6:[1,0]};

@@ -85,4 +85,6 @@ Object.assign(window.I18N_EN,{
 "Если поле пустое, хранилище берёт предзапись основного хранилища:":"If the field is empty, the storage takes the pre-recording of the main storage:",
 "Предзапись основного хранилища, с":"Pre-recording of the main storage, s",
 "предзапись основного хранилища":"pre-recording of the main storage",
+// Поворот на видео (вариант Е)
+"Тянуть по видео, чтобы повернуть камеру. Колесо мыши меняет зум.":"Drag on the video to turn the camera. The mouse wheel changes the zoom.",
 });
