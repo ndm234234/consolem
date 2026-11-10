@@ -168,6 +168,15 @@ UiCheck(async ({ ok, until }) => {
     f.remove();
   }
   sessionStorage.removeItem("tourSpeed");
+  // Панель ассистента: каждая глава доходит до своего последнего шага (цикл выше играет только последнюю)
+  const AP = Tour.find("assistant-panel")?.topic;
+  ok(AP && AP.chapters.map((c) => c.id).join() === "assistant-panel.turn,assistant-panel.chats,assistant-panel.place", "тема о панели ассистента: главы turn, chats, place");
+  for (const c of AP ? AP.chapters.slice(0, -1) : []) {
+    const f = open(`tour=${AP.id}&ch=${c.id}&demo=${c.to}`), want = AP.steps[c.to].say;
+    const reached = await until(() => sayIn(f) === want && btnIn(f, "Показать снова"), 90000);
+    ok(reached, `«${AP.title}», глава «${c.title}»: показ дошёл до последнего шага` + (reached ? "" : `, на экране: ${sayIn(f)}`));
+    f.remove();
+  }
 
   // Рабочая история ассистента и код службы: в показ не переходят и показом не меняются. Две учебные вкладки сразу — у каждой
   // своя память; перезагрузка показа начинает с чистых учебных данных, настоящее хранилище на месте
