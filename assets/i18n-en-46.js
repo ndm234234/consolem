@@ -87,6 +87,8 @@ Object.assign(window.I18N_EN,{
 "предзапись основного хранилища":"pre-recording of the main storage",
 // «Отправлять настройки устройству» — строка слева над блоками
 "Консоль передаёт в камеру параметры потоков и изображения.":"The console sends the stream and image parameters to the camera.",
+// Встроенное хранилище без замка
+"Консоль не берёт записи с карты памяти. Чтобы смотреть эти записи и забирать их в хранилище, включить встроенное хранилище.":"The console does not take recordings from the memory card. To view these recordings and copy them to a storage, turn on the built-in storage.",
 // Поворот на видео (вариант Е)
 "Тянуть по видео, чтобы повернуть камеру. Колесо мыши меняет зум.":"Drag on the video to turn the camera. The mouse wheel changes the zoom.",
 });

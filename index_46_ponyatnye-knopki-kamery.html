@@ -935,6 +935,8 @@ html[data-theme="light"] .cp.done{border-color:var(--one-success-icon);color:var
 .cs-toc{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-width:0}
 .cs-toc-list{display:contents}
 .cs-state{font-size:13px;margin:2px 0 8px}.cs-state b{font-weight:600}
+/* Под параметрами драйвера — то, что о блоке знает сервер (объём и репликация встроенного хранилища) */
+.cs-after{margin-top:12px;padding-top:12px;border-top:1px solid var(--ln)}
 .cs-toc-h{font-size:12px;line-height:24px;color:var(--mu);white-space:nowrap;margin-right:4px}
 .cs-toc-i{display:inline-flex;align-items:baseline;gap:6px;max-width:100%;min-width:0;height:24px;padding:0 9px;border:1px solid var(--ln);border-radius:12px;background:var(--p);font:inherit;font-size:12px;line-height:22px;color:inherit;cursor:pointer;white-space:nowrap}
 .cs-toc-i:hover{background:var(--p2)}.cs-toc-i:focus-visible{outline:2px solid var(--bl);outline-offset:1px}
@@ -12969,6 +12971,8 @@ function camGenLayout(n,p,ips){
 // Значения живут только в браузере (drvStore) и на сервер не уходят.
 // Группа параметров драйвера, которую рисует блок «Идентификация объекта», а не отдельный блок
 const DRV_IDENT="Идентификация объекта";
+// Группа «Встроенное хранилище»: её рисует карточка встроенного хранилища на вкладке «Архив», а не отдельный блок
+const DRV_EDGE="Встроенное хранилище";
 function camDriver(n){const v=camConnVal(n,"Производитель",n.vendor||"");return isRtspVendor(v)?"rtsp":/onvif|generic/i.test(v)?"onvif":"native"}
 function drvP(tab,group,order,label,type,x={}){return{type,"x-ui-tab":tab,"x-ui-group":group,"x-ui-order":order,"x-label":label,...x}}
 function drvE(labels,def){return{enum:Object.keys(labels),"x-enum-labels":labels,default:def}}
@@ -13060,11 +13064,15 @@ function camDrvSchema0(n){
       camMotionSens:drvP("det",D,11,"Чувствительность","integer",{minimum:0,maximum:100,default:55,"x-hint":"Чем больше значение, тем ниже чувствительность",...dev}),
       camMotionThr:drvP("det",D,12,"Порог","integer",{minimum:0,maximum:100,default:10,...dev}),
       camMotionDelay:drvP("det",D,13,"Задержка","integer",{minimum:0,maximum:100,default:5,...dev})});
-    const E="Встроенное хранилище";
-    P.edgeStorage=drvP("rec",E,10,"Включить","boolean",{default:false,...dev});
+    // Встроенное хранилище — не настройка камеры: консоль сама берёт записи с карты и работает с ними (просмотр, репликация),
+    // поэтому замка нет и «Отправлять настройки устройству» его не касается. Запись на карту задают на самой камере.
+    // Пока поле не меняли, «Включить» следует за картой (recEdge): это делает drvState, а не default — хранилище в дереве
+    // может появиться позже первого чтения схемы. Блок рисует edgeStorageCardHtml вместе с объёмом и репликацией (DRV_EDGE)
+    const E=DRV_EDGE;
+    P.edgeStorage=drvP("rec",E,10,"Включить","boolean",{default:false});
     on("edgeStorage",true,{
-      cacheDepth:drvP("rec",E,11,"Глубина кэша","integer",{minimum:0,maximum:365,default:0,"x-ui-unit":"дн.","x-hint":"0 — кэш выключен",...dev}),
-      cacheUpdatePeriod:drvP("rec",E,12,"Период обновления кэша","integer",{minimum:0,maximum:86400,default:0,"x-ui-unit":"с",...dev})});
+      cacheDepth:drvP("rec",E,11,"Глубина кэша","integer",{minimum:0,maximum:365,default:0,"x-ui-unit":"дн.","x-hint":"0 — кэш выключен"}),
+      cacheUpdatePeriod:drvP("rec",E,12,"Период обновления кэша","integer",{minimum:0,maximum:86400,default:0,"x-ui-unit":"с"})});
   }
   return{type:"object",properties:P,allOf};
 }
@@ -13086,6 +13094,8 @@ function drvState(n){
   const sch=camDrvSchema(n);
   const fill=ps=>Object.entries(ps).forEach(([f,p])=>{if(!(f in st.vals)&&"default"in p)st.vals[f]=p.default});
   fill(sch.properties);(sch.allOf||[]).forEach(b=>fill(b.then.properties));
+  // «Включить» встроенного хранилища следует за картой, пока его не правили (st.own — поля, которые правил пользователь)
+  if("edgeStorage" in sch.properties&&!st.own?.edgeStorage)st.vals.edgeStorage=!!recEdge(n);
   return st;
 }
 function drvTarget(id){const n=find(id)?.n;if(!n)return null;const st=drvState(n);return{schema:{properties:drvResolve(camDrvSchema(n),st.vals).props},vals:st.vals}}
@@ -13111,6 +13121,7 @@ function drvEditStart(id,g){
   const n=find(id)?.n;if(!n)return;const st=drvState(n),snap={};
   drvGroupProps(n,g).forEach((p,f)=>{if(f in st.vals)snap[f]=cardClone({v:st.vals[f]}).v});
   drvBaseTake(n,g);st.snap[g]=snap;csEditSet(id,drvKey(g),true);
+  if(g===DRV_EDGE)st.own={...st.own,edgeStorage:true};
 }
 function drvEditCancel(id,g){
   const n=find(id)?.n;if(!n)return;const st=drvState(n),snap=st.snap[g];
@@ -13279,26 +13290,33 @@ function csOpenTabs(n){
 // Подсказка поля: у переключателя — под его подписью, у других полей — под полем
 function drvHint(html,h){if(!h)return html;return html.startsWith('<div class="ln ln-sw"><div>')?html.replace(/^(<div class="ln ln-sw"><div>[\s\S]*?)<\/div>/,(m,a)=>a+h+"</div>"):html.replace(/<\/div>$/,h+"</div>")}
 function drvSecsHtml(n,tabId){
-  const groups=drvGroups(n,tabId),st=drvState(n),d=camDriver(n);
+  const groups=drvGroups(n,tabId),d=camDriver(n);
   let out="";
   groups.forEach((fs,g)=>{
-    if(g===DRV_IDENT)return;
-    const k=drvKey(g),lock=!drvSend(n)&&fs.some(([,p])=>p["x-dev"]),ed=csEditOn(n.id,k)&&!lock;
-    const acts=lock?"":ed?`<button type="button" class="btn s" ${onEv("click",["drvEditCancel",`${n.id}`,g])}>${i18n("Отменить")}</button><button type="button" class="btn pri s" ${onEv("click",["drvEditDone",`${n.id}`,g])}>${i18n("Добавить в план")}</button>`
-      :`<button type="button" class="btn s" ${onEv("click",["drvEditStart",`${n.id}`,g])}>${i18n("Изменить")}</button>`;
-    const hint=p=>p["x-hint"]?`<small class="sub cs-hint">${escHtml(i18n(p["x-hint"]))}</small>`:"";
-    // Главный переключатель группы — поле с подписью «Включить»: в просмотре «Включить: выключено» читается как приказ,
-    // поэтому он — строка состояния «Сейчас выключено»; в правке остаётся переключатель «Включить»
-    const main=fs.find(([,p])=>p.type==="boolean"&&p["x-label"]==="Включить"),mainOn=main&&!!st.vals[main[0]],rest=main?fs.filter(x=>x!==main):fs;
-    const state=main?`<div class="cs-state">${i18n("Сейчас")} <b>${i18n(mainOn?"включено":"выключено")}</b>${drvChg(st,main[0])?`<span class="cs-chg">${i18n("изменено")}</span>`:""}</div>`:"";
-    const body=ed?`<div class="g">${fs.map(([f,p])=>drvHint(sfFieldHtml("drv",n.id,f,p,st.vals[f],{ro:sfReadOnly(p)}),hint(p))).join("")}</div>`
-      :state+(rest.length?csDl(rest.map(([f,p])=>[propLabel(p,f),p.type==="boolean"?escHtml(st.vals[f]?i18n("включено"):i18n("выключено")):sfText(p,st.vals[f])==="—"?`<span class="cs-empty">—</span>`:escHtml(sfText(p,st.vals[f])),drvChg(st,f)])):"");
-    const sum=main?i18n(mainOn?"включено":"выключено"):`${fs.length} ${i18n(plural(fs.length,"параметр|параметра|параметров"))}`;
-    out+=`<div class="card" data-sec="${escHtml(k)}" data-cs-sum="${escHtml(sum)}"><div class="ch">${escHtml(i18n(g))}${lock?csLockHtml():""}<span class="cs-acts">${acts}</span></div><div class="cb">${body}</div></div>`;
+    if(g===DRV_IDENT||(g===DRV_EDGE&&drvEdgeMerged(n)))return;
+    out+=drvGroupCardHtml(n,g,fs);
   });
   if(!groups.size&&tabId!=="gen"&&tabId!=="acc"&&tabId!=="view"&&d==="rtsp")
     out+=`<div class="nt">${i18n("У камеры RTSP здесь нет настроек: их задают на самой камере.")}</div>`;
   return out;
+}
+// Группу «Встроенное хранилище» рисует карточка встроенного хранилища (edgeStorageCardHtml), если она есть на вкладке
+function drvEdgeMerged(n){return n.type==="camera"&&edgeOn()&&!!recEdge(n)}
+// Блок группы параметров драйвера; after — что карточка показывает под параметрами (объём и репликация встроенного хранилища)
+function drvGroupCardHtml(n,g,fs,after=""){
+  const st=drvState(n);
+  const k=drvKey(g),lock=!drvSend(n)&&fs.some(([,p])=>p["x-dev"]),ed=csEditOn(n.id,k)&&!lock;
+  const acts=lock?"":ed?`<button type="button" class="btn s" ${onEv("click",["drvEditCancel",`${n.id}`,g])}>${i18n("Отменить")}</button><button type="button" class="btn pri s" ${onEv("click",["drvEditDone",`${n.id}`,g])}>${i18n("Добавить в план")}</button>`
+    :`<button type="button" class="btn s" ${onEv("click",["drvEditStart",`${n.id}`,g])}>${i18n("Изменить")}</button>`;
+  const hint=p=>p["x-hint"]?`<small class="sub cs-hint">${escHtml(i18n(p["x-hint"]))}</small>`:"";
+  // Главный переключатель группы — поле с подписью «Включить»: в просмотре «Включить: выключено» читается как приказ,
+  // поэтому он — строка состояния «Сейчас выключено»; в правке остаётся переключатель «Включить»
+  const main=fs.find(([,p])=>p.type==="boolean"&&p["x-label"]==="Включить"),mainOn=main&&!!st.vals[main[0]],rest=main?fs.filter(x=>x!==main):fs;
+  const state=main?`<div class="cs-state">${i18n("Сейчас")} <b>${i18n(mainOn?"включено":"выключено")}</b>${drvChg(st,main[0])?`<span class="cs-chg">${i18n("изменено")}</span>`:""}</div>`:"";
+  const body=ed?`<div class="g">${fs.map(([f,p])=>drvHint(sfFieldHtml("drv",n.id,f,p,st.vals[f],{ro:sfReadOnly(p)}),hint(p))).join("")}</div>`
+    :state+(rest.length?csDl(rest.map(([f,p])=>[propLabel(p,f),p.type==="boolean"?escHtml(st.vals[f]?i18n("включено"):i18n("выключено")):sfText(p,st.vals[f])==="—"?`<span class="cs-empty">—</span>`:escHtml(sfText(p,st.vals[f])),drvChg(st,f)])):"");
+  const sum=main?i18n(mainOn?"включено":"выключено"):`${fs.length} ${i18n(plural(fs.length,"параметр|параметра|параметров"))}`;
+  return`<div class="card" data-sec="${escHtml(k)}" data-cs-sum="${escHtml(sum)}"><div class="ch">${escHtml(i18n(g))}${lock?csLockHtml():""}<span class="cs-acts">${acts}</span></div><div class="cb">${body}${after?`<div class="cs-after">${after}</div>`:""}</div></div>`;
 }
 
 // ── «Разделы с оглавлением» на любой вкладке камеры ───────────────────────────────────────────────────────
@@ -27752,14 +27770,20 @@ function edgeStorageCardHtml(owner){
   const cam=nvrOf?owner.id:undefined,p=edgeRep(st),s=edgeStat(st,cam),a=archById(p.arch),excluded=nvrOf&&p.excl.has(owner.id)&&p.type==="all";
   const where=nvrOf?`${i18n("Записи камеры лежат на диске регистратора")} <button type="button" class="lk" ${onEv("click",["pick",nvrOf.id])}>${escHtml(locName(nvrOf))}</button>. ${i18n("Регистратор задаёт одну постоянную репликацию для всех своих камер.")}`
     :`${i18n(owner.type==="ipsrv"?"Диск внутри регистратора.":"Карта памяти внутри камеры.")}`;
-  return card("Встроенное хранилище",`<div class="mx">
+  const body=`<div class="mx">
       <div class="mc"><span>${i18n("Объём")}</span><b>${escHtml(st.size||"—")}</b></div>
       <div class="mc"><span>${i18n("Репликация")}</span><b>${excluded?i18n("камера не входит"):escHtml(edgeRepLabel(st,cam))}</b></div>
       <div class="mc"><span>${i18n("Куда")}</span><b class="er-ell" title="${escHtml(a?locName(a):"—")}">${p.type!=="all"||excluded?"—":escHtml(a?locName(a):"—")}</b></div>
       <div class="mc"><span>${i18n("Сейчас")}</span><b>${excluded?edgeStatChip(null):edgeStatChip(s)}</b></div>
     </div>
     <p class="sub" style="margin-top:10px">${where} ${excluded?"":edgeSummary(st,cam)}</p>
-    <button type="button" class="btn s" ${onEv("click",["edgeOpen",`${st.id}`])}>${i18n("Настроить репликацию")}</button>`);
+    <button type="button" class="btn s" ${onEv("click",["edgeOpen",`${st.id}`])}>${i18n("Настроить репликацию")}</button>`;
+  // Камера: «Включить», глубина и период кэша (параметры драйвера) — в этом же блоке, сверху; одного блока с этим именем хватает
+  // Выключено — консоль с картой не работает: объём и репликацию не показываем, чтобы блок не спорил сам с собой
+  const fs=owner.type==="camera"&&drvEdgeMerged(owner)?drvGroups(owner,"rec").get(DRV_EDGE):null;
+  if(!fs)return card("Встроенное хранилище",body);
+  const on=!!drvState(owner).vals.edgeStorage;
+  return drvGroupCardHtml(owner,DRV_EDGE,fs,on?body:`<p class="sub">${i18n("Консоль не берёт записи с карты памяти. Чтобы смотреть эти записи и забирать их в хранилище, включить встроенное хранилище.")}</p>`);
 }
 // ── Вкладка архива «Встроенные хранилища»: устройства его сервера с картой или диском ──
 // Все встроенные хранилища — одним перечнем GET /units?kind=storage: в дереве они видны только в раскрытой ветке
