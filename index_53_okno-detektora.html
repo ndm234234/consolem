@@ -3017,19 +3017,11 @@ body.pj-hdlog .gojump{display:none}
 .dw-live{display:inline-flex;align-items:center;gap:6px;font-weight:600}
 .dw-arch{padding:1px 8px;border-radius:6px;background:var(--one-info-bg);color:var(--x-link);font-weight:600;font-size:12px}
 .dw-play .btn:has(.dw-rec){display:inline-flex;align-items:center;gap:6px}
-.dw-ch-h{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:6px 0 4px;font-size:13px}
-.dw-ch-h .sub{margin:0;font-size:12px}
-.dw-ch-n{font-size:12.5px}
-.dw-ch-n b{font-size:15px;font-variant-numeric:tabular-nums}
-.dw-ch{position:relative;border:1px solid var(--ln);border-radius:6px;background:var(--p2);cursor:pointer;overflow:hidden}
-.dw-ch svg{display:block}
-.dw-ch-e{cursor:default;padding:12px;min-height:44px;box-sizing:border-box}
-.dw-ch-e .sub{margin:0;font-size:12px}
-.dw-b0{fill:var(--mu);opacity:.75}
-.dw-b1{fill:var(--rd)}
-.dw-bf{fill:none;stroke:var(--rd);stroke-dasharray:2 2;stroke-width:1;opacity:.8}
-.dw-ch-now{stroke:var(--tx);stroke-width:1.5}
-.dw-ch-note{margin:0 0 6px;font-size:11.5px}
+.dw-tl2{height:58px}
+.dw-tl2 .dw-tl-lb{right:auto;left:4px;padding:0 4px;border-radius:3px;background:var(--p2);z-index:1}
+.dw-tl-empty{position:absolute;left:50%;bottom:9px;transform:translateX(-50%);font-size:11px;color:var(--mu);pointer-events:none;white-space:nowrap}
+.dw-tl-fc{position:absolute;bottom:3px;font-size:10.5px;color:var(--rd);pointer-events:none;white-space:nowrap}
+.dw-cs-h{margin:0 0 6px;font-size:12px}
 @media(prefers-reduced-motion:reduce){.dw-hd:hover{r:1.7}}
 </style>
 <!-- ONE PSIM: мост по ONE.PSIM.PrototypeKit, подключён после стилей прототипа -->
@@ -14678,14 +14670,14 @@ function dwToolsHtml(d,k){
 }
 function dwLayHtml(k){
   const b=(key,l)=>`<button type="button" class="btn s${dw.lay[key]?" on":""}" aria-pressed="${dw.lay[key]}" ${onEv("click",["dwLay",key])}>${i18n(l)}</button>`;
-  return b("obj","Рамки")+b("trk","Следы")+b("why","Причины")+(DW_SIZE.has(k)?b("size","Размеры"):"");
+  return b("obj","Рамки")+b("trk","Следы")+(DW_SIZE.has(k)?b("size","Размеры"):"");
 }
 function dwHintText(k){
   if(dw.tool==="in")return"Протянуть мышью по кадру. Детектор будет искать объекты внутри зоны.";
   if(dw.tool==="ex")return"Протянуть мышью по кадру. Детектор не будет замечать объекты в этой зоне.";
   if(dw.tool==="line")return"Протянуть мышью от точки A к точке B.";
   if(k==="other")return"Для этого вида превью нет.";
-  return"Перетащить точку или сдвинуть порог. Кадр сразу покажет, какие объекты детектор считает с новыми настройками.";
+  return"Перетащить точку или сдвинуть порог. Кадр сразу покажет рамками, какие объекты детектор находит с новыми настройками.";
 }
 // Кадр-заглушка: здание с дверью, дерево слева, тротуар, дорога и парковка справа
 function dwSceneSvg(){return`<svg class="dw-scene" viewBox="0 0 ${DW_X} ${DW_Y}" preserveAspectRatio="none" aria-hidden="true">${dwSceneInner()}</svg>`}
@@ -14751,23 +14743,23 @@ function dwSilSvg(o,pos){
 function dwRun(o,t,test,max){let n=0;for(let s=Math.floor(t);s>=o.t0&&n<=max;s--){const p=dwAt(o,s);if(!p||!test(p,s))break;n++}return n}
 function dwObjSvg(d,t){
   const k=dwKindOf(d);if(k==="other")return"";
-  const c=dwC(d),E=dwEval(c,k);let sil="",box="",inZone=0,nOk=0,nNo=0;
+  const c=dwC(d),E=dwEval(c,k);let sil="",box="",inZone=0,nOk=0;
   for(const o of dwScene()){
     if(o.t0>t)break;if(t>o.t1)continue;
     const pos=dwAt(o,t);if(!pos)continue;
     sil+=dwSilSvg(o,pos);
     const fl=dwFail(c,k,o,pos),why=fl?.text||"";
     if(k==="crowd"&&!why)inZone++;
-    if(why==="hide")continue;
-    if(o.cls!=="noise"||DW_PIX.has(k)){if(why)nNo++;else nOk++}
+    // Детектор отдаёт только найденные объекты: отсеянные объекты на кадре не видны
+    if(why)continue;
+    nOk++;
     if(!dw.lay.obj)continue;
     const f=E.byObj.get(o.id)||[],hot=f.find(x=>t>=x.t&&t-x.t<3);
-    const st=hot?"hot":why?"no":"ok";
+    const st=hot?"hot":"ok";
     const X=(pos[0]-o.w/2)*DW_X,Y=(pos[1]-o.h)*DW_Y,W=o.w*DW_X,H=o.h*DW_Y;
     if(dw.lay.trk&&o.cls!=="noise"){const pts=[];for(let s=Math.max(o.t0,t-8);s<=t;s+=1){const p=dwAt(o,s);if(p)pts.push(dwP(p))}pts.push(dwP(pos));box+=`<polyline class="dw-trk ${st}" points="${pts.join(" ")}"/>`}
     let lb="";
     if(hot){const sub=hot.sub?c.subs.find(s=>s.id===hot.sub):null;lb=sub?`${i18n("Сработка")}: ${sub.name}`:i18n("Сработка")}
-    else if(why)lb=dw.lay.why?i18n(why):"";
     else if(k==="lpr")lb=o.plate;
     else if(k==="neural")lb=`${i18n(DW_CLS[o.cls])} ${Math.round(o.conf*100)}%`;
     else if(k==="abandoned"){const n=dwRun(o,t,(p,s)=>{const q=dwAt(o,s-1);return!dwWhy(c,k,o,p)&&q&&Math.hypot(p[0]-q[0],p[1]-q[1])<.002},c.stay);lb=`${i18n("лежит")} ${n} ${i18n("с из")} ${c.stay}`}
@@ -14778,7 +14770,7 @@ function dwObjSvg(d,t){
   }
   if(k==="crowd"&&c.areas[0]){const a=c.areas[0].pts,x=Math.max(...a.map(p=>p[0]))*DW_X,y=Math.min(...a.map(p=>p[1]))*DW_Y;
     box+=`<text class="dw-lb ${inZone>=c.count?"hot":"ok"}" x="${(x-1).toFixed(1)}" y="${(y+4).toFixed(1)}" text-anchor="end">${i18n("Людей в зоне")}: ${inZone} ${i18n("из")} ${c.count}</text>`}
-  dw.now=[nOk,nNo];
+  dw.now=nOk;
   return sil+box;
 }
 // ── Превью сработок ──
@@ -14814,61 +14806,62 @@ function dwPrevHtml(d){
   const k=dwKindOf(d);
   if(k==="other")return`<div class="dw-prev-h"><b>${i18n("Сработки")}</b></div><p class="sub">${i18n("Для этого вида превью пока нет.")}</p>`;
   const pv=dw.pv||"cmp";
-  const tabs=`<span class="dw-seg dw-pv">${[["cmp","До и после применения"],["arch","Проверка на архиве"],["live","Лента сработок"]].map(([v,l])=>`<button type="button" class="${pv===v?"on":""}" ${onEv("click",["dwPv",v])}>${i18n(l)}</button>`).join("")}</span>`;
+  const tabs=`<span class="dw-seg dw-pv">${[["cmp","До и после применения"],["live","Лента сработок"]].map(([v,l])=>`<button type="button" class="${pv===v?"on":""}" ${onEv("click",["dwPv",v])}>${i18n(l)}</button>`).join("")}</span>`;
   if(pv==="live"){
     const s=dwSaved(d),last=dwFiresIn(s,k,dw.T-DW_T,dw.T).reverse();
     return`<div class="dw-prev-h">${tabs}<span class="sub">${i18n("Сработки детектора с применёнными настройками за последний час. Новые сработки появляются слева.")}</span></div>
       <div data-dw-strip="${last.length}">${last.length?dwStripHtml(last,s,k,14):`<p class="sub">${i18n("За последний час детектор не сработал.")}</p>`}</div>
-      ${dwChanged(d)?`<div class="nt dw-nt">${i18n("Лента показывает применённые настройки. Чтобы увидеть, как сработают новые настройки, открыть «Проверку на архиве».")}</div>`:""}`;
+      ${dwChanged(d)?`<div class="nt dw-nt">${i18n("Лента показывает применённые настройки. Детектор начнёт работать с новыми настройками после «Применить».")}</div>`:""}`;
   }
-  if(pv==="arch"){
-    const c=dwC(d),s=dwSaved(d),A=dw.T-DW_T,E=dwFiresIn(c,k,A,dw.T),S=dwFiresIn(s,k,A,dw.T),n=E.length,m=S.length,dl=n-m,ch=dwChanged(d);
-    const x=at=>((at-A)/DW_T*100).toFixed(2);
-    const tick=(f,y0,y1,col)=>`<line x1="${x(f.at)}%" x2="${x(f.at)}%" y1="${y0}" y2="${y1}" stroke="${col}"/>`;
-    const noise=E.filter(f=>f.o?.cls==="noise").length;
-    return`<div class="dw-prev-h">${tabs}<span class="sub">${i18n(ch?"Детектор проверил архив за последний час с новыми настройками. Настройки ещё не применены.":"Детектор проверил архив за последний час с применёнными настройками.")}</span></div>
-    <div class="dw-cnt"><b class="dw-n">${n}</b><span>${i18n(ch?"сработок с новыми настройками":"сработок за час")}</span>
-      ${ch?`<span class="dw-was">${i18n("с применёнными")}: ${m}</span><span class="dw-dl ${dl<0?"dn":dl>0?"up":""}">${dl>0?"+":dl<0?"−":"±"}${Math.abs(dl)}</span>`:""}
-      ${noise?`<span class="dw-was">${i18n("из них похожи на помехи")}: ${noise}</span>`:""}</div>
-    <div class="dw-tl" ${onEv("mousedown",["dwChartSeek",onEv.el,onEv.event,A,DW_T])}>
-      <svg width="100%" height="100%" preserveAspectRatio="none">
-        ${E.map(f=>tick(f,3,ch?19:37,dwFireColor(f,c))).join("")}
-        ${ch?S.map(f=>tick(f,23,37,"var(--mu)")).join(""):""}
-        <line data-dw-cur x1="${dw.at==null?"-10%":x(dw.at)+"%"}" x2="${dw.at==null?"-10%":x(dw.at)+"%"}" y1="0" y2="40" stroke="var(--tx)" stroke-width="1.5"/>
-      </svg>
-      ${ch?`<span class="dw-tl-lb a">${i18n("новые")}</span><span class="dw-tl-lb b">${i18n("применённые")}</span>`:""}
-    </div>
-    <div class="dw-tl-x">${[0,.25,.5,.75,1].map(p=>`<span>${dwClock(A+p*DW_T).slice(0,5)}</span>`).join("")}</div>
-    ${n?dwStripHtml(E,c,k,30):`<p class="sub">${i18n("С этими настройками детектор не сработал за последний час.")}</p>`}`;
-  }
+  const C=dwCmpData(d);
   return`<div class="dw-prev-h">${tabs}<span class="dw-seg">${[5,10,15,30,60].map(v=>`<button type="button" class="${dw.per===v?"on":""}" ${onEv("click",["dwPer",v])}>${v} ${i18n("мин")}</button>`).join("")}</span></div>
-    <div data-dw-cmp>${dwCmpHtml(d)}</div>`;
+    <div data-dw-cmp>${dwCmpHtml(d,C)}</div>
+    <div data-dw-cstrip="${C.strip.length}">${dwCmpStripHtml(d,C)}</div>`;
 }
-// Сравнение: верхний график — сработки за период до применения (прежние настройки), нижний — после применения, с прогнозом до конца периода
-function dwCmpHtml(d){
-  const k=dwKindOf(d),key=dwKey(d),ap=dw.ap[key],s=dwSaved(d),P=dw.per*60,N=30,bw=P/N,T=dw.T;
-  const A0=(ap?ap.T:T)-P,before=dwFiresIn(ap?ap.prev:s,k,A0,A0+P),nb=before.length;
-  const bins=(fs,A)=>{const b=new Array(N).fill(0);fs.forEach(f=>b[Math.min(N-1,Math.floor((f.at-A)/bw))]++);return b};
-  const bb=bins(before,A0);
-  let after=[],ba=new Array(N).fill(0),el=0,fc=null,rate=0;
-  if(ap){el=Math.min(P,T-ap.T);after=dwFiresIn(s,k,ap.T,ap.T+el);ba=bins(after,ap.T);
-    if(el>=P)fc=after.length;else if(el>=30){rate=after.length/el;fc=Math.round(rate*P)}}
-  const fb=rate*bw,mx=Math.max(1,...bb,...ba,fb);
-  const H=44,bar=(v,i,cls)=>v?`<rect class="${cls}" x="${(i/N*100+.3).toFixed(2)}%" width="${(100/N-.6).toFixed(2)}%" y="${(H-v/mx*(H-4)).toFixed(1)}" height="${(v/mx*(H-4)).toFixed(1)}"/>`:"";
-  const ax=A=>`<div class="dw-tl-x">${[0,.25,.5,.75,1].map(p=>`<span>${dwClock(A+p*P).slice(0,5)}</span>`).join("")}</div>`;
-  const chart=(A,body,now)=>`<div class="dw-ch" ${onEv("mousedown",["dwChartSeek",onEv.el,onEv.event,A,P])}><svg width="100%" height="${H}" preserveAspectRatio="none">${body}${now!=null?`<line x1="${now}%" x2="${now}%" y1="0" y2="${H}" class="dw-ch-now"/>`:""}</svg></div>${ax(A)}`;
-  const top=`<div class="dw-ch-h"><b>${i18n(ap?"До применения":"Последние")} ${dw.per} ${i18n("мин")}</b><span class="sub">${dwClock(A0).slice(0,5)}–${dwClock(A0+P).slice(0,5)}</span><span class="dw-ch-n"><b>${nb}</b> ${i18n(plural(nb,"сработка|сработки|сработок"))}</span></div>
-    ${chart(A0,bb.map((v,i)=>bar(v,i,"dw-b0")).join(""),null)}`;
-  if(!ap)return top+`<div class="dw-ch-h"><b>${i18n("После применения")}</b></div><div class="dw-ch dw-ch-e"><span class="sub">${i18n("Изменить настройки и применить их через план. Здесь появятся сработки после применения и прогноз на период. Верхний график покажет сработки за тот же период до применения.")}</span></div>`;
-  const nowI=Math.floor(el/bw),dl=fc==null?null:fc-nb;
-  const fut=fc!=null&&el<P?Array.from({length:N},(_,i)=>i>nowI?bar(fb,i,"dw-bf"):"").join(""):"";
-  const res=fc==null?`<span class="sub">${i18n("Прогноз появится через")} ${Math.ceil(30-el)} ${i18n("с")}</span>`
-    :`${el<P?`<span class="dw-ch-n">${i18n("прогноз на")} ${dw.per} ${i18n("мин")}: <b>≈${fc}</b></span>`:""}<span class="dw-dl ${dl<0?"dn":dl>0?"up":""}">${dl>0?"+":dl<0?"−":"±"}${Math.abs(dl)}</span><span class="sub">${i18n(dl<0?"меньше сработок, чем до применения":dl>0?"больше сработок, чем до применения":"столько же сработок, сколько до применения")}</span>`;
-  return top+`<div class="dw-ch-h"><b>${i18n("После применения")}</b><span class="sub">${dwClock(ap.T).slice(0,5)}–${dwClock(ap.T+P).slice(0,5)}</span>
-      <span class="dw-ch-n"><b>${after.length}</b> ${i18n(plural(after.length,"сработка|сработки|сработок"))} ${i18n("за")} ${dwDur(el)}</span>${res}</div>
-    ${chart(ap.T,ba.map((v,i)=>bar(v,i,"dw-b1")).join("")+fut,el<P?(el/P*100).toFixed(2):null)}
-    ${fc!=null&&el<P?`<p class="sub dw-ch-note">${i18n("Пунктир — прогноз: консоль делит число сработок на прошедшее время и продлевает до конца периода.")}</p>`:""}`;
+// «До и после применения». Верхний ряд — сработки прежних настроек за период до применения: эталон, он не меняется.
+// Нижний ряд заполняется сработками с момента применения. Прогноз: число сработок / прошедшее время × период
+function dwCmpData(d){
+  const k=dwKindOf(d),ap=dw.ap[dwKey(d)],s=dwSaved(d),P=dw.per*60,T=dw.T;
+  const A0=(ap?ap.T:T)-P,before=dwFiresIn(ap?ap.prev:s,k,A0,A0+P);
+  let after=[],el=0,fc=null;
+  if(ap){el=Math.min(P,T-ap.T);after=dwFiresIn(s,k,ap.T,ap.T+el);
+    if(el>=P)fc=after.length;else if(el>=30)fc=Math.round(after.length/el*P)}
+  return{k,ap,s,P,A0,A1:ap?ap.T:null,before,after,el,fc,strip:(ap?after:before).slice().reverse()};
 }
+function dwCmpHtml(d,C){
+  C=C||dwCmpData(d);const{k,ap,P,A0,A1,before,after,el,fc}=C,nb=before.length,per=dw.per;
+  const x=(at,A)=>((at-A)/P*100).toFixed(2);
+  const tick=(f,A,y0,y1,col)=>`<line x1="${x(f.at,A)}%" x2="${x(f.at,A)}%" y1="${y0}" y2="${y1}" stroke="${col}"/>`;
+  const sp=(A)=>`${dwClock(A).slice(0,5)}–${dwClock(A+P).slice(0,5)}`;
+  const dl=fc==null?null:fc-nb,chip=dl==null?"":`<span class="dw-dl ${dl<0?"dn":dl>0?"up":""}">${dl>0?"+":dl<0?"−":"±"}${Math.abs(dl)}</span>`;
+  const cnt=ap?`<b class="dw-n">${after.length}</b><span>${i18n(plural(after.length,"сработка|сработки|сработок"))} ${i18n("после применения за")} ${dwDur(el)}</span>
+      <span class="dw-was">${i18n("до применения за")} ${per} ${i18n("мин")}: ${nb}</span>
+      ${fc==null?`<span class="dw-was">${i18n("Прогноз появится через")} ${Math.ceil(30-el)} ${i18n("с")}</span>`
+        :`<span>${i18n(el<P?`прогноз на ${per} мин`:`итог за ${per} мин`)}: <b>${el<P?"≈":""}${fc}</b></span>${chip}<span class="dw-was">${i18n(dl<0?"меньше сработок, чем до применения":dl>0?"больше сработок, чем до применения":"столько же сработок, сколько до применения")}</span>`}`
+    :`<b class="dw-n">${nb}</b><span>${i18n(plural(nb,"сработка|сработки|сработок"))} ${i18n("за последние")} ${per} ${i18n("мин")}</span>
+      <span class="dw-was">${i18n("Применить новые настройки через план. Нижний ряд начнёт заполняться с этого момента.")}</span>`;
+  const nowX=ap&&el<P?(el/P*100).toFixed(2):null;
+  return`<div class="dw-cnt">${cnt}</div>
+    <div class="dw-tl dw-tl2" ${onEv("mousedown",["dwCmpSeek",onEv.el,onEv.event,A0,A1??-1,P])}>
+      <svg width="100%" height="100%" preserveAspectRatio="none">
+        <line x1="0" x2="100%" y1="28" y2="28" stroke="var(--ln)"/>
+        ${before.map(f=>tick(f,A0,4,24,"var(--mu)")).join("")}
+        ${after.map(f=>tick(f,A1,32,52,dwFireColor(f,C.s))).join("")}
+        ${nowX!=null?`<rect x="${nowX}%" width="${(100-nowX).toFixed(2)}%" y="32" height="20" fill="url(#dwFc)"/><line x1="${nowX}%" x2="${nowX}%" y1="30" y2="56" stroke="var(--tx)" stroke-width="1.5"/>`:""}
+        <defs><pattern id="dwFc" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2" height="6" fill="var(--rd)" opacity=".22"/></pattern></defs>
+      </svg>
+      <span class="dw-tl-lb a">${i18n("до применения")} · ${sp(A0)}</span>
+      <span class="dw-tl-lb b">${ap?`${i18n("после применения")} · ${sp(A1)}`:i18n("после применения")}</span>
+      ${!ap?`<span class="dw-tl-empty">${i18n("Ряд заполнится после «Применить»")}</span>`:nowX!=null&&fc!=null?`<span class="dw-tl-fc" style="left:calc(${nowX}% + 6px)">${i18n("прогноз")} ≈${fc}</span>`:""}
+    </div>
+    <div class="dw-tl-x">${[0,.25,.5,.75,1].map(p=>`<span>${p?`+${Math.round(p*per)} ${i18n("мин")}`:i18n("начало периода")}</span>`).join("")}</div>`;
+}
+function dwCmpStripHtml(d,C){
+  const{k,ap,s,strip}=C;
+  if(!strip.length)return`<p class="sub">${i18n(ap?"После применения детектор ещё не сработал.":"За этот период детектор не сработал.")}</p>`;
+  return`<p class="sub dw-cs-h">${i18n(ap?"Сработки после применения, новые слева":"Сработки за период, новые слева")}</p>${dwStripHtml(strip,s,k,20)}`;
+}
+function dwCmpSeek(el,e,A0,A1,P){const r=el.getBoundingClientRect(),low=e.clientY-r.top>r.height/2,A=low?+A1:+A0;if(low&&A1<0)return;const at=A+(e.clientX-r.left)/r.width*+P;if(at<dw.T)dwArch(at)}
 function dwDur(sec){sec=Math.floor(sec);return sec<60?`${sec} ${i18n("с")}`:`${Math.floor(sec/60)} ${i18n("мин")}${sec%60?` ${sec%60} ${i18n("с")}`:""}`}
 // ── Панель настроек ──
 function dwSec(title,body,x=""){return`<section class="dw-sec"><h4>${i18n(title)}${x}</h4>${body}</section>`}
@@ -14878,15 +14871,14 @@ function dwRange(id,key,l,min,max,step,unit,help,hist){
   const shown=unit==="%f"?Math.round(v*100):v;
   return`<div class="dw-f"><label>${i18n(l)} <b data-dw-out="${key}">${shown}${unit==="%f"?"%":unit?" "+i18n(unit):""}</b></label>
     <input type="range" min="${min}" max="${max}" step="${step}" value="${unit==="%f"?Math.round(v*1000)/10:v}" ${onEv("input",["dwSet",id,key,onEv.value])}>
-    ${hist?`<div class="dw-hist" data-dw-hist="${hist}">${dwHistHtml(detNodeOf(id),hist)}</div>`:""}${help?dwHelp(help):""}</div>`;
+    ${help?dwHelp(help):""}</div>`;
 }
 function dwNum(id,key,l,min,max,unit,help){
   const c=dwC(detNodeOf(id));
   return`<div class="dw-f dw-num"><label>${i18n(l)}</label><span class="dw-in"><input type="number" min="${min}" max="${max}" value="${c[key]}" ${onEv("input",["dwSet",id,key,onEv.value])}><span>${i18n(unit)}</span></span>${help?dwHelp(help):""}</div>`;
 }
 function dwChips(id,list,cur,fn,sid=""){
-  const cnt={};dwScene().forEach(o=>cnt[o.cls]=(cnt[o.cls]||0)+1);
-  return`<div class="dw-chips">${list.map(cl=>`<button type="button" class="dw-chip${cur.includes(cl)?" on":""}" aria-pressed="${cur.includes(cl)}" ${onEv("click",sid?[fn,id,sid,cl]:[fn,id,cl])}>${cur.includes(cl)?lu("check",12):""}${i18n(DW_CLS[cl])}<small>${cnt[cl]||0}</small></button>`).join("")}</div>`;
+  return`<div class="dw-chips">${list.map(cl=>`<button type="button" class="dw-chip${cur.includes(cl)?" on":""}" aria-pressed="${cur.includes(cl)}" ${onEv("click",sid?[fn,id,sid,cl]:[fn,id,cl])}>${cur.includes(cl)?lu("check",12):""}${i18n(DW_CLS[cl])}</button>`).join("")}</div>`;
 }
 // Распределение за час: серые столбцы — помехи, синие — люди и машины; светлая полоса — что детектор замечает
 function dwHistHtml(d,what){
@@ -14911,7 +14903,6 @@ function dwSizeHtml(id){
   const row=(m,l)=>`<div class="dw-sz-r"><span>${i18n(l)}</span><span class="dw-in"><input type="number" min="1" max="100" step="0.5" value="${p(c[m][0])}" ${onEv("input",["dwSet",id,m+".0",onEv.value])}><span>×</span><input type="number" min="1" max="100" step="0.5" value="${p(c[m][1])}" ${onEv("input",["dwSet",id,m+".1",onEv.value])}><span>% ${i18n("кадра")}</span></span></div>`;
   return`<div class="dw-f"><label>${i18n("Размер объекта")} <button type="button" class="lk" ${onEv("click",["dwLay","size"])}>${i18n(dw.lay.size?"Скрыть на кадре":"Показать на кадре")}</button></label>
     ${row("min","Не меньше")}${row("max","Не больше")}
-    <div class="dw-hist" data-dw-hist="size">${dwHistHtml(detNodeOf(id),"size")}</div>
     ${dwHelp("Детектор не замечает объекты меньше и больше этих размеров. Ширина × высота — в процентах кадра.")}</div>`;
 }
 function dwAreasHtml(id,k,c){
@@ -15007,13 +14998,13 @@ function dwPanelHtml(cam,d,k,c){
     <p class="sub">${escHtml(i18n(DW_KINDS.find(x=>x[0]===k)?.[1]||detKindText(d,cam)))} · ${i18n(d.builtin?"на камере":"на сервере")}${cam?` · ${escHtml(locName(cam))}`:""}</p>
     <div class="dw-state" data-dw-st>${dwStateHtml(d)}</div></section>`;
   if(k==="other")return head+dwSec("Параметры",detFieldsHtml(cam,d,"Имя"));
-  const what=k==="linecross"||k==="neural"?dwSec("Кого искать",dwChips(id,["person","car","bike"],c.classes,"dwClass")+dwHelp("Число — сколько таких объектов было в кадре за последний час.")):"";
+  const what=k==="linecross"||k==="neural"?dwSec("Кого искать",dwChips(id,["person","car","bike"],c.classes,"dwClass")+dwHelp("Детектор сработает только на объекты выбранных классов.")):"";
   const when=[];
   if(k==="motion"||k==="tracker")when.push(dwRange(id,"sens","Чувствительность",1,100,1,"","Чем выше чувствительность, тем более слабое движение замечает детектор.","sens"));
   if(k==="neural"||k==="lpr")when.push(dwRange(id,"conf","Уверенность нейросети не ниже",10,99,1,"%","Детектор сработает, только если нейросеть уверена в объекте не меньше этого значения.","conf"));
   if(k==="lpr")when.push(`<div class="dw-f"><label>${i18n("Ширина номера")} <b data-dw-out="pw">${(c.pw[0]*100).toFixed(1)}–${(c.pw[1]*100).toFixed(1)}%</b></label>
       <div class="dw-2r"><input type="range" min="1" max="8" step="0.1" value="${c.pw[0]*100}" ${onEv("input",["dwSet",id,"pw.0",onEv.value])}><input type="range" min="1" max="8" step="0.1" value="${c.pw[1]*100}" ${onEv("input",["dwSet",id,"pw.1",onEv.value])}></div>
-      <div class="dw-hist" data-dw-hist="pw">${dwHistHtml(d,"pw")}</div>${dwHelp("Ширина номера — в процентах ширины кадра. Номера уже или шире детектор пропускает.")}</div>`);
+      ${dwHelp("Ширина номера — в процентах ширины кадра. Номера уже или шире детектор пропускает.")}</div>`);
   if(k==="linecross")when.push(`<div class="dw-f"><label>${i18n("Направление")}</label>${dwDirHtml(id,c.dir,"dwDir")}${dwHelp("Детектор сработает, только когда объект пересечёт линию в этом направлении.")}</div>`);
   if(k==="motion")when.push(dwNum(id,"delay","Сработать, если движение длится не меньше",0,30,"с","Короткое движение, например блик или птица, детектор пропустит."));
   if(k==="crowd")when.push(dwNum(id,"count","Людей в зоне не меньше",2,50,"чел."),dwNum(id,"hold","Дольше",1,600,"с","Детектор сработает, когда в зоне долго стоит группа людей. Следующая сработка — после того, как группа разойдётся."));
@@ -15044,12 +15035,13 @@ function dwPaintObj(){
   const t=dw.at??dw.T,g=root.querySelector("[data-dw-obj]");if(g)g.innerHTML=dwObjSvg(d,((t%DW_T)+DW_T)%DW_T);
   const ck=root.querySelector("[data-dw-clock]");if(ck)ck.textContent=dwClock(t);
   const tg=root.querySelector("[data-dw-tag]");if(tg)tg.innerHTML=dwTagHtml();
-  const nw=root.querySelector("[data-dw-now]");if(nw)nw.textContent=dw.now&&dwKindOf(d)!=="other"?`${i18n("В кадре")}: ${i18n("детектор считает")} ${dw.now[0]}, ${i18n("отсеял")} ${dw.now[1]}`:"";
+  const nw=root.querySelector("[data-dw-now]");if(nw)nw.textContent=dw.now!=null&&dwKindOf(d)!=="other"?`${i18n("Детектор видит в кадре")}: ${dw.now}`:"";
   const cur=root.querySelector("[data-dw-cur]");if(cur){const A=dw.T-DW_T,x=dw.at==null?"-10%":((dw.at-A)/DW_T*100).toFixed(2)+"%";cur.setAttribute("x1",x);cur.setAttribute("x2",x)}
   // Раз в секунду живого времени: графики «до и после», лента, итог плана после очереди
   const sec=Math.floor(dw.T);if(sec!==dw.shown){dw.shown=sec;
     const sj=JSON.stringify(dwSaved(d));if(sj!==dw.sj){const first=!dw.sj;dw.sj=sj;if(!first){dwRefresh();return}}
-    const cm=root.querySelector("[data-dw-cmp]");if(cm)cm.innerHTML=dwCmpHtml(d);
+    const cm=root.querySelector("[data-dw-cmp]");if(cm){const C=dwCmpData(d);cm.innerHTML=dwCmpHtml(d,C);
+      const cs=root.querySelector("[data-dw-cstrip]");if(cs&&+cs.dataset.dwCstrip!==C.strip.length){cs.dataset.dwCstrip=C.strip.length;cs.innerHTML=dwCmpStripHtml(d,C)}}
     const st=root.querySelector("[data-dw-strip]");if(st){const n=dwFiresIn(dwSaved(d),dwKindOf(d),dw.T-DW_T,dw.T).length;if(+st.dataset.dwStrip!==n)dwPv("live")}}
 }
 function dwStart(){if(dw.raf)return;dw.last=performance.now();dw.raf=requestAnimationFrame(dwLoop)}
