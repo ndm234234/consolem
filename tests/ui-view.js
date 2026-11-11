@@ -1,5 +1,6 @@
-/* Сценарий интерфейса: закладка «Просмотр», работа с живым и архивом. PTZ, лента и титры из потока, разговор, реле, шкала по окнам,
-   куски по 60 с, переход к моменту, недоступное словами, удержания, отметки, «Закрепить». Куски подставные: события элемента видео
+/* Сценарий интерфейса: закладка «Просмотр», работа с живым и архивом. Поворот по кадру, лента и титры из потока, разговор, реле,
+   шкала с головой в центре (масштаб, перетаскивание, дочитывание), панель на кадре (пауза, ±10 с, кадры, скорость, звук), клавиши,
+   справка, календарь записи, экспорт одной группой, куски по 60 с, переход к моменту, недоступное словами, удержания, отметки, «Закрепить». Куски подставные: события элемента видео
    задаёт сценарий, в виртуальном времени файл не играет. Настоящей мышью и с кадрами — tools/check_live.py. */
 UiCheck(async ({ ok, until, sleep, confirmWith }) => {
   const stub = window.ConsolemWhepStub;
@@ -35,7 +36,12 @@ UiCheck(async ({ ok, until, sleep, confirmWith }) => {
   }
   await open(cam, "view");
   ok(await until(() => lv.tl && !lv.tl.busy && lv.tl.spans.length), "шкала прочитана при открытии");
-  ok(q("[data-tl-win='1h']").classList.contains("pri"), "окно по умолчанию — час");
+  ok(q("[data-tl-win='1h']").getAttribute("aria-pressed") === "true", "масштаб по умолчанию — час");
+  ok(!!q("[data-live-state][role='status']"), "состояние словами для экранного диктора");
+  const expG = q(".vw-expg");
+  ok(expG && expG.getAttribute("role") === "group" && /Экспорт/.test(expG.firstElementChild.textContent) && /Кадр/.test(expG.children[1]?.textContent) && /Область/.test(expG.children[2]?.textContent), "экспорт одной группой, «Экспорт…» первой");
+  const headMid = () => { const h = q("[data-tl-head]").getBoundingClientRect(), b = q("[data-tl-bar]").getBoundingClientRect(); return Math.abs(h.left + h.width / 2 - (b.left + b.width / 2)) < 3; };
+  ok(headMid(), "голова шкалы в центре");
 
   // PTZ: аренда, пока кнопка нажата
   const puts = [];
@@ -45,17 +51,16 @@ UiCheck(async ({ ok, until, sleep, confirmWith }) => {
   if (ptzCam) {
     const c0 = lv;
     await open(ptzCam, "view");
-    ok(!!q("[data-ptz='0']"), "кнопки движения на закладке");
+    const zin = () => q("[data-cv-onvid] .cv-hold");
+    ok(!!q("[data-cv-onvid]") && !!zin(), "поворот по кадру, как на вкладке «Видео»");
     ok(!/Запомнить/.test(document.getElementById("main").textContent), "задания пресетов здесь нет");
-    q("[data-ptz='0']").dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    zin().dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }));
     ok(await until(() => puts.length >= 1), "движение: аренда");
     await sleep(1700);
     ok(puts.length >= 2 && puts[0].ttlSec === PTZ_TTL, "продление раньше срока");
     window.dispatchEvent(new MouseEvent("mouseup"));
-    ok(!ptzMove, "отпустили — стоп");
-    ptzCam.direct = false;
-    ok(/disabled/.test(ptzPadHtml(ptzCam).split('data-ptz="0"')[1].slice(0, 120)), "за NAT движения нет");
-    delete ptzCam.direct;
+    ok(!cvMove, "отпустили — стоп");
+    ok(cvOnVidHtml(Object.assign({}, ptzCam, { direct: false })) === "", "за NAT поворота по кадру нет");
     await open(cam, "view");
     await until(() => lv.tl && !lv.tl.busy);
   } else ok(true, "у набора нет PTZ-камеры на связи");
@@ -67,6 +72,9 @@ UiCheck(async ({ ok, until, sleep, confirmWith }) => {
   ok(await until(() => lv.sess, 60000), "живое");
   conn(lv.pc, "connected");
   ok(await until(() => /Старое событие/.test(text("[data-feed]"))), "лента: журнал с начала показа");
+  const sess0 = lv.sess;
+  vwGoLive();
+  ok(lv.sess === sess0 && !lv.pb, "уже живое: «Живое» не подключает заново");
   const fed = reads.filter((p) => p === "/journal").length;
   await emit(cam.id, { text: "Новое из потока", source: "det", kind: "motion" });
   ok(await until(() => /Новое из потока/.test(text("[data-feed]"))), "лента: новое из потока");
@@ -98,7 +106,7 @@ UiCheck(async ({ ok, until, sleep, confirmWith }) => {
   const t1 = stub.log.filter((x) => /\/talk\//.test(x.url)).at(-1);
   ok(t1.method === "POST" && /^Bearer stub-/.test(t1.auth), "офер на url с токеном");
   ok(/a=sendonly/.test(t1.sdp), "только отправка");
-  ok(q("[data-talk]").textContent === "Закончить разговор", "кнопка конца");
+  ok(q("[data-talk]").textContent === "Закончить разговор" && !!q("[data-talk] svg"), "кнопка конца, значок на месте");
   const pcT = talk.pc, micT = talk.mic;
   q("[data-talk]").click();
   ok(await until(() => stub.log.at(-1).method === "DELETE"), "конец: DELETE");
@@ -137,19 +145,35 @@ UiCheck(async ({ ok, until, sleep, confirmWith }) => {
   ok(await until(() => op.length === 2 && op[1].pulseMs === 1000), "реле: импульс");
   API.post = post0;
 
-  // Окна: только по кнопке, таймера нет
+  // Масштаб: кнопки периода меняют вид, шкала дочитывает записи сама и один раз; таймера чтения нет
   const tlReads = () => reads.filter((p) => /\/timeline$/.test(p)).length;
   const r0 = tlReads();
   await sleep(5000);
   ok(tlReads() === r0, "таймера шкалы нет");
   q("[data-tl-win='24h']").click();
-  ok(await until(() => lv.tl.win === "24h" && !lv.tl.busy && lv.tl.spans.length > 3), "окно сутки");
-  ok(tlReads() === r0 + 1, "одно чтение на окно");
-  ok(q("[data-tl-win='24h']").classList.contains("pri"), "окно подсвечено");
+  ok(lv.tl.vz === 864e5 && q("[data-tl-win='24h']").getAttribute("aria-pressed") === "true" && q("[data-tl-win='1h']").getAttribute("aria-pressed") === "false", "масштаб сутки нажат");
+  ok(await until(() => tlReads() === r0 + 1 && !lv.tl.busy && lv.tl.spans.length > 3), "шкала дочитала записи под сутки");
+  await sleep(1000);
+  ok(tlReads() === r0 + 1, "одно чтение на масштаб");
+  ok(lv.tl.from <= lv.tl.vc - lv.tl.vz / 2, "загружено с запасом влево");
+  const z0 = lv.tl.vz;
+  const bar0 = q("[data-tl-bar]"), we = new WheelEvent("wheel", { deltaY: 100, bubbles: true, cancelable: true });
+  bar0.dispatchEvent(we);
+  ok(we.defaultPrevented && Math.abs(lv.tl.vz - z0 * 1.25) < 1, "колесо над шкалой: масштаб, страница не едет");
+  ok(q("[data-tl-win='24h']").getAttribute("aria-pressed") === "false", "свой масштаб: кнопки отжаты");
+  const kz = (code, key) => q("[data-tl-bar]").dispatchEvent(new KeyboardEvent("keydown", { code, key, bubbles: true, cancelable: true }));
+  const z1 = lv.tl.vz;
+  kz("Equal", "+");
+  ok(Math.abs(lv.tl.vz - z1 * 0.8) < 1, "«+» приближает шкалу");
+  kz("Minus", "-");
+  ok(Math.abs(lv.tl.vz - z1) < 1, "«−» отдаляет шкалу");
+  q("[data-tl-win='24h']").click();
+  await until(() => !lv.tl.busy);
   ok(q("[data-tl-bar] .tl-s.fen") && q("[data-tl-bar] .tl-s:not(.fen)"), "отсечённый спан виден");
   ["6h", "all"].forEach((w) => ok(!!q(`[data-tl-win='${w}']`), "окно " + w));
   q("[data-tl-win='all']").click();
   ok(await until(() => lv.tl.win === "all" && !lv.tl.busy && lv.tl.from > 0 && lv.tl.spans.length > 20), "окно всё: края по спанам");
+  ok(lv.tl.vz >= Math.min(VW_ZMAX, lv.tl.to - lv.tl.from) - 1, "«Всё»: в виде все записи");
 
   // Проигрывание: кусок, сдвиг, следующий от конца поставленного
   const t = lv.tl, plain = t.spans.filter((s) => !s.fenced && !s.backupOnly && s.source === "live").at(-3);
@@ -189,13 +213,13 @@ UiCheck(async ({ ok, until, sleep, confirmWith }) => {
   // Вариант «pos» в выборе есть, только если такое событие попало в окно: на стенде часы идут, набор журнала в окно может не попасть
   await emit(cam.id, { text: "Чек на шкале", source: "pos", kind: "text", occurredAt: new Date(plain.startMs + 660000).toISOString() });
   q("[data-tl-win='all']").click();
-  ok(await until(() => !lv.tl.busy && /Сработка на шкале/.test(text("[data-tl]"))), "событие на шкале");
+  ok(await until(() => !lv.tl.busy && /Сработка на шкале/.test(text("[data-tl-ev]"))), "событие на шкале");
   ok(await until(() => ["det", "pos"].every((v) => [...document.querySelectorAll("[data-tl-source] option")].some((o) => o.value === v))), "фильтр по подсистеме");
   const sel1 = q("[data-tl-source]");
   sel1.value = "pos";
   sel1.dispatchEvent(new Event("change", { bubbles: true }));
   ok(sel1.value === "pos", "выбрана подсистема pos");
-  ok(await until(() => !/Сработка на шкале/.test(text("[data-tl]")) && /Чек на шкале/.test(text("[data-tl]"))), "отбор по подсистеме");
+  ok(await until(() => !/Сработка на шкале/.test(text("[data-tl-ev]")) && /Чек на шкале/.test(text("[data-tl-ev]"))), "отбор по подсистеме");
   // Чтения внахлёст: поздний ответ без отбора отбор не затирает
   const jget = API.get;
   let late = null;
@@ -204,19 +228,117 @@ UiCheck(async ({ ok, until, sleep, confirmWith }) => {
   tlEvents(lv);
   ok(await until(() => late), "чтение без отбора задержано");
   tlSource("pos");
-  ok(await until(() => !/Сработка на шкале/.test(text("[data-tl]"))), "отбор показан");
+  ok(await until(() => !/Сработка на шкале/.test(text("[data-tl-ev]"))), "отбор показан");
   late();
   API.get = jget;
   await sleep(100);
-  ok(!/Сработка на шкале/.test(text("[data-tl]")), "поздний ответ без отбора отбор не затёр");
+  ok(!/Сработка на шкале/.test(text("[data-tl-ev]")), "поздний ответ без отбора отбор не затёр");
   const sel2 = q("[data-tl-source]");
   sel2.value = "";
   sel2.dispatchEvent(new Event("change", { bubbles: true }));
-  ok(await until(() => /Сработка на шкале/.test(text("[data-tl]"))), "снова все");
-  [...document.querySelectorAll("[data-tl] .tl-go")].find((x) => /Сработка/.test(x.textContent)).click();
+  ok(await until(() => /Сработка на шкале/.test(text("[data-tl-ev]"))), "снова все");
+  [...document.querySelectorAll("[data-tl-ev] .tl-go")].find((x) => /Сработка/.test(x.textContent)).click();
   ok(await until(() => lv.pb?.piece?.from === plain.startMs + 600000), "переход к моменту события");
   pbPlay(lv, Date.now() + 864e5);
   ok(await until(() => /Записи на этот момент нет/.test(state())), "записи нет: слова");
+
+  // Панель на кадре: пауза, скорость, ±10 с, кадр, звук
+  pbPlay(lv, plain.startMs + 90000, plain.spanId, plain);
+  ok(await until(() => lv.pb?.piece), "архив для панели");
+  ok(!!q("[data-vw-ctl]") && !!q("[data-vw-pp]"), "панель на кадре");
+  vwPP();
+  ok(lv.pbPaused && liveEl.paused, "пауза");
+  ok(/пауза/.test(text("[data-vw-mode]")) && /Архив/.test(text("[data-vw-mode]")), "метка на кадре: архив, пауза: " + text("[data-vw-mode]"));
+  vwPP();
+  ok(!lv.pbPaused, "снова смотреть");
+  vwRate(4);
+  ok(lv.pbRate === 4 && liveEl.playbackRate === 4 && /4×/.test(text("[data-vw-mode]")), "скорость 4×");
+  vwRateStep(1);
+  ok(lv.pbRate === 8, "скорость на шаг быстрее: 8×");
+  vwRate(1);
+  const m0 = pbMoment(lv);
+  vwSkip(1);
+  ok(Math.abs(lv.tl.vc - (m0 + VW_SKIP)) < 1500, "вперёд на 10 с");
+  const m1 = vwMomentOf(lv);
+  vwSkip(-1);
+  vwSkip(-1);
+  ok(Math.abs(lv.tl.vc - (m1 - 2 * VW_SKIP)) < 1500, "две перемотки подряд: от момента перехода, а не от «сейчас»");
+  vwFrame(-1);
+  ok(lv.pbPaused, "кадр назад ставит на паузу");
+  vwPP();
+  const mu = liveEl.muted;
+  vwMute();
+  ok(liveEl.muted === !mu, "звук: переключён");
+  vwMute();
+  // Клавиши с фокусом на видео не уходят в общие клавиши страницы
+  const vid = q(".vw-vid"), key = (code, k, el = vid, o = {}) => { const e = new KeyboardEvent("keydown", Object.assign({ code, key: k, bubbles: true, cancelable: true }, o)); el.dispatchEvent(e); return e; };
+  ok(key("Space", " ").defaultPrevented && lv.pbPaused, "пробел на видео: пауза");
+  key("KeyK", "k");
+  ok(!lv.pbPaused, "K на видео: смотреть");
+  key("Period", ">", vid, { shiftKey: true });
+  ok(lv.pbRate === 2, "Shift+«.»: быстрее");
+  vwRate(1);
+  const sel0 = sel;
+  ok(key("ArrowDown", "ArrowDown").defaultPrevented === false && sel === sel0, "↓ на видео не уходит в дерево");
+  // Справка: кнопка в строке под видео, «?», Esc
+  const kbtn = q(".vw-bar [data-vw-keys]");
+  ok(!!kbtn && /Горячие клавиши/.test(kbtn.textContent), "кнопка «Горячие клавиши» под видео");
+  kbtn.click();
+  ok(!q("[data-vw-keys-box]").hidden && kbtn.getAttribute("aria-pressed") === "true", "справка открыта");
+  ok(q("[data-vw-keys-box]").querySelectorAll("tr").length >= 15, "в справке клавиши видео, шкалы и мыши");
+  key("Escape", "Escape", document.body);
+  ok(q("[data-vw-keys-box]").hidden && kbtn.getAttribute("aria-pressed") === "false", "Esc закрывает справку");
+  key("Slash", "?", vid, { shiftKey: true });
+  ok(!q("[data-vw-keys-box]").hidden, "«?» открывает справку");
+  vwKeysToggle(false);
+
+  // Шкала: голова в центре, тянут шкалу; щелчок — момент под курсором
+  const bar = q("[data-tl-bar]");
+  bar.setPointerCapture = () => {};
+  const br = bar.getBoundingClientRect(), y = br.top + br.height / 2, cx = br.left + br.width / 2;
+  const pt = (type, x, el = document) => el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: x, clientY: y, pointerId: 1 }));
+  const c0 = lv.tl.vc, z = lv.tl.vz;
+  pt("pointerdown", cx, bar);
+  pt("pointermove", cx + 40);
+  pt("pointermove", cx + 100);
+  ok(lv.drag && Math.abs(lv.tl.vc - (c0 - 100 / br.width * z)) < 2000, "тянем шкалу вправо: голова уходит в прошлое");
+  ok(headMid(), "голова стоит в центре");
+  pt("pointerup", cx + 100);
+  ok(!lv.drag && lv.pb, "отпустили: запись с момента под головой");
+  const c1 = lv.tl.vc;
+  ok(c1 <= c0 - 100 / br.width * z + 2000, "момент под головой — тот, куда утащили");
+  await until(() => lv.pb?.piece);
+  await until(() => !lv.tl.busy);
+  await sleep(500);
+  const c2 = lv.tl.vc, bar2 = q("[data-tl-bar]");
+  bar2.setPointerCapture = () => {};
+  pt("pointerdown", cx - br.width / 4, bar2);
+  pt("pointerup", cx - br.width / 4);
+  const want = c2 - z / 4, sp = lv.tl.spans, rec = sp.some((x) => x.startMs <= want && want < x.endMs);
+  ok(!rec || Math.abs(lv.tl.vc - want) < 2000, "щелчок: момент под курсором");
+  // Разрыв: ближайшая запись после момента
+  const plainSp = sp.filter((x) => !x.fenced).sort((a, b) => a.startMs - b.startMs);
+  const gi = plainSp.findIndex((x, i) => plainSp[i + 1] && plainSp[i + 1].startMs - x.endMs > 120000 && !sp.some((o) => o.startMs <= x.endMs + 60000 && x.endMs + 60000 < o.endMs));
+  if (gi >= 0) {
+    const gapMs = plainSp[gi].endMs + 60000, nx = sp.find((x) => x.startMs > gapMs && !x.fenced);
+    vwSeekTo(lv, gapMs);
+    ok(lv.tl.vc === nx.startMs, "разрыв: запись с начала следующей");
+    ok(await until(() => lv.pb?.piece && lv.pb.piece.to > nx.startMs), "разрыв: кусок следующей записи");
+  } else ok(true, "в наборе нет разрыва в записи");
+
+  // Календарь: сутки с записью отмечены, будущие выбрать нельзя; выбор суток — запись с начала суток
+  vwCalToggle();
+  ok(await until(() => q("[data-vw-cal]") && Object.values(vwDays).some((d) => !d.busy && Object.keys(d.days).length)), "календарь: месяц прочитан");
+  ok(reads.some((p) => /\/recording-days$/.test(p)), "календарь: GET recording-days");
+  const days = [...q("[data-vw-cal]").querySelectorAll(".vw-cal-d")];
+  ok(days.some((d) => d.classList.contains("rec")), "есть сутки с записью");
+  ok(days.filter((d) => d.classList.contains("fut") || d.classList.contains("no")).every((d) => d.disabled), "без записи и будущие — недоступны");
+  const pickD = days.find((d) => d.classList.contains("rec"));
+  pickD.click();
+  ok(!q("[data-vw-cal]"), "выбор закрыл календарь");
+  ok(await until(() => lv.tl.day && !lv.tl.busy && lv.pb), "сутки на шкале, запись идёт");
+  ok(new Date(lv.tl.day).getDate() === +pickD.textContent, "выбраны те сутки");
+  liveStop();
 
   // Живое снимает архив, стоп снимает всё
   liveStart();
@@ -255,6 +377,8 @@ UiCheck(async ({ ok, until, sleep, confirmWith }) => {
   q("[data-hold-add]").click();
   ok(await until(() => document.getElementById("holdFrom")), "окно удержания");
   ok(document.getElementById("holdFrom").value && document.getElementById("holdNote"), "окно по показанному");
+  const shown = vwShown(lv.tl);
+  ok(Math.abs(new Date(document.getElementById("holdFrom").value) - shown.from) < 61000 && Math.abs(new Date(document.getElementById("holdTo").value) - shown.to) < 61000, "удержать показанное — то, что видно на шкале");
   document.getElementById("holdNote").value = "Инцидент 1";
   const first = document.querySelector(".hold-rec");
   ok(!!first, "записи камеры на выбор");

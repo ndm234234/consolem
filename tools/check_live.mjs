@@ -68,7 +68,7 @@ try {
   ok(a?.w === 640 && a?.h === 360, `video.videoWidth×videoHeight ${a?.w}×${a?.h}`);
   ok(b?.t > a?.t + 1, `currentTime растёт: ${a?.t.toFixed(2)} → ${b?.t.toFixed(2)} за 2 с`);
   ok(!b?.paused, "не на паузе");
-  ok(/настоящего видео на стенде нет/.test(await ev(`document.querySelector(".live-note").textContent`)), "подпись на кадре: не камера");
+  ok(/настоящего видео на стенде нет|На стенде нет настоящего видео/.test(await ev(`document.querySelector(".live-note").textContent`)), "подпись на кадре: не камера");
   if (process.env.SHOT) fs.writeFileSync(process.env.SHOT, Buffer.from((await cmd("Page.captureScreenshot", { format: "png" })).data, "base64"));
   // Часть 2: PTZ мышью, разговор на подставном микрофоне браузера, реле
   await ev(`window.uiPtz=devicePool.find(n=>n.type==="camera"&&n.ptz&&n.online!==false);window.uiPuts=[];const p0=API.put;API.put=(p,b,v)=>(/\\/ptz$/.test(p)&&uiPuts.push(b),p0(p,b,v));null`);
@@ -77,14 +77,14 @@ try {
     await until(`!uiPtz._row&&sel===uiPtz.id`);
     await click(`#main .tab:nth-child(2)`);
     await until(`tab==="view"`);
-    const b = await box(`[data-ptz="0"]`);
+    const b = await box(`[data-cv-onvid] .cv-hold`);
     await cmd("Input.dispatchMouseEvent", { type: "mouseMoved", x: b.x, y: b.y });
     await cmd("Input.dispatchMouseEvent", { type: "mousePressed", x: b.x, y: b.y, button: "left", clickCount: 1 });
     await sleep(1800);
-    ok((await ev(`uiPtz&&uiPuts.length`)) >= 2 && (await ev(`!!ptzMove`)), "PTZ: держим кнопку мышью, аренда продлена");
+    ok((await ev(`uiPtz&&uiPuts.length`)) >= 2 && (await ev(`!!cvMove`)), "PTZ: держим кнопку зума на кадре мышью, аренда продлена");
     await cmd("Input.dispatchMouseEvent", { type: "mouseReleased", x: b.x, y: b.y, button: "left", clickCount: 1 });
     await sleep(150);
-    ok(await ev(`!ptzMove`), "PTZ: отпустили, стоп");
+    ok(await ev(`!cvMove`), "PTZ: отпустили, стоп");
   }
   await ev(`window.uiSpk=devicePool.find(n=>n.type==="camera"&&n.name==="Главный вход");pick(uiSpk.id,{force:true});null`);
   await until(`!uiSpk._row&&sel===uiSpk.id`);
@@ -94,6 +94,7 @@ try {
   ok(await until(`talk?.sess&&talk.pc.connectionState==="connected"`), "разговор соединён: " + (await ev(`document.querySelector("[data-talk-state]").textContent`)));
   ok(await click(`[data-talk]`), "«Закончить разговор»: мышью");
   ok(await until(`!talk`), "разговор закончен");
+  ok(await click(`[data-vw-tab="relay"]`), "вкладка «Реле»: мышью");
   ok(await click(`[data-relay] button`), "реле «Замкнуть»: мышью");
   ok(await until(`/замкнуто/.test(document.body.textContent)`), "реле: ответ словами");
 
@@ -109,7 +110,7 @@ try {
   const t0 = await ev(`liveEl.currentTime`);
   await sleep(1500);
   ok((await ev(`liveEl.currentTime`)) > t0, `кусок играет: currentTime ${t0.toFixed(2)} → ${(await ev(`liveEl.currentTime`)).toFixed(2)}`);
-  ok(/настоящей записи на стенде нет/.test(await ev(`document.querySelector(".live-note").textContent`)), "подпись на куске");
+  ok(/настоящей записи на стенде нет|На стенде нет настоящей записи/.test(await ev(`document.querySelector(".live-note").textContent`)), "подпись на куске");
   if (process.env.SHOT2) fs.writeFileSync(process.env.SHOT2, Buffer.from((await cmd("Page.captureScreenshot", { format: "png" })).data, "base64"));
   const first = await ev(`lv.pb.piece.to`);
   await ev(`liveEl.currentTime=liveEl.duration-1;null`);
@@ -117,10 +118,12 @@ try {
   ok(await until(`liveEl.currentTime>0.2&&!liveEl.paused`), "следующий играет");
 
   // Часть 4: отметка, удержание мышью
+  ok(await click(`[data-vw-tab="marks"]`), "вкладка «Отметки»: мышью");
   await click(`[data-mark-note]`);
   await cmd("Input.insertText", { text: "Отметка мышью" });
   ok(await click(`[data-mark-add]`), "«Отметить»: мышью");
   ok(await until(`lv.marks.some(m=>m.note==="Отметка мышью")`), "отметка на месте");
+  ok(await click(`[data-vw-tab="holds"]`), "вкладка «Удержания»: мышью");
   ok(await click(`[data-hold-add]`), "«Удержать показанное»: мышью");
   ok(await until(`!!document.getElementById("holdFrom")`), "окно удержания");
   await click(`#holdNote`);
