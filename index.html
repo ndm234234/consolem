@@ -655,19 +655,29 @@ div.exp-ln{display:flex;align-items:center;padding:8px 0}
 /* вкладка «Видео» — видео и поворот на одном экране */
 .cv{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;align-items:stretch;margin-bottom:12px;transition:grid-template-columns .3s ease}
 .cv.cv-has-ptz{grid-template-columns:minmax(0,1fr) 300px}
+.cv-cq{container:cv / inline-size}
+/* Потоки под видео: строка на поток, выбранная — с меткой и подсветкой, как выбранный пункт меню кита */
+.cv-sps{display:grid;gap:2px;margin-top:10px}.cv-sps-h{font-size:12px;color:var(--mu);margin:0 0 2px}
+.cv-sp{display:flex;align-items:center;gap:8px;min-height:32px;padding:4px 8px;border:1px solid transparent;border-radius:6px;background:none;color:var(--tx);font:inherit;font-size:12px;text-align:left;cursor:pointer;min-width:0}
+.cv-sp:hover:not(:disabled){background:var(--p2)}
+.cv-sp[aria-checked="true"]{background:color-mix(in srgb,var(--bl) 14%,transparent);border-color:color-mix(in srgb,var(--bl) 45%,transparent)}
+.cv-sp:disabled{opacity:.5;cursor:default}
+.cv-sp b{font-weight:500;white-space:nowrap}.cv-sp-t{color:var(--mu);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cv-sp-r{flex:none;width:14px;height:14px;border-radius:50%;border:1px solid var(--mu);box-sizing:border-box}
+.cv-sp[aria-checked="true"] .cv-sp-r{border:4px solid var(--bl)}
+/* Узкая область (широкое дерево, узкое окно): «Поворот» — под видео одной карточкой, джойстик и пресеты рядом, без пустоты под видео */
+/* .cv-cq в каждом правиле: запрос контейнера веса не добавляет, а базовые правила .cv-side и .cv-editing стоят ниже */
+@container cv (max-width:700px){
+  .cv-cq .cv.cv-has-ptz,.cv-cq .cv.cv-has-ptz.cv-editing{grid-template-columns:minmax(0,1fr)}
+  .cv-cq .cv-side{min-height:0}
+  .cv-cq .cv-side-in{position:static;inset:auto;flex-direction:row;flex-wrap:wrap;align-items:stretch;overflow:visible}
+  .cv-cq .cv-side-in>.cv-sec{flex:1 1 280px;border-bottom:0}
+  .cv-cq .cv-side-in .cv-pl{max-height:240px}
+}
 .cv>.card{margin-bottom:0}
 .cv-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;row-gap:6px}.cv-h-g{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}.cv-h .bd{font-weight:400}.cv-h-sp{flex:1}
-.cv-seg-l{font-size:12px;font-weight:400;color:var(--mu)}.cv-bar{display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap}
-.cv-seg{display:inline-flex;border:1px solid var(--ln);border-radius:8px;overflow:hidden;background:var(--p2)}
-.cv-seg button{border:0;background:none;color:var(--tx);font:inherit;font-size:12px;font-weight:400;padding:4px 10px;min-height:28px;cursor:pointer;white-space:nowrap;border-left:1px solid var(--ln)}
-.cv-seg button:first-child{border-left:0}.cv-seg button small{color:var(--mu);margin-left:4px}
-.cv-seg button[aria-checked="true"]{background:var(--bl);color:#fff}.cv-seg button[aria-checked="true"] small{color:#fffc}
-.cv-seg button:disabled{opacity:.45;cursor:default}
 .cv-main .vid{max-width:min(100%,calc((100vh - 400px)*16/9));margin:0}
-.cv-sum{display:flex;align-items:flex-start;gap:12px;margin-top:8px;font-size:12px;color:var(--mu)}
-.cv-sum ul{list-style:none;margin:0;padding:0;flex:1;display:grid;gap:2px}.cv-sum b{color:var(--tx);font-weight:500;margin-right:4px}
-.cv-sum .lk{white-space:nowrap;font-size:12px}
-.cv-side{position:relative;min-height:min(580px,calc(100vh - 220px))}
+.cv-side{position:relative;min-height:min(440px,calc(100vh - 220px))}
 .cv-side-in{position:absolute;inset:0;display:flex;flex-direction:column;overflow:hidden}
 .cv-sec{padding:10px 12px;border-bottom:1px solid var(--ln)}.cv-sec:last-child{border-bottom:0}
 .cv-sec-h{display:flex;align-items:baseline;gap:8px;font-weight:600;font-size:13px;margin-bottom:8px}.cv-sec-h .sub{margin:0 0 0 auto;font-weight:400;font-size:12px}
@@ -770,6 +780,22 @@ div.exp-ln{display:flex;align-items:center;padding:8px 0}
 .cv-te .cv-warn{margin:0}
 .cv-te-f{flex:none;display:flex;gap:6px;align-items:center;padding-top:8px;border-top:1px solid var(--ln)}.cv-te-f .btn{white-space:nowrap}
 .cv-tour-ov{position:absolute;left:8px;top:8px;z-index:2;max-width:calc(100% - 16px);background:#000a;color:#fff;font-size:12px;padding:3px 8px;border-radius:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+/* Поворот на видео (ресёрч 2026-11-10, вариант Е, как OnScreen PTZ в Axxon One): тянуть по кадру — поворот, скорость растёт
+   с расстоянием от точки нажатия; колесо и «+ −» в углу — зум. Стрелка от точки нажатия показывает направление */
+.cv-onvid{position:absolute;inset:0;z-index:1;cursor:move;touch-action:none}
+.cv-onvid~.live-acts{z-index:3}.cv-onvid~.live-note{max-width:calc(100% - 64px)}
+.cv-tour-ov:not([hidden])~.cv-onvid .cv-onvid-hint{display:none}
+.cv-onvid-arr{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+.cv-onvid-arr[hidden]{display:none}
+.cv-onvid-arr line{stroke:#fff;stroke-width:2.5;stroke-linecap:round}
+.cv-onvid-arr circle{fill:none;stroke:#fff;stroke-width:2}.cv-onvid-arr polygon{fill:#fff}
+.cv-onvid-arr g{filter:drop-shadow(0 0 2px #000)}
+.cv-onvid-hint{position:absolute;left:50%;top:8px;transform:translateX(-50%);max-width:calc(100% - 16px);font-size:12px;color:#fff;background:#000a;padding:3px 8px;border-radius:6px;pointer-events:none;opacity:0;transition:opacity .2s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cv-onvid:hover .cv-onvid-hint{opacity:1}.cv-onvid.on .cv-onvid-hint{opacity:0}
+.cv-onvid-z{position:absolute;right:8px;bottom:8px;display:flex;flex-direction:column;gap:4px;cursor:default}
+.cv-onvid-z .btn{width:32px;height:32px;padding:0;display:grid;place-items:center;background:#000a;color:#fff;border-color:#fff5}
+.cv-onvid-z .btn:hover{background:#000d}.cv-onvid-z .btn.on{background:var(--bl);border-color:var(--bl)}
+@media(prefers-reduced-motion:reduce){.cv-onvid-hint{transition:none}}
 .cv-tour-ov.pause{background:color-mix(in srgb,#000 55%,var(--one-warning-text))}
 @media(prefers-reduced-motion:reduce){.cv-ts li{transition:none}.cv{transition:none}.cv-side-in.cv-in,.cv-tab-body.cv-in{animation:none}.cv-te-mb,.cv-te-mh svg{transition:none}.cv-tabs button{transition:none}}
 .mx{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}.mc{padding:10px;background:var(--p2);border:1px solid var(--ln);border-radius:8px;font-size:12px;text-align:left}.mc span{color:var(--mu);display:block}.mc b{font-size:18px;font-weight:700;display:block;margin-top:4px}
@@ -894,15 +920,29 @@ html[data-theme="light"] .cp.done{border-color:var(--one-success-icon);color:var
 .cs-ro :is(input[type=checkbox],input[type=radio]):disabled{opacity:.7}
 .cs-sw-ro{pointer-events:none;opacity:.6}
 
-.cs-send{display:inline-flex;align-items:center;gap:8px;margin-left:auto;font-size:13px;white-space:nowrap;cursor:pointer}
-.cs-tocw{display:grid;grid-template-columns:210px minmax(0,1fr);gap:14px;align-items:start}
-.cs-toc{position:sticky;top:0;display:flex;flex-direction:column;gap:2px;padding:8px;border:1px solid var(--ln);border-radius:8px;background:var(--p)}
-.cs-toc-h{font-size:12px;color:var(--mu);padding:4px 8px}
-.cs-toc-i{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;min-width:0;padding:6px 8px;border:0;border-radius:6px;background:none;font:inherit;font-size:13px;color:inherit;text-align:left;cursor:pointer}
-.cs-toc-i:hover{background:var(--p2)}
-.cs-toc-i span,.cs-toc-i small{max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.cs-toc-i small{color:var(--mu);font-size:12px}
-.cs-toc-acts{display:flex;flex-wrap:wrap;gap:4px 12px;padding:8px 8px 2px;border-top:1px solid var(--ln);margin-top:4px;font-size:12px}
+.cs-send{display:inline-flex;align-items:center;gap:8px;font-size:13px;white-space:nowrap;cursor:pointer}.cs-send b{font-weight:500}
+.cs-mode{display:flex;gap:8px;align-items:flex-start;padding:8px 12px;margin-bottom:12px;border:1px solid var(--ln);border-radius:8px;background:var(--p);font-size:13px;line-height:1.45}
+.cs-mode>svg{flex:0 0 auto;margin-top:2px;color:var(--mu)}
+/* Строка с переключателем: переключатель и название — слева, пояснение — рядом, а в узкой области — под ними */
+.cs-mode-sw{align-items:center;flex-wrap:wrap;gap:4px 14px}
+.cs-mode-t{flex:1 1 300px;min-width:0;color:var(--mu)}.cs-mode-t svg{display:inline;vertical-align:-2px;margin-right:2px}
+.cs-lock{display:inline-flex;align-items:center;margin-left:6px;color:var(--mu)}.cs-lock svg{width:13px;height:13px}
+.tab-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--one-warning-icon);margin-left:6px;vertical-align:middle}
+/* Оглавление — строка над разделами, а не третий столбец: слева уже дерево (ресёрч 2026-11-10, вариант А). Строка не
+   прилипает: прилипшую строку ссылок под вкладками легко принять за вторые вкладки (NN/g) */
+.cs-tocw{display:flex;flex-direction:column;gap:12px;min-width:0}
+/* Подпись, ссылки и «Развернуть всё» — один поток на всю ширину: ссылки занимают и место под подписью, строк меньше */
+.cs-toc{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-width:0}
+.cs-toc-list{display:contents}
+.cs-state{font-size:13px;margin:2px 0 8px}.cs-state b{font-weight:600}
+/* Под параметрами драйвера — то, что о блоке знает сервер (объём и репликация встроенного хранилища) */
+.cs-after{margin-top:12px;padding-top:12px;border-top:1px solid var(--ln)}
+.cs-toc-h{font-size:12px;line-height:24px;color:var(--mu);white-space:nowrap;margin-right:4px}
+.cs-toc-i{display:inline-flex;align-items:baseline;gap:6px;max-width:100%;min-width:0;height:24px;padding:0 9px;border:1px solid var(--ln);border-radius:12px;background:var(--p);font:inherit;font-size:12px;line-height:22px;color:inherit;cursor:pointer;white-space:nowrap}
+.cs-toc-i:hover{background:var(--p2)}.cs-toc-i:focus-visible{outline:2px solid var(--bl);outline-offset:1px}
+.cs-toc-i span{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.cs-toc-i small{color:var(--mu);font-size:11px}
+.cs-toc-acts{display:flex;gap:12px;margin-left:auto;padding-left:6px;font-size:12px;line-height:24px;white-space:nowrap}
 .cs-sec>.ch{flex-wrap:nowrap;justify-content:flex-start}
 .cs-chev{display:inline-flex;align-items:center;justify-content:center;flex:none;width:24px;height:24px;margin:-4px 4px -4px -6px;padding:0;border:0;border-radius:6px;background:none;color:inherit;cursor:pointer}
 .cs-chev:hover{background:var(--p2)}.cs-chev:focus-visible{outline:2px solid var(--bl)}
@@ -913,7 +953,6 @@ html[data-theme="light"] .cp.done{border-color:var(--one-success-icon);color:var
 .cs-bin{min-height:0;overflow:hidden}
 .cs-sec.closed .cs-body{grid-template-rows:0fr}
 @media (prefers-reduced-motion:reduce){.cs-body,.cs-chev svg{transition:none}}
-@container (max-width:760px){.cs-tocw{grid-template-columns:minmax(0,1fr)}.cs-toc{display:none}}
 .cs-acts{display:flex;gap:6px;margin-left:auto;font-weight:400}
 .cs-dl{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px 16px;margin:0}
 .cs-dl>div{min-width:0}
@@ -2412,14 +2451,43 @@ body :is(.n:not(.on,.mark),.as-name,.it) .ici.ici-asdisk{color:color-mix(in srgb
 .as-bar i{display:block;height:100%;background:var(--bl)}
 .as-bar.warn i{background:var(--one-warning-icon)}.as-bar.bad i{background:var(--one-danger)}
 .nt .as-link{font-weight:600;color:inherit;text-decoration:underline}
-/* Хранилища камеры: строка — хранилище, поток, режим */
+/* Хранилища и запись: строка — хранилище, поток, режим. Ячейки без поля слева: строки, «Привязать к хранилищу»
+   и настройки записи стоят по одной левой линии. .ca-wrap поднимает вес правила над bridge.css (table td 8px 12px).
+   Между хранилищами — одна линия, как divide-y в ките ONE PSIM; у последнего линии нет */
 .ca-tbl{width:100%;border-collapse:collapse}
-.ca-tbl th{text-align:left;font-size:11px;color:var(--mu);font-weight:500;padding:0 8px 6px 0}
-.ca-tbl td{padding:4px 8px 6px 0;vertical-align:top}
+.ca-wrap .ca-tbl th{text-align:left;font-size:11px;color:var(--mu);font-weight:500;padding:0 8px 6px 0;border-bottom:1px solid var(--ln)}
+.ca-wrap .ca-tbl td{padding:10px 8px 10px 0;vertical-align:top;border-bottom:1px solid var(--ln)}
+.ca-wrap .ca-tbl td:last-child{padding-right:0}
+.ca-wrap .ca-tbl tbody tr:last-child td{border-bottom:0}
 .ca-tbl td select{width:100%}
 .ca-tbl .ca-x{width:1%;white-space:nowrap;padding-right:0}
+/* Поток и режим — по ширине текста: поле не обрезает «По расписанию»; не влезло — сужается первый столбец */
+.ca-tbl td.ca-fit{width:1%;white-space:nowrap}.ca-tbl td.ca-fit select{width:auto;field-sizing:content;max-width:220px}
+/* Узкая карточка: хранилище — первой строкой, поток, режим и «Отвязать» — ниже, с переносом целиком */
+.ca-wrap{container:ca / inline-size}
+@container ca (max-width:560px){
+  .ca-tbl thead{display:none}
+  .ca-tbl,.ca-tbl tbody{display:block;width:100%}
+  .ca-tbl tr{display:flex;flex-wrap:wrap;align-items:flex-end;gap:6px 10px;padding-top:8px}
+  .ca-wrap .ca-tbl td{display:block;padding:0;border-bottom:0}
+  .ca-wrap .ca-tbl tr{border-bottom:1px solid var(--ln);padding-bottom:10px}.ca-wrap .ca-tbl tr:has(+tr.ca-when),.ca-wrap .ca-tbl tbody tr:last-child{border-bottom:0}
+  .ca-tbl td:first-child{flex:1 1 100%}
+  .ca-tbl td.ca-fit{width:auto}
+  .ca-tbl td.ca-fit::before{content:attr(data-l);display:block;font-size:11px;color:var(--mu);margin-bottom:2px}
+  .ca-tbl td.ca-x{margin-left:auto;width:auto}
+  .ca-wrap .ca-tbl tr.ca-when{padding-top:0}.ca-wrap .ca-tbl tr.ca-when td{flex:1 1 100%;padding:0}
+}
 .ca-main{color:var(--x-link)}
-.ca-foot{margin-top:8px}
+.plan-rec-sum{font-size:12px;color:var(--mu);padding:6px 10px;border-bottom:1px solid var(--ln);display:grid;gap:2px}
+/* «Привязать к хранилищу» — под списком, по той же левой линии, без своей линии */
+.ca-foot{margin-top:12px}
+/* «⋮» — квадрат высотой с поля строки (32), как .btn-icon кита */
+.ca-tbl .ca-more{width:32px;height:32px;min-width:32px;padding:0;justify-content:center}
+/* Настройки записи — раздел той же карточки под списком хранилищ */
+.ca-set{margin-top:16px;padding-top:12px;border-top:1px solid var(--ln)}.ca-set-h{font-weight:600;font-size:13px;margin:0 0 8px}
+/* Срок, глубина и предзапись строки — в один ряд: подписи над полями, поля по низу одной линии */
+.ca-depth{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px 12px;align-items:end;margin-top:8px;max-width:420px}
+.ca-depth>div{display:flex;flex-direction:column;gap:4px;min-width:0}.ca-depth label{font-size:12px;color:var(--mu);line-height:1.25}.ca-depth input{width:100%;min-width:0}
 .ca-add{max-width:360px}
 /* Камеры регистратора: группа под заголовком, канал вместо своего IP */
 .tag.tag-ch{color:color-mix(in srgb, var(--one-palette-purple) 30%, var(--one-fg));background:color-mix(in srgb, var(--one-palette-purple) var(--x-tint), var(--one-surface))}
@@ -2604,6 +2672,16 @@ html[data-theme="light"] .cp-step{background:var(--one-control-hover);color:var(
 .er-bulk-n{flex:none;min-width:120px;white-space:nowrap}
 .er-rules-nt{margin:0 0 10px}.er-rules td .btn{white-space:nowrap}
 .er-rules-add{margin-top:12px}.er-rules-add>.sub{display:block;margin-bottom:8px}
+.rec-gap{color:var(--one-warning-icon);display:flex;gap:4px;align-items:flex-start}
+.ca-wrap .ca-tbl tr:has(+tr.ca-when) td{border-bottom:0;padding-bottom:6px}.ca-wrap .ca-tbl tr.ca-when td{padding:4px 0 12px}
+@container ca (max-width:560px){.ca-wrap .ca-tbl tr:has(+tr.ca-when) td,.ca-wrap .ca-tbl tr.ca-when td{padding:0}}.ca-when .rec-gap{font-size:12px;margin:0 0 6px;padding:6px 8px;border-radius:6px;background:color-mix(in srgb, var(--one-warning-icon) 12%, transparent)}
+/* Предупреждение «Запись не начнётся…» моргает два раза, когда появилось после правки: цвет предупреждения, а не синий */
+@keyframes recGapFlash{0%,100%{box-shadow:inset 0 0 0 2px transparent}12%,44%{box-shadow:inset 0 0 0 2px var(--one-warning-icon);background-color:color-mix(in srgb, var(--one-warning-icon) 30%, transparent)}28%,60%{box-shadow:inset 0 0 0 2px transparent}}
+.rec-gap.rec-gap-flash{animation:recGapFlash 2.4s ease-out}
+@media (prefers-reduced-motion:reduce){.rec-gap.rec-gap-flash{animation:none;box-shadow:inset 0 0 0 2px var(--one-warning-icon)}}
+
+.ca-when-ok{font-size:12px;color:var(--mu)}.ca-when-add{display:flex;flex-wrap:wrap;gap:6px}
+.ca-sch{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin-bottom:4px}.ca-sch label{font-size:12px;color:var(--mu)}.ca-tbl .ca-sch select{width:auto;field-sizing:content;max-width:100%}.rec-gap svg{flex:none;width:13px;height:13px;margin-top:2px}
 .er-t-rule:hover{border-color:var(--bl)}.er-t-go{display:flex;align-items:center;gap:5px;color:var(--x-link);font-size:12px}
 .er-pull{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px 10px;align-items:center;margin-top:10px}.er-pull label{margin:0}.er-pull input{width:100%;min-width:0;box-sizing:border-box}
 /* Общий вид встроенных хранилищ */
@@ -2886,7 +2964,7 @@ onEv.key=(...keys)=>[".key",...keys];
   }
   // Перехват на документе: шаги идут раньше слушателей ниже по дереву и раньше «клика снаружи» на
   // документе — как шли атрибуты onclick; stopPropagation останавливает и тех, и других
-  ["click","dblclick","change","input","keydown","mousedown","contextmenu","dragover","dragleave","drop","focus","blur","mouseenter","mouseleave"].forEach(type=>
+  ["click","dblclick","change","input","keydown","mousedown","pointerdown","contextmenu","dragover","dragleave","drop","focus","blur","mouseenter","mouseleave"].forEach(type=>
     document.addEventListener(type,ev=>{
       const attr="data-on-"+type;
       // Невсплывающее (focus, mouseenter, input из dispatchEvent без bubbles) — только у самого элемента
@@ -3599,7 +3677,7 @@ function devNode(r){
     else if(k==="sizeBytes"){n.size=bytesText(v);n.bytes=v}
     else if(k==="lat"||k==="lon")n[k]=v==null?"":v.toFixed(6);
     else if(k==="azimuth")n[k]=v==null?"":String(v);
-    else if(k==="extraArchives")n.archx=v.map(x=>({arch:x.archiveId,rec:x.recordMode,stream:x.stream,...(x.labels?{labels:x.labels}:{}),...(x.state?{state:x.state}:{}),...(x.reason?{reason:x.reason}:{}),...(x.readOnly?{ro:true}:{}),...("replicaFrom" in x?{replicaFrom:x.replicaFrom}:{}),...(x.replicaLagSec!=null?{lag:x.replicaLagSec}:{}),...(x.retentionDays!=null?{retentionDays:x.retentionDays}:{}),...(x.minDepthDays!=null?{minDepthDays:x.minDepthDays}:{})}));
+    else if(k==="extraArchives")n.archx=v.map(x=>({arch:x.archiveId,rec:x.recordMode,stream:x.stream,...(x.labels?{labels:x.labels}:{}),...(x.state?{state:x.state}:{}),...(x.reason?{reason:x.reason}:{}),...(x.readOnly?{ro:true}:{}),...("replicaFrom" in x?{replicaFrom:x.replicaFrom}:{}),...(x.replicaLagSec!=null?{lag:x.replicaLagSec}:{}),...(x.retentionDays!=null?{retentionDays:x.retentionDays}:{}),...(x.minDepthDays!=null?{minDepthDays:x.minDepthDays}:{}),...(x.preRecordSec!=null?{pre:x.preRecordSec}:{})}));
     else if(k==="mode"&&r.type==="email")n.mode=EMAIL_MODE_RU[v]||v;
     else if(k==="norm")n.norm=NORM_RU[v]||v;
     else if(k==="disabledByRuleAt")n.ruleOffAt=v?clockText(v,true):"";
@@ -3799,8 +3877,9 @@ function hwApplyUnit(u){
   if(t==="archive")return hwApplyArchive(r);
   if(t==="vol")return hwApplyVolume(r);
   // Потоки камеры — отдельные объекты: в записи без них кэш держит прочитанные
-  const n=find(u.uid)?.n;
-  if(n&&!("streams" in r)&&n.streams)r.streams=n.streams;
+  // Потоки черновика карточки — не серверные: в запись идут потоки снимка «до»
+  const n=find(u.uid)?.n,sb=cardBase&&cardBase.id===u.uid?cardBase.snap:null,ks=sb?sb.streams:n?.streams;
+  if(n&&!("streams" in r)&&ks)r.streams=cardClone({v:ks}).v;
   return hwApplyDevice(r);
 }
 const KEEP_SCHEMA=new Set(["devices","_more","_nf","_nr","_row","_schemaOwn","props"]);
@@ -3834,6 +3913,18 @@ function hwSetStreams(id,list){
   const n=find(id)?.n;if(!n)return;
   const base=cardBase&&cardBase.id===id?cardBase.snap:null;
   const touched=!!base&&JSON.stringify(n.streams)!==JSON.stringify(base.streams);
+  if(touched){
+    // Черновик потоков: тронутый поток остаётся как в черновике, нетронутый — как на сервере; поток, который добавили
+    // или удалили в другом месте, появляется или пропадает, а не становится строкой «Удалить: поток» плана
+    const was=new Map((base.streams||[]).map(x=>[x.id,x])),srvM=new Map(list.map(x=>[x.id,x])),live=[];
+    (n.streams||[]).forEach(x=>{const w=was.get(x.id),f=srvM.get(x.id);
+      if(x._new){live.push(x);return}
+      if(!f)return;
+      live.push(w&&JSON.stringify(x)===JSON.stringify(w)?cardClone(f):x)});
+    const at=live.findIndex(x=>x._new);
+    list.forEach(f=>{if(!was.has(f.id)&&!live.some(x=>x.id===f.id))live.splice(at<0?live.length:at,0,cardClone(f))});
+    n.streams=live;
+  }
   if(base){if(list.length)base.streams=cardClone({v:list}).v;else delete base.streams}
   if(touched)return;
   if(list.length)n.streams=list;else delete n.streams;
@@ -5313,7 +5404,7 @@ function isRecording(n){return n&&n.type==="camera"&&!!n.arch&&n.rec&&n.rec!=="n
 function camArchs(n){
   if(!n||n.type!=="camera")return[];
   if(!n.arch)return(n.archx||[]).map(x=>({...x}));
-  return[{arch:n.arch,rec:n.rec||"none",stream:n.stream||"main",main:true,state:n.recordState,reason:n.recordReason,replicaFrom:n.replicaFrom,lag:n.replicaLagSec,retentionDays:n.retentionDays,minDepthDays:n.minDepthDays},...(n.archx||[]).map(x=>({...x}))];
+  return[{arch:n.arch,rec:n.rec||"none",stream:n.stream||"main",main:true,state:n.recordState,reason:n.recordReason,replicaFrom:n.replicaFrom,lag:n.replicaLagSec,retentionDays:n.retentionDays,minDepthDays:n.minDepthDays,pre:n.pre},...(n.archx||[]).map(x=>({...x}))];
 }
 function camWritesTo(n,aid){return camArchs(n).some(x=>x.arch===aid&&x.rec&&x.rec!=="none")}
 // Камеры хранилища: у строки кэша записи нет, поэтому — и то, что прочитано дверью archiveId
@@ -5365,7 +5456,9 @@ function camDropArch(n,aid){
   if(n.arch===aid){
     // Строка только для чтения и резерв на сбой основной не становятся
     const i=n.archx.findIndex(x=>!x.ro&&x.rec!=="backup"),next=i>=0?n.archx.splice(i,1)[0]:null;
-    if(next){n.arch=next.arch;n.rec=next.rec;n.stream=next.stream}else{n.arch=null;n.rec="none"}
+    // Срок и глубина строки переходят к камере, как на сервере; своя предзапись строки — тоже, иначе остаётся предзапись камеры
+    if(next){n.arch=next.arch;n.rec=next.rec;n.stream=next.stream;["retentionDays","minDepthDays"].forEach(k=>{if(k in next)n[k]=next[k];else delete n[k]});if(next.pre!=null)n.pre=next.pre}
+    else{n.arch=null;n.rec="none"}
   }
 }
 // Виртуальная группа: на сервере её нет, это отбор noRecord. У строки кэша записи нет, поэтому в группе то, что отбор
@@ -6573,7 +6666,7 @@ const CARD_PROP={overlays:"Камеры титров",overlayFont:"Шрифт т
   recordScheduleId:"Расписание записи",retentionDays:"Срок записи, дней",minDepthDays:"Глубина не меньше, дней",audioDeviceId:"Микрофон записи",replicaFrom:"Откуда забирать",size:"Объём",recordMode:"Когда писать",admits:"Принимает записи",zone:"Зона",labels:"Метки",alarmKinds:"Тревожные виды",enabled:"Включено",rec:"Режим записи",arch:"Архив",archx:"Дополнительные архивы",pre:"Предзапись, с",srvId:"Сервер",
   recDets:"Запись по детекторам",name:"Имя",short:"Короткое имя",ip:"IP",port:"Порт",vendor:"Производитель",model:"Модель",
   days:"Глубина, дней",enc:"Шифрование",storage:"Тип хранения",vols:"Тома",kind:"Тип",sens:"Чувствительность",license:"Лицензия",
-  codec:"Кодек",res:"Разрешение",fps:"к/с",stream:"Поток",lat:"Широта",lon:"Долгота",azimuth:"Азимут",user:"Имя пользователя",pass:"Пароль"};
+  codec:"Кодек",res:"Разрешение",fps:"к/с",stream:"Поток",recordingTarget:"Сервер записи",lat:"Широта",lon:"Долгота",azimuth:"Азимут",user:"Имя пользователя",pass:"Пароль"};
 // Поле карточки → свойство объекта, куда его запишет «Применить».
 const CARD_FLD_PROP={"Имя пользователя":"user","Пароль":"pass","Имя":"name","Короткое имя":"short","IP":"ip","Порт":"port","Производитель":"vendor","Модель":"model",
   "Широта":"lat","Долгота":"lon","Азимут":"azimuth","MAC":"mac","Адрес кассы или сервера":"ip","Адрес":"path","Номер канала":"ch","Роль":"role",
@@ -6593,6 +6686,7 @@ function cardFmt(k,v){
   if(k==="arch"){const a=archById(v);return a?locName(a):String(v)}
   if(k==="srvId"){const s=servers.find(x=>x.id===v);return s?locName(s):String(v)}
   if(k==="pass")return"••••••••";
+  if(k==="recordingTarget")return recTargetText(v);
   if(k==="zone")return zoneText(v);
   if(Array.isArray(v))return v.length?`${v.length} ${i18n("шт.")}`:"—";
   if(typeof v==="object")return"…";
@@ -6604,6 +6698,7 @@ function cardDiffNode(live,snap,owner,out){
     if(CARD_SKIP.has(k)||k.startsWith("_"))return;
     if(k==="props"&&isSchemaNode(live)){schemaDiff(live,snap,owner,out);return}
     if(k==="xprops"&&!isSchemaNode(live)){schemaDiffX(live,snap,owner,out);return}
+    if(k==="streams"&&live.type==="camera"){camStreamsDiff(live,snap,out);return}
     if(JSON.stringify(live[k])===JSON.stringify(snap[k]))return;
     const from=snap[k]===undefined?undefined:cardClone({v:snap[k]}).v,to=live[k]===undefined?undefined:cardClone({v:live[k]}).v;
     out.push({node:live,key:k,from,to,label:(live!==owner?`«${locName(live)}»: `:"")+i18n(CARD_PROP[k]||k),
@@ -6627,6 +6722,8 @@ function cardDiff(){
   Object.entries(cardDraft.fields).forEach(([l,f])=>out.push({node:n,fld:l,prop:CARD_FLD_PROP[l]||null,from:f.from,to:f.to,label:i18n(l),fromT:f.from===""?"—":f.from,toT:f.to===""?"—":f.to}));
   Object.entries(edits).forEach(([k,v])=>{const[id,f]=splitEditKey(k);if(id!==n.id)return;out.push({node:n,edit:k,prop:f,from:n[f],to:v,label:i18n(CARD_PROP[f]||f),fromT:cardFmt(f,n[f]),toT:cardFmt(f,v)})});
   posMergeProto(out,n);
+  camPlanRows(n,out);
+  camRecRulePlanRows(n,out);
   return out;
 }
 // Вернуть объект к снимку «до»: по ключам, начинку — по id, добавленное — убрать.
@@ -6644,6 +6741,9 @@ function cardRestore(){
   if(!cardDraft)return;
   const n=find(cardDraft.id)?.n;if(n){cardRestoreNode(n,cardDraft.snap);if(cardDraft.folders)cardSetFolders(n.id,cardDraft.folders)}
   Object.keys(edits).forEach(k=>{if(splitEditKey(k)[0]===cardDraft.id)delete edits[k]});
+  // Значения в блоках камеры верны только для этого черновика: после «Сбросить» или «Применить» открытые блоки закрываются,
+  // заглушки (параметры драйвера, кодек и битрейт потоков, туры) возвращаются к значениям до плана
+  camPlanRestore(cardDraft.id);
   cardDraft=null;cardBase=null;dirty=false;
   treeMatchCache.clear();searchMatchCache.clear();
 }
@@ -6680,15 +6780,24 @@ function cardPlanOpen(){
   openBulkModal(`${i18n("План")}: «${escHtml(locName(n))}», ${d.length} ${i18n(plural(d.length,"изменение|изменения|изменений"))}`,
     `<table class="bk-table"><thead><tr><th>#</th><th>${i18n("Параметр")}</th><th>${i18n("Было")}</th><th>${i18n("Станет")}</th></tr></thead><tbody>${rows}</tbody></table>
      ${off?`<div class="nt bk-warn">${lu("triangle-alert")} ${i18n("сервер")} «${escHtml(locName(s))}» ${i18n("без связи. Консоль не применит изменения, в отчёте у них будет статус «не применено»")}</div>`:""}
-     <p class="sub" style="margin:10px 0 0">${i18n("Как изменение выборки: консоль отправляет изменения на сервер одной операцией. Итог будет в отчёте. После применения можно нажать «Отменить».")}</p>`,
+     <p class="sub" style="margin:10px 0 0">${i18n(d.some(r=>!r.stub&&!camCallOf(r))?"Как изменение выборки: консоль отправляет изменения на сервер одной операцией. Итог будет в отчёте. После применения можно нажать «Отменить».":"Итог будет в отчёте. «Отменить» после применения нет: на сервере нет операции, которую можно отменить.")}</p>
+     ${n.type==="camera"&&d.some(r=>["arch","rec","archx","recDets","recordScheduleId"].includes(r.key))?camRecGaps(n).map(g=>`<div class="nt bk-warn" data-plan-rec-gap="${g.k}">${lu("triangle-alert")} ${escHtml(g.text)}</div>`).join(""):""}
+     ${d.some(r=>r.recRule)?`<p class="sub" data-plan-rule>${i18n("Правило записи по движению консоль создаст после операции, если все изменения применятся. «Отменить» после применения правило не удалит.")}</p>`:""}
+     ${d.some(camCallOf)?`<p class="sub" data-plan-rt>${i18n("«Сервер записи» и потоки консоль запишет отдельными запросами до операции. «Отменить» после применения их не вернёт.")}</p>`:""}
+     ${d.some(r=>r.stub)?`<p class="sub" data-plan-stub>${i18n("Заглушка: консоль пока не отправляет на сервер параметры драйвера, кодек и битрейт потоков и туры. «Применить» оставит их как есть.")}</p>`:""}`,
     `<button type="button" class="btn" ${onEv("click",["closeBulkModal"])}>${i18n("Назад")}</button><button type="button" class="btn pri" ${onEv("click",["closeBulkModal"],["cardApply"])}>${i18n("Применить")} (${d.length})</button>`,"bbox-wide");
 }
 function cardApply(ok){
-  const d=cardDiff();if(!d.length)return;
+  const all=cardDiff();if(!all.length)return;
+  // Правило записи по движению — запрос POST /rules (правил в /operations нет): консоль создаёт его только после
+  // операции без ошибок, иначе правило осталось бы у камеры без детектора и режима
+  const d=all.filter(r=>!r.recRule),recRules=all.filter(r=>r.recRule),afterOk=recRules.length?()=>camRecRulesAfter(recRules):null;
   if(bq&&!bq.finished){toast("Групповая операция ещё не закончена. Подождать её конца");return}
   if(busyRefuse(cardDraft.id))return;
   const n=find(cardDraft.id).n;
-  const items=cardApiItems(n,d);
+  // Не шаги операции: заглушки (остаются как есть) и отдельные запросы — «Сервер записи» и потоки (camCallRun)
+  const isLoc=r=>!!r.stub||camCallOf(r),api=d.filter(r=>!isLoc(r)),loc=d.filter(isLoc);
+  const items=cardApiItems(n,api);
   // Меньший объём тома или карты камеры стирает старое: без второго слова сервер откажет
   const less=(items||[]).filter(x=>x.set?.sizeBytes!=null&&(volById(x.targetId)||find(x.targetId)?.n)?.bytes>x.set.sizeBytes);
   if(less.length&&!ok){
@@ -6697,20 +6806,30 @@ function cardApply(ok){
   }
   less.forEach(x=>{x.set.confirmShrinkBytes=x.set.sizeBytes});
   if(items){
-    cardRestore();
-    const label=r=>r.add?r.label:`${r.label}: ${r.toT}`;
-    const ops=d.map(r=>({...mkOp(r.node||n,label(r),r.folders?"folder":"param"),state:"wait",msg:"",done:false,tempId:r.add?.id}));
-    const targets=[...new Set(items.map(opTarget))];
-    apiQueue([{label:`«${locName(n)}»: ${d.length} ${plural(d.length,"изменение|изменения|изменений")}`,ops}],`«${locName(n)}»`,{undo:true},
-      ()=>API.post("/operations",{idempotencyKey:opKey(),items:opItems(items),expectedVersions:Object.fromEntries(targets.map(x=>[x,hwVer.get(x)]))}));
+    camPlanCommit(n.id);cardRestore();
+    const label=r=>r.add||r.streamAdd||r.streamDel?r.label:`${r.label}: ${r.toT}`;
+    // Заглушки и отдельные запросы — шаги с o.call: очередь выполняет их до операции (apiQueue). Заглушка — сразу «выполнено»
+    const mk=r=>({...mkOp(r.node||n,label(r),r.folders?"folder":"param"),state:"wait",msg:"",done:false,tempId:r.add?.id,
+      call:r.stub?()=>Promise.resolve():isLoc(r)?()=>camCallRun(n,r):undefined});
+    const apiOps=api.map(mk),locOps=loc.map(mk),step={label:`«${locName(n)}»: ${all.length} ${plural(all.length,"изменение|изменения|изменений")}`,ops:[...locOps,...apiOps]};
+    const streams=loc.some(r=>r.streamSet||r.streamAdd||r.streamDel),targets=[...new Set(items.map(opTarget))];
+    // Правка основного потока меняет версию камеры: после потоков камера перечитывается, версии для операции — свежие
+    const afterCalls=streams?()=>hwStreamsRead(n.id).then(()=>API.get(`/units/${n.id}`)).then(u=>{hwApplyUnit(u);hwVer.set(u.uid,u.version)}):null;
+    // Только заглушки и отдельные запросы: операции на сервере нет, «Отменить» после применения тоже
+    apiQueue([step],`«${locName(n)}»`,{undo:!!items.length,afterCalls,afterOk},
+      items.length?()=>API.post("/operations",{idempotencyKey:opKey(),items:opItems(items),expectedVersions:Object.fromEntries(targets.map(x=>[x,hwVer.get(x)]))}):null,apiOps);
     paint();
     return;
   }
   // Модель возвращается к «до», а «станет» записывает очередь — так сбой
   // сервера оставляет объект как был, а не наполовину изменённым.
-  cardRestore();
+  camPlanCommit(n.id);cardRestore();
   const set=(o,k,v)=>{if(v===undefined)delete o[k];else o[k]=cardClone({v}).v};
   const ops=d.map(r=>{
+    if(r.stub)return mkOp(n,`${r.label}: ${r.toT}`,"param",()=>{});
+    if(r.streamSet)return mkOp(n,`${r.label}: ${r.toT}`,"param",()=>{const x=(n.streams||[]).find(y=>y.uid===r.streamSet.uid);if(x)Object.assign(x,r.streamSet.props)});
+    if(r.streamAdd)return mkOp(n,r.label,"param",()=>{(n.streams||(n.streams=[])).push(cardClone(r.streamAdd))},null,()=>{n.streams=(n.streams||[]).filter(x=>x.id!==r.streamAdd.id)});
+    if(r.streamDel)return mkOp(n,r.label,"param",()=>{n.streams=(n.streams||[]).filter(x=>x.id!==r.streamDel.id)});
     if(r.folders)return mkOp(n,`${r.label}: ${r.toT}`,"folder",()=>cardSetFolders(n.id,r.folders),null,()=>cardSetFolders(n.id,r.fromFolders));
     if(r.add)return mkOp(r.node,r.label,"param",()=>{(r.node.devices||(r.node.devices=[])).push(r.add);hwIdxDrop()},null,()=>{r.node.devices=r.node.devices.filter(x=>x!==r.add);hwIdxDrop()});
     if(r.fld||r.edit){const k=r.prop,prev=k?n[k]:undefined,v=k==="port"||k==="ch"?Number(r.to)||r.to:String(r.to).trim();
@@ -6722,7 +6841,7 @@ function cardApply(ok){
     }
     return mkOp(r.node,`${r.label}: ${r.toT}`,"param",()=>set(r.node,r.key,r.to),null,()=>set(r.node,r.key,r.from));
   });
-  startQueue([{label:`«${locName(n)}»: ${d.length} ${plural(d.length,"изменение|изменения|изменений")}`,ops:ops.map(o=>({...o,state:"wait",msg:"",done:false}))}],`«${locName(n)}»`,{undo:true});
+  startQueue([{label:`«${locName(n)}»: ${all.length} ${plural(all.length,"изменение|изменения|изменений")}`,ops:ops.map(o=>({...o,state:"wait",msg:"",done:false}))}],`«${locName(n)}»`,{undo:true,afterOk});
   paint();
 }
 
@@ -9980,7 +10099,13 @@ function pick(id,opts){
   const f=find(id);
   if(!f){if(typeof id==="string"&&!id.includes(":"))hwEnsure([id]).then(()=>{if(find(id))pick(id,opts)}).catch(()=>{});return}
   // Ушли с объекта с неприменёнными правками — спрашиваем, а не теряем молча.
+  // Блоки драйвера и «Параметры потоков» с несохранённой правкой — тоже вопрос (их правка не в черновике карточки)
+  // Вопрос и сброс идут вместе: выбор нескольких объектов (range, additive) камеру не закрывает — ни вопроса, ни сброса.
+  // force (подтвердили черновик карточки) этот вопрос не пропускает: о блоках драйвера и потоках спрашивает только он
+  const csGo=sel&&sel!==id&&!opts?.range&&!opts?.additive;
+  if(csGo&&!opts?.csOk&&csDirtyList(sel).length){csLeaveAsk(sel,()=>pick(id,{...(opts||{}),csOk:true}));return}
   if(!opts?.force&&cardDraft&&cardDraft.id!==id&&cardDiff().length){cardLeaveAsk(()=>pick(id,{...(opts||{}),force:true}));return}
+  if(csGo)csLeave(sel);
   // Открытый объект — в дереве и после поиска, который его принёс (метки _q, _qi)
   treeKeepQ(id);
   const range=!!opts?.range,additive=!!opts?.additive,multi=range||additive;
@@ -10051,7 +10176,7 @@ function bdg(n){
   }
   const st=nodeStatus(n),bits=[];
   if(st.ruleOff)bits.push(i18n("Отключено по правилу"));
-  else bits.push(st.on?i18n("Включен"):i18n("Выключен"));
+  else bits.push(st.on?i18n("Включён"):i18n("Выключен"));
   if(st.nosignal)bits.push(i18n("нет сигнала")+(devErr(n)?": "+i18n(DEV_ERR[devErr(n)].s):""));
   else if(st.on)bits.push(i18n("есть сигнал"));
   if(st.license)bits.push(i18n("лицензия превышена"));
@@ -11450,14 +11575,15 @@ function gear(){
   if(n.type==="server")serverArchives(n.id).forEach(a=>volsEnsure(a).catch(()=>{}));
   if(n.type==="eventsrc"&&tab==="words")tab="overlay"; // прежняя вкладка «Подсветка» теперь внутри «Титров»
   if(tabs.length&&!tabs.some(([id])=>id===tab))tab=tabs[0][0];
-  const tabsH=tabs.map(([id,x])=>`<button class="tab ${tab===id?"on":""}" ${onEv("click",["tabGo",id])}>${i18n(x)}</button>`).join("");
+  const csOpen=n.type==="camera"&&!isSchemaNode(n)?csOpenTabs(n):new Set();
+  const tabsH=tabs.map(([id,x])=>`<button class="tab ${tab===id?"on":""}" ${onEv("click",["tabGo",id])}>${i18n(x)}${csOpen.has(id)?`<span class="tab-dot" role="img" title="${i18n("На этой вкладке вы не закончили правку блока")}" aria-label="${i18n("На этой вкладке вы не закончили правку блока")}"></span>`:""}</button>`).join("");
   // Слева направо — вход добавления устройств (он один, остальное — стрелкой рядом);
   // дальше собственные действия объекта, а звезда последней и без подписи.
   const addBtn=(n.type==="folder"?folderAddBtn():slice==="arch"?archCreateBtn(n)+(n.type==="archive"||n.type==="vol"?inspectorAddBtn(n):""):(lanHost(n)||n.type==="found")?addSplitBtn(n):inspectorAddBtn(n))+schemaRootBtn(n)+bulkCopyBtn(n)+detDeleteBtn(n)+cardMoreBtn(n)+favCardBtn(n)+fullCardBtn();
   const scClass=n.type==="unalloc"?"sc sc-unalloc":"sc";
   xpropsEnsure(n);
   cardEnsureBase(n);
-  paintMain(mainHd(flUpBtn(n)+bulkPeekCrumbHtml()+crumbsHtml(sel),objectTitle(n),"",tabsH,addBtn,true,n.type==="camera"&&!isSchemaNode(n)?drvSendHtml(n):"")+`<div class="${scClass}">${hiddenByFilterNoteHtml()}${tab==="stor"?"":objectStatusNotesHtml(n)}${form(n)}</div>`+cardFootHtml());
+  paintMain(mainHd(flUpBtn(n)+bulkPeekCrumbHtml()+crumbsHtml(sel),objectTitle(n),"",tabsH,addBtn,true)+`<div class="${scClass}">${hiddenByFilterNoteHtml()}${tab==="stor"?"":objectStatusNotesHtml(n)}${form(n)}</div>`+cardFootHtml());
   if(n.type==="found")renderDeviceWizard();  // панель живёт в разметке, которую только что вставили
   if(tab==="topo"&&(n.type==="domain"||n.type==="server"))g7Start(n);else if(G7.raf)g7Stop();
 }
@@ -12737,13 +12863,40 @@ function camConnDetect(id){
 
 // Вкладка «Подключение» камеры: карточки собирает formBase, раскладывает camGenLayout (у каждого варианта — своя)
 // Вариант «Просмотр, затем правка»: значения — текстом, поля появляются по «Изменить» у блока.
-// Правка идёт в тот же черновик карточки: «Готово» оставляет её в плане, «Отменить» снимает правки блока
+// Правка идёт в тот же черновик карточки: «Добавить в план» закрывает поля, правку применяет «Применить» внизу; «Отменить» снимает правки блока
 const csEdit=new Set();
 const CS_SEC_FIELDS={ident:["Имя","Короткое имя"],conn:["Производитель","Модель","IP","Порт","RTSP","Имя пользователя","Пароль"]};
 function csEditOn(id,k){return csEdit.has(id+":"+k)}
-function csEditSet(id,k,on){if(on)csEdit.add(id+":"+k);else csEdit.delete(id+":"+k);gear();if(on)setTimeout(()=>document.querySelector(`#main [data-sec="${k}"] input:not([disabled])`)?.focus(),30)}
+// Фокус: после «Изменить» — первое поле блока (поле ввода, список, переключатель), после закрытия — кнопка «Изменить»
+function csSecOf(k){return k.startsWith("blk:")?k.split(":").slice(2).join(":"):k}
+function csFocus(k,on){
+  const el=document.querySelector(`#main [data-sec="${CSS.escape(csSecOf(k))}"]`);if(!el)return;
+  const f=on?[...el.querySelectorAll('input:not([disabled]):not([type=hidden]),select:not([disabled]),textarea:not([disabled]),[role=switch][tabindex="0"]')]
+    .find(c=>!c.closest(".cs-acts,.ch")&&!(c.matches("input")&&csSearchInput(c))&&c.getClientRects().length>0):el.querySelector(":scope>.ch .cs-acts button");
+  f?.focus();
+}
+// Блок меняет высоту плавно: поля появляются и уходят без скачка, блоки ниже съезжают следом. prefers-reduced-motion — без движения
+function csAnim(k,paint){
+  const q=`#main [data-sec="${CSS.escape(csSecOf(k))}"]`,el0=document.querySelector(q),h0=el0?el0.getBoundingClientRect().height:0;
+  paint();
+  const el=document.querySelector(q);if(!el||!h0||!el.animate||matchMedia("(prefers-reduced-motion: reduce)").matches)return;
+  const h1=el.getBoundingClientRect().height;if(Math.abs(h1-h0)<2)return;
+  el.style.overflow="hidden";
+  const a=el.animate([{height:h0+"px"},{height:h1+"px"}],{duration:220,easing:"cubic-bezier(.2,.7,.3,1)"});
+  const body=el.querySelector(":scope>.cs-body,:scope>.cb");body?.animate([{opacity:0},{opacity:1}],{duration:200,easing:"ease-out"});
+  a.onfinish=a.oncancel=()=>{el.style.overflow=""};
+}
+// «Размещение и тревоги» меняет метки и тревоги объекта сразу (черновик карточки): «Отменить» возвращает их по снимку
+const csPlaceSnap=new Map();
+function csEditSet(id,k,on){
+  if(k==="ident")csIdentDrvEdit(id,on?"start":"done");
+  if(k==="place"){const n=find(id)?.n;if(on&&n&&!csPlaceSnap.has(id))csPlaceSnap.set(id,cardClone({labels:n.labels,alarmKinds:n.alarmKinds}));else if(!on)csPlaceSnap.delete(id)}
+  if(on)csEdit.add(id+":"+k);else csEdit.delete(id+":"+k);csAnim(k,gear);setTimeout(()=>csFocus(k,on),30)}
 function csEditCancel(id,k){
   if(cardDraft&&cardDraft.id===id)(CS_SEC_FIELDS[k]||[]).forEach(l=>delete cardDraft.fields[l]);
+  if(k==="ident")csIdentDrvEdit(id,"cancel");
+  const ps=k==="place"&&csPlaceSnap.get(id),pn=find(id)?.n;
+  if(ps&&pn)["labels","alarmKinds"].forEach(f=>{if(ps[f]===undefined)delete pn[f];else pn[f]=ps[f]});
   setD(true);csEditSet(id,k,false);
 }
 function csChanged(l){return!!(cardDraft&&cardDraft.id===sel&&cardDraft.fields[l])}
@@ -12751,8 +12904,31 @@ function csDl(rows){return`<dl class="cs-dl">${rows.map(([l,v,ch])=>`<div><dt>${
 function csHead(html,act){return html.replace(/^(<div class="card"[^>]*><div class="ch">[\s\S]*?)<\/div>/,(m,h)=>`${h}<span class="cs-acts">${act}</span></div>`)}
 function csEditBtns(n,k){
   return csEditOn(n.id,k)
-    ?`<button type="button" class="btn s" ${onEv("click",["csEditCancel",`${n.id}`,`${k}`])}>${i18n("Отменить")}</button><button type="button" class="btn pri s" ${onEv("click",["csEditSet",`${n.id}`,`${k}`,false])}>${i18n("Готово")}</button>`
+    ?`<button type="button" class="btn s" ${onEv("click",["csEditCancel",`${n.id}`,`${k}`])}>${i18n("Отменить")}</button><button type="button" class="btn pri s" ${onEv("click",["csEditSet",`${n.id}`,`${k}`,false])}>${i18n("Добавить в план")}</button>`
     :`<button type="button" class="btn s" ${onEv("click",["csEditSet",`${n.id}`,`${k}`,true])}>${i18n("Изменить")}</button>`;
+}
+// Параметры драйвера в «Идентификации»: тип камеры, прошивка, версия драйвера, серийный номер, комментарий.
+// ЗАГЛУШКА (api/requests/2026-11-09-182805Z-mockup-camera-driver-params-request.md): их значения живут в drvStore; в API они
+// придут свойствами объекта (GET /units/{uid}/schema).
+// Они идут в тот же план, что и другие правки карточки (camPlanRows): «Отменить» возвращает их, «Сбросить» — к значениям до плана
+function csIdentDrv(n){return drvGroups(n,"gen").get(DRV_IDENT)||[]}
+function csIdentDrvRows(n){
+  const st=drvState(n);
+  return csIdentDrv(n).filter(([f,p])=>!(p.readOnly&&(st.vals[f]===""||st.vals[f]==null))).map(([f,p])=>{const t=sfText(p,st.vals[f]);
+    return[propLabel(p,f),t==="—"||t===""?`<span class="cs-empty">—</span>`:escHtml(t),drvChg(st,f)]});
+}
+function csIdentDrvFields(n){
+  const st=drvState(n),fs=csIdentDrv(n).filter(([f,p])=>!(p.readOnly&&(st.vals[f]===""||st.vals[f]==null)));if(!fs.length)return"";
+  return`<div class="g" style="margin-top:10px">${fs.map(([f,p])=>sfFieldHtml("drv",n.id,f,p,st.vals[f],{ro:sfReadOnly(p)})).join("")}</div>`;
+}
+// Снимок и итог правки этой группы — вместе с «Изменить», «Отменить», «Добавить в план» блока «Идентификация»
+function csIdentDrvEdit(id,mode){
+  const n=find(id)?.n;if(!n||n.type!=="camera"||isSchemaNode(n))return;
+  const st=drvState(n),g=DRV_IDENT;
+  if(mode==="start"){if(!st.snap[g]){const snap={};drvGroupProps(n,g).forEach((p,f)=>{if(f in st.vals)snap[f]=cardClone({v:st.vals[f]}).v});drvBaseTake(n,g);st.snap[g]=snap}return}
+  const snap=st.snap[g];if(!snap)return;
+  if(mode==="cancel")drvGroupProps(n,g).forEach((p,f)=>{if(f in snap)st.vals[f]=snap[f];else delete st.vals[f]});
+  delete st.snap[g];setD(true);
 }
 function camGenLayout(n,p,ips){
   const val=(l,v)=>camConnVal(n,l,v);
@@ -12761,8 +12937,9 @@ function camGenLayout(n,p,ips){
   if(!csEditOn(n.id,"ident")){
     const rows=[["Имя",txt(val("Имя",n.name)),csChanged("Имя")],["Короткое имя",txt(val("Короткое имя",n.short??"")),csChanged("Короткое имя")],["ID",txt(deviceIdentifierValue(n)||"—")]];
     if(ips)rows.push(["Номер видеоканала",txt(ipsrvCameraVideoChannel(n,ips))]);
+    rows.push(...csIdentDrvRows(n));
     ident=card("Идентификация объекта",`${bdg(n)}${enabledToggleHtml(n)}<div style="margin-top:10px">${csDl(rows)}</div>`);
-  }
+  }else ident=ident.replace(/<\/div><\/div>$/,`${csIdentDrvFields(n)}</div></div>`);
   ident=csHead(csWrap("ident",ident),csEditBtns(n,"ident"));
   if(!(ips&&!n.ip)){
     if(!csEditOn(n.id,"conn")){
@@ -12781,8 +12958,10 @@ function camGenLayout(n,p,ips){
     const chips=l=>l&&l.length?`<div class="cs-chips">${l.map(x=>`<span class="cs-tag">${escHtml(i18n(x))}</span>`).join("")}</div>`:`<span class="cs-empty">${i18n("не заданы")}</span>`;
     place=card("Размещение и тревоги",csDl([["Метки серверов: где работает",chips(n.labels)],["Что считать тревогой",chips(n.alarmKinds)]]));
   }
-  place=csHead(csWrap("place",place),csEditOn(n.id,"place")?`<button type="button" class="btn pri s" ${onEv("click",["csEditSet",`${n.id}`,"place",false])}>${i18n("Готово")}</button>`:csEditBtns(n,"place"));
-  return ident+conn+drvSecsHtml(n,"gen")+csWrap("folders",p.folders)+place+csWrap("periph",p.periph)+csWrap("rules",p.rules);
+  place=csHead(csWrap("place",place),csEditBtns(n,"place"));
+  // Частые блоки выше: «Расположение» и «Размещение и тревоги» нужны при каждой установке, параметры драйвера — реже
+  // «Периферия» — на своей вкладке, здесь её нет
+  return ident+conn+csWrap("folders",p.folders)+place+drvSecsHtml(n,"gen")+csWrap("rules",p.rules);
 }
 // ── Параметры драйвера камеры (ЗАГЛУШКА до ответа на запрос api/requests/2026-11-09-182805Z-mockup-camera-driver-params-request.md) ─────────────────────────────────────────────────────
 // Набор параметров зависит от драйвера: RTSP, ONVIF или нативная интеграция. В контракте 0.2.0 такой набор отдаёт
@@ -12790,6 +12969,10 @@ function camGenLayout(n,p,ips){
 // minimum/maximum, readOnly и ветками if/then. В наборе demo.json такой камеры нет, поэтому страница строит схему
 // сам (camDrvSchema) по образцу свойств Axxon One (DeviceIpint, VideoChannel, Microphone, Telemetry, EmbeddedStorage).
 // Значения живут только в браузере (drvStore) и на сервер не уходят.
+// Группа параметров драйвера, которую рисует блок «Идентификация объекта», а не отдельный блок
+const DRV_IDENT="Идентификация объекта";
+// Группа «Встроенное хранилище»: её рисует карточка встроенного хранилища на вкладке «Архив», а не отдельный блок
+const DRV_EDGE="Встроенное хранилище";
 function camDriver(n){const v=camConnVal(n,"Производитель",n.vendor||"");return isRtspVendor(v)?"rtsp":/onvif|generic/i.test(v)?"onvif":"native"}
 function drvP(tab,group,order,label,type,x={}){return{type,"x-ui-tab":tab,"x-ui-group":group,"x-ui-order":order,"x-label":label,...x}}
 function drvE(labels,def){return{enum:Object.keys(labels),"x-enum-labels":labels,default:def}}
@@ -12802,13 +12985,15 @@ function camDrvSchema(n){
 }
 function camDrvSchema0(n){
   const d=camDriver(n),P={},allOf=[],when=(cond,props)=>allOf.push({if:{properties:cond,required:Object.keys(cond)},then:{properties:props}}),on=(f,v,props)=>when({[f]:{const:v}},props);
-  const G="Характеристики объекта",B="Буферизация видео",GEO="Геолокация",O="Другое",ALT="Резервное отображение";
-  // Характеристики объекта: только для чтения то, что сообщает камера или драйвер (Axxon One: DeviceIpint)
+  // Группы по смыслу: то, что называет камеру, — в «Идентификации» (DRV_IDENT, блок рисует camGenLayout);
+  // как консоль обменивается данными с камерой — «Обмен с камерой»; «Геолокация» — отдельно; «Резервное отображение» — на «Видео»
+  const G=DRV_IDENT,C="Обмен с камерой",B=C,GEO="Геолокация",O=C,ALT="Резервное отображение";
+  // Что сообщает камера или драйвер (Axxon One: DeviceIpint): только для чтения, кроме типа камеры
   P.cameraType=drvP("gen",G,9,"Тип камеры","string",drvE({"":"Не определено",bullet:"Bullet",speed_dome:"PTZ/SpeedDome",fix_dome:"FixDome"},""));
   P.firmware=drvP("gen",G,10,"Прошивка","string",{readOnly:true,default:d==="rtsp"?"":d==="onvif"?"2.6.1":"V5.7.3 build 220112"});
   P.driverVersion=drvP("gen",G,11,"Версия драйвера","string",{readOnly:true,default:d==="rtsp"?"1.4":d==="onvif"?"3.92":"3.92.1"});
   if(d==="native"&&/axis/i.test(camConnVal(n,"Производитель",n.vendor||"")))P.deviceSerialNumber=drvP("gen",G,12,"Серийный номер устройства","string",{readOnly:true,default:"ACCC8E7F3B21"});
-  P.breakUnusedConnections=drvP("gen",G,20,"Прервать неиспользуемое соединение","boolean",{default:false});
+  P.breakUnusedConnections=drvP("gen",C,23,"Прервать неиспользуемое соединение","boolean",{default:false});
   if(d==="rtsp"){
     const RS="Поток RTSP";
     P.transport=drvP("vid",RS,40,"Транспортный протокол","string",drvE({tcp:"TCP",udp:"UDP",http:"Туннелирование RTSP через HTTP"},"tcp"));
@@ -12816,7 +13001,7 @@ function camDrvSchema0(n){
     P.ssrcCheck=drvP("vid",RS,42,"Проверять идентификатор SSRC","boolean",{default:false});
   }
   // Буферизация видео (Axxon One: isVideoBufferOn, videoBufferSize)
-  P.isVideoBufferOn=drvP("gen",B,30,"Активировать","boolean",{default:false});
+  P.isVideoBufferOn=drvP("gen",B,30,"Буферизация видео","boolean",{default:false});
   on("isVideoBufferOn",true,{videoBufferSize:drvP("gen",B,31,"Размер буфера","integer",{minimum:50,maximum:3000,default:50,"x-ui-unit":"мс"})});
   P.geoLocationLatitude=drvP("gen",GEO,40,"Широта","number",{minimum:-90,maximum:90,default:0});
   P.geoLocationLongitude=drvP("gen",GEO,41,"Долгота","number",{minimum:-180,maximum:180,default:0});
@@ -12825,19 +13010,19 @@ function camDrvSchema0(n){
   // CameraDataSource — список камер домена; NodeName список не сужает)
   const dom=nodeDomainId(n),alt={"":"Не выбрано"};
   walkAll(c=>{if(c.type==="camera"&&c.id!==n.id&&nodeDomainId(c)===dom)alt[c.id]=locName(c)});
-  const altP=(o,l)=>drvP("gen",ALT,o,l,"string",{...drvE(alt,""),"x-hint":"Камера показывает своё видео в раскладках, пока нет сигнала с этой камеры"});
+  const altP=(o,l)=>drvP("vid",ALT,o,l,"string",{...drvE(alt,""),"x-hint":"Камера показывает своё видео в раскладках, пока нет сигнала с этой камеры"});
   P.alternativeCameraName=altP(45,"Резервная камера 1");
   P.secondAlternativeCameraName=altP(46,"Резервная камера 2");
   // Другое (Axxon One: группа «Другое»)
-  if(d!=="native")P.profile=drvP("gen",O,49,"Профиль","string",drvE({basic:"Базовый",high:"Высокий"},"basic"));
-  P.timeout=drvP("gen",O,50,"Тайм-аут","integer",{minimum:1,maximum:60,default:10,"x-ui-unit":"с"});
-  P.reconnectTimeout=drvP("gen",O,51,"Тайм-аут повторного подключения","integer",{minimum:1,maximum:300,default:10,"x-ui-unit":"с"});
-  if(d!=="native")P.rtpReorder=drvP("gen",O,52,"Переупорядочивать пакеты RTP","boolean",{default:true});
-  P.comment=drvP("gen",O,53,"Комментарий","string",{"x-ui-widget":"textarea",default:""});
+  P.timeout=drvP("gen",O,21,"Тайм-аут","integer",{minimum:1,maximum:60,default:10,"x-ui-unit":"с"});
+  P.reconnectTimeout=drvP("gen",O,22,"Тайм-аут повторного подключения","integer",{minimum:1,maximum:300,default:10,"x-ui-unit":"с"});
+  if(d!=="native")P.rtpReorder=drvP("gen",O,24,"Переупорядочивать пакеты RTP","boolean",{default:true});
+  if(d!=="native")P.profile=drvP("gen",O,25,"Профиль","string",drvE({basic:"Базовый",high:"Высокий"},"basic"));
+  P.comment=drvP("gen",G,13,"Комментарий","string",{"x-ui-widget":"textarea",default:""});
   // Панорамный обзор — свойство видеоканала у камеры любого драйвера (Axxon One: isPanomorphOn…)
   const PAN="Панорамный обзор",IV=["A0**V","A1UST","A8TRT","B0QQV","B4QQV","B5SST","B6SST","B72YV","B8QQT","B9VVT","C1ZZV","C2TTV","C322V","C4VVV","C7SST","C8WWT","C9VVT","D1SST","D2WWV","D4SST","D9SSV","E3VVV"];
   const lens={FISH_EYE_LENS:"Стандартный объектив «рыбий глаз»",DoubleSphere:"Бисферический объектив «рыбий глаз»"};IV.forEach(x=>lens[x]=x);
-  P.isPanomorphOn=drvP("vid",PAN,50,"Активировать","boolean",{default:false});
+  P.isPanomorphOn=drvP("vid",PAN,50,"Включить","boolean",{default:false});
   on("isPanomorphOn",true,{
     panomorphCameraPosition:drvP("vid",PAN,51,"Позиция камеры","string",drvE({"0":"Стена","1":"Потолок","2":"Пол"},"0")),
     panomorphCameraLens:drvP("vid",PAN,52,"Тип объектива","string",drvE(lens,"FISH_EYE_LENS")),
@@ -12856,30 +13041,34 @@ function camDrvSchema0(n){
     }
     if(n.ptz){
       const T="Поворотное устройство (PTZ)";
-      P.defaultEnablePatrol=drvP("vid",T,60,"Патрулирование","boolean",{default:false});
+      P.defaultEnablePatrol=drvP("vid",T,60,"Патрулирование","boolean",{default:false,...dev});
       on("defaultEnablePatrol",true,{
-        patrolTimeout:drvP("vid",T,61,"Интервал переключения","integer",{minimum:1,maximum:600000,default:1,"x-ui-unit":"с"}),
-        partolSpeed:drvP("vid",T,62,"Скорость патрулирования","integer",{minimum:0,maximum:100,default:100})});
-      P.homePreset=drvP("vid",T,63,"Домашняя предустановка","integer",{minimum:0,maximum:999999999,default:0});
-      P.homePresetTimeout=drvP("vid",T,64,"Возврат домой через","integer",{minimum:0,maximum:999999999,default:0,"x-ui-unit":"мс"});
-      P.savePresetsOnDevice=drvP("vid",T,65,"Сохранять предустановки на устройстве","boolean",{default:false});
-      P.useDevicePresets=drvP("vid",T,66,"Использовать предустановки устройства","boolean",{default:false});
-      P.enableMultipleControl=drvP("vid",T,67,"Управление несколькими операторами","boolean",{default:true});
-      P.discreteOverContinous=drvP("vid",T,68,"Пошаговое управление через плавное","boolean",{default:false});
+        patrolTimeout:drvP("vid",T,61,"Интервал переключения","integer",{minimum:1,maximum:600000,default:1,"x-ui-unit":"с",...dev}),
+        partolSpeed:drvP("vid",T,62,"Скорость патрулирования","integer",{minimum:0,maximum:100,default:100,...dev})});
+      P.homePreset=drvP("vid",T,63,"Домашняя предустановка","integer",{minimum:0,maximum:999999999,default:0,...dev});
+      P.homePresetTimeout=drvP("vid",T,64,"Возврат домой через","integer",{minimum:0,maximum:999999999,default:0,"x-ui-unit":"мс",...dev});
+      P.savePresetsOnDevice=drvP("vid",T,65,"Сохранять предустановки на устройстве","boolean",{default:false,...dev});
+      P.useDevicePresets=drvP("vid",T,66,"Использовать предустановки устройства","boolean",{default:false,...dev});
+      P.enableMultipleControl=drvP("vid",T,67,"Управление несколькими операторами","boolean",{default:true,...dev});
+      P.discreteOverContinous=drvP("vid",T,68,"Пошаговое управление через плавное","boolean",{default:false,...dev});
     }
     const A="Микрофон";
-    P.micEnabled=drvP("io",A,10,"Включить","boolean",{default:false});
-    on("micEnabled",true,{audioCodec:drvP("io",A,11,"Аудиокодек","string",drvE({raw:"RAW",aac:"AAC",g711:"G.711",g726:"G726",pcm:"PCM"},"raw")),
-      micVolume:drvP("io",A,12,"Громкость","string",drvE({high:"Высокий уровень",low:"Низкий уровень"},"high"))});
+    P.micEnabled=drvP("io",A,10,"Включить","boolean",{default:false,...dev});
+    on("micEnabled",true,{audioCodec:drvP("io",A,11,"Аудиокодек","string",{...drvE({raw:"RAW",aac:"AAC",g711:"G.711",g726:"G726",pcm:"PCM"},"raw"),...dev}),
+      micVolume:drvP("io",A,12,"Громкость","string",{...drvE({high:"Высокий уровень",low:"Низкий уровень"},"high"),...dev})});
   }
   if(d==="native"){
-    const D="Встроенный детектор движения";
-    P.camMotion=drvP("det",D,10,"Включить","boolean",{default:false});
+    const D="Встроенный детектор движения",dev={"x-dev":true};
+    P.camMotion=drvP("det",D,10,"Включить","boolean",{default:false,...dev});
     on("camMotion",true,{
-      camMotionSens:drvP("det",D,11,"Чувствительность","integer",{minimum:0,maximum:100,default:55,"x-hint":"Чем больше значение, тем ниже чувствительность"}),
-      camMotionThr:drvP("det",D,12,"Порог","integer",{minimum:0,maximum:100,default:10}),
-      camMotionDelay:drvP("det",D,13,"Задержка","integer",{minimum:0,maximum:100,default:5})});
-    const E="Встроенное хранилище";
+      camMotionSens:drvP("det",D,11,"Чувствительность","integer",{minimum:0,maximum:100,default:55,"x-hint":"Чем больше значение, тем ниже чувствительность",...dev}),
+      camMotionThr:drvP("det",D,12,"Порог","integer",{minimum:0,maximum:100,default:10,...dev}),
+      camMotionDelay:drvP("det",D,13,"Задержка","integer",{minimum:0,maximum:100,default:5,...dev})});
+    // Встроенное хранилище — не настройка камеры: консоль сама берёт записи с карты и работает с ними (просмотр, репликация),
+    // поэтому замка нет и «Отправлять настройки устройству» его не касается. Запись на карту задают на самой камере.
+    // Пока поле не меняли, «Включить» следует за картой (recEdge): это делает drvState, а не default — хранилище в дереве
+    // может появиться позже первого чтения схемы. Блок рисует edgeStorageCardHtml вместе с объёмом и репликацией (DRV_EDGE)
+    const E=DRV_EDGE;
     P.edgeStorage=drvP("rec",E,10,"Включить","boolean",{default:false});
     on("edgeStorage",true,{
       cacheDepth:drvP("rec",E,11,"Глубина кэша","integer",{minimum:0,maximum:365,default:0,"x-ui-unit":"дн.","x-hint":"0 — кэш выключен"}),
@@ -12898,18 +13087,25 @@ function drvResolve(schema,vals){
   });
   return{props,conds};
 }
-const drvStore=new Map();   // uid → {vals, chg:Set, snap:{group:{…}}, send}
+const drvStore=new Map();   // uid → {vals, base:{поле: значение до плана}, snap:{group:{…}}}
 function drvState(n){
   let st=drvStore.get(n.id);
-  if(!st){st={vals:{},chg:new Set(),snap:{}};drvStore.set(n.id,st)}
+  if(!st){st={vals:{},base:{},snap:{}};drvStore.set(n.id,st)}
   const sch=camDrvSchema(n);
   const fill=ps=>Object.entries(ps).forEach(([f,p])=>{if(!(f in st.vals)&&"default"in p)st.vals[f]=p.default});
   fill(sch.properties);(sch.allOf||[]).forEach(b=>fill(b.then.properties));
+  // «Включить» встроенного хранилища следует за картой, пока его не правили (st.own — поля, которые правил пользователь)
+  // Пока блок открыт на правку (есть снимок), значение не трогаем: иначе выбор пользователя пропал бы
+  if("edgeStorage" in sch.properties&&!st.own?.edgeStorage&&!st.snap[DRV_EDGE])st.vals.edgeStorage=!!recEdge(n);
   return st;
 }
 function drvTarget(id){const n=find(id)?.n;if(!n)return null;const st=drvState(n);return{schema:{properties:drvResolve(camDrvSchema(n),st.vals).props},vals:st.vals}}
 // Поле, от которого зависят другие, перерисовывает карточку: зависимые поля появляются или пропадают
-function drvChanged(id,f){const n=find(id)?.n;if(n&&drvResolve(camDrvSchema(n),drvState(n).vals).conds.has(f))gear()}
+function drvChanged(id,f){const n=find(id)?.n;if(!n)return;setD(true);if(drvResolve(camDrvSchema(n),drvState(n).vals).conds.has(f))gear()}
+// «изменено» у параметра драйвера: значение отличается от значения до плана
+function drvChg(st,f){return Object.prototype.hasOwnProperty.call(st.base,f)&&JSON.stringify(st.vals[f])!==JSON.stringify(st.base[f])}
+// Значения группы до плана: снимаются при первом «Изменить», «Сбросить» возвращает к ним, «Применить» их забывает
+function drvBaseTake(n,g){const st=drvState(n);drvGroupProps(n,g).forEach((p,f)=>{if(!Object.prototype.hasOwnProperty.call(st.base,f))st.base[f]=f in st.vals?cardClone({v:st.vals[f]}).v:undefined})}
 function drvGroups(n,tabId){
   const st=drvState(n),{props}=drvResolve(camDrvSchema(n),st.vals),groups=new Map();
   sfEntries({properties:props}).forEach(([f,p])=>{if(p["x-ui-tab"]!==tabId)return;const g=p["x-ui-group"];(groups.get(g)||groups.set(g,[]).get(g)).push([f,p])});
@@ -12925,18 +13121,19 @@ function drvGroupDev(n,g){return[...drvGroupProps(n,g).values()].some(p=>p["x-de
 function drvEditStart(id,g){
   const n=find(id)?.n;if(!n)return;const st=drvState(n),snap={};
   drvGroupProps(n,g).forEach((p,f)=>{if(f in st.vals)snap[f]=cardClone({v:st.vals[f]}).v});
-  st.snap[g]=snap;csEditSet(id,drvKey(g),true);
+  drvBaseTake(n,g);st.snap[g]=snap;csEditSet(id,drvKey(g),true);
 }
 function drvEditCancel(id,g){
   const n=find(id)?.n;if(!n)return;const st=drvState(n),snap=st.snap[g];
   if(snap)drvGroupProps(n,g).forEach((p,f)=>{if(f in snap)st.vals[f]=snap[f];else delete st.vals[f]});
-  delete st.snap[g];csEditSet(id,drvKey(g),false);
+  delete st.snap[g];setD(true);csEditSet(id,drvKey(g),false);
 }
+// «Добавить в план»: правка остаётся в черновике карточки, «Применить» внизу применяет её вместе с правками других вкладок
 function drvEditDone(id,g){
-  const n=find(id)?.n;if(!n)return;const st=drvState(n),was=st.snap[g]||{};
-  drvGroupProps(n,g).forEach((p,f)=>{if(JSON.stringify(st.vals[f])!==JSON.stringify(was[f]))st.chg.add(f)});
-  delete st.snap[g];csEditSet(id,drvKey(g),false);
-  toast("Заглушка: консоль не отправит эти параметры на сервер");
+  const n=find(id)?.n;if(!n)return;const st=drvState(n);
+  // «Включить» встроенного хранилища перестаёт следовать за картой, только когда правку добавили в план, а не при «Отменить»
+  if(g===DRV_EDGE)st.own={...st.own,edgeStorage:true};
+  delete st.snap[g];setD(true);csEditSet(id,drvKey(g),false);
 }
 // «Отправлять настройки устройству» и режим «Параметров потоков» — одно и то же: cvCfg.mode ("console" — консоль
 // передаёт настройки в камеру, "device" — консоль только показывает то, что сообщила камера). Включение — с подтверждением
@@ -12944,59 +13141,218 @@ function drvEditDone(id,g){
 function drvSend(n){return camDriver(n)!=="rtsp"&&cvCfgOf(n).mode==="console"}
 // Окно подтверждения открывается после клика: иначе тот же клик закроет его как клик мимо окна
 function drvSendToggle(id){const n=find(id)?.n;if(!n)return;const m=drvSend(n)?"device":"console";setTimeout(()=>cvModeSet(id,m),0)}
-// «Отправлять настройки устройству» — в строке вкладок камеры: виден на любой вкладке. У камеры RTSP его нет:
-// консоль не меняет настройки такой камеры
-function drvSendHtml(n){
-  if(camDriver(n)==="rtsp")return"";
-  const on=drvSend(n),t=i18n("Включено: консоль передаёт в камеру параметры потоков и изображения. Выключено: консоль показывает настройки так, как их сообщила камера, и не меняет их.");
-  return`<div class="cs-send" title="${escHtml(t)}" ${onEv("click",["drvSendToggle",`${n.id}`])}><span class="sw ${on?"on":""}" role="switch" tabindex="0" aria-checked="${on}" aria-label="${i18n("Отправлять настройки устройству")}" ${onEv("keydown",["drvSendKey",`${n.id}`,onEv.event])}></span><span>${i18n("Отправлять настройки устройству")}</span></div>`;
-}
 function drvSendKey(id,e){if(e.key===" "||e.key==="Enter"){e.preventDefault();drvSendToggle(id)}}
+// Замок в заголовке блока: настройки самой камеры, консоль их не меняет, пока «Отправлять настройки устройству» выключено
+function csLockHtml(){const t=i18n("Настройки самой камеры. Изменить их можно, когда включено «Отправлять настройки устройству».");return`<span class="cs-lock" role="img" title="${escHtml(t)}" aria-label="${escHtml(t)}">${lu("lock",13)}</span>`}
+// «Отправлять настройки устройству» — одна строка слева над блоками: переключатель и что он сейчас значит. Раньше переключатель
+// стоял справа под вкладками, а ниже была отдельная заметка о замках со ссылкой «Включить…» — два места об одном.
+// Строка есть, только если на вкладке есть настройки самой камеры (блок с замком); на «Подключении» и «Доступе» её нет.
+// У камеры RTSP переключателя нет: консоль не меняет настройки такой камеры
+function csModeLine(n,tabId){
+  if(!["vid","io","det","rec"].includes(tabId))return"";
+  const rtsp=camDriver(n)==="rtsp";
+  if(rtsp)return tabId==="vid"?`<div class="cs-mode">${lu("lock",14)}<span>${i18n("Консоль показывает параметры потоков так, как их сообщила камера. У камеры RTSP их меняют в веб-интерфейсе камеры.")}</span></div>`:"";
+  const dev=tabId==="vid"||[...drvGroups(n,tabId).values()].some(fs=>fs.some(([,p])=>p["x-dev"]));
+  if(!dev)return"";
+  const on=drvSend(n),t=i18n("Включено: консоль передаёт в камеру параметры потоков и изображения. Выключено: консоль показывает настройки так, как их сообщила камера, и не меняет их.");
+  const sw=`<span class="cs-send" title="${escHtml(t)}" ${onEv("click",["drvSendToggle",`${n.id}`])}><span class="sw ${on?"on":""}" role="switch" tabindex="0" aria-checked="${on}" aria-label="${i18n("Отправлять настройки устройству")}" ${onEv("keydown",["drvSendKey",`${n.id}`,onEv.event])}></span><b>${i18n("Отправлять настройки устройству")}</b></span>`;
+  const txt=on?i18n("Консоль передаёт в камеру параметры потоков и изображения."):`${lu("lock",13)} ${i18n("Блоки с замком содержат настройки самой камеры. Консоль показывает их так, как их сообщила камера, и не меняет их.")}`;
+  return`<div class="cs-mode cs-mode-sw ${on?"on":""}">${sw}<span class="cs-mode-t">${txt}</span></div>`;
+}
+// Что консоль запишет в камеру при включении: потоки и «Изображение» — как их показывает карточка сейчас
+function cvSendPreview(n){
+  const c=cvCfgOf(n),out=camStreams(n).map((s,i)=>{const p=c.streams[s.id]||{},res=(cvStreamRes(n,s,i)||"—").replace(/x/g,"×"),fps=cvStreamFps(n,s,i);
+    return`<b>${escHtml(s.name)}</b>: ${escHtml(`${s.codec||p.codec||"—"}, ${res}, ${fps?`${fps} ${i18n("к/с")}`:"—"}, ${p.brc==="cbr"?i18n("постоянный"):i18n("переменный, до")} ${cvKbpsText(p.kbps)}`)}`});
+  const g=drvGroups(n,"vid").get("Изображение"),st=drvState(n);
+  if(g)out.push(`<b>${escHtml(i18n("Изображение"))}</b>: ${escHtml(g.map(([f,p])=>`${propLabel(p,f)} ${sfText(p,st.vals[f])}`).join(", "))}`);
+  return out;
+}
+// Несохранённые правки блоков драйвера и «Параметров потоков» камеры: подписи блоков
+function csDirtyList(id,devOnly){
+  const n=find(id)?.n;if(!n||n.type!=="camera"||isSchemaNode(n))return[];
+  const out=[],st=drvStore.get(id);
+  if(st)Object.entries(st.snap).forEach(([g,snap])=>{if((!devOnly||drvGroupDev(n,g))&&[...drvGroupProps(n,g).keys()].some(f=>JSON.stringify(st.vals[f])!==JSON.stringify(snap[f])))out.push(i18n(g))});
+  if(cvDirty(n))out.push(i18n("Параметры потоков"));
+  return out;
+}
+function csLeaveAsk(id,go){
+  const n=find(id)?.n,l=csDirtyList(id);
+  askConfirm("Вы не сохранили изменения",`<p>${i18n("Консоль не сохранила изменения камеры")} «${escHtml(locName(n||{}))}» ${i18n("в блоках:")}</p><ul class="bk-del">${l.map(x=>`<li>${escHtml(x)}</li>`).join("")}</ul>`,"",i18n("Сбросить и перейти"),go,{html:true,cancelLabel:"Остаться"});
+}
+// Ушли с камеры: открытые правки её блоков закрываются, значения блоков драйвера и потоков возвращаются
+function csLeave(id){
+  const n=find(id)?.n,st=drvStore.get(id);
+  if(n&&st)Object.keys(st.snap).forEach(g=>{const snap=st.snap[g];drvGroupProps(n,g).forEach((p,f)=>{if(f in snap)st.vals[f]=snap[f];else delete st.vals[f]});delete st.snap[g]});
+  if(n&&cvSnap.has(id))cvRestore(n,cvSnap.get(id));
+  cvSnap.delete(id);csBlkSnap.forEach((v,k)=>{if(k.startsWith(id+":"))csBlkSnap.delete(k)});
+  csPlaceSnap.delete(id);[...csEdit].forEach(k=>{if(k.startsWith(id+":"))csEdit.delete(k)});
+}
+// ── Камера: правки всех вкладок — в одном плане ──
+// Ни один блок камеры не пишет сразу: «Добавить в план» оставляет правку в черновике карточки, подвал «Не применено»
+// считает правки всех вкладок, «Применить» отправляет их вместе: «Сервер записи» и потоки — отдельными запросами до
+// операции (camCallOf), остальное — шагами одной операции.
+// ЗАГЛУШКА: параметры драйвера (drvStore), кодек и битрейт потоков (cvCfg) и туры живут только в этой странице
+// (запросы api/requests/2026-11-09-182805Z-mockup-camera-driver-params-request.md и 2026-11-08-174207Z-mockup-camera-video-streams-tours-request.md):
+// их строки плана помечены stub, «Применить» оставляет значения, «Сбросить» возвращает значения до плана
+const camPlanBase=new Map();   // uid камеры → {cv: cvCfg потоков до плана, tours: туры до плана}
+function camPlanTouch(n,part){
+  const b=camPlanBase.get(n.id)||{};
+  if(part==="cv"&&!b.cv)b.cv=cardClone({v:cvCfgOf(n).streams}).v;
+  if(part==="tours"&&!b.tours){const st=cvToursOf(n);b.tours=cardClone({tours:st.tours,idleTour:st.idleTour,idleSec:st.idleSec})}
+  camPlanBase.set(n.id,b);
+}
+const CV_KEY_RU={codec:"Кодек",profile:"Профиль кодека",brc:"Режим битрейта",kbps:"Битрейт",quality:"Качество",gop:"Опорный кадр каждые",live:"В просмотре"};
+function cvValText(k,v){
+  if(v===undefined||v===null||v==="")return"—";
+  if(k==="live")return i18n(v?"да":"нет");
+  if(k==="brc")return i18n(v==="cbr"?"постоянный":"переменный");
+  if(k==="kbps")return cvKbpsText(v);
+  if(k==="quality")return i18n((CV_QUALITY.find(([x])=>x===String(v))||[,String(v)])[1]);
+  if(k==="gop")return`${v} ${i18n("кадров")}`;
+  return String(v);
+}
+function drvValText(p,v){return p.type==="boolean"?i18n(v?"включено":"выключено"):sfText(p,v)||"—"}
+function camStreamText(s,keys){return keys.map(k=>k==="res"?(s.res||"—").replace("x","×"):`${s.fps??"—"} ${i18n("к/с")}`).join(", ")}
+// Потоки камеры в плане: строка на поток — разрешение и к/с одним PATCH потока, новый поток — POST /units, удалённый — DELETE
+function camStreamsDiff(live,snap,out){
+  const was=new Map((snap.streams||[]).map(x=>[x.id,x])),now=live.streams||[];
+  now.forEach(x=>{
+    const w=was.get(x.id);
+    if(!w){const ks=["res","fps"].filter(k=>x[k]!=null&&x[k]!=="");
+      if(x._new)out.push({node:live,streamAdd:x,label:`${i18n("Добавить")}: ${i18n("поток")} «${x.name}»`,fromT:"—",toT:i18n("консоль добавит")+(ks.length?`: ${camStreamText(x,ks)}`:"")});return}
+    if(!x.uid)return;
+    const keys=["res","fps"].filter(k=>JSON.stringify(x[k])!==JSON.stringify(w[k]));if(!keys.length)return;
+    out.push({node:live,streamSet:{uid:x.uid,props:Object.fromEntries(keys.map(k=>[k,x[k]]))},label:`«${x.name}»: ${keys.map(k=>i18n(k==="res"?"разрешение":"к/с")).join(", ")}`,fromT:camStreamText(w,keys),toT:camStreamText(x,keys)});
+  });
+  const ids=new Set(now.map(x=>x.id));
+  (snap.streams||[]).forEach(w=>{if(!ids.has(w.id)&&w.uid)out.push({node:live,streamDel:w,label:`${i18n("Удалить")}: ${i18n("поток")} «${w.name}»`,fromT:"—",toT:i18n("будет удалён")})});
+}
+// Строки плана, которые «Применить» отправляет отдельными запросами, а не шагами операции. «Сервер записи» в /operations нет.
+// Потоки: шаг createUnit потока сервер отклоняет BUSY всегда, patch и delete потока — когда шаг по камере стоит позже в той же
+// операции (хуки потока проверяют блокировку камеры без своей операции) — запрос api/requests/2026-11-10-103516Z-mockup-stream-steps-in-operations-request.md
+function camCallOf(r){return r.key==="recordingTarget"||!!(r.streamSet||r.streamAdd||r.streamDel)}
+function camCallRun(n,r){
+  if(r.key==="recordingTarget")return API.put(`/units/${n.id}/recording-target`,{serverId:r.to?.serverId||null,copies:r.to?.copies||[]}).then(u=>{hwApplyUnit(u);treeMatchCache.clear();searchMatchCache.clear();renderTreeSoon()});
+  if(r.streamSet){const uid=r.streamSet.uid;return API.patch(`/units/${uid}`,{properties:r.streamSet.props},hwVer.get(uid)).then(u=>{if(u?.version!=null)hwVer.set(uid,u.version)})}
+  if(r.streamAdd){
+    const x=r.streamAdd,props=Object.fromEntries(["res","fps"].filter(k=>x[k]!=null&&x[k]!=="").map(k=>[k,x[k]]));
+    return unitsCreate([{kind:"stream",parentId:n.id,name:x.name,properties:props}]).then(([u])=>{
+      const c=cvCfg.get(n.id),sid=u&&streamRec(u).id;if(c&&sid&&c.streams[x.id]){c.streams[sid]=c.streams[x.id];delete c.streams[x.id]}});
+  }
+  if(r.streamDel){const uid=r.streamDel.uid;return API.del(`/units/${uid}`,hwVer.get(uid)).then(()=>hwVer.delete(uid))}
+  return Promise.resolve();
+}
+// Строки плана из заглушек камеры: параметры драйвера, кодек и битрейт потоков, туры
+function camPlanRows(n,out){
+  if(n.type!=="camera"||isSchemaNode(n))return;
+  const st=drvStore.get(n.id);
+  if(st&&Object.keys(st.base).length){
+    const sch=camDrvSchema(n),all=new Map(),add=ps=>Object.entries(ps||{}).forEach(([f,p])=>all.set(f,p));
+    add(sch.properties);(sch.allOf||[]).forEach(b=>add(b.then?.properties));
+    Object.keys(st.base).forEach(f=>{if(!drvChg(st,f))return;const p=all.get(f)||{};
+      out.push({node:n,stub:"drv",label:`${i18n(p["x-ui-group"]||"")}: ${propLabel(p,f)}`,fromT:drvValText(p,st.base[f]),toT:drvValText(p,st.vals[f])})});
+  }
+  const b=camPlanBase.get(n.id);
+  if(b?.cv){
+    const cur=cvCfgOf(n).streams,names=new Map(camStreams(n).map(x=>[x.id,x.name]));
+    Object.entries(cur).forEach(([sid,o])=>{const w=b.cv[sid];if(!w||!names.has(sid))return;   // новый поток — строка «Добавить: поток»
+      Object.keys(CV_KEY_RU).forEach(k=>{if(JSON.stringify(o[k])!==JSON.stringify(w[k]))out.push({node:n,stub:"cv",label:`«${names.get(sid)}»: ${i18n(CV_KEY_RU[k])}`,fromT:cvValText(k,w[k]),toT:cvValText(k,o[k])})})});
+  }
+  if(b?.tours){
+    const st=cvToursOf(n),was=new Map(b.tours.tours.map(t=>[t.id,t])),now=new Map(st.tours.map(t=>[t.id,t])),lb=t=>`${i18n("Тур")} «${t.name}»`;
+    now.forEach((t,id)=>{const w=was.get(id);
+      if(!w)out.push({node:n,stub:"tours",label:lb(t),fromT:"—",toT:i18n("консоль добавит")});
+      else if(JSON.stringify(w)!==JSON.stringify(t))out.push({node:n,stub:"tours",label:lb(t),fromT:i18n("прежний"),toT:i18n("консоль изменит")})});
+    was.forEach((t,id)=>{if(!now.has(id))out.push({node:n,stub:"tours",label:lb(t),fromT:"—",toT:i18n("консоль удалит")})});
+    const idle=x=>{const t=x.tours.find(y=>y.id===x.idleTour);return t?`«${t.name}», ${i18n("через")} ${cvDur(x.idleSec)}`:"—"};
+    if(idle(b.tours)!==idle(st))out.push({node:n,stub:"tours",label:i18n("Тур, когда камерой не управляют"),fromT:idle(b.tours),toT:idle(st)});
+  }
+}
+// «Применить»: заглушки остаются как есть, база плана забывается
+function camPlanCommit(id){const st=drvStore.get(id);if(st)st.base={};camPlanBase.delete(id)}
+// «Сбросить» и уход с черновиком: заглушки — к значениям до плана, открытые блоки камеры закрываются
+function camPlanRestore(id){
+  const n=find(id)?.n,st=drvStore.get(id),b=camPlanBase.get(id);
+  if(st){Object.entries(st.base).forEach(([f,v])=>{if(v===undefined)delete st.vals[f];else st.vals[f]=v});st.base={};st.snap={}}
+  if(n&&b?.cv){const cur=cvCfgOf(n).streams;Object.keys(b.cv).forEach(sid=>{cur[sid]=b.cv[sid]})}
+  if(n&&b?.tours){const t=cvToursOf(n);if(t.run&&!b.tours.tours.some(x=>x.id===t.run.tid))cvTourHalt(t);Object.assign(t,b.tours)}
+  camPlanBase.delete(id);cvSnap.delete(id);csPlaceSnap.delete(id);
+  csBlkSnap.forEach((v,k)=>{if(k.startsWith(id+":"))csBlkSnap.delete(k)});
+  [...csEdit].forEach(k=>{if(k.startsWith(id+":"))csEdit.delete(k)});
+}
+// Вкладки камеры, где открыта правка блока: точка у названия вкладки
+function csOpenTabs(n){
+  const out=new Set(),pre=n.id+":";
+  csEdit.forEach(x=>{if(!x.startsWith(pre))return;const k=x.slice(pre.length);
+    if(k==="ident"||k==="conn"||k==="place")out.add("gen");else if(k==="streams")out.add("vid");
+    else if(k.startsWith("blk:"))out.add(k.split(":")[1]);
+    else if(k.startsWith("drv:")){const p=drvGroupProps(n,k.slice(4)).values().next().value;if(p)out.add(p["x-ui-tab"])}});
+  return out;
+}
 // Подсказка поля: у переключателя — под его подписью, у других полей — под полем
 function drvHint(html,h){if(!h)return html;return html.startsWith('<div class="ln ln-sw"><div>')?html.replace(/^(<div class="ln ln-sw"><div>[\s\S]*?)<\/div>/,(m,a)=>a+h+"</div>"):html.replace(/<\/div>$/,h+"</div>")}
 function drvSecsHtml(n,tabId){
-  const groups=drvGroups(n,tabId),st=drvState(n),d=camDriver(n);
+  const groups=drvGroups(n,tabId),d=camDriver(n);
   let out="";
   groups.forEach((fs,g)=>{
-    const k=drvKey(g),lock=!drvSend(n)&&fs.some(([,p])=>p["x-dev"]),ed=csEditOn(n.id,k)&&!lock;
-    const acts=lock?"":ed?`<button type="button" class="btn s" ${onEv("click",["drvEditCancel",`${n.id}`,g])}>${i18n("Отменить")}</button><button type="button" class="btn pri s" ${onEv("click",["drvEditDone",`${n.id}`,g])}>${i18n("Готово")}</button>`
-      :`<button type="button" class="btn s" ${onEv("click",["drvEditStart",`${n.id}`,g])}>${i18n("Изменить")}</button>`;
-    const note=lock?`<div class="nt">${i18n("Консоль показывает настройки так, как их сообщила камера.")} <button type="button" class="lk" ${onEv("click",["drvSendToggle",`${n.id}`])}>${i18n("Включить «Отправлять настройки устройству»")}</button></div>`:"";
-    const hint=p=>p["x-hint"]?`<small class="sub cs-hint">${escHtml(i18n(p["x-hint"]))}</small>`:"";
-    const body=ed?`<div class="g">${fs.map(([f,p])=>drvHint(sfFieldHtml("drv",n.id,f,p,st.vals[f],{ro:sfReadOnly(p)}),hint(p))).join("")}</div>`
-      :csDl(fs.map(([f,p])=>[propLabel(p,f),p.type==="boolean"?escHtml(st.vals[f]?i18n("включено"):i18n("выключено")):sfText(p,st.vals[f])==="—"?`<span class="cs-empty">—</span>`:escHtml(sfText(p,st.vals[f])),st.chg.has(f)]));
-    out+=`<div class="card" data-sec="${escHtml(k)}" data-cs-sum="${escHtml(`${fs.length} ${i18n(plural(fs.length,"параметр|параметра|параметров"))}`)}"><div class="ch">${escHtml(i18n(g))}<span class="cs-acts">${acts}</span></div><div class="cb">${note}${body}</div></div>`;
+    if(g===DRV_IDENT||(g===DRV_EDGE&&drvEdgeMerged(n)))return;
+    out+=drvGroupCardHtml(n,g,fs);
   });
   if(!groups.size&&tabId!=="gen"&&tabId!=="acc"&&tabId!=="view"&&d==="rtsp")
     out+=`<div class="nt">${i18n("У камеры RTSP здесь нет настроек: их задают на самой камере.")}</div>`;
   return out;
+}
+// Группу «Встроенное хранилище» рисует карточка встроенного хранилища (edgeStorageCardHtml), если она есть на вкладке
+function drvEdgeMerged(n){return n.type==="camera"&&edgeOn()&&!!recEdge(n)}
+// Блок группы параметров драйвера; after — что карточка показывает под параметрами (объём и репликация встроенного хранилища)
+function drvGroupCardHtml(n,g,fs,after=""){
+  const st=drvState(n);
+  const k=drvKey(g),lock=!drvSend(n)&&fs.some(([,p])=>p["x-dev"]),ed=csEditOn(n.id,k)&&!lock;
+  const acts=lock?"":ed?`<button type="button" class="btn s" ${onEv("click",["drvEditCancel",`${n.id}`,g])}>${i18n("Отменить")}</button><button type="button" class="btn pri s" ${onEv("click",["drvEditDone",`${n.id}`,g])}>${i18n("Добавить в план")}</button>`
+    :`<button type="button" class="btn s" ${onEv("click",["drvEditStart",`${n.id}`,g])}>${i18n("Изменить")}</button>`;
+  const hint=p=>p["x-hint"]?`<small class="sub cs-hint">${escHtml(i18n(p["x-hint"]))}</small>`:"";
+  // Главный переключатель группы — поле с подписью «Включить»: в просмотре «Включить: выключено» читается как приказ,
+  // поэтому он — строка состояния «Сейчас выключено»; в правке остаётся переключатель «Включить»
+  const main=fs.find(([,p])=>p.type==="boolean"&&p["x-label"]==="Включить"),mainOn=main&&!!st.vals[main[0]],rest=main?fs.filter(x=>x!==main):fs;
+  const state=main?`<div class="cs-state">${i18n("Сейчас")} <b>${i18n(mainOn?"включено":"выключено")}</b>${drvChg(st,main[0])?`<span class="cs-chg">${i18n("изменено")}</span>`:""}</div>`:"";
+  const body=ed?`<div class="g">${fs.map(([f,p])=>drvHint(sfFieldHtml("drv",n.id,f,p,st.vals[f],{ro:sfReadOnly(p)}),hint(p))).join("")}</div>`
+    :state+(rest.length?csDl(rest.map(([f,p])=>[propLabel(p,f),p.type==="boolean"?escHtml(st.vals[f]?i18n("включено"):i18n("выключено")):sfText(p,st.vals[f])==="—"?`<span class="cs-empty">—</span>`:escHtml(sfText(p,st.vals[f])),drvChg(st,f)])):"");
+  const sum=main?i18n(mainOn?"включено":"выключено"):`${fs.length} ${i18n(plural(fs.length,"параметр|параметра|параметров"))}`;
+  return`<div class="card" data-sec="${escHtml(k)}" data-cs-sum="${escHtml(sum)}"><div class="ch">${escHtml(i18n(g))}${lock?csLockHtml():""}<span class="cs-acts">${acts}</span></div><div class="cb">${body}${after?`<div class="cs-after">${after}</div>`:""}</div></div>`;
 }
 
 // ── «Разделы с оглавлением» на любой вкладке камеры ───────────────────────────────────────────────────────
 // Верхние карточки вкладки получают кнопку «свернуть», слева — оглавление «На этой странице».
 // Разбор идёт по готовой разметке вкладки, поэтому раздел вкладки можно не переписывать
 const csClosed=new Set();
-function csTitleOf(ch){const c=ch.cloneNode(true);c.querySelectorAll("button,.cs-acts,.cs-drv-tag,.bd,select,input,.sw,.sub").forEach(x=>x.remove());return c.textContent.replace(/\s+/g," ").trim()}
-// Краткое значение для оглавления: счётчик из заголовка карточки (.sub), если карточка не задала своё
-function csSumOf(el,ch){return el.dataset.csSum||ch.querySelector(":scope>.sub")?.textContent.trim()||""}
+function csTitleOf(ch){const c=ch.cloneNode(true);c.querySelectorAll("button,.cs-acts,.cs-drv-tag,.cs-lock,.bd,select,input,.sw,.sub").forEach(x=>x.remove());return c.textContent.replace(/\s+/g," ").trim()}
+// Краткое значение для оглавления: своё у карточки, счётчик из заголовка (.sub) или число строк значений блока
+function csSumOf(el,ch){
+  const own=el.dataset.csSum||ch.querySelector(":scope>.sub")?.textContent.trim();if(own)return own;
+  const c=el.querySelectorAll(".cs-dl>div").length;return c?`${c} ${i18n(plural(c,"параметр|параметра|параметров"))}`:"";
+}
 // ── «Изменить» у прежних блоков вкладок ──────────────────────────────────────────────────────────────────
-// Правило одно для всех вкладок: блок показывает значения, «Изменить» открывает поля. Прежние блоки («Хранилища
-// камеры», «Детекторы камеры», «Периферия», «Доступ», «Расположение»…) сохраняют правку сразу (запрос к серверу или
-// черновик карточки), поэтому «Отменить» у них нет — только «Готово», как у «Размещения и тревог».
+// Блок со значениями показывает их, «Изменить» открывает поля. Прежние блоки («Хранилища камеры», «Запись») кладут
+// правку в черновик карточки, поэтому кнопка закрытия — «Добавить в план», как у «Размещения и тревог»; «Отменить» у них
+// нет: правку снимает «Сбросить» внизу. Список членства («Расположение»: папки камеры) — не значение блока, а действия
+// над списком, поэтому «Изменить» у него нет и «+ Добавить в папку…» всегда на виду. Фильтр списка (.acc-bar) — тоже не значение.
 // Без «Изменить» поля блока выглядят как текст, кнопки действий скрыты; поиск по списку и ссылки работают.
 const CS_LOCK_SKIP=new Set(["view"]);
 function csSearchInput(c){return c.type==="search"||!!c.closest(".lst-sq")}
 // «Изменить» нужен блоку с полями (поле ввода, список, переключатель). Блок только с кнопками действий («Скан»,
 // «+ Детектор», «Создать правило») оставляет их на виду: это действия, а не значения блока
 function csEditable(el){
+  if(el.querySelector("select.lst-add"))return false;
   return[...el.querySelectorAll(":scope>:not(.ch) :is(input,select,textarea),[role=switch],.sw")]
-    .some(c=>!(c.matches("input")&&csSearchInput(c))&&!c.closest(".cs-acts,.pg-size"));
+    .some(c=>!(c.matches("input")&&csSearchInput(c))&&!c.closest(".cs-acts,.pg-size,.acc-bar"));
 }
 function csBlkLock(n,el,ch,k){
   if(CS_LOCK_SKIP.has(tab)||ch.querySelector(".cs-acts")||!csEditable(el))return;
   const ek="blk:"+tab+":"+k,on=csEditOn(n.id,ek),acts=document.createElement("span"),b=document.createElement("button");
-  acts.className="cs-acts";b.type="button";b.className=on?"btn pri s":"btn s";b.textContent=i18n(on?"Готово":"Изменить");
-  b.setAttribute("data-on-click",JSON.stringify([["csBlkEdit",n.id,ek,!on]]));acts.append(b);ch.append(acts);
+  acts.className="cs-acts";b.type="button";b.className=on?"btn pri s":"btn s";b.textContent=i18n(on?"Добавить в план":"Изменить");
+  b.setAttribute("data-on-click",JSON.stringify([["csBlkEdit",n.id,ek,!on]]));
+  if(on){const c=document.createElement("button");c.type="button";c.className="btn s";c.textContent=i18n("Отменить");c.setAttribute("data-on-click",JSON.stringify([["csBlkCancel",n.id,ek]]));acts.append(c)}
+  acts.append(b);ch.append(acts);
   if(on){el.classList.add("cs-rw");return}
   el.classList.add("cs-ro");
   el.querySelectorAll("input,select,textarea,button").forEach(c=>{
@@ -13008,7 +13364,35 @@ function csBlkLock(n,el,ch,k){
   });
   el.querySelectorAll('[role=switch],.sw').forEach(c=>{c.setAttribute("aria-disabled","true");c.classList.add("cs-sw-ro");c.removeAttribute("tabindex")});
 }
-function csBlkEdit(id,ek,on){csEditSet(id,ek,on)}
+// Снимок блока при «Изменить»: объект, его серверный снимок и поля карточки. Общий блок открыт один на объект: «Изменить»
+// другого общего блока закрывает прежний с правками в плане, поэтому снимки блоков не вкладываются друг в друга.
+// «Отменить» возвращает только ключи, изменённые за правку: к значению черновика до блока, а если до блока ключ не был
+// тронут, — к значению с сервера (правка с сервера за это время не теряется). Поля карточки — только поля этого блока
+const csBlkSnap=new Map();
+function csBlkEdit(id,ek,on){
+  const n=find(id)?.n,key=id+":"+ek;
+  if(on)[...csEdit].forEach(k=>{if(k.startsWith(id+":blk:")&&k!==key){csEdit.delete(k);csBlkSnap.delete(k)}});
+  if(on&&n)csBlkSnap.set(key,{node:cardClone(n),base:cardBase&&cardBase.id===id?cardClone(cardBase.snap):null,
+    fields:cardClone(cardDraft&&cardDraft.id===id?cardDraft.fields:{})});
+  else csBlkSnap.delete(key);
+  if(!on)setD(true);
+  csEditSet(id,ek,on);
+}
+function csBlkCancel(id,ek){
+  const n=find(id)?.n,key=id+":"+ek,sn=csBlkSnap.get(key);csBlkSnap.delete(key);
+  if(n&&sn){
+    const base=cardBase&&cardBase.id===id?cardBase.snap:null,J=JSON.stringify;
+    new Set([...Object.keys(n),...Object.keys(sn.node)]).forEach(k=>{
+      if(CARD_SKIP.has(k)||k.startsWith("_")||J(n[k])===J(sn.node[k]))return;
+      const v=!base||!sn.base||J(sn.node[k])!==J(sn.base[k])?sn.node[k]:base[k];
+      if(v===undefined)delete n[k];else n[k]=cardClone({v}).v;
+    });
+    hwIdxDrop();
+    const el=document.querySelector(`#main [data-sec="${CSS.escape(csSecOf(ek))}"]`);
+    if(cardDraft&&cardDraft.id===id)[...(el?.querySelectorAll("[data-df]")||[])].forEach(x=>{const l=x.dataset.df;if(l in sn.fields)cardDraft.fields[l]=sn.fields[l];else delete cardDraft.fields[l]});
+  }
+  setD(true);csEditSet(id,ek,false);
+}
 function csTabWrap(n,html){
   const t=document.createElement("template");t.innerHTML=html;
   const secs=[];
@@ -13032,17 +13416,17 @@ function csTabWrap(n,html){
       if(inner){const k="w:"+i;el.dataset.sec=k;secs.push({k,title:csTitleOf(inner),sum:"",fold:false})}
     }
   });
-  // Меньше двух блоков — без оглавления и сворачивания, но «Изменить» у блоков остаётся
-  if(secs.filter(x=>x.fold).length<2){
+  // Меньше трёх блоков — без оглавления и сворачивания: короткую вкладку видно целиком; «Изменить» у блоков остаётся
+  if(secs.filter(x=>x.fold).length<3){
     const t2=document.createElement("template");t2.innerHTML=html;
     [...t2.content.children].forEach(el=>{const ch=el.matches(".card")?el.querySelector(":scope>.ch"):null;
       if(ch){el.dataset.sec=el.dataset.sec||("t:"+csTitleOf(ch));csBlkLock(n,el,ch,el.dataset.sec)}});
     const b=document.createElement("div");b.append(t2.content);return b.innerHTML;
   }
-  const toc=`<nav class="cs-toc" aria-label="${i18n("На этой странице")}"><div class="cs-toc-h">${i18n("На этой странице")}</div>
-    ${secs.map(x=>`<button type="button" class="cs-toc-i" ${onEv("click",["csGo",x.k])}><span>${escHtml(x.title)}</span>${x.sum?`<small>${escHtml(x.sum)}</small>`:""}</button>`).join("")}
-    <div class="cs-toc-acts"><button type="button" class="lk" ${onEv("click",["csAll",true])}>${i18n("Развернуть всё")}</button><button type="button" class="lk" ${onEv("click",["csAll",false])}>${i18n("Свернуть всё")}</button></div></nav>`;
   const box=document.createElement("div");box.append(t.content.cloneNode(true));
+  const toc=`<nav class="cs-toc" aria-label="${i18n("На этой странице")}"><div class="cs-toc-h">${i18n("На этой странице")}:</div>
+    <div class="cs-toc-list">${secs.map(x=>`<button type="button" class="cs-toc-i" title="${escHtml(x.sum?`${x.title}: ${x.sum}`:x.title)}" ${onEv("click",["csGo",x.k])}><span>${escHtml(x.title)}</span>${x.sum?`<small>${escHtml(x.sum)}</small>`:""}</button>`).join("")}</div>
+    <div class="cs-toc-acts"><button type="button" class="lk" ${onEv("click",["csAll",true])}>${i18n("Развернуть всё")}</button><button type="button" class="lk" ${onEv("click",["csAll",false])}>${i18n("Свернуть всё")}</button></div></nav>`;
   return`<div class="cs-tocw">${toc}<div class="cs-secs">${box.innerHTML}</div></div>`;
 }
 function csSecSet(c,open){
@@ -16039,9 +16423,17 @@ function recCopyPaint(id,q){
   const n=find(id)?.n,t=n?.recordingTarget,box=document.getElementById("recCopyList"),dom=domains.find(d=>d.id===deviceDomain(id));
   if(box&&t)box.innerHTML=recCopyListHtml(n,t,dom?.servers||[],q);
 }
+// «Сервер записи» меняется в черновике карточки, как другие блоки. В контракте это отдельный PUT /units/{uid}/recording-target,
+// а не шаг /operations: «Применить» отправляет его отдельным запросом до операции плана (camCallRun)
 function recTargetPut(id,serverId,copies){
-  const n=find(id)?.n;
-  return API.put(`/units/${id}/recording-target`,{serverId:serverId||null,copies}).then(r=>{hwApplyUnit(r);treeMatchCache.clear();searchMatchCache.clear();renderTreeSoon();gear()}).catch(e=>{toast(problemText(e,n));gear()});
+  const n=find(id)?.n;if(!n)return;
+  n.recordingTarget=serverId?{...(n.recordingTarget||{}),serverId,copies}:null;
+  setD(true);gear();
+}
+function recTargetText(t){
+  if(!t?.serverId)return i18n("Не назначен");
+  const s=servers.find(x=>x.id===t.serverId),c=(t.copies||[]).length;
+  return`${s?recServerLabel(s):t.serverId}${c?`, ${i18n("копий")}: ${c}`:""}`;
 }
 function recTargetSet(id,serverId){
   const n=find(id)?.n;
@@ -16126,25 +16518,34 @@ function camVideoHtml(n){
   const ptz=!!n.ptz&&can("putUnitPtz");
   // «Авто» нет: в превью одного размера оно прячет, какой поток на экране (как вкладки Main / Second stream в Axxon One)
   const cur=(lv?.id===n.id&&lv.stream)||camStreams(n)[0]?.id||"";
-  const seg=[].concat(camStreams(n).map((s,i)=>{
-    const res=cvStreamRes(n,s,i),fps=cvStreamFps(n,s,i);
-    return[s.id,`${escHtml(s.name)}${res?` <small>${escHtml(res.replace("x","×"))}</small>`:""}`,`${s.name}: ${res||"—"}, ${fps??"—"} ${i18n("к/с")}, ${s.codec||"—"}${s.online===false?`. ${i18n("Нет сигнала")}`:""}`,s.online===false]}));
-  const segHtml=`<div class="cv-seg" role="radiogroup" aria-label="${i18n("Поток в просмотре")}">${seg.map(([id,l,t,off])=>`<button type="button" role="radio" aria-checked="${id===cur}" data-cv-stream="${escHtml(id)}" title="${escHtml(t)}" ${off?"disabled":""} ${onEv("click",["cvStreamSet",`${n.id}`,`${id}`])}>${l}</button>`).join("")}</div>`;
   const main=`<div class="card cv-main"><div class="ch cv-h"><span>${i18n("Видео")}</span>${bdg(n)}</div>
-    <div class="cb">${liveFrameHtml(n,ptz?cvTourOvHtml(n):"")}<div class="cv-bar"><span class="cv-seg-l">${i18n("Поток")}</span>${segHtml}</div>${cvSummaryHtml(n)}</div></div>`;
+    <div class="cb">${liveFrameHtml(n,ptz?cvTourOvHtml(n)+cvOnVidHtml(n):"")}${cvStreamPickHtml(n,cur)}</div></div>`;
   const side=ptz?`<aside class="card cv-side" data-cv-side><div class="cv-side-in">${cvTourEdit?.id===n.id?"":cvPtzHtml(n)}${cvPresetsHtml(n)}</div></aside>`:"";
-  return`<div class="cv ${ptz?"cv-has-ptz":""} ${ptz&&cvTourEdit?.id===n.id?"cv-editing":""}">${main}${side}</div>${cvStreamsCardHtml(n)}`;
+  // .cv-cq — контейнер: узкая область ставит «Поворот» под видео, широкая — рядом. Строка оглавления (csTabWrap) — над видео, как на других вкладках
+  return`<div class="cv-cq"><div class="cv ${ptz?"cv-has-ptz":""} ${ptz&&cvTourEdit?.id===n.id?"cv-editing":""}">${main}${side}</div></div>${cvStreamsCardHtml(n)}`;
 }
-// Под видео — что идёт с камеры: одна строка на поток и режим настроек; полная форма — карточкой ниже
-function cvSummaryHtml(n){
-  const c=cvCfgOf(n);
-  const rows=camStreams(n).map((s,i)=>{const p=c.streams[s.id],res=cvStreamRes(n,s,i),fps=cvStreamFps(n,s,i);
-    return`<li><b>${escHtml(s.name)}</b> ${escHtml((res||"—").replace("x","×"))} · ${fps??"—"} ${i18n("к/с")} · ${escHtml(drvSend(n)?p.codec:s.codec||"—")} · ${escHtml(cvKbpsText(p.kbps))}${s.online===false?` · <span class="pf-st bad">${i18n("нет сигнала")}</span>`:""}</li>`}).join("");
-  return`<div class="cv-sum"><ul>${rows}</ul></div>`;
+// Под видео — потоки камеры списком: строка на поток (имя, разрешение, к/с, кодек, битрейт), выбранная строка — поток
+// в просмотре. Список растёт вниз, поэтому третий и следующие потоки помещаются при любой ширине
+function cvStreamPickHtml(n,cur){
+  const c=cvCfgOf(n),ss=camStreams(n),on=ss.filter(s=>s.online!==false);
+  // Выбран поток с сигналом: если cur без сигнала, отмечен первый живой. В Tab — одна остановка, стрелки ходят по живым
+  const pick=on.some(s=>s.id===cur)?cur:(on[0]?.id||cur);
+  const rows=ss.map((s,i)=>{const p=c.streams[s.id],res=cvStreamRes(n,s,i),fps=cvStreamFps(n,s,i),off=s.online===false;
+    const t=`${(res||"—").replace("x","×")} · ${fps??"—"} ${i18n("к/с")} · ${drvSend(n)?p.codec:s.codec||"—"} · ${cvKbpsText(p.kbps)}`;
+    return`<button type="button" role="radio" class="cv-sp" aria-checked="${s.id===pick}" tabindex="${s.id===pick?0:-1}" title="${escHtml(`${s.name}: ${t}${off?`. ${i18n("Нет сигнала")}`:""}`)}" data-cv-stream="${escHtml(s.id)}" ${off?"disabled":""} ${onEv("click",["cvStreamSet",`${n.id}`,`${s.id}`])}><span class="cv-sp-r" aria-hidden="true"></span><b>${escHtml(s.name)}</b><span class="cv-sp-t">${escHtml(t)}</span>${off?`<span class="pf-st bad">${i18n("нет сигнала")}</span>`:""}</button>`}).join("");
+  return`<div class="cv-sps" role="radiogroup" aria-label="${i18n("Поток в просмотре")}" ${onEv("keydown",["cvStreamKey",`${n.id}`])}><div class="cv-sps-h">${i18n("Поток в просмотре")}</div>${rows}</div>`;
+}
+// Стрелки вверх и вниз (и влево, вправо) выбирают соседний поток с сигналом, как в обычной группе радиокнопок
+function cvStreamKey(id){
+  const e=onEv.now,d={ArrowDown:1,ArrowRight:1,ArrowUp:-1,ArrowLeft:-1}[e.key];if(!d)return;
+  e.preventDefault();
+  const bs=[...document.querySelectorAll("#main .cv-sps [data-cv-stream]:not(:disabled)")];if(!bs.length)return;
+  const i=bs.findIndex(b=>b.getAttribute("aria-checked")==="true"),b=bs[(i+d+bs.length)%bs.length];
+  cvStreamSet(id,b.dataset.cvStream);b.focus();
 }
 function cvToStreams(){const el=document.querySelector("#main [data-cv-streams]");if(!el)return;el.scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth",block:"start"});el.classList.remove("acc-flash");void el.offsetWidth;el.classList.add("acc-flash")}
 function cvStreamSet(id,sid){
-  document.querySelectorAll("#main [data-cv-stream]").forEach(b=>b.setAttribute("aria-checked",String(b.dataset.cvStream===sid)));
+  document.querySelectorAll("#main [data-cv-stream]").forEach(b=>{const on=b.dataset.cvStream===sid;b.setAttribute("aria-checked",String(on));b.tabIndex=on?0:-1});
   if(!lv||lv.id!==id)return;
   liveStreamSet(sid);
 }
@@ -16190,8 +16591,11 @@ function cvPut(){
 }
 // Начать или сменить движение; при перетаскивании PUT уходит не чаще раза в 200 мс
 function cvRun(id,body){
+  // Короткий зум колесом кончается по таймеру; новое движение (кнопка, ручка, тяга по видео) этот таймер снимает
+  clearTimeout(cvWheelT);cvWheelT=0;
   cvTourManual(id);
-  if(cvMove&&cvMove.id===id){cvMove.body=body;cvSay(body);if(Date.now()-cvMove.sent>200)cvPut();return}
+  // Сменилась ось (зум колесом → фокус кнопкой): PUT сразу, без паузы в 200 мс — иначе камера ещё секунду делала бы прежнее
+  if(cvMove&&cvMove.id===id){const axes=Object.keys(body).join()!==Object.keys(cvMove.body).join();cvMove.body=body;cvSay(body);if(axes||Date.now()-cvMove.sent>200)cvPut();return}
   ptzStop();cvLeaseEnd();
   cvMove={id,body,sent:0,timer:setInterval(cvPut,PTZ_RENEW_MS)};
   cvSay(body);cvPut();
@@ -16203,6 +16607,7 @@ let cvHoldEl=null;
 function cvHoldWatch(el){if(!el)return;cvHoldEl=el;el.addEventListener("mouseleave",cvStop,{once:true})}
 function cvStop(){
   document.removeEventListener("mousemove",cvKnobMove);
+  cvVidEnd();
   if(cvHoldEl){cvHoldEl.removeEventListener("mouseleave",cvStop);cvHoldEl=null}
   const k=document.querySelector("#main [data-joy-knob]");if(k){k.style.transform="";k.classList.remove("on")}
   document.querySelectorAll("#main .joy-dir.on,#main .cv-hold.on").forEach(b=>b.classList.remove("on"));
@@ -16246,6 +16651,81 @@ function cvKnobMove(e){
   if(!pan&&!tilt){if(cvMove){cvMove.body={pan:0,tilt:0};cvSay(null);cvPut()}return}
   cvRun(cvKnob.id,{pan,tilt});
 }
+// ── Поворот на видео ──────────────────────────────────────────────────────
+// Нажать на кадр и тянуть: направление и скорость — от точки нажатия до курсора (r — половина меньшей стороны кадра),
+// как ручка джойстика. Нажатие без движения камеру не двигает. Колесо — короткий зум, пока крутят; «+ −» в углу держат,
+// как кнопки «Зум». Путь к камере тот же, что у джойстика: cvRun и аренда, отпустили — cvStop
+let cvVid=null,cvWheelT=0;
+function cvOnVidHtml(n){
+  if(n.online===false||n.direct===false)return"";
+  const z=(sign,label,ic)=>`<button type="button" class="btn s cv-hold" tabindex="-1" title="${i18n(label)}" aria-label="${i18n(label)}" ${onEv("mousedown",["cvHoldDown",`${n.id}`,"zoom",sign])}>${lu(ic,16)}</button>`;
+  return`<div class="cv-onvid" data-cv-onvid="${escHtml(n.id)}" ${onEv("pointerdown",["cvVidDown",`${n.id}`])}>
+    <svg class="cv-onvid-arr" data-cv-onvid-arr hidden aria-hidden="true"><g><circle r="7"/><line/><polygon/></g></svg>
+    <span class="cv-onvid-hint">${i18n("Тянуть по видео, чтобы повернуть камеру. Колесо мыши меняет зум.")}</span>
+    <span class="cv-onvid-z">${z(1,"Приблизить","plus")}${z(-1,"Отдалить","minus")}</span>
+  </div>`;
+}
+function cvVidDown(id){
+  const e=onEv.now;if(!e||e.button!==0||e.target.closest("button"))return;
+  // Без preventDefault: иначе нет mousedown, и меню, которые закрывает щелчок снаружи, остались бы открытыми.
+  // Выделение текста и прокрутку пальцем уже запрещают user-select и touch-action у кадра
+  clearTimeout(cvWheelT);cvWheelT=0;
+  const r=this.getBoundingClientRect();
+  cvVid={id,x0:e.clientX,y0:e.clientY,r:Math.max(40,Math.min(r.width,r.height)/2)};
+  this.classList.add("on");
+  document.addEventListener("pointermove",cvVidMove);
+  window.addEventListener("pointerup",cvStop,{once:true});window.addEventListener("pointercancel",cvStop,{once:true});
+  cvVidArrow(e.clientX,e.clientY);
+}
+function cvVidMove(e){
+  if(!cvVid)return;
+  cvVidArrow(e.clientX,e.clientY);
+  // Скорость ограничена кругом, как ход ручки джойстика: по диагонали не быстрее, чем по прямой
+  const{r}=cvVid;let dx=e.clientX-cvVid.x0,dy=e.clientY-cvVid.y0;const d=Math.hypot(dx,dy);if(d>r){dx*=r/d;dy*=r/d}
+  const dead=.08,pan=Math.abs(dx/r)<dead?0:+(dx/r).toFixed(2),tilt=Math.abs(dy/r)<dead?0:+(-dy/r).toFixed(2);
+  if(!pan&&!tilt){if(cvMove){cvMove.body={pan:0,tilt:0};cvSay(null);cvPut()}return}
+  cvRun(cvVid.id,{pan,tilt});
+}
+// Стрелка в координатах кадра: кадр могли перерисовать, поэтому его ищем при каждом движении
+function cvVidArrow(x,y){
+  const ov=document.querySelector("#main [data-cv-onvid]"),svg=ov?.querySelector("[data-cv-onvid-arr]");if(!svg)return;
+  const b=ov.getBoundingClientRect(),x0=cvVid.x0-b.left,y0=cvVid.y0-b.top,x1=x-b.left,y1=y-b.top,d=Math.hypot(x1-x0,y1-y0);
+  svg.hidden=false;
+  svg.querySelector("circle").setAttribute("cx",x0);svg.querySelector("circle").setAttribute("cy",y0);
+  const ln=svg.querySelector("line"),pg=svg.querySelector("polygon");
+  if(d<10){ln.setAttribute("x1",x0);ln.setAttribute("y1",y0);ln.setAttribute("x2",x0);ln.setAttribute("y2",y0);pg.setAttribute("points","");return}
+  const ux=(x1-x0)/d,uy=(y1-y0)/d,h=10;
+  ln.setAttribute("x1",x0+ux*7);ln.setAttribute("y1",y0+uy*7);ln.setAttribute("x2",x1-ux*h);ln.setAttribute("y2",y1-uy*h);
+  pg.setAttribute("points",`${x1},${y1} ${x1-ux*h*1.4-uy*h*.8},${y1-uy*h*1.4+ux*h*.8} ${x1-ux*h*1.4+uy*h*.8},${y1-uy*h*1.4-ux*h*.8}`);
+}
+function cvVidEnd(){
+  document.removeEventListener("pointermove",cvVidMove);
+  window.removeEventListener("pointerup",cvStop);window.removeEventListener("pointercancel",cvStop);
+  cvVid=null;clearTimeout(cvWheelT);cvWheelT=0;
+  const ov=document.querySelector("#main [data-cv-onvid]");if(!ov)return;
+  ov.classList.remove("on");const a=ov.querySelector("[data-cv-onvid-arr]");if(a)a.hidden=true;
+}
+// Колесо над кадром: вверх — приблизить, вниз — отдалить; зум идёт, пока крутят, и стоит через 350 мс после последнего
+// щелчка. Слушатель не пассивный: иначе колесо прокрутило бы страницу. Пока держат другой орган поворота, колесо молчит.
+// Непассивный слушатель висит только на самом кадре (вешаем при первом наведении): на документе он тормозил бы прокрутку
+// дерева и списков, потому что браузер ждал бы его перед каждой прокруткой
+// Колесо, которое только что прокручивало страницу и доехало до кадра, прокручивает дальше, а не зумит
+let cvScrollAt=0;
+document.addEventListener("scroll",()=>{cvScrollAt=performance.now()},{capture:true,passive:true});
+function cvOnVidWheel(e){
+  const ov=e.currentTarget;if(!ov.isConnected||!e.deltaY)return;
+  if(!cvWheelT&&performance.now()-cvScrollAt<300)return;
+  e.preventDefault();
+  if(cvVid||(cvMove&&!cvWheelT))return;
+  clearTimeout(cvWheelT);
+  cvRun(ov.dataset.cvOnvid,{zoom:(e.deltaY<0?1:-1)*Math.max(.3,cvSpeed/10)});
+  cvWheelT=setTimeout(cvStop,350);
+}
+document.addEventListener("pointerover",e=>{
+  const ov=e.target.closest?.("#main [data-cv-onvid]");if(!ov||ov._cvWheel)return;
+  ov._cvWheel=true;ov.addEventListener("wheel",cvOnVidWheel,{passive:false});
+},{passive:true});
+// ── Джойстик: клавиатура ──────────────────────────────────────────────────
 // Клавиатура: стрелка — движение, пока клавиша нажата; + и − — зум; отпустили или ушли с круга — стоп
 // Как горячие клавиши Axxon One: NumPad 8/2/4/6 — поворот, 9/3 — зум, Home/End — фокус
 const CV_KEYS={ArrowUp:[0,1],ArrowDown:[0,-1],ArrowLeft:[-1,0],ArrowRight:[1,0],Numpad8:[0,1],Numpad2:[0,-1],Numpad4:[-1,0],Numpad6:[1,0]};
@@ -16269,7 +16749,7 @@ function cvJoyKey(id){
 // Строка: номер, имя (правится на месте), «Перейти», «Запомнить сюда», удалить. Внизу — новый пресет: имя и
 // «Запомнить положение» (следующий свободный номер, нынешнее положение камеры)
 // Пресеты и туры — вкладки одной панели: тур собирают из пресетов, поэтому они рядом.
-// Редактор тура занимает всю боковую панель без вкладок (видео остаётся на экране) и уходит по «Сохранить» или «Отмена».
+// Редактор тура занимает всю боковую панель без вкладок (видео остаётся на экране) и уходит по «Добавить в план» или «Отмена».
 let cvSideTab="pre";
 function cvPresetsHtml(n){
   if(cvTourEdit?.id===n.id)return`<section class="cv-sec cv-pre cv-ed">${cvTourEditorHtml(n,cvTourEdit.t)}</section>`;
@@ -16471,7 +16951,7 @@ function cvTourEditorHtml(n,t){
       </div></div>
     </div>
     ${probs.length?`<ul class="cv-warn">${probs.map(x=>`<li>${escHtml(x)}</li>`).join("")}</ul>`:""}
-    <div class="cv-te-f"><button type="button" class="btn s" ${probs.length?"disabled":""} title="${i18n("Пройти один круг и остановиться. Камера идёт по точкам, видно в кадре")}" ${onEv("click",["cvTourTrial"])}>${trial?lu("square",13):lu("circle-play",14)}${i18n(trial?"Остановить":"Проверить круг")}</button><span class="cv-h-sp"></span><button type="button" class="btn s" ${onEv("click",["cvTourClose"])}>${i18n("Отмена")}</button><button type="button" class="btn s pri" ${probs.length?"disabled":""} ${onEv("click",["cvTourSave"])}>${i18n("Сохранить")}</button></div>
+    <div class="cv-te-f"><button type="button" class="btn s" ${probs.length?"disabled":""} title="${i18n("Пройти один круг и остановиться. Камера идёт по точкам, видно в кадре")}" ${onEv("click",["cvTourTrial"])}>${trial?lu("square",13):lu("circle-play",14)}${i18n(trial?"Остановить":"Проверить круг")}</button><span class="cv-h-sp"></span><button type="button" class="btn s" ${onEv("click",["cvTourClose"])}>${i18n("Отмена")}</button><button type="button" class="btn s pri" ${probs.length?"disabled":""} ${onEv("click",["cvTourSave"])}>${i18n("Добавить в план")}</button></div>
   </div>`;
 }
 // Сам, когда камерой не управляют: так может запускаться только один тур камеры (как AutoStart в ONVIF)
@@ -16517,21 +16997,22 @@ function cvTourClose(){
   const e=cvTE();if(!e){cvTourEdit=null;gear();return}
   const go=()=>{const st=cvToursOf(e.n);if(st.run?.trial)cvTourHalt(st);cvTourEdit=null;cvSidePaint(e.n,true);cvTourOvSync(e.n)};
   if(cvTourEditSnap()===cvTourEdit.orig){go();return}
-  askConfirm("Закрыть без сохранения?",i18n("Консоль не сохранит правки тура"),"",i18n("Закрыть"),go,{cancelLabel:"Вернуться"});
+  askConfirm("Закрыть без правок?",i18n("Консоль не добавит правки тура в план"),"",i18n("Закрыть"),go,{cancelLabel:"Вернуться"});
 }
 function cvTourSave(){
   const e=cvTE();if(!e||cvTourProblems(e.n,e.t).length)return;const st=cvToursOf(e.n);
+  camPlanTouch(e.n,"tours");
   if(st.run?.trial){cvTourHalt(st);cvTourOvSync(e.n)}
   const i=st.tours.findIndex(x=>x.id===e.t.id);if(i<0)st.tours.push(e.t);else st.tours[i]=e.t;
   if(cvTourEdit.idle){st.idleTour=e.t.id;st.idleSec=cvTourEdit.idleSec}else if(st.idleTour===e.t.id)st.idleTour="";
-  cvTourEdit=null;cvSidePaint(e.n,true);toast(`${i18n("Консоль сохранила тур")} «${e.t.name}»`);
+  cvTourEdit=null;setD(true);cvSidePaint(e.n,true);toast(`${i18n("Консоль добавила в план тур")} «${e.t.name}»`);
   requestAnimationFrame(()=>{const li=document.querySelector(`#main [data-tour="${e.t.id}"]`);li?.classList.add("acc-flash")});
 }
 function cvTourDel(id,tid){
   const n=find(id)?.n,st=n&&cvToursOf(n),t=st?.tours.find(x=>x.id===tid);if(!t)return;
-  askConfirm("Удалить тур?",`<ul class="bk-del"><li>${i18n("Консоль удалит тур")} «${escHtml(t.name)}»</li>${st.idleTour===tid?`<li>${i18n("Когда камерой не управляют, камера останется на месте")}</li>`:""}<li>${i18n("Пресеты и другие туры останутся")}</li></ul>`,"",i18n("Удалить"),()=>scheduleDelete([`${id}~${tid}`],{label:`${i18n("Тур")} «${t.name}»`,commit:()=>{
-    if(st.run?.tid===tid)cvTourHalt(st);st.tours=st.tours.filter(x=>x.id!==tid);if(st.idleTour===tid)st.idleTour="";gear();toast(i18n("Консоль удалила тур"));
-  }}),{html:true,typeCount:1});
+  askConfirm("Удалить тур?",`<ul class="bk-del"><li>${i18n("Консоль удалит тур")} «${escHtml(t.name)}» ${i18n("после «Применить»")}</li>${st.idleTour===tid?`<li>${i18n("Когда камерой не управляют, камера останется на месте")}</li>`:""}<li>${i18n("Пресеты и другие туры останутся")}</li><li>${i18n("До «Применить» тур вернёт «Сбросить» внизу")}</li></ul>`,"",i18n("Удалить"),()=>{
+    camPlanTouch(n,"tours");if(st.run?.tid===tid)cvTourHalt(st);st.tours=st.tours.filter(x=>x.id!==tid);if(st.idleTour===tid)st.idleTour="";setD(true);gear();
+  },{html:true,typeCount:1});
 }
 function cvPresetNew(id){
   const n=find(id)?.n;if(!n||n.direct===false||n.online===false)return;
@@ -16553,33 +17034,33 @@ function cvPresetGo(id,no){
 }
 
 // ── Параметры потоков ─────────────────────────────────────────────────────
-// «Параметры потоков» — как другие блоки вкладок: значения текстом, «Изменить» открывает поля.
-// Разрешение и к/с до «Готово» ждут в cvPendM и уходят на сервер только по «Готово»; «Отменить» возвращает всё
-const cvPendM=new Map(),cvSnap=new Map();
-function cvPend(id,sid,k,v){const m=cvPendM.get(id)||{};(m[sid]||(m[sid]={}))[k]=k==="fps"?Number(v):String(v).trim();cvPendM.set(id,m);mainSeen.html=null;gear()}
-function cvPendOf(id,sid,k,v){const x=cvPendM.get(id)?.[sid];return x&&k in x?x[k]:v}
-function cvEditStart(id){const n=find(id)?.n;if(!n)return;cvSnap.set(id,cardClone({v:cvCfgOf(n).streams}).v);cvPendM.delete(id);csEditSet(id,"streams",true)}
-function cvEditCancel(id){const n=find(id)?.n;if(n&&cvSnap.has(id))cvCfgOf(n).streams=cvSnap.get(id);cvSnap.delete(id);cvPendM.delete(id);csEditSet(id,"streams",false)}
-// «Готово»: один PATCH на поток со всеми его значениями. Два PATCH одного потока с той же версией дали бы 412
-function cvEditDone(id){
-  const n=find(id)?.n,m=cvPendM.get(id)||{};cvPendM.delete(id);cvSnap.delete(id);csEditSet(id,"streams",false);
-  if(!n)return;
-  const calls=Object.entries(m).map(([sid,o])=>{
-    const s=camStreams(n).find(x=>x.id===sid),props={};if(!s?.uid)return null;
-    Object.entries(o).forEach(([k,v])=>{const val=k==="fps"?Number(v):String(v).trim();if(k==="fps"?val>0:val)props[k]=val});
-    return Object.keys(props).length?API.patch(`/units/${s.uid}`,{properties:props},hwVer.get(s.uid)).then(u=>{if(u?.version!=null)hwVer.set(s.uid,u.version)}):null;
-  }).filter(Boolean);
-  if(!calls.length)return;
-  Promise.all(calls).then(()=>hwStreamsRead(id)).then(()=>gear()).catch(e=>{toast(problemText(e,n));hwStreamsRead(id).then(()=>gear(),()=>gear())});
+// «Параметры потоков» — как другие блоки вкладок: значения текстом, «Изменить» открывает поля, «Добавить в план» закрывает.
+// Разрешение и к/с, новый и удалённый поток — правка потоков в черновике карточки (n.streams): «Применить» отправляет их
+// отдельными запросами (camCallRun). Кодек, битрейт и другие — заглушка cvCfg, строки плана из camPlanRows
+const cvSnap=new Map();   // uid камеры → значения при «Изменить»: для «Отменить»
+function cvPend(id,sid,k,v){
+  const n=find(id)?.n;if(!n)return;const val=k==="fps"?Number(v):String(v).trim();
+  if(k==="fps"?!(val>0):!val){mainSeen.html=null;gear();return}
+  const s=(n.streams||[]).find(x=>x.id===sid);if(s)s[k]=val;else n[k]=val;   // без объектов потоков основной поток — это сама камера
+  setD(true);mainSeen.html=null;gear();
 }
+function cvSnapOf(n){return cardClone({cfg:cvCfgOf(n).streams,streams:n.streams,res:n.res,fps:n.fps})}
+function cvEditStart(id){const n=find(id)?.n;if(!n)return;cvSnap.set(id,cvSnapOf(n));camPlanTouch(n,"cv");csEditSet(id,"streams",true)}
+function cvRestore(n,snap){
+  cvCfgOf(n).streams=cardClone({v:snap.cfg}).v;
+  ["streams","res","fps"].forEach(k=>{if(snap[k]===undefined)delete n[k];else n[k]=cardClone({v:snap[k]}).v});
+}
+function cvDirty(n){const snap=cvSnap.get(n.id);return!!snap&&JSON.stringify(cvSnapOf(n))!==JSON.stringify(snap)}
+function cvEditCancel(id){const n=find(id)?.n;if(n&&cvSnap.has(id))cvRestore(n,cvSnap.get(id));cvSnap.delete(id);setD(true);csEditSet(id,"streams",false)}
+function cvEditDone(id){cvSnap.delete(id);setD(true);csEditSet(id,"streams",false)}
 function cvStreamsCardHtml(n){
   const c=cvCfgOf(n),con=drvSend(n),rtsp=camDriver(n)==="rtsp",ed=con&&csEditOn(n.id,"streams");
-  const acts=!con?"":ed?`<button type="button" class="btn s" ${onEv("click",["cvEditCancel",`${n.id}`])}>${i18n("Отменить")}</button><button type="button" class="btn pri s" ${onEv("click",["cvEditDone",`${n.id}`])}>${i18n("Готово")}</button>`
+  const acts=!con?"":ed?`<button type="button" class="btn s" ${onEv("click",["cvEditCancel",`${n.id}`])}>${i18n("Отменить")}</button><button type="button" class="btn pri s" ${onEv("click",["cvEditDone",`${n.id}`])}>${i18n("Добавить в план")}</button>`
     :`<button type="button" class="btn s" ${onEv("click",["cvEditStart",`${n.id}`])}>${i18n("Изменить")}</button>`;
-  const note=ed?`<div class="nt cv-push">${lu("triangle-alert",14)}${i18n("После изменения камера может перезапустить поток. Тогда видео и запись прервутся на несколько секунд.")} ${i18n("Новый или удалённый поток консоль сохраняет сразу: «Отменить» его не вернёт.")}</div>`
-    :con?"":`<p class="sub cv-lock">${lu("lock",13)}${i18n("Консоль показывает параметры так, как их сообщила камера.")} ${rtsp?i18n("У камеры RTSP их меняют в веб-интерфейсе камеры."):`<button type="button" class="lk" ${onEv("click",["drvSendToggle",`${n.id}`])}>${i18n("Включить «Отправлять настройки устройству»")}</button>`}</p>`;
+  const note=ed?`<div class="nt cv-push">${lu("triangle-alert",14)}${i18n("После изменения камера может перезапустить поток. Тогда видео и запись прервутся на несколько секунд.")}</div>`
+    :"";
   const cols=camStreams(n).map((s,i)=>cvStreamColHtml(n,s,i,c,ed)).join("");
-  return`<div class="card cv-streams" data-cv-streams data-sec="streams"><div class="ch">${i18n("Параметры потоков")}<span class="sub" style="font-weight:400">${camStreams(n).length}</span><span class="cs-acts">${acts}</span></div><div class="cb">
+  return`<div class="card cv-streams" data-cv-streams data-sec="streams"><div class="ch">${i18n("Параметры потоков")}<span class="sub" style="font-weight:400">${camStreams(n).length}</span>${con?"":csLockHtml()}<span class="cs-acts">${acts}</span></div><div class="cb">
     ${note}<div class="cv-cols">${cols}</div>
     ${ed?`<div class="ca-foot"><button type="button" class="btn s" ${onEv("click",["streamAdd",`${n.id}`])}>${lu("plus")}${i18n("Поток")}</button></div>`:""}
     <p class="sub cv-stub">${i18n("Прототип: «Отправлять настройки устройству», кодек, профиль, битрейт, качество, опорные кадры и «В просмотре» пока живут только в этой странице. Для них нужен запрос к API. Разрешение и к/с консоль записывает на сервер.")}</p>
@@ -16587,7 +17068,7 @@ function cvStreamsCardHtml(n){
   </div></div>`;
 }
 function cvStreamColHtml(n,s,i,c,con){
-  const sid=s.id,id=n.id,p=c.streams[sid],res=con?cvPendOf(id,sid,"res",cvStreamRes(n,s,i)):cvStreamRes(n,s,i),fps=con?cvPendOf(id,sid,"fps",cvStreamFps(n,s,i)):cvStreamFps(n,s,i);
+  const sid=s.id,id=n.id,p=c.streams[sid],res=cvStreamRes(n,s,i),fps=cvStreamFps(n,s,i);
   const set=(k)=>["cvStubSet",`${id}`,`${sid}`,k,onEv.value];
   const ro=(l,v)=>`<div class="cv-f"><label>${i18n(l)}</label><div class="cv-ro">${escHtml(v)}</div></div>`;
   const sel=(l,k,opts,cur)=>`<div class="cv-f"><label>${i18n(l)}</label><select ${onEv("change",set(k))}>${opts.map(o=>{const[v,t]=Array.isArray(o)?o:[o,o];return`<option value="${escHtml(v)}" ${String(v)===String(cur)?"selected":""}>${escHtml(i18n(t))}</option>`}).join("")}</select></div>`;
@@ -16622,13 +17103,15 @@ function cvModeSet(id,mode){
   const n=find(id)?.n;if(!n)return;const c=cvCfgOf(n);
   // Выключение: открытые правки параметров устройства закрываются с возвратом значений, иначе поля остались бы открыты
   if(mode!=="console"){
+    const l=csDirtyList(id,true);
+    if(l.length&&!cvModeSet.ok){askConfirm("Выключить «Отправлять настройки устройству»?",`<p>${i18n("Консоль не сохранила изменения камеры")} «${escHtml(locName(n))}» ${i18n("в блоках:")}</p><ul class="bk-del">${l.map(x=>`<li>${escHtml(x)}</li>`).join("")}</ul><p>${i18n("Консоль вернёт прежние значения этих блоков.")}</p>`,"",i18n("Выключить"),()=>{cvModeSet.ok=true;try{cvModeSet(id,mode)}finally{cvModeSet.ok=false}},{html:true,cancelLabel:"Остаться"});return}
     c.mode=mode;
     if(csEditOn(id,"streams")||cvSnap.has(id))cvEditCancel(id);
     Object.keys(drvState(n).snap).forEach(g=>{if(drvGroupDev(n,g))drvEditCancel(id,g)});
     gear();return;
   }
   mainSeen.html=null;gear();// радиокнопка вернётся к «Настройки камеры», пока не подтвердили
-  askConfirm("Отправлять настройки устройству?",`<ul class="bk-del"><li>${i18n("Консоль запишет в камеру параметры всех потоков (кодек, разрешение, к/с, битрейт, опорные кадры) и изображения (яркость, контраст и другие)")}</li><li>${i18n("Настройки, которые сделали в веб-интерфейсе камеры, пропадут")}</li><li>${i18n("Камера может перезапустить поток. Тогда видео и запись прервутся на несколько секунд")}</li></ul>`,"",i18n("Передавать"),()=>{c.mode="console";gear()},{html:true});
+  askConfirm("Включить «Отправлять настройки устройству»?",`<ul class="bk-del"><li>${i18n("Консоль запишет в камеру значения, которые показывает сейчас:")}<ul class="cs-send-prev">${cvSendPreview(n).map(x=>`<li>${x}</li>`).join("")}</ul></li><li>${i18n("Консоль запишет и другие настройки в блоках с замком.")}</li><li>${i18n("Если кто-то изменит настройки в веб-интерфейсе камеры, консоль заменит их своими.")}</li><li>${i18n("Камера может перезапустить поток. Тогда видео и запись прервутся на несколько секунд.")}</li></ul>`,"",i18n("Включить"),()=>{c.mode="console";gear()},{html:true});
 }
 function cvStubSet(id,sid,k,v){
   const n=find(id)?.n;if(!n)return;const p=cvCfgOf(n).streams[sid];if(!p)return;
@@ -17131,9 +17614,12 @@ function recStateHtml(x){
   if(!x.state&&!x.reason&&x.lag==null)return"";
   return`<div class="bk-hint" data-rec-state>${x.state?`${i18n("запись")}: ${escHtml(i18n(REC_STATE_RU[x.state]||x.state))}`:""}${x.lag!=null&&x.rec==="replica"?`<span data-rec-lag> · ${i18n("отставание")} ${escHtml(lagText(x.lag))}</span>`:""}${x.reason?` · ${escHtml(x.reason)}`:""}</div>`;
 }
+// Новый поток — в черновике карточки: «Применить» создаст его (camCallRun)
 function streamAdd(id){
   const n=find(id)?.n;if(!n)return;
-  unitsCreate([{kind:"stream",parentId:id,name:`${i18n("Поток")} ${camStreams(n).length+1}`,properties:{}}]).then(()=>hwStreamsRead(id)).then(()=>gear()).catch(e=>toast(problemText(e,n)));
+  const list=n.streams||(n.streams=[]);let k=list.length+1;while(list.some(x=>x.name===`${i18n("Поток")} ${k}`))k++;
+  list.push({id:"new-"+Date.now().toString(36),name:`${i18n("Поток")} ${k}`,_new:true});
+  setD(true);gear();
 }
 function streamSet(id,sid,k,v){
   const n=find(id)?.n;if(!n)return;
@@ -17144,9 +17630,12 @@ function streamSet(id,sid,k,v){
 }
 function streamDel(id,sid){
   const n=find(id)?.n,s=camStreams(n).find(x=>x.id===sid);if(!s)return;
-  askConfirm("Удалить поток?",`<ul class="bk-del"><li>${i18n("Будет удалён поток")} «${escHtml(s.name)}»</li><li>${i18n("Камера и основной поток останутся")}</li></ul>`,"",i18n("Удалить"),()=>scheduleDelete([`${id}/${sid}`],{label:`${i18n("Поток")} «${s.name}»`,commit:()=>{
-    API.del(`/units/${s.uid}`,hwVer.get(s.uid)).then(()=>{hwVer.delete(s.uid);return hwStreamsRead(id)}).then(()=>{gear();toast(i18n("Поток удалён"))}).catch(e=>toast(problemText(e,n)));
-  }}),{html:true,typeCount:1});
+  // Новый поток ещё не создан на сервере: он просто уходит из черновика
+  if(s._new){n.streams=n.streams.filter(x=>x.id!==sid);setD(true);gear();return}
+  // Удаление — в черновике карточки: «Применить» удалит поток (camCallRun), до этого его вернут «Отменить» и «Сбросить»
+  askConfirm("Удалить поток?",`<ul class="bk-del"><li>${i18n("Консоль удалит поток")} «${escHtml(s.name)}» ${i18n("после «Применить»")}</li><li>${i18n("Камера и основной поток останутся")}</li><li>${i18n("До «Применить» поток вернут «Отменить» в блоке и «Сбросить» внизу")}</li></ul>`,"",i18n("Удалить"),()=>{
+    n.streams=(n.streams||[]).filter(x=>x.id!==sid);setD(true);gear();
+  },{html:true,typeCount:1});
 }
 function lanTabOpen(n){
   if(!n)return false;
@@ -17157,7 +17646,7 @@ function lanTabOpen(n){
 }
 // Карточки устройства плюс «Правила автоматизации»: где оно используется, видно, не заходя в раздел правил.
 function form(n){
-  if(n.type==="camera"&&!isSchemaNode(n))return`<div class="cs-cq">${csTabWrap(n,formBase(n)+(tab==="gen"?"":drvSecsHtml(n,tab)+ruleUsesFor(n)))}</div>`;
+  if(n.type==="camera"&&!isSchemaNode(n))return`<div class="cs-cq">${csModeLine(n,tab)}${csTabWrap(n,formBase(n)+(tab==="gen"?"":drvSecsHtml(n,tab)+ruleUsesFor(n)))}</div>`;
   return tab==="topo"&&(n.type==="domain"||n.type==="server")?g7Html(n):formBase(n)+ruleUsesFor(n)}
 // Переключатель карточки: вид меняется сразу, значение уходит с «Применить»
 function swToggle(el){el.classList.toggle("on");setD(true)}
@@ -17428,7 +17917,7 @@ function formBase(n){
     if(tab==="acc")return accCamAccessHtml(n);
     if(tab==="rec"){
       const noRec=!isRecording(n),edge=recEdge(n),list=camArchs(n);
-      return recTargetCardHtml(n)+camArchsCardHtml(n)+card("Запись",`<div class="g">${n.rec==="replica"?fldRo("Предзапись, с","—"):fld("Предзапись, с",String(n.pre??5),"number")}${recSchedHtml(n)}${recMicHtml(n)}</div>
+      return recTargetCardHtml(n)+camArchsCardHtml(n,`${recMicHtml(n)?`<div class="g">${recMicHtml(n)}</div>`:""}
       ${edge?"":`<p class="sub">${i18n("Встроенного хранилища нет. Репликация берёт записи только из другого архива этой камеры.")}</p>`}
       ${list.some(x=>x.rec==="replica")?`<div class="nt" data-replica-note>${!edgeStorage(n)&&edge&&list.some(x=>x.rec==="replica"&&!x.replicaFrom)?`${i18n("Записи этой камеры находятся на диске регистратора")} «${escHtml(locName(ipsrvOwnerNode(n)))}» — ${i18n("сервер берёт их оттуда.")} `:""}${i18n("Сервер берёт записи без постоянного потока: из встроенного хранилища или из другого архива этой камеры. Сервер сам выбирает период. Строка записи показывает отставание. Если источник стёр минуты записи раньше, чем сервер их взял, эти минуты пропадают. Строка и журнал сообщают об этом.")}</div>`:""}
       ${list.some(x=>x.rec==="backup")?`<div class="nt" data-backup-note>${i18n("Резерв при сбое. Сервер записывает сюда живой поток, только когда основная запись должна идти, но не идёт из-за сбоя.")}</div>`:""}
@@ -17436,7 +17925,7 @@ function formBase(n){
           :i18n("Чтобы включить запись, привязать камеру к хранилищу. Камера ещё не подключена к серверу. Камера подключится к серверу выбранного хранилища."))
         :i18n("Основное хранилище задаёт сервер камеры. Дополнительные хранилища записывают тот же поток или второй поток. Пример: основной поток — в локальное хранилище, второй — в облако.")}</p>
       ${ipsrvOwnerNode(n)?`<p class="sub">${i18n("Камера входит в регистратор")} <button class="lk" ${onEv("click",["pick",`${ipsrvOwnerNode(n).id}`],["goTab","rec"])}>${escHtml(locName(ipsrvOwnerNode(n)))}</button> — ${i18n("там режим задают сразу для всех его камер.")}</p>`:""}`)
-      +edgeStorageCardHtml(n)+(list.some(x=>x.rec==="motion")?camRecDetsHtml(n):"")+rwCardsHtml(n);
+      +edgeStorageCardHtml(n)+camRecRulesHtml(n)+rwCardsHtml(n);
     }
     const ips=ipsrvOwnerNode(n);
     const underIpsrv=!!ips;
@@ -26822,41 +27311,190 @@ function lanArchFixed(){
   const n=find(wizd.lanOwner)?.n;
   return lanIsArch(n)?n:null;
 }
-const REC_MODES_ALL=[["none","Нет"],["always","Всегда"],["motion","По детектору"],["sched","По расписанию"],["replica","Репликация"],["backup","Резерв при сбое"]];
+const REC_MODES_ALL=[["none","Нет"],["always","Всегда"],["motion","По движению"],["sched","По расписанию"],["replica","Репликация"],["backup","Резерв при сбое"]];
 // Что система умеет — reference.recordModes; backup бывает только в строке дополнительного архива
 let refRecModes=REC_MODES_ALL.map(x=>x[0]);
 function recModes(){return REC_MODES_ALL.filter(([v])=>v!=="backup"&&refRecModes.includes(v))}
 function recModesOf(a){const m=archSpec(a).recordModes;return REC_MODES_ALL.filter(([v])=>m.includes(v)&&refRecModes.includes(v))}
-// Запись по детектору: пишем по срабатыванию конкретных детекторов камеры.
-// Пустой список recDets означает «все детекторы камеры».
-function camRecDets(n){
-  const all=camDetectors(n).map(d=>d.id);
-  if(!Array.isArray(n.recDets))return all;
-  return n.recDets.filter(id=>all.includes(id));
+// ── Что запускает запись: расписание, правило автоматизации ──
+// «По движению» (motion) — детектор движения камеры и правило «движение — запись», «По расписанию» — по расписанию
+// записи (recordScheduleId); правило с действием «Записывать» может добавить запись к любому режиму. Если запускать запись нечему,
+// строка хранилища, список режимов и план предупреждают: иначе пользователь не узнает, что запись не начнётся.
+// Действие попадает в камеру: ссылкой или как «устройство из события». Событие детектора у камеры без детектора
+// не наступит: такое событие правила не считается — и для «устройства из события», и для прямой ссылки
+function camRecHit(r,a,n){
+  const has=ref=>!!ref&&refNodes(ref,["camera"]).some(c=>c.id===n.id);
+  const can=w=>w.sub!=="det"||refNodes(w.ref||"",["camera"]).some(c=>camDetectors(c).length);
+  if(a.ref==="$src")return r.when.some(w=>(w.sub!=="det"||camDetectors(n).length)&&has(w.ref));
+  return has(a.ref)&&(r.start!=="event"||!r.when.length||r.when.some(can));
 }
-function toggleRecDet(camId,detId){
-  const f=find(camId);if(!f)return;
-  const cur=new Set(camRecDets(f.n));
-  if(cur.has(detId))cur.delete(detId);else cur.add(detId);
-  f.n.recDets=[...cur];
-  setD(true);gear();
+function camRecRuleActs(r,n){return ruleActs(r).map(x=>x.it).filter(a=>(a.action==="record"||a.action==="replicate")&&camRecHit(r,a,n))}
+// Правила, которые записывают камеру или забирают записи с её встроенного хранилища: [{r, rec}].
+// Один проход по правилам на отрисовку: ruleMemo сбрасывает тот же ruleIdxDrop, что и индекс ссылок
+function camRecRuleList(n){
+  if(!edgeRulesOn())return[];
+  return ruleMemo("camrec|"+n.id,()=>rules.filter(r=>!r._new).map(r=>{const a=camRecRuleActs(r,n);return a.length?{r,rec:a.some(x=>x.action==="record")}:null}).filter(Boolean));
 }
-function camRecDetsHtml(n){
-  const dets=camDetectors(n);
-  if(!dets.length)return`<div class="nt">${i18n("У камеры нет детекторов, поэтому запись по событию невозможна.")} <button class="lk lk-act" ${onEv("click",["goTab","det"])}>${i18n("Создать детектор")} →</button></div>`;
-  const on=new Set(camRecDets(n));
-  return listCard({
-    key:"recdet:"+n.id,
-    title:"Детекторы, запускающие запись",
-    items:dets,
-    text:d=>[locName(d),i18n(d.kind||DET_TYPES[0])],
-    row:d=>`<div class="ln ln-sw"><div>${escHtml(locName(d))}<small class="sub" style="display:block">${escHtml(i18n(d.kind||DET_TYPES[0]))}</small></div>
-      <div class="sw ${on.has(d.id)?"on":""}" ${onEv("click",["toggleRecDet",`${n.id}`,`${d.id}`])}></div></div>`,
-    ph:"Имя или тип детектора…",
-    unit:"детектор|детектора|детекторов",
-    extra:on.size?"":`<p class="sub">${i18n("Детектор не выбран, поэтому запись по событию не будет работать.")}</p>`,
-    head:`<span class="sub" style="font-weight:400">${on.size}/${dets.length}</span>`
+function camRecRules(n){return camRecRuleList(n).map(x=>x.r)}
+// «По движению» — как On motion в Axxon One: консоль сама, без вопросов, создаёт детектор движения камеры
+// (recordDetectorIds) и правило автоматизации «движение — запись» для этой камеры. Без правила запись не начнётся.
+// Чтобы это делал сервер по одному режиму — запрос к владельцу контракта (api/requests/2026-11-10-123425Z-mockup-record-mode-event-request.md)
+function camIsMotionDet(d){return(d.kind||DET_TYPES[0])===DET_KIND_RU.motion}
+// Детекторы, по которым пишет «По движению»: из recordDetectorIds; без списка — все детекторы движения камеры
+function camRecMotionDets(n){
+  const all=camDetectors(n);
+  return Array.isArray(n.recDets)?all.filter(d=>n.recDets.includes(d.id)):all.filter(camIsMotionDet);
+}
+// Детектор движения для «По движению»: свой, если есть; иначе новый — встроенный, если камера умеет, иначе на сервере
+function camMotionDetEnsure(n){
+  const own=camDetectors(n).find(camIsMotionDet);if(own)return own;
+  const o=(n.detectorOptions||[]).find(x=>x.kind==="motion");
+  const d={id:"det"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),type:"det",online:true,devices:[],kind:DET_KIND_RU.motion,
+    name:o?o.name:i18n("Детектор движения"),...(o?{template:o.template,builtin:true,...(o.sensitivityMin!=null?{sens:String(o.sensitivityMin)}:{})}:{sens:"12"})};
+  (n.devices||(n.devices=[])).push(d);camAutoDets.add(d);hwIdxDrop();return d;
+}
+// Детекторы, которые консоль добавила для «По движению» в этом черновике: уйти с режима — убрать их
+const camAutoDets=new WeakSet();
+function camRecModeSet(n,row,v){
+  row.rec=v;
+  if(v==="motion"){camRecMotionBind(n,camMotionDetEnsure(n));camRecRuleEnsure(n);return}
+  if(camArchs(n).some(x=>!x.ro&&x.rec==="motion"))return;
+  // Ни одна строка не пишет по движению: правило и новый детектор больше не нужны, список детекторов записи — как был
+  delete n._recRule;
+  const was=(n.devices||[]).length;
+  n.devices=(n.devices||[]).filter(d=>!(camAutoDets.has(d)&&!hwVer.has(d.id)));
+  if(n.devices.length!==was)hwIdxDrop();
+  if("_recDetsWas" in n){if(n._recDetsWas===undefined)delete n.recDets;else n.recDets=n._recDetsWas;delete n._recDetsWas}
+}
+// Правила «движение — запись» этой камеры: событие детектора движения, действие «Записывать» эту камеру, «Работает»
+function camRecMotionRules(n){
+  return camRecRuleList(n).filter(x=>x.rec&&ruleState(x.r)==="on"&&x.r.start==="event"&&x.r.when.some(w=>w.sub==="det"&&w.kind==="motion"&&refNodes(w.ref||"",["camera"]).some(c=>c.id===n.id))).map(x=>x.r);
+}
+// Консоль может создать правило записи: право, шаблон «Движение — запись» и действие «Записывать» объявлены
+function camRecRuleOk(){return can("createRule")&&edgeRulesOn()&&edgeTplOk("mrec")&&camRecActOk()}
+// Правила записи по движению нет — правило попадёт в план (n._recRule). «Сбросить» убирает метку вместе с черновиком
+function camRecRuleEnsure(n){if(camRecRuleOk()&&!camRecMotionRules(n).length)n._recRule=true}
+function camRecRuleName(n){return`${locName(n)} — ${i18n("запись по движению")}`}
+// Тело правила «движение — запись»: событие — на камерах, а не на детекторе, поэтому правилу не нужно ждать создания детектора
+function camRecRuleBody(ids,name){
+  const now=ruleNow();
+  return ruleBody({name,on:true,watch:false,repeat:"skip",start:"event",run:{mode:"always",modes:[]},cond:[],menu:false,rate:6,within:0,sched:null,
+    when:[{sub:"det",kind:"motion",ref:refMake([...ids],[]),match:{}}],then:[{sub:"rec",action:"record",ref:"$src",dur:"event",after:10}],
+    owner:ACC_ME,purpose:"",created:{by:ACC_ME,at:now},changed:{by:ACC_ME,at:now},server:dcRuleServer(ids),runAs:"system",chain:true});
+}
+function camRecRuleCreate(ids,name){return API.post("/rules",camRecRuleBody(ids,name)).then(async x=>{ruleSet(x);await ruleHistLoad(x.id);return x})}
+function camRecRulesAfter(rows){
+  Promise.allSettled(rows.map(r=>camRecRuleCreate([r.node.id],r.recRule))).then(res=>{
+    const ok=res.filter(x=>x.status==="fulfilled").map(x=>x.value),bad=res.find(x=>x.status==="rejected");
+    if(bad)toast(problemText(bad.reason));
+    if(ok.length)toastAction("recrule",`${i18n("Консоль создала правило")}: ${ok.length>1?ok.length:`«${ok[0].name}»`}`,i18n("Открыть"),()=>ruleGoRule(ok[0].id),12000);
+    paint();
   });
+}
+// Строки плана «Добавить: правило»: у камеры карточки и у камер регистратора — правило на камеру, как в Axxon One
+function camRecRulePlanRows(n,out){
+  const walk=d=>{if(d.type==="camera"&&d._recRule&&camArchs(d).some(x=>!x.ro&&x.rec==="motion")&&!camRecMotionRules(d).length)
+    out.push({node:d,recRule:camRecRuleName(d),label:`${d!==n?`«${locName(d)}»: `:""}${i18n("Добавить")}: ${i18n("правило")} «${camRecRuleName(d)}»`,fromT:"—",toT:i18n("консоль создаст после операции")});
+    (d.devices||[]).forEach(walk)};
+  walk(n);
+}
+// Новый детектор ещё не создан на сервере, и операция не может сослаться на него по номеру: тогда поле пустое —
+// «все детекторы камеры», новый в их числе. Детектор с сервера — его номер в recordDetectorIds
+// Нет поля — уже «все детекторы»: детектор с сервера в их числе, поле не трогаем
+function camRecMotionBind(n,d){
+  if(hwVer.has(d.id)&&!Array.isArray(n.recDets))return;
+  if(!("_recDetsWas" in n))n._recDetsWas=n.recDets===undefined?undefined:[...n.recDets];
+  if(hwVer.has(d.id))n.recDets=[...new Set([...n.recDets,d.id])];else delete n.recDets;
+}
+function camRecMotionFix(id){const n=find(id)?.n;if(!n)return;camRecMotionBind(n,camMotionDetEnsure(n));camRecRuleEnsure(n);setD(true);paint()}
+// Чего не хватает режиму mode строки хранилища: {k, text} или null
+function camRecGap(n,mode){
+  if(mode==="motion"){
+    if(!camRecMotionDets(n).length)return{k:"nodet",text:i18n("Запись не начнётся, потому что у камеры нет детектора движения.")};
+    return !edgeRulesOn()||n._recRule||camRecMotionRules(n).length?null:{k:"norule",text:i18n("Запись не начнётся, потому что ни одно правило автоматизации не запускает запись по движению.")};
+  }
+  if(mode==="sched"){
+    const id=n.recordScheduleId,s=id?schById(id):null;
+    if(!id)return{k:"nosch",text:i18n("Запись не начнётся, потому что у камеры нет расписания записи.")};
+    if(!s)return{k:"schgone",text:i18n("Запись не начнётся, потому что расписания записи больше нет.")};
+    if(schEmpty(s))return{k:"schempty",text:`${i18n("Запись не начнётся, потому что расписание")} «${s.name}» ${i18n("не включает запись ни в один день.")}`};
+  }
+  return null;
+}
+// Все пробелы камеры: по одному на режим из её строк хранилищ
+function camRecGaps(n){return[...new Set(camArchs(n).filter(x=>!x.ro).map(x=>x.rec))].map(m=>camRecGap(n,m)).filter(Boolean)}
+function camRecGapHtml(n,mode){
+  const g=camRecGap(n,mode);if(!g)return"";
+  const fl=camRecFlash===n.id;if(fl)setTimeout(()=>{if(camRecFlash===n.id)camRecFlash=null},0);   // вспышка — на одну отрисовку
+  return`<div class="bk-hint rec-gap${fl?" rec-gap-flash":""}" data-rec-gap="${g.k}">${lu("triangle-alert")} ${escHtml(g.text)}</div>`;
+}
+// Предупреждение моргает, когда пользователь сменил режим или хранилище: иначе строку под таблицей легко не заметить
+let camRecFlash=null;
+function camRecFlashOn(id){camRecFlash=id}
+// Переход к детектору камеры: вкладка «Детекторы», детектор выбран
+function camRecDetGo(camId,detId){detSel=detId;goTab("det");hwFlashLanding()}   // переход по ссылке моргает, как другие
+// Полоса «Когда писать» под строкой хранилища: что запускает запись в выбранном режиме
+function camRecWhenHtml(n,x){
+  const v=x.rec;
+  if(v!=="motion"&&v!=="sched")return"";
+  let body;
+  if(v==="motion"){
+    const ds=camRecMotionDets(n),rr=camRecMotionRules(n),g=camRecGap(n,"motion");
+    const dets=`${i18n(ds.length>1?"Детекторы":"Детектор")} ${ds.slice(0,2).map(d=>`<button type="button" class="lk" ${onEv("click",["camRecDetGo",n.id,d.id])}>«${escHtml(detTitle(d))}»</button> (${i18n(d.builtin?"встроенный":"на сервере")})`).join(", ")}${ds.length>2?` ${i18n("и ещё")} ${ds.length-2}`:""}`;
+    const rule=rr.length?` ${i18n("Правило")} <button type="button" class="lk" ${onEv("click",["ruleGoRule",rr[0].id])}>«${escHtml(rr[0].name)}»</button> ${i18n("запускает запись, пока детектор видит движение, и ещё 10 секунд после.")}`
+      :n._recRule?` ${i18n("Консоль создаст правило записи")} «${escHtml(camRecRuleName(n))}», ${i18n("когда вы примените изменения.")}`
+      :!edgeRulesOn()?` ${i18n("Нет права читать правила автоматизации.")}`:"";
+    const both=camRecRuleOk()&&!camRecMotionRules(n).length;
+    const fix=g&&(g.k==="nodet"?can("createUnits"):camRecRuleOk())?`<div class="ca-when-add"><button type="button" class="btn s pri" data-rec-motion-fix ${onEv("click",["camRecMotionFix",n.id])}>${lu("plus",13)} ${i18n(g.k!=="nodet"?"Создать правило записи":both?"Создать детектор и правило записи":"Создать детектор движения")}</button></div>`:"";
+    body=g?(g.k==="norule"?`<div class="ca-when-ok" data-rec-dets>${dets}.</div>`:"")+camRecGapHtml(n,"motion")+fix
+      :`<div class="ca-when-ok" data-rec-dets>${dets}.${rule}</div>`;
+  }else{
+    const s=n.recordScheduleId?schById(n.recordScheduleId):null;
+    body=`<div class="ca-sch" data-rec-sched><label>${i18n("Расписание записи")}</label>${recSchedHtml(n)}${s?`<span class="sub" data-rec-sched-text>${escHtml(schText(s,true))}</span><button type="button" class="lk" ${onEv("click",["camRecSchOpen",s.id])}>${i18n("Открыть расписание")} →</button>`:""}</div>${camRecGapHtml(n,"sched")}`;
+  }
+  return`<tr class="ca-when" data-rec-when="${v}"><td colspan="4">${body}</td></tr>`;
+}
+// Кнопки нового правила записи: шаблон «Движение — запись», пустое правило, детектор
+function camRecAddHtml(n){
+  if(!can("createRule"))return"";
+  const dets=camDetectors(n).length,b=[];
+  if(dets&&edgeTplOk("mrec"))b.push(`<button type="button" class="btn s" ${onEv("click",["camRecRuleNew",n.id,"mrec"])}>${lu("zap",13)} ${i18n("Движение — запись")}</button>`);
+  if(camRecActOk())b.push(`<button type="button" class="btn s" ${onEv("click",["camRecRuleNew",n.id,""])}>${lu("zap",13)} ${i18n("Правило с записью…")}</button>`);
+  if(!dets)b.push(`<button type="button" class="btn s" ${onEv("click",["goTab","det"])}>${i18n("Создать детектор")} →</button>`);
+  return b.length?`<div class="ca-when-add" data-cam-rec-add>${b.join("")}</div>`:"";
+}
+// Переход к расписанию в «Автоматизации»: раздел открывается без своей вспышки, подсветит ruleOpen
+function camRecSchOpen(id){ruleQuiet=true;setApp("rules");ruleQuiet=false;ruleOpen("sch:"+id,true)}
+// Новое правило с записью этой камеры: шаблон «Движение — запись» (камера в событии) или пустое правило с действием «Записывать»
+function camRecRuleNew(id,tpl){
+  const n=find(id)?.n;if(!n||!can("createRule"))return;
+  const ref=refMake([n.id],[]),back={id:n.id,tab:"rec"};
+  let preset;
+  if(tpl&&edgeTplOk(tpl)){const t=RULE_TPL.find(x=>x.id===tpl),it=ruleClone(t.make().when[0]);it.ref=ref;
+    preset={start:t.start,tpl,back,when:[it],note:"Консоль подставила камеру в событие правила."}}
+  else{const st=startDeclared("event")?"event":ruleNewStartDef();
+    preset={start:st,back,then:[st==="event"?{sub:"rec",action:"record",ref,dur:"event",after:10}:{sub:"rec",action:"record",ref,dur:"min",minutes:10}],note:"Консоль подставила камеру."}}
+  ruleQuiet=true;setApp("rules");ruleQuiet=false;
+  ruleNewOpen(preset);
+}
+// Сервер объявил действие «Записывать» (контракт: возможности правил)
+function camRecActOk(){const k=ACTION_KINDS.find(x=>x.sub==="rec"&&x.action==="record");return!!k&&actDeclared(k)}
+const CAM_REC_START={event:"по событию",sched:"по расписанию",manual:"по кнопке"};
+// Блок «Запись по правилам»: как «Репликация по правилам» у встроенного хранилища
+function camRecRulesHtml(n){
+  const list=camArchs(n);if(!list.length)return"";
+  const rr=camRecRules(n);
+  if(!rr.length)return"";
+  const note=`<p class="sub er-rules-nt">${i18n("Правило автоматизации с действием «Записывать» запускает запись по событию. Режим «По движению» создаёт такое правило сам. Правило с действием «Начать репликацию» забирает записи со встроенного хранилища камеры.")}</p>`;
+  const rows=rr.length?`<table class="er-tbl er-rules" data-cam-rec-rules><colgroup><col><col style="width:240px"><col style="width:130px"><col style="width:150px"></colgroup>
+    <thead><tr><th>${i18n("Правило")}</th><th>${i18n("Что делает")}</th><th>${i18n("Сейчас")}</th><th></th></tr></thead><tbody>${rr.map(r=>{
+      const rec=camRecRuleList(n).find(x=>x.r===r)?.rec,st=ruleState(r);
+      const what=`${i18n(rec?"Записывает":"Забирает со встроенного хранилища")}${CAM_REC_START[r.start]?` · ${i18n(CAM_REC_START[r.start])}`:""}`;
+      return`<tr><td class="er-ell" title="${escHtml(r.name)}">${lu("zap",14)} ${escHtml(r.name)}</td><td class="er-ell">${escHtml(what)}</td><td><span class="er-st ${st==="on"?"ok":"off"}">${i18n(st==="err"?"Ошибка":ruleStateName(r))}</span></td><td><button type="button" class="btn s" ${onEv("click",["ruleGoRule",r.id])}>${i18n("Открыть правило")}</button></td></tr>`;
+    }).join("")}</tbody></table>`
+    :"";   // без правил блока нет (выше), поэтому пустого состояния здесь нет
+  const add=can("createRule")?`<div class="er-rules-add"><span class="sub">${i18n("Создать правило для этой камеры. Консоль откроет мастер правила и подставит камеру.")}</span>${camRecAddHtml(n)}</div>`:"";
+  return card("Запись по правилам",note+rows+add,`<span class="sub" style="font-weight:400">${rr.length}</span>`);
 }
 function recordModeLabel(rec){
   return(REC_MODES_ALL.find(([v])=>v===rec)||REC_MODES_ALL[0])[1];
@@ -27140,14 +27778,20 @@ function edgeStorageCardHtml(owner){
   const cam=nvrOf?owner.id:undefined,p=edgeRep(st),s=edgeStat(st,cam),a=archById(p.arch),excluded=nvrOf&&p.excl.has(owner.id)&&p.type==="all";
   const where=nvrOf?`${i18n("Записи камеры лежат на диске регистратора")} <button type="button" class="lk" ${onEv("click",["pick",nvrOf.id])}>${escHtml(locName(nvrOf))}</button>. ${i18n("Регистратор задаёт одну постоянную репликацию для всех своих камер.")}`
     :`${i18n(owner.type==="ipsrv"?"Диск внутри регистратора.":"Карта памяти внутри камеры.")}`;
-  return card("Встроенное хранилище",`<div class="mx">
+  const body=`<div class="mx">
       <div class="mc"><span>${i18n("Объём")}</span><b>${escHtml(st.size||"—")}</b></div>
       <div class="mc"><span>${i18n("Репликация")}</span><b>${excluded?i18n("камера не входит"):escHtml(edgeRepLabel(st,cam))}</b></div>
       <div class="mc"><span>${i18n("Куда")}</span><b class="er-ell" title="${escHtml(a?locName(a):"—")}">${p.type!=="all"||excluded?"—":escHtml(a?locName(a):"—")}</b></div>
       <div class="mc"><span>${i18n("Сейчас")}</span><b>${excluded?edgeStatChip(null):edgeStatChip(s)}</b></div>
     </div>
     <p class="sub" style="margin-top:10px">${where} ${excluded?"":edgeSummary(st,cam)}</p>
-    <button type="button" class="btn s" ${onEv("click",["edgeOpen",`${st.id}`])}>${i18n("Настроить репликацию")}</button>`);
+    <button type="button" class="btn s" ${onEv("click",["edgeOpen",`${st.id}`])}>${i18n("Настроить репликацию")}</button>`;
+  // Камера: «Включить», глубина и период кэша (параметры драйвера) — в этом же блоке, сверху; одного блока с этим именем хватает
+  // Выключено — консоль с картой не работает: объём и репликацию не показываем, чтобы блок не спорил сам с собой
+  const fs=owner.type==="camera"&&drvEdgeMerged(owner)?drvGroups(owner,"rec").get(DRV_EDGE):null;
+  if(!fs)return card("Встроенное хранилище",body);
+  const on=!!drvState(owner).vals.edgeStorage;
+  return drvGroupCardHtml(owner,DRV_EDGE,fs,on?body:`<p class="sub">${i18n("Консоль не берёт записи с карты памяти. Чтобы смотреть эти записи и забирать их в хранилище, включить встроенное хранилище.")}</p>`);
 }
 // ── Вкладка архива «Встроенные хранилища»: устройства его сервера с картой или диском ──
 // Все встроенные хранилища — одним перечнем GET /units?kind=storage: в дереве они видны только в раскрытой ветке
@@ -27364,8 +28008,7 @@ function setNvrRec(id,v){
   if(v==="__mixed__")return;
   const cams=ipsrvCameras(f.n);
   cams.forEach(c=>{
-    c.rec=v;
-    if(v==="motion")c.recDets=camDetectors(c).map(d=>d.id);
+    camRecModeSet(c,c,v);
     if(v!=="none"&&!c.arch){pinCamServer(c);c.arch=archChoicesFor(c)[0]?.id||null;bindArchServer(c)}
     camReplicaSync(c);
   });
@@ -27827,9 +28470,16 @@ function camReplicaSync(n){
 }
 // Расписания записи: те, что заведены отдельно, а не принадлежат правилу или окну
 function recSchedules(){return SCHEDS.filter(s=>!s.own)}
+// Список расписаний записи: как окно обновления в настройках роутера — выбирают готовое расписание по имени
 function recSchedHtml(n){
-  if(!camArchs(n).some(x=>x.rec==="sched"))return"";
-  return`<div data-rec-sched><label>${i18n("Расписание записи")}</label><select ${onEv("change",["camRecSet",`${n.id}`,"recordScheduleId",onEv.value])}>${recSchedules().map(s=>`<option value="${escHtml(s.id)}" ${s.id===n.recordScheduleId?"selected":""}>${escHtml(s.name)}</option>`).join("")}</select></div>`;
+  return`<select aria-label="${i18n("Расписание записи")}" title="${escHtml(schById(n.recordScheduleId||"")?.name||"")}" ${onEv("change",["camRecSchedPick",`${n.id}`,onEv.value])}>${n.recordScheduleId&&schById(n.recordScheduleId)?"":`<option value="" selected disabled>${i18n("Выбрать расписание…")}</option>`}${recSchedules().map(s=>`<option value="${escHtml(s.id)}" ${s.id===n.recordScheduleId?"selected":""}>${escHtml(s.name)}</option>`).join("")}${can("createSchedule")?`<option value="__new">${i18n("Новое расписание…")}</option>`:""}</select>`;
+}
+// Выбор расписания записи; «Новое расписание…» открывает редактор расписания на месте, новое сразу выбрано
+function camRecSchedPick(id,v){
+  const n=find(id)?.n;if(!n)return;
+  if(v!=="__new"){camRecSet(id,"recordScheduleId",v);return}
+  const d=schBlank({name:`${i18n("Запись")} — ${locName(n)}`});
+  schDlgOpen(d.id,{draft:d,isNew:true,onSave:sid=>{const m=find(id)?.n;if(m){m.recordScheduleId=sid;setD(true)}paint()}});paint();
 }
 function recMicHtml(n){
   const mics=(n.devices||[]).filter(d=>d.type==="mic");
@@ -27934,37 +28584,59 @@ function replicaSrcHtml(n,x,i){
   const can=replicaSources(n,x),gone=x.replicaFrom&&!can.some(s=>s.id===x.replicaFrom);
   return`<div class="ca-src" data-replica-src><label>${i18n("Откуда забирать")}</label><select ${onEv("change",["camArchRowSet",`${n.id}`,i,"replicaFrom",onEv.value])}>${gone?`<option value="${escHtml(x.replicaFrom)}" selected>${i18n("источник снят")}</option>`:""}${can.map(s=>`<option value="${escHtml(s.id)}" ${s.id===(x.replicaFrom||"")?"selected":""}>${escHtml(s.name)}</option>`).join("")}</select></div>`;
 }
-// Срок и наименьшая глубина — свои у каждой записи; пустой срок — как у хранилища
+// Срок, наименьшая глубина и предзапись — свои у каждой записи (как prerecord_sec привязки в Axxon One).
+// Пустой срок — как у хранилища; пустая предзапись дополнительной строки — как у камеры (основного хранилища).
+// replica забирает готовые записи, поэтому предзаписи у неё нет
 function recDepthHtml(n,x,i,a){
-  const inp=(l,k,ph)=>`<div><label>${i18n(l)}</label><input type="number" min="0" value="${x[k]??""}" placeholder="${escHtml(ph)}" data-rec-field="${k}" ${onEv("change",["camArchRowSet",`${n.id}`,i,k,onEv.value])}></div>`;
-  return`<div class="ca-depth" data-rec-depth>${inp("Срок, дней","retentionDays",a?String(a.days):"")}${inp("Глубина не меньше, дней","minDepthDays","")}</div>`;
+  const inp=(l,k,ph,tip="")=>`<div><label>${i18n(l)}</label><input type="number" min="0" value="${x[k]??""}" placeholder="${escHtml(ph)}" ${tip?`title="${escHtml(tip)}"`:""} data-rec-field="${k}" ${onEv("change",["camArchRowSet",`${n.id}`,i,k,onEv.value])}></div>`;
+  const pre=x.rec==="replica"?"":x.main?inp("Предзапись, с","pre","5")
+    :inp("Предзапись, с","pre",String(n.pre??5),`${i18n("Если поле пустое, хранилище берёт предзапись основного хранилища:")} ${n.pre??5} ${i18n("с")}`);
+  return`<div class="ca-depth" data-rec-depth>${inp("Срок, дней","retentionDays",a?String(a.days):"")}${inp("Глубина не меньше, дней","minDepthDays","")}${pre}</div>`;
 }
 function archDaysText(a,x){const d=x.retentionDays??a?.days;return d?d+" "+i18n("дн."):i18n("без ограничения")}
-function camArchsCardHtml(n){
+// Хранилища и запись одной карточкой. Предзапись — в строке хранилища; rest — общие настройки записи камеры (микрофон, заметки)
+function camArchsCardHtml(n,rest=""){
   const list=camArchs(n),used=new Set(list.map(x=>x.arch));
   const free=(n.arch?archRowChoices(n):archChoicesFor(n)).filter(a=>!used.has(a.id));
   const rows=list.map((x,i)=>{
     const a=archById(x.arch),opts=(x.main?archChoicesFor(n):archRowChoices(n)).filter(o=>o.id===x.arch||!used.has(o.id));
     if(x.ro)return`<tr data-arch-ro="${x.arch}"><td>${escHtml(a?locName(a):x.arch)} · ${escHtml(a?archKindTag(a):"")}<div class="bk-hint">${i18n("работает со всеми камерами сервера. У камеры это значение можно только читать")}</div>${recStateHtml(x)}</td>
       <td>${escHtml(camStreams(n).find(s=>s.id===x.stream)?.name||x.stream||"")}</td><td>${escHtml(i18n(a&&archSpec(a).archiveModes.length?ARCH_MODE_RU[x.rec]||x.rec||"Авто":recordModeLabel(x.rec)))}</td><td></td></tr>`;
-    const recOpts=(a?recModesOf(a):REC_MODES_ALL.slice(1)).filter(([v])=>x.main?v!=="backup":true);
+    const recOpts=(a?recModesOf(a):REC_MODES_ALL.slice(1)).filter(([v])=>x.main?v!=="backup":true),xv=x.rec;
     return`<tr><td><select ${onEv("change",["camArchRowSet",`${n.id}`,i,"arch",onEv.value])}>${opts.map(o=>`<option value="${o.id}" ${o.id===x.arch?"selected":""}>${escHtml(locName(o))} · ${escHtml(archKindTag(o))}</option>`).join("")}</select>
         ${x.main?`<div class="bk-hint ca-main">${i18n("основное")}${a?` · ${archDaysText(a,x)}`:""}</div>`:`<div class="bk-hint">${a?archDaysText(a,x):""}</div>${chipsHtml(refLabels,x.labels,"camArchRowLabel",`${n.id}`,i)}`}${replicaSrcHtml(n,x,i)}${recDepthHtml(n,x,i,a)}${recStateHtml(x)}</td>
-      <td><select ${onEv("change",["camArchRowSet",`${n.id}`,i,"stream",onEv.value])}>${camStreams(n).filter(s=>x.rec!=="replica"||s.id===replicaStream(n,x,list)).map(s=>`<option value="${escHtml(s.id)}" ${s.id===(x.stream||camStreams(n)[0].id)?"selected":""}>${escHtml(s.name)}</option>`).join("")}</select></td>
-      <td><select ${onEv("change",["camArchRowSet",`${n.id}`,i,"rec",onEv.value])}>${recOpts.map(([v,l])=>`<option value="${v}" ${x.rec===v?"selected":""} ${(v==="replica"&&!replicaSources(n,x).length)||(v==="sched"&&!recSchedules().length)?"disabled":""}>${i18n(l)}</option>`).join("")}${x.rec==="none"?`<option value="none" selected>${i18n("Нет")}</option>`:""}</select></td>
-      <td class="ca-x"><button type="button" class="btn s" title="${i18n("Отвязать от хранилища")}" ${onEv("click",["camArchRowDel",`${n.id}`,i])}>${i18n("Отвязать")}</button></td></tr>`;
+      <td class="ca-fit" data-l="${i18n("Поток")}"><select title="${escHtml(camStreams(n).find(s=>s.id===(x.stream||camStreams(n)[0].id))?.name||"")}" ${onEv("change",["camArchRowSet",`${n.id}`,i,"stream",onEv.value])}>${camStreams(n).filter(s=>x.rec!=="replica"||s.id===replicaStream(n,x,list)).map(s=>`<option value="${escHtml(s.id)}" ${s.id===(x.stream||camStreams(n)[0].id)?"selected":""}>${escHtml(s.name)}</option>`).join("")}</select></td>
+      <td class="ca-fit" data-l="${i18n("Режим записи")}"><select title="${escHtml(i18n(recordModeLabel(xv)))}" ${onEv("change",["camArchRowSet",`${n.id}`,i,"rec",onEv.value])}>${recOpts.map(([v,l])=>`<option value="${v}" ${xv===v?"selected":""} ${(v==="replica"&&!replicaSources(n,x).length)||(v==="sched"&&!recSchedules().length&&!can("createSchedule"))?"disabled":""}>${i18n(l)}</option>`).join("")}${x.rec==="none"?`<option value="none" selected>${i18n("Нет")}</option>`:""}</select></td>
+      <td class="ca-x"><button type="button" class="btn s ca-more" title="${i18n("Ещё")}" aria-label="${escHtml(`${i18n("Ещё")} · ${a?locName(a):x.arch}`)}" aria-haspopup="menu" ${onEv("click",["camArchRowMenu",onEv.el,`${n.id}`,i])}>${lu("ellipsis-vertical",14)}</button></td></tr>${camRecWhenHtml(n,x)}`;
   }).join("");
   const add=free.length?`<select class="ca-add" ${onEv("change",onEv.ifValue,["camArchRowAdd",n.id,onEv.value])}><option value="">＋ ${i18n("Привязать к хранилищу")}…</option>${free.map(a=>`<option value="${a.id}">${escHtml(locName(a))} · ${escHtml(archKindTag(a))}</option>`).join("")}</select>`
     :`<span class="sub">${i18n(list.length?"Других доступных хранилищ нет":"Доступных хранилищ нет")}</span>`;
-  return card("Хранилища камеры",`${list.length?`<table class="ca-tbl"><thead><tr><th>${i18n("Хранилище")}</th><th>${i18n("Поток")}</th><th>${i18n("Режим записи")}</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+  return card("Хранилища и запись",`${list.length?`<div class="ca-wrap"><table class="ca-tbl"><thead><tr><th>${i18n("Хранилище")}</th><th>${i18n("Поток")}</th><th>${i18n("Режим записи")}</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
       :`<div class="nt">${i18n("Камера не привязана к хранилищу, поэтому запись не идёт.")}</div>`}
-    <div class="ca-foot">${add}</div>${archChoicesNote(n)}`,`<span class="sub" style="font-weight:400">${list.length}</span>`);
+    <div class="ca-foot">${add}</div>${archChoicesNote(n)}${rest?`<div class="ca-set" data-rec-set><div class="ca-set-h">${i18n("Настройки записи")}</div>${rest}</div>`:""}`,`<span class="sub" style="font-weight:400">${list.length}</span>`);
 }
 function camArchRowAdd(id,aid){
   const f=find(id);if(!f)return;
   camAddArch(f.n,aid);
   treeMatchCache.clear();searchMatchCache.clear();setD(true);paint();
   toast(`${i18n("Камера привязана к хранилищу")} «${locName(archById(aid))}»`);
+}
+// «Отвязать» — редкое действие: оно спрятано в меню «Ещё» строки и требует подтверждения
+function camArchRowMenu(el,id,i){
+  accMenuOpen(el,`<button type="button" class="mi danger" data-ca-unbind ${onEv("click",["accMenuClose"],["camArchRowAsk",`${id}`,i])}>${i18n("Отвязать от хранилища")}…</button>`);
+}
+function camArchRowAsk(id,i){
+  const n=find(id)?.n;if(!n)return;
+  const list=camArchs(n),x=list[i];if(!x)return;
+  const a=archById(x.arch),an=`«${a?locName(a):x.arch}»`,nm=y=>`«${locName(archById(y)||{name:y})}»`;
+  // Текст — по состоянию после отвязки: то же camDropArch на копии
+  const t={type:"camera",arch:n.arch,rec:n.rec,stream:n.stream,archx:(n.archx||[]).map(y=>({...y}))};camDropArch(t,x.arch);
+  const after=camArchs(t),ro=after.find(y=>y.ro);
+  const msg=`${i18n("Камера")} «${locName(n)}» ${i18n("перестанет записывать видео в хранилище")} ${an}. `+
+    (t.arch?(x.main?`${i18n("Основным станет хранилище")} ${nm(t.arch)}.`:i18n("Запись в другие хранилища камеры продолжится."))
+      :ro?`${i18n("Запись продолжится в хранилище")} ${nm(ro.arch)}: ${i18n("оно работает со всеми камерами сервера.")}`
+      :after.length?i18n("Другие хранилища камеры пишут только при сбое основного, поэтому запись остановится."):i18n("Других хранилищ у камеры нет, поэтому запись остановится."));
+  askConfirm("Отвязать от хранилища",msg,"Записи, которые уже есть в хранилище, останутся. Консоль отвяжет камеру, когда вы примените изменения.","Отвязать",()=>camArchRowDel(id,i),{rawMsg:true});
 }
 function camArchRowDel(id,i){
   const f=find(id);if(!f)return;
@@ -27976,16 +28648,20 @@ function camArchRowDel(id,i){
 function camArchRowSet(id,i,k,v){
   const f=find(id);if(!f)return;const n=f.n;
   const row=n.arch&&i===0?n:(n.archx||[])[i-(n.arch?1:0)];if(!row)return;
+  const gapsWas=new Set(camRecGaps(n).map(g=>g.k));
   if(k==="replicaFrom"){if(v)row.replicaFrom=v;else delete row.replicaFrom}
   else if(k==="retentionDays"||k==="minDepthDays"){if(v==="")delete row[k];else row[k]=Math.max(0,Number(v)||0)}
+  // Предзапись основного хранилища — preRecordSec камеры (row === n); пустая у дополнительной строки — как у камеры
+  else if(k==="pre"){if(v==="")delete row.pre;else row.pre=Math.max(0,Number(v)||0)}   // пустое у камеры — null, как прежнее поле: сервер берёт умолчание
+  else if(k==="rec")camRecModeSet(n,row,v);
   else row[k]=v;
   if(k==="arch"){
     if(row===n){pinCamServer(n);bindArchServer(n)}
     const modes=recModesOf(archById(v)).map(x=>x[0]).filter(m=>row!==n||m!=="backup");
     if(!modes.includes(row.rec))row.rec=modes[0]||"none";
   }
-  if(k==="rec"&&row===n&&v==="motion"&&!Array.isArray(n.recDets))n.recDets=camDetectors(n).map(d=>d.id);
   camReplicaSync(n);
+  if((k==="rec"||k==="arch")&&camRecGaps(n).some(g=>!gapsWas.has(g.k)))camRecFlashOn(n.id);   // моргает только новое предупреждение
   treeMatchCache.clear();searchMatchCache.clear();setD(true);paint();
 }
 function camArchSelectHtml(n){
@@ -28009,7 +28685,7 @@ function setCamArch(id,v){
   treeMatchCache.clear();searchMatchCache.clear();setD(true);paint();
 }
 function foundRecordOptions(r){
-  return `<option value="none" ${(!r.record||r.record==="none")?"selected":""}>Нет</option><option value="always" ${r.record==="always"?"selected":""}>Всегда</option><option value="motion" ${r.record==="motion"?"selected":""}>По детектору</option>`;
+  return `<option value="none" ${(!r.record||r.record==="none")?"selected":""}>Нет</option><option value="always" ${r.record==="always"?"selected":""}>Всегда</option><option value="motion" ${r.record==="motion"?"selected":""}>По движению</option>`;
 }
 function devDisabledFieldHtml(label){
   return `<label>${label}</label><select class="dev-inline-select" disabled tabindex="-1" ${onEv("click",onEv.stop)}><option>—</option></select>`;
@@ -28162,7 +28838,7 @@ function deviceNodeFromData(r,server,opts={}){
   if(r.lat!=""&&r.lat!=null)node.lat=r.lat;else node.lat="0";
   if(r.lon!=""&&r.lon!=null)node.lon=r.lon;else node.lon="0";
   if(r.azimuth)node.azimuth=r.azimuth;
-  if(node.rec==="motion")node.devices.push({id:id+"det",type:"det",name:"Детектор движения",online:true});
+  if(node.rec==="motion")node.devices.push({id:id+"det",type:"det",name:"Детектор движения",kind:DET_KIND_RU.motion,online:true});
   if(opts.disabled)node.enabled=false;
   return node;
 }
@@ -28248,7 +28924,7 @@ function updateBulkEditField(key,value,rerender){
 }
 function bulkEditRecordOptions(){
   const r=wizd.bulkEdit.record;
-  return `<option value="">— не менять —</option><option value="none" ${r==="none"?"selected":""}>Нет</option><option value="always" ${r==="always"?"selected":""}>Всегда</option><option value="motion" ${r==="motion"?"selected":""}>По детектору</option>`;
+  return `<option value="">— не менять —</option><option value="none" ${r==="none"?"selected":""}>Нет</option><option value="always" ${r==="always"?"selected":""}>Всегда</option><option value="motion" ${r==="motion"?"selected":""}>По движению</option>`;
 }
 function applyBulkEdit(){
   const list=selectedDeviceResults();
@@ -28521,7 +29197,7 @@ function manualNode(m,s,disabled,prof){
   else if(m.type==="eventsrc")node={...common,type:"eventsrc",...(m.server?{srvId:m.server}:{})};
   else if(m.type==="acfa")node={...common,type:"acfa"};
   else node={...common,type:"camera",arch:m.arch||null,rec:m.record==="always"?"always":m.record==="motion"?"motion":"none",lat:m.lat,lon:m.lon,azimuth:m.azimuth};
-  if(node.type==="camera"&&m.record==="motion")node.devices.push({id:node.id+"det",type:"det",name:"Детектор движения",online:true});
+  if(node.type==="camera"&&m.record==="motion")node.devices.push({id:node.id+"det",type:"det",name:"Детектор движения",kind:DET_KIND_RU.motion,online:true});
   if(s.type==="server")setDevServer(node,s.id);else bindArchServer(node);
   return node;
 }
@@ -28561,12 +29237,12 @@ function deviceManualHtml(){
       <div><label>Короткое имя</label><input value="${escHtml(m.short)}" placeholder="Авто" ${onEv("input",["updateManual","short",onEv.value])}></div>
       <div><label>Название</label><input value="${escHtml(m.name)}" placeholder="По умолчанию" ${onEv("input",["updateManual","name",onEv.value])}></div>
       ${camera?`<div><label>Архив</label>${comboArchHtml(m.arch,["updateManual","arch"],{inline:false})}</div>
-      <div>${hasLinkedArchive(m.arch)?`<label>Запись</label><select class="dev-inline-select" ${onEv("change",["updateManual","record",onEv.value])}><option value="none" ${(!m.record||m.record==="none")?"selected":""}>Нет</option><option value="always" ${m.record==="always"?"selected":""}>Всегда</option><option value="motion" ${m.record==="motion"?"selected":""}>По детектору</option></select>`:devDisabledFieldHtml("Запись")}</div>
+      <div>${hasLinkedArchive(m.arch)?`<label>Запись</label><select class="dev-inline-select" ${onEv("change",["updateManual","record",onEv.value])}><option value="none" ${(!m.record||m.record==="none")?"selected":""}>Нет</option><option value="always" ${m.record==="always"?"selected":""}>Всегда</option><option value="motion" ${m.record==="motion"?"selected":""}>По движению</option></select>`:devDisabledFieldHtml("Запись")}</div>
       <div><label>Папка</label>${comboGroupHtml(m.group,["updateManual","group"],{inline:false})}</div>
       <div><label>Широта</label><input value="${escHtml(m.lat)}" ${onEv("input",["updateManual","lat",onEv.value])}></div>
       <div><label>Долгота</label><input value="${escHtml(m.lon)}" ${onEv("input",["updateManual","lon",onEv.value])}></div>
       <div><label>Азимут</label><input type="number" value="${escHtml(m.azimuth)}" ${onEv("input",["updateManual","azimuth",onEv.value])}></div>
-      ${m.record==="motion"?`<p class="motion-note">Предзапись — 3 секунды. Консоль создаёт серверный детектор движения. Встроенный детектор можно добавить в карточке камеры, когда устройство ответит.</p>`:""}`:""}
+      ${m.record==="motion"?`<p class="motion-note">${i18n(camRecRuleOk()?"Консоль создаст детектор движения на сервере и правило записи. Камера будет писать, пока детектор видит движение, и ещё 10 секунд после. Предзапись — 3 секунды. Встроенный детектор можно выбрать в карточке камеры, когда устройство ответит.":"Консоль создаст детектор движения на сервере. Создать правило записи в «Автоматизации», иначе запись не начнётся.")}</p>`:""}`:""}
     </div>
   </div>${wizd.manualAddedId?`<div class="nt ok">Устройство добавлено в конфигурацию</div>`:""}`;
 }
@@ -28639,7 +29315,7 @@ function csvRowFrom(cols,index,colMap){
   const a=arch.find(x=>x.name===archiveName||x.id===archiveName);
   if(a&&!wizArchList().includes(a))errors.push("архив другого домена или сервера");
   row.arch=a&&wizArchList().includes(a)?a.id:"";
-  const recMap={Нет:"none",Всегда:"always","По движению":"motion","По детектору":"motion",none:"none",always:"always",motion:"motion"};
+  const recMap={Нет:"none",Всегда:"always","По движению":"motion","По детектору":"motion","По событию":"motion",none:"none",always:"always",motion:"motion"};
   row.record=recMap[recordName]||(row.arch?"motion":"none");
   row.group=resolveGroupIdFromName(groupName);
   if(groupName&&!row.group)errors.push("неизвестная группа");
@@ -29453,6 +30129,7 @@ function planSend(rows,retry){
     const gone=new Set(res.done.map(d=>rows[d.index]));
     addPlan.rows=addPlan.rows.filter(x=>!gone.has(x));
     addPlan.added=got;
+    planRecRulesCreate(rows,res.done);
     addPlan.last={done:(retry&&addPlan.last?addPlan.last.done:0)+res.done.length};
     treeMatchCache.clear();searchMatchCache.clear();
     toast(res.failed.length?`${i18n("Добавлено")} ${res.done.length} · ${i18n("не добавлено")} ${res.failed.length}`:`${i18n("Добавлено устройств")}: ${res.done.length}`);
@@ -29547,7 +30224,22 @@ function planPanelHtml(){
   if(!rows.length&&!addPlan.links.length)list=`<div class="plan-empty">${i18n("План пуст. На шаге «Что добавить» отметить устройства и нажать «В план». Пока вы не примените план, в системе ничего не изменится.")}</div>`;
   else list=planLinksHtml()+[...groups].map(([sid,part])=>`<div class="plan-grp">${sid?escHtml(locName(find(sid)?.n||{name:"—"})):i18n("Сервер выберет система")} · ${part.length}</div>`+part.map(planRowHtml).join("")).join("");
   return`<div class="plan-hd"><b>${i18n("План")} · ${rows.length+addPlan.links.length}</b>${rows.length||addPlan.links.length?`<button type="button" class="lk" ${addPlan.applying?`disabled title="${i18n("Идёт применение плана")}"`:""} ${onEv("click",["planClear"])}>${i18n("Очистить план")}</button>`:""}</div>
-    <div class="plan-rows">${added}${sum}${list}</div>`;
+    ${planRecSumHtml(rows)}<div class="plan-rows">${added}${sum}${list}</div>`;
+}
+// После добавления: одно правило «движение — запись» на камеры плана в режиме «По движению», как автоправило Axxon One.
+// Событие правила — на камерах, поэтому правило не ждёт, пока сервер создаст детекторы
+function planRecRulesCreate(rows,done){
+  const cams=done.filter(d=>{const r=rows[d.index]?.r;return r&&(r.type||"camera")==="camera"&&r.arch&&r.record==="motion"}).map(d=>d.devices[0])
+    .filter(d=>{const n=d&&find(d.id)?.n;return d&&!(n&&camRecMotionRules(n).length)});   // папку или сервер камеры уже пишет правило — второе не нужно
+  if(!cams.length||!camRecRuleOk())return;
+  const name=cams.length===1?`${cams[0].name||cams[0].id} — ${i18n("запись по движению")}`:`${i18n("Запись по движению")}: ${cams.length} ${i18n(plural(cams.length,"камера|камеры|камер"))}`;
+  camRecRuleCreate(cams.map(d=>d.id),name).then(x=>toastAction("planrecrule",`${i18n("Консоль создала правило")}: «${x.name}»`,i18n("Открыть"),()=>ruleGoRule(x.id),12000)).catch(e=>toast(problemText(e)));
+}
+// Итог записи по плану — строкой, без отдельного шага: сколько детекторов движения и правил записи создаст консоль
+function planRecSumHtml(rows){
+  const mot=rows.filter(x=>(x.r.type||"camera")==="camera"&&x.r.arch&&x.r.record==="motion").length;
+  if(!mot)return"";
+  return`<div class="plan-rec-sum" data-plan-rec-sum><div>${escHtml(`${i18n("Камер в режиме «По движению»:")} ${mot}. ${i18n(camRecRuleOk()?"Консоль создаст им детекторы движения на сервере и правило записи по движению.":"Консоль создаст им детекторы движения на сервере. Создать правило записи в «Автоматизации», иначе запись не начнётся.")}`)}</div></div>`;
 }
 // Панель плана — только в ящике: панель «Найденных» в дереве остаётся одна. Ящик открыт — значит, он и есть wizd
 function planInDrawer(){return!!document.getElementById("wiz")?.classList.contains("open")&&wizd?.mode==="device-add"}
@@ -30345,6 +31037,9 @@ function ctxThen(id,fn,...args){
   closeTreeCtx();
   const run=()=>window[fn](...args);
   if(sel===id&&!(treeSel.size>1&&!treeSel.has(id)))return run();
+  // Несохранённые блоки драйвера и потоки камеры — свой вопрос; после него — вопрос о черновике карточки, затем действие
+  const draftThen=()=>{if(cardDraft&&cardDraft.id!==id&&cardDiff().length){cardLeaveAsk(()=>{pick(id,{force:true,csOk:true});if(sel===id)run()});return}pick(id,{csOk:true});if(sel===id)run()};
+  if(sel&&sel!==id&&csDirtyList(sel).length){csLeaveAsk(sel,draftThen);return}
   if(cardDraft&&cardDraft.id!==id&&cardDiff().length){cardLeaveAsk(()=>{pick(id,{force:true});if(sel===id)run()});return}
   // pick может не открыть объект сразу: черновик зон спрашивает первым.
   pick(id);if(sel===id)run();
@@ -30523,7 +31218,8 @@ document.onkeydown=e=>{
   }
   if(app==="hw"&&!document.getElementById("gopop")?.classList.contains("open")){
     const inQ=e.target&&e.target.id==="gq";              // из поля поиска ходим тоже
-    const free=inQ||!e.target.closest("input,textarea,select,[contenteditable]");
+    // defaultPrevented: стрелки уже забрал свой элемент (группа радиокнопок «Поток в просмотре»), дерево их не берёт
+    const free=!e.defaultPrevented&&(inQ||!e.target.closest("input,textarea,select,[contenteditable]"));
     const keys=inQ?["ArrowDown","ArrowUp"]:["ArrowDown","ArrowUp","ArrowRight","ArrowLeft"];
     if(free&&keys.includes(e.key)&&!e.shiftKey&&!e.ctrlKey&&!e.metaKey&&!e.altKey){
       e.preventDefault();treeKeyNav(e.key);return;
@@ -31294,7 +31990,7 @@ function bulkRecHtml(nodes){
   const archOpts=[["__none__",i18n("Не задан")],...arch.map(a=>[a,cams.filter(n=>archChoicesFor(n).includes(a)).length]).filter(([,k])=>k)
     .map(([a,k])=>[a.id,locName(a)+(k<cams.length?` — ${i18n("подходит")} ${k} ${i18n("из")} ${cams.length}`:"")])];
   const recOpts=recModes().map(([v,l])=>[v,i18n(l),v==="replica"&&!edgeAll]);
-  return card("Архив и запись",`<div class="g">${bkSelect("Архив","arch",archOpts,archD)}${bkSelect("Режим","rec",recOpts,recD)}${bkInput("Предзапись, с","pre","number",preD)}</div>
+  return card("Архив и запись",`<div class="g">${bkSelect("Архив","arch",archOpts,archD)}${bkSelect("Режим","rec",recOpts,recD)}${bkInput("Предзапись основного хранилища, с","pre","number",preD)}</div>
     <p class="sub">${i18n("Камера с сервером записывает только в хранилища своего сервера или в сетевые хранилища домена. План пропустит камеры другого сервера. Камера без сервера подключается к серверу выбранного хранилища, поэтому изменение идёт через план. Консоль применяет всё через план. После этого можно нажать «Отменить».")} ${edgeAll?"":`${i18n("Репликация недоступна. Источник для репликации есть только у")} ${edgeN} ${i18n("из")} ${nodes.length}.`}</p>`);
 }
 function bulkVidHtml(nodes,st){
@@ -32894,7 +33590,7 @@ function apiVal(k,v){
 }
 // Строка плана карточки → изменение устройства; null — строку не выразить через API
 function fldToApi(label,prop,v){
-  const k=prop?(DEV_API[prop]||prop):DEV_FLD_API[label]||(label==="Предзапись, с"?"preRecordSec":null);
+  const k=prop?(DEV_API[prop]||prop):DEV_FLD_API[label]||null;
   // Пароль камеры (блок «Подключение»): в API — password, только на запись; пустое поле снимает пароль
   if(prop==="pass")return{password:v===""||v==null?null:v};
   if(!k||!DEVICE_PATCH.has(k))return null;
@@ -32916,7 +33612,7 @@ function keyToApi(node,key,v){
   if(key==="size")return{sizeBytes:v===undefined?null:Math.round(sizeTb(v)*TB)};
   if(key==="kind"&&node.type==="det")return{detectorKind:v===undefined?null:DET_KIND_CODE[v]||v};
   if(key==="sens")return{sensitivity:apiVal("sensitivity",v)};
-  if(key==="archx")return{extraArchives:v===undefined?null:v.filter(x=>!x.ro).map(x=>({archiveId:x.arch,recordMode:x.rec??null,stream:x.stream??null,...(x.labels?.length?{labels:x.labels}:{}),...(x.rec==="replica"?{replicaFrom:x.replicaFrom??null}:{}),...(x.retentionDays!=null?{retentionDays:x.retentionDays}:{}),...(x.minDepthDays!=null?{minDepthDays:x.minDepthDays}:{})}))};
+  if(key==="archx")return{extraArchives:v===undefined?null:v.filter(x=>!x.ro).map(x=>({archiveId:x.arch,recordMode:x.rec??null,stream:x.stream??null,...(x.labels?.length?{labels:x.labels}:{}),...(x.rec==="replica"?{replicaFrom:x.replicaFrom??null}:{}),...(x.retentionDays!=null?{retentionDays:x.retentionDays}:{}),...(x.minDepthDays!=null?{minDepthDays:x.minDepthDays}:{}),...(x.pre!=null?{preRecordSec:x.pre}:{})}))};
   if(key==="mode"&&node.type==="email")return{mode:v===undefined?null:EMAIL_MODE_CODE[v]||v};
   if(key==="pass")return{password:v===undefined?null:v};
   if(key==="norm")return{norm:v===undefined?null:NORM_CODE[v]||v};
@@ -32971,6 +33667,8 @@ const opKey=()=>`ui-${Date.now().toString(36)}-${++opKeySeq}`;
 let opEarly=[];
 // Кто ждёт конца операции, которую очередь не показывает (откат по «Отменить»)
 const opWait=new Map();
+// Шаг с o.call — отдельный запрос (не шаг операции): очередь выполняет такие шаги по одному до операции, итог каждого — в
+// его строке. Очередь занята с первого шага, поэтому другая операция не начнётся между ними. call=null — операции нет
 function apiQueue(steps,title,opts,call,apiOps,noopOps){
   startQueue(steps,title,Object.assign({},opts,{api:"pending"}));
   const q=bq;if(!q||q.api!=="pending")return;
@@ -32981,6 +33679,25 @@ function apiQueue(steps,title,opts,call,apiOps,noopOps){
     renderRailStatus();renderTree();
   }
   q.apiOps=apiOps||steps.flatMap(s=>s.ops);
+  const callOps=steps.flatMap(s=>s.ops).filter(o=>o.call&&!o.done);
+  if(callOps.length||!call){
+    (async()=>{
+      for(const o of callOps){
+        if(q.cancelled)break;
+        o.state="run";renderRailStatus();syncQueueModal();
+        try{await o.call();o.state="ok";o.msg="";q.ok++}catch(e){o.state="fail";o.msg=problemText(e,o.n);q.fail++}
+        o.done=true;q.done++;renderRailStatus();syncQueueModal();
+      }
+      if(opts?.afterCalls)await opts.afterCalls().catch(()=>{});
+      if(!call||q.cancelled){q.api=null;if(bq===q)queueFinish();return}
+      const nx=queueNext();if(nx){nx.o.state="run";q.cur=nx.s.label}
+      apiQueueCall(q,call);
+    })();
+    return;
+  }
+  apiQueueCall(q,call);
+}
+function apiQueueCall(q,call){
   opEarly=[];
   call().then(op=>{q.api=op.id;const early=opEarly;opEarly=[];early.forEach(opOnEvent);if(q.cancelled&&!q.finished&&bq===q)apiQueueOp("cancel").catch(e=>toast(problemText(e)))}).catch(e=>{
     // Сервер не принял операцию целиком (план устарел, объект занят, ошибка в поле): ни один шаг не выполнен
@@ -33020,7 +33737,7 @@ function apiQueueOp(path){return API.post(`/operations/${bq.api}/${path}`)}
 function startQueue(steps,title,opts){
   if(bq&&!bq.finished){toast("Групповая операция уже выполняется");return}
   const total=steps.reduce((s,x)=>s+x.ops.filter(o=>!o.done).length,0);
-  bq={steps,title,total,done:0,ok:0,fail:0,skipped:steps.reduce((s,x)=>s+x.ops.filter(o=>o.done).length,0),cancelled:false,finished:false,cur:"",started:Date.now(),undo:!!opts?.undo,quiet:!!opts?.undo,api:opts?.api||null};
+  bq={steps,title,total,done:0,ok:0,fail:0,skipped:steps.reduce((s,x)=>s+x.ops.filter(o=>o.done).length,0),cancelled:false,finished:false,cur:"",started:Date.now(),undo:!!opts?.undo,quiet:!!opts?.undo,api:opts?.api||null,afterOk:opts?.afterOk||null};
   // Открытая карточка занятого объекта показывает пометку и закрывает «Показать план»
   if(sel&&busyIds().has(sel)&&(app==="hw"||app==="dev"||app==="srvs"))gear();
   if(bq.api){const o=queueNext();if(o){o.o.state="run";bq.cur=o.s.label}renderRailStatus();renderTree();return}
@@ -33064,6 +33781,8 @@ function queueFinish(){
   treeMatchCache.clear();searchMatchCache.clear();
   paint();renderRailStatus();
   const bad=bq.fail+bq.steps.reduce((n,s)=>n+s.ops.filter(o=>o.state==="cancel").length,0);
+  // Шаг после очереди (правило записи): только когда все шаги прошли
+  if(bq.afterOk&&!bad){const f=bq.afterOk;bq.afterOk=null;f()}
   const kept=bq.steps.reduce((n,s)=>n+s.ops.filter(o=>o.kept).length,0);
   if(bad||kept>1||document.getElementById("bmodal")?.classList.contains("open")){openReport();return}
   // Принятое ещё не применено и откату не подлежит: «Применено» с «Отменить» здесь было бы неправдой
@@ -33169,7 +33888,8 @@ function retryFailed(){
   const steps=bq.steps.map(s=>({label:s.label,ops:s.ops.filter(o=>o.state==="fail").map(o=>({...o,state:"wait",done:false,msg:"",retry:true}))})).filter(s=>s.ops.length);
   closeBulkModal();
   const title=bq.title;
-  if(bq.api){const id=bq.api;bq=null;apiQueue(steps,title+` · ${i18n("повтор")}`,{},()=>API.post(`/operations/${id}/retry-failed`));openQueueModal();return}
+  const srv=steps.flatMap(s=>s.ops).filter(o=>!o.call);
+  if(bq.api||srv.length<steps.reduce((a,s)=>a+s.ops.length,0)){const id=bq.api;bq=null;apiQueue(steps,title+` · ${i18n("повтор")}`,{},id&&srv.length?()=>API.post(`/operations/${id}/retry-failed`):null,srv);openQueueModal();return}
   bq=null;
   startQueue(steps,title+` · ${i18n("повтор")}`);
   openQueueModal();
@@ -33394,7 +34114,7 @@ function cpGroups(src){
     const a=arch.find(x=>x.id===src.arch);
     return[
       {key:"arch",label:"Привязка к архиву",value:a?locName(a):i18n("архив не задан"),tag:cpArchScope(a),off:!a},
-      {key:"rec",label:"Настройки записи",value:`${i18n(recordModeLabel(src.rec||"none"))} · ${i18n("предзапись")} ${src.pre??5} ${i18n("с")}`},
+      {key:"rec",label:"Настройки записи",value:`${i18n(recordModeLabel(src.rec||"none"))} · ${i18n("предзапись основного хранилища")} ${src.pre??5} ${i18n("с")}`},
       {key:"video",label:"Видео",value:`${src._f?.["Разрешение"]||"—"} · ${src._f?.["к/с"]||"—"} ${i18n("к/с")}`,tag:i18n("только та же модель")},
       en,fGroup,
       {key:"creds",label:"Учётные данные",value:i18n("логин и пароль источника (консоль не показывает пароль)")}
