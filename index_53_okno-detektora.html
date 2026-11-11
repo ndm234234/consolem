@@ -9106,7 +9106,7 @@ function favSelected(){
   paint();
 }
 function canFav(n){
-  return!!n&&!["unalloc","norec","nofolder","gpu","found","founddev","det"].includes(n.type);
+  return!!n&&!["unalloc","norec","nofolder","gpu","found","founddev"].includes(n.type);
 }
 // Контекстное меню мышью знают не все, а с сенсорного экрана правой кнопки нет
 // вовсе — поэтому у каждой строки есть и явная кнопка.
@@ -11006,8 +11006,11 @@ function rcSliceItems(n){
   const id=n.id;
   if(n.type==="det"){
     const cam=find(id)?.p;
+    // Создать поддетектор — первым пунктом после «Открыть»: в дереве нет постоянной строки «Создать…»
     return[rcGoItems(id),
-      rulePresetFor(n)?[tctxItem(i18n("Создать правило по событию…"),["rcRun","ruleFromDevice",id])]:[],
+      [...(dwHasSubs(n)?[tctxItem(i18n("Создать поддетектор…"),["rcRun","dwSubCreate",id],tctxPlusIcon())]:[]),
+       ...(rulePresetFor(n)?[tctxItem(i18n("Создать правило по событию…"),["rcRun","ruleFromDevice",id])]:[])],
+      canFav(n)?[tctxItem(isFav(id)?i18n("Убрать из избранного"):i18n("В избранное"),["toggleFav",id,sel===id&&selCtx?selCtx:null],tctxStarIcon())]:[],
       cam?[tctxDanger(`${i18n("Удалить")}…`,["rcRun","deleteDetector",cam.id,id])]:[]];
   }
   if(slice==="det"&&n.type==="camera")return[rcGoItems(id),[tctxItem(i18n("Добавить детекторы…"),["rcRun","detCreateOpen",id],tctxPlusIcon())]];
@@ -11428,18 +11431,18 @@ function gdetrow(d,l,ctx,parentHit=false){
   const q=qval();
   const hit=matchesStatus(d)&&(parentHit||matchesSearch(d,q));
   if(!hit)return"";
-  // Поддетекторы — как в Axxon One: под детектором, с меткой числа и строкой «Создать поддетектор…»
-  const sp=dwHasSubs(d),subs=sp?dwSaved(d).subs:[],ok=(ctx?ctx+"|":"")+d.id,op=sp&&open.has(ok);
+  // Поддетекторы — под детектором, с меткой числа. Создать поддетектор — в карточке детектора (раздел «Поддетекторы»)
+  // и в меню строки («⋮», правая кнопка, «Ещё» в карточке): постоянной строки «Создать…» в дереве нет
+  const subs=dwHasSubs(d)?dwSaved(d).subs:[],sp=subs.length>0,ok=(ctx?ctx+"|":"")+d.id,op=sp&&open.has(ok);
   const badge=subs.length?`<span class="dw-tsub" title="${subs.length} ${i18n(plural(subs.length,"поддетектор|поддетектора|поддетекторов"))}">${lu("list-tree",12)}${subs.length}</span>`:"";
   let h=`<div class="n ${rowOn(d.id,ctx)}" style="--l:${l}"${treeRowPick(d.id,ctx)}${treeExpandMeta(ok,"node",sp)}>
-    ${treeChevron(ok,"node",sp,op)}${ic("det")}<span class="nm" title="${escHtml(locName(d))} · ${escHtml(i18n(d.kind||DET_TYPES[0]))}">${hlText(locName(d),q)}</span>${badge}${treeTail({status:treeStatusSlot(d)})}</div>`;
-  if(op)h+=subs.map((s,i)=>dwTreeSubRow(d,s,i,l+1)).join("")
-    +`<div class="n n-add" style="--l:${l+1}" ${onEv("click",["dwSubCreate",d.id])}><span class="tw"></span>${lu("plus",12)}<span class="nm">${i18n("Создать поддетектор…")}</span></div>`;
+    ${treeChevron(ok,"node",sp,op)}${ic("det")}<span class="nm" title="${escHtml(locName(d))} · ${escHtml(i18n(d.kind||DET_TYPES[0]))}">${hlText(locName(d),q)}</span>${badge}${treeTail({status:treeStatusSlot(d),acts:d.id,ctx})}</div>`;
+  if(op)h+=subs.map((s,i)=>dwTreeSubRow(d,s,i,l+1)).join("");
   return h;
 }
 function dwTreeSubRow(d,s,i,l){
   const on=sel===d.id&&dw.subSel===s.id,t=i18n(DW_SUBN[s.kind]);
-  return`<div class="n dw-tsr${on?" on":""}" style="--l:${l}" ${onEv("click",["dwSubPick",d.id,s.id])}><span class="tw"></span><i class="dw-tdot" style="background:${DW_SUBC[i%DW_SUBC.length]}"></i><span class="nm" title="${escHtml(s.name)} · ${escHtml(t)}">${escHtml(s.name)}</span><span class="dw-tty">${escHtml(t)}</span>${s.on?"":`<span class="bd off">${i18n("выкл")}</span>`}</div>`;
+  return`<div class="n dw-tsr${on?" on":""}" style="--l:${l}" data-dwsub="${d.id}|${escHtml(s.id)}" ${onEv("click",["dwSubPick",d.id,s.id])}><span class="tw"></span><i class="dw-tdot" style="background:${DW_SUBC[i%DW_SUBC.length]}"></i><span class="nm" title="${escHtml(s.name)} · ${escHtml(t)}">${escHtml(s.name)}</span><span class="dw-tty">${escHtml(t)}</span>${s.on?"":`<span class="bd off">${i18n("выкл")}</span>`}<span class="n-meta"><span class="n-fav" aria-hidden="true"></span><button type="button" class="n-menu" tabindex="-1" aria-label="${i18n("Действия")}" title="${i18n("Действия")}" aria-haspopup="menu" ${onEv("click",["dwSubMenu",onEv.event,d.id,s.id])}>${lu("ellipsis-vertical",16)}</button></span></div>`;
 }
 function gcamrow(cam,dets,l,ctx){
   if(treeHidQ(cam))return"";// камера под GPU сервера: строится не обходом дерева, метку смотрим здесь
@@ -15282,6 +15285,20 @@ function dwSubPick(did,sid,link){
   dw.id=did+dwKindOf(d);dw.sel=null;dw.tool=null;dw.subNew=false;dw.subAdv=false;dw.subSel=sid;dw.subFlash=!!link;
   if(link)detFromCam(did);else if(sel===did){gear();renderTree()}else pick(did);
 }
+// Меню поддетектора — по «⋮» в строке дерева и по правой кнопке: те же действия, что в карточке
+function dwSubCtx(did,sid,xy,el){
+  const d=detNodeOf(did),s=d&&dwC(d).subs.find(x=>x.id===sid);if(!s)return;
+  const open=sel===did&&dw.subSel===sid?[]:[tctxItem(i18n("Открыть"),["rcRun","dwSubPick",did,sid],null,false,"tctx-default")];
+  const g=[open,[tctxItem(i18n(s.on?"Выключить":"Включить"),["dwSubTreeOn",did,sid])],[tctxDanger(i18n("Удалить поддетектор…"),["dwSubTreeDel",did,sid])]];
+  rcShow(g.filter(x=>x.length).map(x=>x.join("")).join(tctxSep()),xy);rcMark(el);
+}
+function dwSubMenu(e,did,sid){
+  e.preventDefault();e.stopPropagation();
+  const b=e.currentTarget,r=b.getBoundingClientRect();
+  dwSubCtx(did,sid,{x:r.left,y:r.bottom+4},b.closest(".n"));
+}
+function dwSubTreeOn(did,sid){closeTreeCtx();dwSubPick(did,sid);dwSubOn(did,sid)}
+function dwSubTreeDel(did,sid){closeTreeCtx();dwSubPick(did,sid);dwSubDel(did,sid)}
 function dwSubCreate(did){
   const d=detNodeOf(did);if(!d)return;
   dw.id=did+dwKindOf(d);dw.sel=null;dw.tool=null;dw.subSel=null;dw.subNew=true;
@@ -33192,6 +33209,8 @@ function rcOnContext(e){
   const text=rcSelectedText(t,byKey);
   if(text){rcCopyText=text;rcShow(tctxItem(i18n("Копировать"),["rcCopy"]),xy);if(byKey)rcFocusFirst();return}
   if(wizOpen()||t.closest(".confirm,.jump,.mask,.ttu,#upop"))return;
+  const subRow=t.closest("#tree [data-dwsub]");
+  if(subRow){const[a,b]=subRow.dataset.dwsub.split("|");dwSubCtx(a,b,xy,subRow);if(byKey)rcFocusFirst();return}
   const link=rcLink(t);
   if(link?.k==="control")return;
   if(link?.k==="node")rcObject(link.id,xy,link.el);
