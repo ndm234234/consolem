@@ -40,8 +40,15 @@ for (const path of LISTS) {
   } while (cursor);
   const key = (x) => x.id || x.uid || x.objectId || x.spanId;
   if (new Set(all.map(key)).size !== all.length) bad.push(`${path}: повтор строки`);
-  const whole = get(`${path}${sep(path)}limit=1000`).body;
-  if (whole.items.length !== all.length) bad.push(`${path}: обход дал ${all.length} из ${whole.items.length}`);
+  // Сверка — обход страницами по 1000: перечень бывает длиннее одной страницы (журнал стенда — 2 000 записей)
+  const whole = [];
+  let wc = null, wn = 0;
+  do {
+    const r = get(`${path}${sep(path)}limit=1000${wc ? `&cursor=${encodeURIComponent(wc)}` : ""}`).body;
+    whole.push(...r.items);
+    wc = r.nextCursor || null;
+  } while (wc && ++wn < 100);
+  if (whole.length !== all.length) bad.push(`${path}: обход дал ${all.length} из ${whole.length}`);
   if (get(`${path}${sep(path)}limit=0`).status !== 422 || get(`${path}${sep(path)}limit=1001`).status !== 422) bad.push(`${path}: limit вне 1–1000`);
   if (get(`${path}${sep(path)}cursor=чужой`).body.code !== "INVALID_CURSOR") bad.push(`${path}: чужой курсор`);
 }

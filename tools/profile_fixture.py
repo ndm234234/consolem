@@ -51,6 +51,9 @@ LARGE = {"cameras": 250000, "servers": 500, "folders": 300, "serverCameras": 500
 XL = {"cameras": 1000000, "servers": 2000, "folders": 1200, "serverCameras": 200000, "firstBranch": 1000, "clusters": 160, "relayed": 20,
       "domains": 4, "domainNames": ["Москва", "Санкт-Петербург", "Казань", "Новосибирск"]}
 
+# Журнал стенда large и xl: записи считает встроенный сервер при загрузке (journalStand в api/server.js), в файле их нет
+JOURNAL = {"count": 200000, "days": 30, "seed": 20261110}
+
 DEVICE_TYPES = ["camera", "det"]
 # Операции контракта, которых в профиле нет: второй домен, тома сверх первого, лицензии, поиск в сети.
 # Завести и удалить объект вида — UnitKind.capabilities: второго домена и второго тома в профиле нет, у видов домена и тома
@@ -401,7 +404,7 @@ def build_large(demo):
         "Стенд большого домена: 250 000 камер, 500 серверов. Записи считает заглушка из stand.large при загрузке, "
         "в файле только числа. Собран tools/profile_fixture.py из demo.json, руками не правится."
     )
-    fx["stand"] = {"large": LARGE}
+    fx["stand"] = {"large": LARGE, "journal": JOURNAL}
     # В отличие от «одного домена» у большого стенда есть ассистент: check_perf меряет поиск вместе с ним (шаг gq-enter-asst).
     # Операция и функция встают на свои места по порядку demo
     caps, dcaps = fx["reference"]["capabilities"], demo["reference"]["capabilities"]
@@ -448,7 +451,7 @@ def build_xl():
             "Наложение: целый набор — large и поверх него эти поля. Собран tools/profile_fixture.py, руками не правится."
         ),
         "$base": "large",
-        "stand": {"large": XL},
+        "stand": {"large": XL, "journal": JOURNAL},
     }
 
 

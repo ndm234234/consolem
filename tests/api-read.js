@@ -8,6 +8,8 @@
   const TABLES = [["domains", "/units?implements=vms.domain/1"], ["servers", "/units?implements=vms.server/1"], ["devices", `/units?kind=${DEVICE_KINDS.join(",")}`],
     ["folders", "/units?implements=vms.folder/1"], ["archives", "/units?implements=vms.archive/1"], ["volumes", "/units?implements=vms.volume/1"], ["rules", "/rules"]];
   const idOf = (r) => r.uid || r.id;
+  // Журнал стенда: встроенный сервер добавляет к записям набора stand.journal.count своих (0.8.0); бэкенд без них — только набор
+  const JOURNAL_SIZES = [FX.journal.length, FX.journal.length + ((FX.stand && FX.stand.journal && FX.stand.journal.count) || 0)];
   const one = (path, id) => (path.startsWith("/units") ? `/units/${id}` : `${path}/${id}`);
 
   test("Чтение: каждая коллекция отдаёт столько записей, сколько в эталонном наборе", async () => {
@@ -59,7 +61,7 @@
     const env = await makeEnv();
     const shift = env.now - Date.parse(FX.capturedAt);
     const journal = await env.list("/journal");
-    const moved = Date.parse(journal[0].at) - Date.parse(FX.journal[0].at);
+    const moved = Date.parse(journal.find((e) => e.id === FX.journal[0].id).at) - Date.parse(FX.journal[0].at);
     // Часы идут — между сдвигом набора и ответом сброса проходит доля секунды
     if (env.frozen) assert.eq(moved, shift, "момент в журнале");
     else assert.ok(Math.abs(moved - shift) < 5000, `момент в журнале: сдвиг ${moved} вместо ${shift}`);
@@ -143,7 +145,9 @@
   test("Журнал: новые первыми, фильтр по категории", async () => {
     const env = await makeEnv();
     const all = await env.list("/journal");
-    assert.eq(all.length, FX.journal.length, "все записи");
+    assert.ok(JOURNAL_SIZES.includes(all.length), `все записи: ${all.length}, ждём ${JOURNAL_SIZES.join(" или ")}`);
+    const ids = new Set(all.map((e) => e.id));
+    assert.ok(FX.journal.every((e) => ids.has(e.id)), "записи набора на месте");
     assert.ok(all.every((e, i) => !i || all[i - 1].at >= e.at), "по убыванию времени");
     const alarms = await env.list("/journal?category=alarm");
     assert.ok(alarms.length && alarms.every((e) => e.category === "alarm"), "только тревоги");
@@ -219,7 +223,9 @@
   test("Журнал: отбор по устройству, подсистеме, времени, limit; truncated и withheldCount", async () => {
     const env = await makeEnv();
     const all = await env.ok("GET", "/journal");
-    assert.eq([all.items.length, all.truncated, all.withheldCount], [FX.journal.length, false, 0], "без отбора — всё");
+    const size = (await env.list("/journal")).length;
+    assert.ok(JOURNAL_SIZES.includes(size), `записей: ${size}`);
+    assert.eq([all.items.length, all.truncated, all.withheldCount], [Math.min(200, size), size > 200, 0], "без отбора — первая страница");
     const some = FX.journal.find((e) => e.deviceId);
     if (some) {
       const by = await env.ok("GET", `/journal?deviceId=${some.deviceId}`);
@@ -228,7 +234,7 @@
     const src = await env.ok("GET", "/journal?source=backend");
     assert.ok(src.items.every((e) => e.source === "backend"), "по подсистеме");
     const one = await env.ok("GET", "/journal?limit=1");
-    assert.eq([one.items.length, one.truncated], [1, FX.journal.length > 1], "limit");
+    assert.eq([one.items.length, one.truncated], [1, size > 1], "limit");
     const at = all.items[0].occurredAt || all.items[0].at;
     const late = await env.ok("GET", `/journal?from=${at}`);
     assert.ok(late.items.length >= 1, "со времени");

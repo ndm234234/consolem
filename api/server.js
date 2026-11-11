@@ -629,6 +629,7 @@
         idsOf(Object.assign({}, db, { devices: [] }));
         seq[KIND.device] = db.devices.length + 1000;
       } else idsOf(Object.assign({}, db, { units: [...store.all()].filter((u) => !tableOf(u.kind)) }));
+      journalInit();
     }
     const uuid = (kind) => {
       const k = KIND[kind];
@@ -664,6 +665,249 @@
       const rec = e.deviceId && byId("devices", e.deviceId);
       return !!rec && (rec.parentId === id || rec.cameraId === id || (rec.overlays || []).some((o) => o.cameraId === id));
     };
+
+    /* ----- Журнал: поиск, счётчики, каталог видов (0.8.0) ----- */
+
+    // Порядок записи — номером записи: место в массиве (indexOf) на 200 000 записей дало бы квадрат.
+    // Новая запись — только через journalAdd: она получает следующий номер
+    let jSeq = new WeakMap(), jNext = 0;
+    const jRank = (e) => {
+      let n = jSeq.get(e);
+      if (n === undefined) { n = ++jNext; jSeq.set(e, n); }
+      return String(1e12 - n).padStart(13, "0");
+    };
+    function journalAdd(e) {
+      if (!e.level) e.level = jLevelOf(e);
+      db.journal.unshift(e);
+      jSeq.set(e, ++jNext);
+    }
+    const J_LEVELS = ["alarm", "error", "audit", "info", "service"];
+    const jLevelOf = (e) => (J_LEVELS.includes(e.level) ? e.level : e.category === "audit" ? "audit" : e.category === "alarm" ? "alarm" : "info");
+    // Уровень события вида (EventDescriptor.severity) → группа журнала
+    const jLevelOfSeverity = (s) => (["alarm", "critical"].includes(s) ? "alarm" : ["error", "warning"].includes(s) ? "error" : "info");
+    // Время записи для отбора — occurredAt, иначе at; число в памяти, а не разбор строки на каждом запросе
+    let jTime = new WeakMap();
+    const jWhen = (e) => {
+      let t = jTime.get(e);
+      if (t === undefined) { t = Date.parse(e.occurredAt || e.at); jTime.set(e, t); }
+      return t;
+    };
+    // Виды событий стенда без объекта и с ним (stand.journal); подписи событий объектов — из описаний видов
+    const J_STAND_KINDS = [
+      ["det.start", "service", "Детектор: начало"], ["det.end", "service", "Детектор: конец"], ["rule.fire", "service", "Срабатывание правила"],
+      ["rec.start", "info", "Начало записи"], ["rec.stop", "info", "Конец записи"], ["cam.online", "info", "Камера в сети"],
+      ["ntp", "info", "Синхронизация времени"], ["srv.start", "info", "Запуск сервера"],
+      ["al.motion", "alarm", "Тревога: движение"], ["al.line", "alarm", "Тревога: пересечение линии"], ["al.tamper", "alarm", "Тревога: вскрытие корпуса"], ["al.ack", "alarm", "Оценка тревоги"],
+      ["cam.offline", "error", "Камера не в сети"], ["rec.lost", "error", "Потеря записи"], ["disk.full", "error", "Хранилище заполнено"], ["cam.auth", "error", "Ошибка входа камеры"],
+      ["login", "audit", "Вход в систему"], ["logout", "audit", "Выход из системы"], ["login.fail", "audit", "Неудачный вход"], ["cam.set", "audit", "Изменение камеры"],
+      ["dev.add", "audit", "Добавление устройства"], ["dev.del", "audit", "Удаление устройства"], ["rule.set", "audit", "Изменение правила"], ["role.set", "audit", "Изменение роли"],
+      ["arch.view", "audit", "Просмотр архива"], ["live.view", "audit", "Просмотр видео"], ["export", "audit", "Экспорт видео"], ["ptz", "audit", "Управление PTZ"], ["jexport", "audit", "Экспорт журнала"],
+    ];
+    // Каталог: события стенда, события видов объектов, общие коды записей набора (audit, alarm, info). Первое имя кода — главное
+    function journalKinds() {
+      const out = new Map();
+      const put = (id, text, level, key) => { if (!out.has(id)) out.set(id, { id, label: { key: key || `journal.kind.${id}`, text, lang: "ru" }, level }); };
+      J_STAND_KINDS.forEach(([id, level, text]) => put(id, text, level));
+      kinds.list().forEach((k) => (k.events || []).forEach((ev) => put(ev.id, (ev.label || {}).text || ev.id, jLevelOfSeverity(ev.severity), (ev.label || {}).key)));
+      put("audit", "Аудит", "audit"); put("alarm", "Тревога", "alarm"); put("info", "Информация", "info");
+      return [...out.values()];
+    }
+    let jKindText = null;
+    const jKindLabel = (id) => {
+      if (!jKindText) jKindText = new Map(journalKinds().map((k) => [k.id, k.label.text]));
+      return jKindText.get(id) || "";
+    };
+    // Текст для поиска: запись, подпись вида, автор, адрес. Имя объекта — отдельно: его могут переименовать
+    let jHay = new WeakMap();
+    const jHayOf = (e) => {
+      let h = jHay.get(e);
+      if (h === undefined) { h = normText(`${e.text || ""} ${jKindLabel(e.kind)} ${e.actor || ""} ${(e.fields && e.fields.ip) || ""}`); jHay.set(e, h); }
+      return h;
+    };
+    // q: «|» — ИЛИ между группами, пробел — И, кавычки — фраза, «-слово» — без него
+    function jParseQ(s) {
+      s = normText(String(s || "").trim());
+      if (!s) return null;
+      const parts = [], groups = [], neg = [];
+      let cur = "", quote = false;
+      for (const ch of s) {
+        if (ch === '"') { quote = !quote; cur += ch; } else if (ch === "|" && !quote) { parts.push(cur); cur = ""; } else cur += ch;
+      }
+      parts.push(cur);
+      parts.forEach((g) => {
+        const terms = [];
+        g.replace(/(-?)"([^"]*)"|(\S+)/g, (m, minus, phrase, word) => {
+          let x = phrase !== undefined ? phrase.trim() : word, no = !!minus;
+          if (phrase === undefined && x.length > 1 && x[0] === "-") { no = true; x = x.slice(1); }
+          if (x && x !== "-") (no ? neg : terms).push(x);
+          return m;
+        });
+        if (terms.length) groups.push(terms);
+      });
+      return groups.length || neg.length ? { groups, neg } : null;
+    }
+    const jList = (v) => { const a = String(v == null ? "" : v).split(",").map((x) => x.trim()).filter(Boolean); return a.length ? new Set(a) : null; };
+    function jWhere(q) {
+      return {
+        cat: jList(q.category), catNot: jList(q.categoryNot), source: q.source || null,
+        from: q.from ? Date.parse(q.from) : null, to: q.to ? Date.parse(q.to) : null, text: jParseQ(q.q),
+        level: jList(q.level), levelNot: jList(q.levelNot), kind: jList(q.kind), kindNot: jList(q.kindNot),
+        dev: jList(q.deviceId), devNot: jList(q.deviceIdNot), exact: q.deviceMatch === "exact", actor: jList(q.actor), actorNot: jList(q.actorNot),
+      };
+    }
+    // Имя объекта записи для поиска — один раз за запрос
+    function jNameOf() {
+      const memo = new Map();
+      return (id) => {
+        if (!id) return "";
+        let n = memo.get(id);
+        if (n === undefined) { const u = store.get(id); n = u ? normText(u.name || "") : ""; memo.set(id, n); }
+        return n;
+      };
+    }
+    const jTextOk = (t, h, name) => {
+      const has = (x) => h.includes(x) || (!!name && name.includes(x));
+      if (t.neg.some(has)) return false;
+      return !t.groups.length || t.groups.some((g) => g.every(has));
+    };
+    // Общие условия (время, подсистема, категория, текст) и по полю: level, kind, deviceId, actor
+    function jPasser(w) {
+      const name = jNameOf();
+      const base = (e) => {
+        if (w.from !== null || w.to !== null) { const t = jWhen(e); if ((w.from !== null && t < w.from) || (w.to !== null && t > w.to)) return false; }
+        if (w.source && e.source !== w.source) return false;
+        if ((w.cat && !w.cat.has(e.category)) || (w.catNot && w.catNot.has(e.category))) return false;
+        return !w.text || jTextOk(w.text, jHayOf(e), name(e.deviceId));
+      };
+      const level = (e) => { const l = jLevelOf(e); return (!w.level || w.level.has(l)) && !(w.levelNot && w.levelNot.has(l)); };
+      const kind = (e) => (!w.kind || w.kind.has(e.kind)) && !(w.kindNot && w.kindNot.has(e.kind));
+      const dev = (e) => (!w.dev || (w.exact ? w.dev.has(e.deviceId) : [...w.dev].some((id) => journalAbout(e, id)))) && !(w.devNot && w.devNot.has(e.deviceId));
+      const actor = (e) => (!w.actor || w.actor.has(e.actor)) && !(w.actorNot && w.actorNot.has(e.actor));
+      return { base, level, kind, dev, actor, all: (e) => base(e) && level(e) && kind(e) && dev(e) && actor(e) };
+    }
+    const jShow = (e) => { const o = clone(e); o.level = jLevelOf(e); return o; };
+    // Счётчики: поле считается без своего условия; periodTotal — за период, служебные — если их не скрывают
+    function journalFacets(q) {
+      const w = jWhere(q), P = jPasser(w);
+      const cnt = { level: new Map(), kind: new Map(), deviceId: new Map(), actor: new Map() };
+      const inc = (m, v) => { if (v) m.set(v, (m.get(v) || 0) + 1); };
+      const serviceHidden = (w.level && !w.level.has("service")) || (w.levelNot && w.levelNot.has("service"));
+      let total = 0, periodTotal = 0;
+      for (const e of db.journal) {
+        if (w.from !== null || w.to !== null) { const t = jWhen(e); if ((w.from !== null && t < w.from) || (w.to !== null && t > w.to)) continue; }
+        const lv = jLevelOf(e);
+        if (!(serviceHidden && lv === "service")) periodTotal++;
+        if (!P.base(e)) continue;
+        const ok = [P.level(e), P.kind(e), P.dev(e), P.actor(e)], fails = ok.filter((x) => !x).length;
+        if (fails === 0) { total++; inc(cnt.level, lv); inc(cnt.kind, e.kind); inc(cnt.deviceId, e.deviceId); inc(cnt.actor, e.actor); } else if (fails === 1) {
+          if (!ok[0]) inc(cnt.level, lv); else if (!ok[1]) inc(cnt.kind, e.kind); else if (!ok[2]) inc(cnt.deviceId, e.deviceId); else inc(cnt.actor, e.actor);
+        }
+      }
+      const lim = q.facetLimit === undefined ? null : Number(q.facetLimit);
+      if (lim !== null && !(Number.isInteger(lim) && lim >= 1)) return problem(422, "VALIDATION_FAILED", "facetLimit — целое от 1", { field: "facetLimit" });
+      const facets = {}, more = {};
+      Object.entries(cnt).forEach(([f, m]) => {
+        const all = [...m].map(([value, count]) => ({ value, count })).sort((a, b) => b.count - a.count || (a.value < b.value ? -1 : 1));
+        facets[f] = lim ? all.slice(0, lim) : all;
+        if (lim && all.length > lim) more[f] = all.length - lim;
+      });
+      return { status: 200, body: Object.assign({ total, periodTotal, facets }, Object.keys(more).length ? { more } : {}) };
+    }
+    function journalList(q) {
+      const w = jWhere(q), P = jPasser(w);
+      if (q.around !== undefined) {
+        const a = db.journal.find((e) => e.id === q.around);
+        if (!a) return notFound("Запись журнала");
+        const limit = limitOf(q);
+        if (limit === null) return limitBad();
+        const hit = db.journal.filter((e) => e === a || P.all(e));
+        const i = hit.indexOf(a), from = Math.max(0, Math.min(i - Math.floor((limit - 1) / 2), hit.length - limit));
+        return { status: 200, body: { items: hit.slice(from, from + limit).map(jShow), truncated: hit.length > limit, withheldCount: 0 } };
+      }
+      // Встроенный сервер права на журнал не проверяет: скрытых записей у него нет
+      const res = pageList(q, "journal", db.journal.filter(P.all), jRank, jShow);
+      if (res.status !== 200) return res;
+      return { status: 200, body: Object.assign(res.body, { truncated: !!res.body.nextCursor, withheldCount: 0 }) };
+    }
+    // Записи стенда (stand.journal: count, days, seed): события камер, серверов, правил и людей за days суток до «сейчас».
+    // Как бэкенд с большим журналом: набор в файле не растёт. Записи набора остаются, всё вместе — по времени, новые первыми
+    function journalStand(J) {
+      const n = Math.max(0, Math.floor(J.count || 0));
+      if (!n) return [];
+      let s = (J.seed >>> 0) || 1;
+      const r = () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };
+      const pick = (a) => a[Math.floor(r() * a.length)];
+      const MIN = 6e4, DAY = 864e5;
+      const cams = store.byKind("camera").slice(0, 400), srvs = store.byKind("server").slice(0, 100), rules = (db.rules || []).slice(0, 50);
+      if (!cams.length) return [];
+      const srvName = (c) => { const p = c.parentId && store.get(c.parentId); return p && p.kind === "server" ? p.name : (srvs[0] || {}).name || ""; };
+      const logins = [...new Set(["root", "admin", ...db.access.users.map((u) => u.login)])].slice(0, 40);
+      const ipOf = (i) => `10.20.${1 + ((i * 7) % 40)}.${5 + ((i * 37) % 240)}`;
+      const STO = ["Хранилище — Офис", "Хранилище — Склад", "Хранилище — Парковка"];
+      const CAM_SET = [["Разрешение", "1920×1080", "2560×1440"], ["Частота кадров", "25 к/с", "15 к/с"], ["Битрейт", "4 Мбит/с", "2 Мбит/с"], ["Режим записи", "Постоянно", "По движению"], ["Звук", "Выключен", "Включён"]];
+      const RULE_SET = [["Расписание", "Всегда", "Рабочие часы"], ["Состояние", "Работает", "Выключено"]];
+      const ROLE_SET = [["Экспорт видео", "запрещено", "разрешено"], ["Управление PTZ", "разрешено", "запрещено"], ["Просмотр архива", "запрещено", "разрешено"]];
+      const hm = (t) => { const d = new Date(t); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+      const flip = ([p, a, b]) => (r() < 0.5 ? { field: p, before: a, after: b } : { field: p, before: b, after: a });
+      // [вид, на чём, вес, автор?, текст и подробности]
+      const K = [
+        ["det.start", "cam", 14, 0, (v) => [`Детектор движения камеры «${v.o}» начал срабатывание`]],
+        ["det.end", "cam", 14, 0, (v) => [`Детектор движения камеры «${v.o}» закончил срабатывание`]],
+        ["rule.fire", "rule", 8, 0, (v) => [`Правило «${v.o}» запустило действие «${pick(["Запись", "Тревога", "Письмо охране"])}»`]],
+        ["rec.start", "cam", 10, 0, (v) => { const x = pick(STO); return [`Камера «${v.o}» начала запись в «${x}»`, { storage: x }]; }],
+        ["rec.stop", "cam", 8, 0, (v) => { const x = pick(STO); return [`Камера «${v.o}» закончила запись в «${x}»`, { storage: x }]; }],
+        ["cam.online", "cam", 3, 0, (v) => [`Сервер «${v.s}» восстановил связь с камерой «${v.o}»`]],
+        ["ntp", "srv", 2, 0, (v) => [`Сервер «${v.o}» сверил время с NTP, сдвиг ${3 + Math.floor(r() * 40)} мс`]],
+        ["al.motion", "cam", 6, 0, (v) => [`Детектор движения камеры «${v.o}» поднял тревогу`, { detector: "motion" }]],
+        ["al.line", "cam", 3, 0, (v) => { const x = pick(["внутрь", "наружу"]); return [`Объект пересёк линию на камере «${v.o}», направление ${x}`, { detector: "line", direction: x }]; }],
+        ["al.tamper", "cam", 0.5, 0, (v) => [`Камера «${v.o}» сообщила о вскрытии корпуса`]],
+        ["al.ack", "cam", 3, 1, (v) => { const x = pick(["подтверждённая", "ложная", "ложная", "подозрительная"]); return [`Оценка тревоги камеры «${v.o}»: ${x}`, { verdict: x }]; }],
+        ["cam.offline", "cam", 2, 0, (v) => [`Сервер «${v.s}» потерял связь с камерой «${v.o}»`]],
+        ["rec.lost", "cam", 0.8, 0, (v) => { const m = 2 + Math.floor(r() * 30), x = pick(STO); return [`Камера «${v.o}» не записала ${m} мин: хранилище «${x}» не отвечало`, { lostMin: m, storage: x }]; }],
+        ["disk.full", "srv", 0.4, 0, (v) => [`Хранилище «${pick(STO)}» сервера «${v.o}» заполнено на ${95 + Math.floor(r() * 5)}%`]],
+        ["cam.auth", "cam", 0.6, 0, (v) => [`Камера «${v.o}» отклонила имя и пароль сервера «${v.s}»`]],
+        ["login", "none", 3, 1, (v) => [`Вход ${v.u} с адреса ${v.ip}`, { ip: v.ip }]],
+        ["logout", "none", 2.6, 1, (v) => [`Выход ${v.u}`]],
+        ["login.fail", "none", 0.5, 1, (v) => [`Неверный пароль для ${v.u}, адрес ${v.ip}`, { ip: v.ip }]],
+        ["cam.set", "cam", 1.2, 1, (v) => { const c = flip(pick(CAM_SET)); return [`Камера «${v.o}», ${c.field}: ${c.before} → ${c.after}`, { change: c }]; }],
+        ["rule.set", "rule", 0.5, 1, (v) => { const c = flip(pick(RULE_SET)); return [`Правило «${v.o}», ${c.field}: ${c.before} → ${c.after}`, { change: c }]; }],
+        ["role.set", "none", 0.2, 1, () => { const c = flip(pick(ROLE_SET)), role = pick(["Операторы", "Охрана", "Администраторы"]); return [`Роль «${role}», право «${c.field}»: ${c.before} → ${c.after}`, { change: c, role }]; }],
+        ["arch.view", "cam", 4, 1, (v) => { const b = (5 + Math.floor(r() * 600)) * MIN; return [`Архив камеры «${v.o}» за ${hm(v.t - b)}–${hm(v.t - b + 15 * MIN)}`]; }],
+        ["live.view", "cam", 5, 1, (v) => [`Живое видео камеры «${v.o}»`]],
+        ["export", "cam", 0.5, 1, (v) => [`Камера «${v.o}», фрагмент в файл MP4 ${20 + Math.floor(r() * 900)} МБ`]],
+        ["ptz", "cam", 1, 1, (v) => [`Камера «${v.o}» повернулась к предустановке «${pick(["Ворота", "Касса", "Вход", "Парковка"])}»`]],
+        ["jexport", "none", 0.05, 1, () => [`Файл CSV, ${100 + Math.floor(r() * 50000)} строк`]],
+      ];
+      const LV = new Map(J_STAND_KINDS.map(([id, level]) => [id, level]));
+      const CAT = { alarm: "alarm", error: "alarm", audit: "audit", info: "info", service: "info" };
+      const cum = (w) => { let t = 0; return w.map((x) => (t += x)); };
+      const bs = (a, x) => { let lo = 0, hi = a.length - 1; while (lo < hi) { const m = (lo + hi) >> 1; if (a[m] < x) lo = m + 1; else hi = m; } return lo; };
+      const kc = cum(K.map((k) => k[2])), cc = cum(cams.map((c, i) => (i % 8 === 3 ? 5 : 1))), uc = cum(logins.map((u, i) => (i === 0 ? 6 : i === 1 ? 4 : i < 5 ? 2 : 1)));
+      const end = now(), step = ((J.days || 30) * DAY) / n, out = new Array(n);
+      let t = end - r() * MIN;
+      for (let i = 0; i < n; i++) {
+        t -= step * -Math.log(1 - r() * 0.999);
+        if (t < end - (J.days || 30) * DAY) t = end - r() * (J.days || 30) * DAY;
+        const k = K[bs(kc, r() * kc[kc.length - 1])];
+        const v = { t, o: "", s: "", u: "", ip: "" };
+        let deviceId = null, cameraId = null, ruleId = null;
+        if (k[1] === "cam") { const c = cams[bs(cc, r() * cc[cc.length - 1])]; v.o = c.name; v.s = srvName(c); deviceId = cameraId = c.uid; } else if (k[1] === "srv" && srvs.length) { const c = pick(srvs); v.o = c.name; deviceId = c.uid; } else if (k[1] === "rule" && rules.length) { const x = pick(rules); v.o = x.name; ruleId = x.id; } else if (k[1] !== "none") { v.o = "—"; }
+        if (k[3]) { const ui = bs(uc, r() * uc[uc.length - 1]); v.u = logins[ui]; v.ip = ipOf(ui); }
+        const [text, extra] = k[4](v), at = iso(t), level = LV.get(k[0]);
+        out[i] = Object.assign({ id: uuid("journal"), at, occurredAt: at, category: CAT[level], level, text, source: k[1] === "none" || k[1] === "rule" ? "backend" : k[1] === "srv" ? "rec" : "cam", kind: k[0] },
+          deviceId ? { deviceId } : {}, cameraId ? { cameraId } : {}, k[3] ? { actor: v.u } : {}, { fields: Object.assign({}, extra || {}, ruleId ? { ruleId } : {}) });
+      }
+      return out;
+    }
+    // После загрузки набора: группы, номера записи; записи стенда — вместе с записями набора, новые первыми
+    function journalInit() {
+      jSeq = new WeakMap(); jTime = new WeakMap(); jHay = new WeakMap(); jKindText = null; jNext = 0;
+      const all = (db.journal || []).concat(db.stand.journal ? journalStand(db.stand.journal) : []);
+      all.forEach((e) => { if (!e.level) e.level = jLevelOf(e); });
+      if (db.stand.journal) all.sort((a, b) => jWhen(b) - jWhen(a));
+      db.journal = all;
+      for (let i = all.length - 1; i >= 0; i--) jSeq.set(all[i], ++jNext);
+    }
     const can = (feature) => caps().features.includes(feature);
 
     /* ===== Поток событий ===== */
@@ -1285,9 +1529,9 @@
       if (!ev) return;
       const at = iso(now()), owner = u.parentId ? store.get(u.parentId) : null;
       const cameraId = u.kind === "camera" ? u.uid : (fields && fields.cameraId) || (owner && owner.kind === "camera" ? owner.uid : null);
-      const e = Object.assign({ id: uuid("journal"), at, occurredAt: at, category: ["alarm", "critical", "error"].includes(ev.severity) ? "alarm" : "info",
+      const e = Object.assign({ id: uuid("journal"), at, occurredAt: at, category: ["alarm", "critical", "error"].includes(ev.severity) ? "alarm" : "info", level: jLevelOfSeverity(ev.severity),
         text: `${(ev.label || {}).text || ev.id}: ${u.name}`, deviceId: u.uid, source: u.kind, kind: eventId }, cameraId ? { cameraId } : {}, fields && Object.keys(fields).length ? { fields: clone(fields) } : {});
-      db.journal.unshift(e);
+      journalAdd(e);
       send("journal.event", { entityId: u.uid, payload: clone(e) });
       // Правила слышат событие не сразу, а из очереди: событие, которое сервер поднял, пока шагал запуск правила (replicate →
       // replication.failed), не запускает правила внутри шага. Событие из очереди — цепочка: правило с allowChain: false его
@@ -3241,9 +3485,9 @@
       const low = desc.id.toLowerCase();
       const ev = ((kinds.get(u.kind) || {}).events || []).find((e) => [low, past(low)].includes(String(e.id).toLowerCase()));
       if (ev) {
-        const e = { id: uuid("journal"), at, occurredAt: at, category: ["alarm", "critical", "error"].includes(ev.severity) ? "alarm" : "info",
+        const e = { id: uuid("journal"), at, occurredAt: at, category: ["alarm", "critical", "error"].includes(ev.severity) ? "alarm" : "info", level: jLevelOfSeverity(ev.severity),
           text: `${(ev.label || {}).text || ev.id}: ${u.name}`, deviceId: u.uid, source: u.kind, kind: ev.id, fields: Object.assign({ action: desc.id }, Object.keys(params || {}).length ? { params: clone(params) } : {}) };
-        db.journal.unshift(e);
+        journalAdd(e);
         send("journal.event", { entityId: u.uid, payload: clone(e) });
       }
       return result;
@@ -4637,16 +4881,10 @@
       [
         "GET",
         "/journal",
-        (p, q) => {
-          const when = (e) => Date.parse(e.occurredAt || e.at);
-          const hit = db.journal.filter((e) => (!q.category || e.category === q.category) && (!q.deviceId || journalAbout(e, q.deviceId)) && (!q.source || e.source === q.source) &&
-            (!q.from || when(e) >= Date.parse(q.from)) && (!q.to || when(e) <= Date.parse(q.to)));
-          // Встроенный сервер права на журнал не проверяет: скрытых записей у него нет
-          const res = pageList(q, "journal", hit, (e) => backRank(db.journal, e), clone);
-          if (res.status !== 200) return res;
-          return { status: 200, body: Object.assign(res.body, { truncated: !!res.body.nextCursor, withheldCount: 0 }) };
-        },
+        (p, q) => journalList(q),
       ],
+      ["GET", "/journal/facets", (p, q) => journalFacets(q)],
+      ["GET", "/journal/kinds", () => items(journalKinds())],
       /* ----- Учётки потоков ----- */
       ["GET", "/archive-watches", (p, q) => pageList(q, "archive-watches", db.archiveWatches.filter((w) => !q.deviceId || w.deviceId === q.deviceId), (w) => partKey(w.id), clone)],
       [
@@ -4995,7 +5233,7 @@
             if (!byId("devices", body.deviceId)) return notFound("Устройство");
             const dev = byId("devices", body.deviceId), at = iso(now()), cameraId = dev.type === "camera" ? dev.id : (Array.isArray(dev.overlays) && dev.overlays.length ? dev.overlays[0].cameraId : dev.cameraId) || dev.parentId;
             const e = Object.assign({ id: uuid("journal"), at, occurredAt: at, category: "info", text: "", deviceId: body.deviceId }, cameraId ? { cameraId } : {}, clone(body.event || {}), { deviceId: body.deviceId });
-            db.journal.unshift(e);
+            journalAdd(e);
             send("journal.event", { entityId: e.deviceId, payload: clone(e) });
             return { status: 200, body: { applied: true } };
           }
