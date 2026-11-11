@@ -16836,7 +16836,7 @@ function cvToursHtml(n){
       <button type="button" class="btn s btn-icon cv-tr-go ${on?"pri":""}" ${off||bad?"disabled":""} title="${escHtml(bad?i18n("Тур с ошибкой. Открыть и исправить"):on?i18n("Остановить тур"):i18n("Запустить тур"))}" aria-label="${escHtml(`${i18n(on?"Остановить тур":"Запустить тур")} ${t.name}`)}" ${onEv("click",["cvTourToggle",`${n.id}`,t.id])}>${on?lu("square",13):lu("circle-play",15)}</button>
       <button type="button" class="cv-tr-name" title="${i18n("Изменить тур")}" ${onEv("click",["cvTourOpen",`${n.id}`,t.id])}><b>${escHtml(t.name)}</b>
         <small>${on?cvTourRunText(n,t,run):`${t.steps.length} ${i18n(plural(t.steps.length,"точка|точки|точек"))} · ${i18n("круг")} ${cvDur(cvTourCycle(t))}${t.order==="random"?` · ${i18n("случайно")}`:""}${st.idleTour===t.id?` · ${i18n("сам через")} ${cvDur(st.idleSec)}`:""}`}${bad?` · <span class="cv-bad">${i18n("ошибка")}</span>`:""}</small></button>
-      <button type="button" class="btn s btn-icon" title="${i18n("Удалить тур")}" aria-label="${escHtml(`${i18n("Удалить тур")} ${t.name}`)}" ${onEv("click",["cvTourDel",`${n.id}`,t.id])}>${lu("trash",14)}</button>
+      <button type="button" class="btn s btn-icon" title="${i18n("Удалить тур")}" aria-label="${escHtml(`${i18n("Удалить тур")} ${t.name}`)}" ${pendingDelHas(`camtour:${n.id}/${t.id}`)?"disabled":""} ${onEv("click",["cvTourDel",`${n.id}`,t.id])}>${lu("trash",14)}</button>
       <button type="button" class="lk cv-tr-resume" data-tour-resume ${on&&run.paused?"":"hidden"} ${onEv("click",["cvTourResume",`${n.id}`])}>${lu("circle-play",13)}${i18n("Продолжить тур сейчас")}</button></li>`}).join("");
   return`${st.tours.length?`<ul class="cv-pl cv-trl" data-keep-scroll>${rows}</ul>`:`<p class="sub cv-pl-empty">${i18n(few?"Тур собирают из пресетов. Сначала запомнить хотя бы два пресета":"Туров нет. Тур водит камеру по пресетам по очереди")}</p>`}
     <div class="cv-pre-add"><button type="button" class="btn s pri" ${few?"disabled":""} title="${i18n(few?"Нужно не меньше двух пресетов":"Собрать новый тур из пресетов")}" ${onEv("click",["cvTourNew",`${n.id}`])}>${lu("plus",14)}${i18n("Тур")}</button></div>`;
@@ -17008,11 +17008,20 @@ function cvTourSave(){
   cvTourEdit=null;setD(true);cvSidePaint(e.n,true);toast(`${i18n("Консоль добавила в план тур")} «${e.t.name}»`);
   requestAnimationFrame(()=>{const li=document.querySelector(`#main [data-tour="${e.t.id}"]`);li?.classList.add("acc-flash")});
 }
+// Отложенное удаление потока или тура меняет черновик карточки камеры. Черновик есть только у открытой карточки
+// (setD), поэтому после отсчёта удаление проходит, только если карточка этой камеры ещё открыта
+function camCardOpenFor(id){return app==="hw"&&sel===id&&cardBase?.id===id&&!(bulkActive()&&!bulkPeek)}
+// Удаление тура: подтверждение, затем отсчёт с «Отменить»; после отсчёта тур уходит из черновика, и удаление ждёт «Применить»
 function cvTourDel(id,tid){
   const n=find(id)?.n,st=n&&cvToursOf(n),t=st?.tours.find(x=>x.id===tid);if(!t)return;
-  askConfirm("Удалить тур?",`<ul class="bk-del"><li>${i18n("Консоль удалит тур")} «${escHtml(t.name)}» ${i18n("после «Применить»")}</li>${st.idleTour===tid?`<li>${i18n("Когда камерой не управляют, камера останется на месте")}</li>`:""}<li>${i18n("Пресеты и другие туры останутся")}</li><li>${i18n("До «Применить» тур вернёт «Сбросить» внизу")}</li></ul>`,"",i18n("Удалить"),()=>{
-    camPlanTouch(n,"tours");if(st.run?.tid===tid)cvTourHalt(st);st.tours=st.tours.filter(x=>x.id!==tid);if(st.idleTour===tid)st.idleTour="";setD(true);gear();
-  },{html:true,typeCount:1});
+  const key=`camtour:${id}/${tid}`;
+  if(pendingDelHas(key)){toast("Консоль удалит тур после отсчёта. Чтобы отменить, нажать «Отменить» в уведомлении");return}
+  askConfirm("Удалить тур?",`<ul class="bk-del"><li>${i18n("Консоль удалит тур")} «${escHtml(t.name)}» ${i18n("после «Применить»")}</li>${st.idleTour===tid?`<li>${i18n("Когда камерой не управляют, камера останется на месте")}</li>`:""}<li>${i18n("Пресеты и другие туры останутся")}</li><li>${i18n("До «Применить» тур вернёт «Сбросить» внизу")}</li></ul>`,"",i18n("Удалить"),()=>scheduleDelete([key],{label:`${i18n("Тур")} «${t.name}»`,cancel:paint,commit:()=>{
+    const n2=find(id)?.n,st2=n2&&cvToursOf(n2);if(!st2||!st2.tours.some(x=>x.id===tid)){paint();return}
+    if(!camCardOpenFor(id)){toast(`${i18n("Консоль не удалила тур")} «${t.name}». ${i18n("Карточка камеры закрыта. Чтобы удалить, открыть камеру и удалить снова")}`);paint();return}
+    camPlanTouch(n2,"tours");if(st2.run?.tid===tid)cvTourHalt(st2);st2.tours=st2.tours.filter(x=>x.id!==tid);if(st2.idleTour===tid)st2.idleTour="";setD(true);paint();
+    toast(`${i18n("Консоль удалит тур")} «${t.name}» ${i18n("после «Применить»")}. ${i18n("До «Применить» тур вернёт «Сбросить» внизу")}`);
+  }}),{html:true,typeCount:1});
 }
 function cvPresetNew(id){
   const n=find(id)?.n;if(!n||n.direct===false||n.online===false)return;
@@ -17084,7 +17093,7 @@ function cvStreamColHtml(n,s,i,c,con){
     if(i&&m&&(+m[1]<640||+m[1]>1280))warn.push(i18n("Для детекторов на этом потоке лучше разрешение от 640×360 до 1280×720"));
   }
   const head=`<div class="cv-col-h"><b>${escHtml(s.name)}</b>${i?"":`<span class="sub">${i18n("основной")}</span>`}${s.online===false?`<span class="pf-st bad">${i18n("нет сигнала")}</span>`:`<span class="pf-st ok">${i18n("работает")}</span>`}
-    ${con&&i?`<button type="button" class="btn s btn-icon" title="${i18n("Удалить поток")}" aria-label="${i18n("Удалить поток")} ${escHtml(s.name)}" ${onEv("click",["streamDel",`${id}`,`${sid}`])}>${lu("trash",14)}</button>`:""}</div>`;
+    ${con&&i?`<button type="button" class="btn s btn-icon" title="${i18n("Удалить поток")}" aria-label="${i18n("Удалить поток")} ${escHtml(s.name)}" ${pendingDelHas(`camstream:${id}/${sid}`)?"disabled":""} ${onEv("click",["streamDel",`${id}`,`${sid}`])}>${lu("trash",14)}</button>`:""}</div>`;
   if(!con)return`<div class="cv-col" data-stream="${escHtml(sid)}">${head}<div class="cv-g">${ro("Кодек",`${s.codec||p.codec}${p.profile?` · ${p.profile}`:""}`)}${ro("Разрешение",(res||"—").replace("x","×"))}${ro("Кадров в секунду",fps??"—")}${ro("Битрейт",`${p.brc==="cbr"?i18n("постоянный"):i18n("переменный, до")} ${cvKbpsText(p.kbps)}`)}${ro("Опорный кадр",`${i18n("каждые")} ${p.gop} ${i18n("кадров")}`)}${ro("В просмотре",i18n(p.live?"да":"нет"))}</div></div>`;
   const resOpts=s.resOptions||(i?null:n.resOptions);
   const resF=`<div class="cv-f"><label>${i18n("Разрешение")}</label>${resInput(resOpts,res,["cvPend",`${id}`,`${sid}`,"res",onEv.value]).replace(/^<(select|input) /,`<$1 data-df="Разрешение" `)}</div>`;
@@ -17632,10 +17641,16 @@ function streamDel(id,sid){
   const n=find(id)?.n,s=camStreams(n).find(x=>x.id===sid);if(!s)return;
   // Новый поток ещё не создан на сервере: он просто уходит из черновика
   if(s._new){n.streams=n.streams.filter(x=>x.id!==sid);setD(true);gear();return}
-  // Удаление — в черновике карточки: «Применить» удалит поток (camCallRun), до этого его вернут «Отменить» и «Сбросить»
-  askConfirm("Удалить поток?",`<ul class="bk-del"><li>${i18n("Консоль удалит поток")} «${escHtml(s.name)}» ${i18n("после «Применить»")}</li><li>${i18n("Камера и основной поток останутся")}</li><li>${i18n("До «Применить» поток вернут «Отменить» в блоке и «Сбросить» внизу")}</li></ul>`,"",i18n("Удалить"),()=>{
-    n.streams=(n.streams||[]).filter(x=>x.id!==sid);setD(true);gear();
-  },{html:true,typeCount:1});
+  const key=`camstream:${id}/${sid}`;
+  if(pendingDelHas(key)){toast("Консоль удалит поток после отсчёта. Чтобы отменить, нажать «Отменить» в уведомлении");return}
+  // Удаление: подтверждение, затем отсчёт с «Отменить»; после отсчёта поток уходит из черновика карточки, и «Применить» удалит
+  // его (camCallRun). До «Применить» поток вернут «Отменить» в блоке и «Сбросить»
+  askConfirm("Удалить поток?",`<ul class="bk-del"><li>${i18n("Консоль удалит поток")} «${escHtml(s.name)}» ${i18n("после «Применить»")}</li><li>${i18n("Камера и основной поток останутся")}</li><li>${i18n("До «Применить» поток вернут «Отменить» в блоке и «Сбросить» внизу")}</li></ul>`,"",i18n("Удалить"),()=>scheduleDelete([key],{label:`${i18n("Поток")} «${s.name}»`,cancel:paint,commit:()=>{
+    const n2=find(id)?.n;if(!n2||!(n2.streams||[]).some(x=>x.id===sid)){paint();return}
+    if(!camCardOpenFor(id)){toast(`${i18n("Консоль не удалила поток")} «${s.name}». ${i18n("Карточка камеры закрыта. Чтобы удалить, открыть камеру и удалить снова")}`);paint();return}
+    n2.streams=n2.streams.filter(x=>x.id!==sid);setD(true);paint();
+    toast(`${i18n("Консоль удалит поток")} «${s.name}» ${i18n("после «Применить»")}. ${i18n("До «Применить» поток вернут «Отменить» в блоке и «Сбросить» внизу")}`);
+  }}),{html:true,typeCount:1});
 }
 function lanTabOpen(n){
   if(!n)return false;
@@ -33968,7 +33983,7 @@ function confirmDeleteNodes(roots,back,skipped){
 // перейти, если удалённый объект был открыт.
 function scheduleDelete(ids,opts={}){
   const key="del"+(++pendingSeq),delay=ids.length>3?15000:10000;
-  const p={key,ids,deadline:Date.now()+delay,delay,timer:null,paused:false,left:0,commit:opts.commit||null,back:opts.back||null};
+  const p={key,ids,deadline:Date.now()+delay,delay,timer:null,paused:false,left:0,commit:opts.commit||null,back:opts.back||null,cancel:opts.cancel||null};
   p.timer=setTimeout(()=>commitDelete(key),delay);
   pendingDel.set(key,p);
   if(!pendingTicker)pendingTicker=setInterval(tickPending,1000);
@@ -33991,6 +34006,7 @@ function cancelDelete(key){
   clearTimeout(p.timer);pendingDel.delete(key);removeToastAction(key);
   toast("Удаление отменено. Консоль ничего не отправила");
   renderTree();
+  if(p.cancel)p.cancel();   // например, снова сделать активной кнопку удаления потока или тура
   if(app==="exp")expRepaint();
 }
 function commitDelete(key){

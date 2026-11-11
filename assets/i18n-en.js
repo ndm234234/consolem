@@ -2765,4 +2765,10 @@ window.I18N_EN={
 "консоль добавит":"the console will add","консоль изменит":"the console will change","консоль удалит":"the console will delete",
 "Консоль создала правило":"The console created the rule",
 "Вы не сохранили изменения":"You did not save the changes",
+// Удаление потока и тура — с отсчётом и «Отменить»
+"Консоль удалит тур после отсчёта. Чтобы отменить, нажать «Отменить» в уведомлении":"The console will delete the tour after the countdown. To cancel, click “Cancel” in the notification",
+"Консоль удалит поток после отсчёта. Чтобы отменить, нажать «Отменить» в уведомлении":"The console will delete the stream after the countdown. To cancel, click “Cancel” in the notification",
+"Консоль не удалила тур":"The console did not delete the tour",
+"Консоль не удалила поток":"The console did not delete the stream",
+"Карточка камеры закрыта. Чтобы удалить, открыть камеру и удалить снова":"The camera card is closed. To delete, open the camera and delete again",
 };

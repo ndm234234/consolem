@@ -91,6 +91,10 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   if (!added._new) {
     ok(await until(() => document.getElementById("confirmCountInp")), "удаление потока — с вводом числа");
     await confirmWith(1);
+    // Отсчёт с «Отменить»; тест не ждёт 10 с, а сразу завершает отсчёт
+    const pd = pendingOf(`camstream:${video.id}/${added.id}`);
+    ok(!!pd, "удаление потока — отсчёт с «Отменить»");
+    if (pd) commitDelete(pd.key);
   }
   ok(await until(() => find(video.id).n.streams.length === rowsBefore), "поток удалён после отсчёта");
   open(video.id, "rec");
@@ -122,8 +126,13 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   streamDel(video.id, fresh.id);
   ok(await until(() => document.getElementById("confirmCountInp")), "удаление правленого потока — с вводом числа");
   await confirmWith(1);
+  const pd2 = pendingOf(`camstream:${video.id}/${fresh.id}`);
+  ok(!!pd2, "удаление правленого потока — отсчёт с «Отменить»");
+  if (pd2) commitDelete(pd2.key);
+  ok(await until(() => find(video.id).n.streams.length === before2), "правленый поток ушёл из черновика после отсчёта");
   await planApply();
-  ok(await until(() => find(video.id).n.streams.length === before2) && !errs.length, "правленый поток удалён: " + (errs[0] || "без отказа"));
+  const goneOnServer = async (uid) => { try { await API.get(`/units/${uid}`); return false; } catch { return true; } };
+  ok((await goneOnServer(fresh.uid)) && !errs.length, "правленый поток удалён на сервере: " + (errs[0] || "без отказа"));
   window.toast = realToast;
 
   // Детекторы: новый создаёт мастер — встроенный из того, что умеет камера; линия рисуется мышью в кадре мастера и уходит на сервер
