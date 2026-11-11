@@ -85,6 +85,8 @@ Object.assign(window.I18N_EN,{
 "Если поле пустое, хранилище берёт предзапись основного хранилища:":"If the field is empty, the storage takes the pre-recording of the main storage:",
 "Предзапись основного хранилища, с":"Pre-recording of the main storage, s",
 "предзапись основного хранилища":"pre-recording of the main storage",
+// «Отправлять настройки устройству» — строка слева над блоками
+"Консоль передаёт в камеру параметры потоков и изображения.":"The console sends the stream and image parameters to the camera.",
 // Поворот на видео (вариант Е)
 "Тянуть по видео, чтобы повернуть камеру. Колесо мыши меняет зум.":"Drag on the video to turn the camera. The mouse wheel changes the zoom.",
 });

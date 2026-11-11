@@ -920,10 +920,12 @@ html[data-theme="light"] .cp.done{border-color:var(--one-success-icon);color:var
 .cs-ro :is(input[type=checkbox],input[type=radio]):disabled{opacity:.7}
 .cs-sw-ro{pointer-events:none;opacity:.6}
 
-.cs-send{display:inline-flex;align-items:center;gap:8px;margin-left:auto;font-size:13px;white-space:nowrap;cursor:pointer}
-.cs-send-st{color:var(--mu)}
+.cs-send{display:inline-flex;align-items:center;gap:8px;font-size:13px;white-space:nowrap;cursor:pointer}.cs-send b{font-weight:500}
 .cs-mode{display:flex;gap:8px;align-items:flex-start;padding:8px 12px;margin-bottom:12px;border:1px solid var(--ln);border-radius:8px;background:var(--p);font-size:13px;line-height:1.45}
 .cs-mode>svg{flex:0 0 auto;margin-top:2px;color:var(--mu)}
+/* Строка с переключателем: переключатель и название — слева, пояснение — рядом, а в узкой области — под ними */
+.cs-mode-sw{align-items:center;flex-wrap:wrap;gap:4px 14px}
+.cs-mode-t{flex:1 1 300px;min-width:0;color:var(--mu)}.cs-mode-t svg{display:inline;vertical-align:-2px;margin-right:2px}
 .cs-lock{display:inline-flex;align-items:center;margin-left:6px;color:var(--mu)}.cs-lock svg{width:13px;height:13px}
 .tab-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--one-warning-icon);margin-left:6px;vertical-align:middle}
 /* Оглавление — строка над разделами, а не третий столбец: слева уже дерево (ресёрч 2026-11-10, вариант А). Строка не
@@ -11580,7 +11582,7 @@ function gear(){
   const scClass=n.type==="unalloc"?"sc sc-unalloc":"sc";
   xpropsEnsure(n);
   cardEnsureBase(n);
-  paintMain(mainHd(flUpBtn(n)+bulkPeekCrumbHtml()+crumbsHtml(sel),objectTitle(n),"",tabsH,addBtn,true,n.type==="camera"&&!isSchemaNode(n)?drvSendHtml(n):"")+`<div class="${scClass}">${hiddenByFilterNoteHtml()}${tab==="stor"?"":objectStatusNotesHtml(n)}${form(n)}</div>`+cardFootHtml());
+  paintMain(mainHd(flUpBtn(n)+bulkPeekCrumbHtml()+crumbsHtml(sel),objectTitle(n),"",tabsH,addBtn,true)+`<div class="${scClass}">${hiddenByFilterNoteHtml()}${tab==="stor"?"":objectStatusNotesHtml(n)}${form(n)}</div>`+cardFootHtml());
   if(n.type==="found")renderDeviceWizard();  // панель живёт в разметке, которую только что вставили
   if(tab==="topo"&&(n.type==="domain"||n.type==="server"))g7Start(n);else if(G7.raf)g7Stop();
 }
@@ -13126,24 +13128,23 @@ function drvEditDone(id,g){
 function drvSend(n){return camDriver(n)!=="rtsp"&&cvCfgOf(n).mode==="console"}
 // Окно подтверждения открывается после клика: иначе тот же клик закроет его как клик мимо окна
 function drvSendToggle(id){const n=find(id)?.n;if(!n)return;const m=drvSend(n)?"device":"console";setTimeout(()=>cvModeSet(id,m),0)}
-// «Отправлять настройки устройству» — в строке вкладок камеры: виден на любой вкладке. У камеры RTSP его нет:
-// консоль не меняет настройки такой камеры
-function drvSendHtml(n){
-  if(camDriver(n)==="rtsp")return"";
-  const on=drvSend(n),t=i18n("Включено: консоль передаёт в камеру параметры потоков и изображения. Выключено: консоль показывает настройки так, как их сообщила камера, и не меняет их.");
-  return`<div class="cs-send" title="${escHtml(t)}" ${onEv("click",["drvSendToggle",`${n.id}`])}><span class="sw ${on?"on":""}" role="switch" tabindex="0" aria-checked="${on}" aria-label="${i18n("Отправлять настройки устройству")}" ${onEv("keydown",["drvSendKey",`${n.id}`,onEv.event])}></span><span>${i18n("Отправлять настройки устройству")}</span><span class="cs-send-st">${i18n(on?"включено":"выключено")}</span></div>`;
-}
 function drvSendKey(id,e){if(e.key===" "||e.key==="Enter"){e.preventDefault();drvSendToggle(id)}}
 // Замок в заголовке блока: настройки самой камеры, консоль их не меняет, пока «Отправлять настройки устройству» выключено
 function csLockHtml(){const t=i18n("Настройки самой камеры. Изменить их можно, когда включено «Отправлять настройки устройству».");return`<span class="cs-lock" role="img" title="${escHtml(t)}" aria-label="${escHtml(t)}">${lu("lock",13)}</span>`}
-// Одна строка о режиме устройства на вкладке вместо заметки в каждом блоке. Строка есть, только если на вкладке есть блок с замком
+// «Отправлять настройки устройству» — одна строка слева над блоками: переключатель и что он сейчас значит. Раньше переключатель
+// стоял справа под вкладками, а ниже была отдельная заметка о замках со ссылкой «Включить…» — два места об одном.
+// Строка есть, только если на вкладке есть настройки самой камеры (блок с замком); на «Подключении» и «Доступе» её нет.
+// У камеры RTSP переключателя нет: консоль не меняет настройки такой камеры
 function csModeLine(n,tabId){
-  if(drvSend(n)||!["vid","io","det","rec"].includes(tabId))return"";
+  if(!["vid","io","det","rec"].includes(tabId))return"";
   const rtsp=camDriver(n)==="rtsp";
   if(rtsp)return tabId==="vid"?`<div class="cs-mode">${lu("lock",14)}<span>${i18n("Консоль показывает параметры потоков так, как их сообщила камера. У камеры RTSP их меняют в веб-интерфейсе камеры.")}</span></div>`:"";
   const dev=tabId==="vid"||[...drvGroups(n,tabId).values()].some(fs=>fs.some(([,p])=>p["x-dev"]));
   if(!dev)return"";
-  return`<div class="cs-mode">${lu("lock",14)}<span>${i18n("Блоки с замком содержат настройки самой камеры. Консоль показывает их так, как их сообщила камера, и не меняет их.")} <button type="button" class="lk" ${onEv("click",["drvSendToggle",`${n.id}`])}>${i18n("Включить «Отправлять настройки устройству»")}</button></span></div>`;
+  const on=drvSend(n),t=i18n("Включено: консоль передаёт в камеру параметры потоков и изображения. Выключено: консоль показывает настройки так, как их сообщила камера, и не меняет их.");
+  const sw=`<span class="cs-send" title="${escHtml(t)}" ${onEv("click",["drvSendToggle",`${n.id}`])}><span class="sw ${on?"on":""}" role="switch" tabindex="0" aria-checked="${on}" aria-label="${i18n("Отправлять настройки устройству")}" ${onEv("keydown",["drvSendKey",`${n.id}`,onEv.event])}></span><b>${i18n("Отправлять настройки устройству")}</b></span>`;
+  const txt=on?i18n("Консоль передаёт в камеру параметры потоков и изображения."):`${lu("lock",13)} ${i18n("Блоки с замком содержат настройки самой камеры. Консоль показывает их так, как их сообщила камера, и не меняет их.")}`;
+  return`<div class="cs-mode cs-mode-sw ${on?"on":""}">${sw}<span class="cs-mode-t">${txt}</span></div>`;
 }
 // Что консоль запишет в камеру при включении: потоки и «Изображение» — как их показывает карточка сейчас
 function cvSendPreview(n){
