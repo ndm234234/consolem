@@ -3082,6 +3082,7 @@ body.pj-hdlog .gojump{display:none}
 <!-- ONE PSIM: мост по ONE.PSIM.PrototypeKit, подключён после стилей прототипа -->
 <link rel="stylesheet" href="assets/one-psim/bridge.css">
 <script src="assets/i18n-en.js"></script>
+<script src="assets/i18n-en-55.js"></script>
 <!-- API: контракт, эталонный набор, встроенный сервер и клиент (api/README.md) -->
 <script src="api/openapi.js"></script>
 <script src="api/fixture.js"></script>
@@ -11451,8 +11452,8 @@ function gdetrow(d,l,ctx,parentHit=false){
   return h;
 }
 function dwTreeSubRow(d,s,i,l){
-  const on=sel===d.id&&dw.subSel===s.id,t=i18n(DW_SUBN[s.kind]);
-  return`<div class="n dw-tsr${on?" on":""}" style="--l:${l}" data-dwsub="${d.id}|${escHtml(s.id)}" ${onEv("click",["dwSubPick",d.id,s.id])}><span class="tw"></span><i class="dw-tdot" style="background:${DW_SUBC[i%DW_SUBC.length]}"></i><span class="nm" title="${escHtml(s.name)} · ${escHtml(t)}">${escHtml(s.name)}</span><span class="dw-tty">${escHtml(t)}</span>${s.on?"":`<span class="bd off">${i18n("выкл")}</span>`}<span class="n-meta"><span class="n-fav" aria-hidden="true"></span><button type="button" class="n-menu" tabindex="-1" aria-label="${i18n("Действия")}" title="${i18n("Действия")}" aria-haspopup="menu" ${onEv("click",["dwSubMenu",onEv.event,d.id,s.id])}>${lu("ellipsis-vertical",16)}</button></span></div>`;
+  const on=sel===d.id&&dw.subSel===s.id,t=i18n(DW_SUBN[s.kind]),gone=!dwC(d).subs.some(x=>x.id===s.id);
+  return`<div class="n dw-tsr${on?" on":""}" style="--l:${l}" data-dwsub="${d.id}|${escHtml(s.id)}" ${onEv("click",["dwSubPick",d.id,s.id])}><span class="tw"></span><i class="dw-tdot" style="background:${DW_SUBC[i%DW_SUBC.length]}"></i><span class="nm" title="${escHtml(s.name)} · ${escHtml(t)}">${escHtml(s.name)}</span><span class="dw-tty">${escHtml(t)}</span>${gone?`<span class="bd off" title="${i18n("Консоль удалит поддетектор после «Применить»")}">${i18n("удалить")}</span>`:s.on?"":`<span class="bd off">${i18n("выкл")}</span>`}<span class="n-meta"><span class="n-fav" aria-hidden="true"></span><button type="button" class="n-menu" tabindex="-1" aria-label="${i18n("Действия")}" title="${i18n("Действия")}" aria-haspopup="menu" ${onEv("click",["dwSubMenu",onEv.event,d.id,s.id])}>${lu("ellipsis-vertical",16)}</button></span></div>`;
 }
 function gcamrow(cam,dets,l,ctx){
   if(treeHidQ(cam))return"";// камера под GPU сервера: строится не обходом дерева, метку смотрим здесь
@@ -14562,7 +14563,8 @@ function camDetectorsHtml(n){
 // ЗАГЛУШКА прототипа 55. Сцену (объекты за последний час), виды «Трекер объектов» и «Нейросетевой трекер»,
 // поддетекторы и превью сработок создаёт браузер. Контракт не менялся: настройки живут в памяти страницы.
 // Карточка: слева кадр с зонами и объектами, под ним превью сработок за час; справа настройки по типам.
-// Превью считает сработки дважды: с черновиком и с сохранёнными настройками, — и показывает разницу.
+// Кадр показывает рамки по черновику сразу. Вкладка «Сработки до и после новых настроек» сравнивает прежние настройки
+// с новыми только после «Применить»: верхний ряд — эталон до «Применить», нижний заполняется после.
 const DW_T=3600,DW_X=160,DW_Y=90,DW_T0=Date.now()-1800*1000;
 const DW_KINDS=[["motion","Движение"],["linecross","Пересечение линии"],["tracker","Трекер объектов"],["neural","Нейросетевой трекер"],["lpr","Номер"],["crowd","Скопление людей"],["abandoned","Оставленный предмет"]];
 const DW_CLS={person:"Человек",car:"Машина",bike:"Велосипед",bag:"Предмет",noise:"Помеха"};
@@ -14982,7 +14984,7 @@ function dwCmpHtml(d,C){
     ${ap?tile("b1",i18n("Новые настройки"),after.length,`${sw(after.length)} ${i18n("за")} ${dwDur(el)}`):tile("b1 off",i18n("Новые настройки"),"—",i18n("Применить настройки через план"))}
     ${!ap?tile("fc off",`${i18n("Прогноз на")} ${per} ${i18n("мин")}`,"—",i18n("Появится после «Применить»"))
       :fc==null?tile("fc off",`${i18n("Прогноз на")} ${per} ${i18n("мин")}`,"…",`${i18n("Появится через")} ${Math.ceil(30-el)} ${i18n("с")}`)
-      :tile("fc",i18n(el<P?`Прогноз на ${per} мин`:`Итог за ${per} мин`),(el<P?"≈":"")+fc,i18n(dl<0?"меньше, чем с прежними настройками":dl>0?"больше, чем с прежними настройками":"столько же, сколько с прежними настройками"),
+      :tile("fc",`${i18n(el<P?"Прогноз на":"Итог за")} ${per} ${i18n("мин")}`,(el<P?"≈":"")+fc,i18n(dl<0?"меньше, чем с прежними настройками":dl>0?"больше, чем с прежними настройками":"столько же, сколько с прежними настройками"),
         `<span class="dw-dl ${dl<0?"dn":dl>0?"up":""}">${dl>0?"+":dl<0?"−":"±"}${Math.abs(dl)}</span>`)}
   </div>`;
   const nowX=ap&&el<P?+(el/P*100).toFixed(2):null;
@@ -14999,51 +15001,33 @@ function dwCmpHtml(d,C){
 }
 function dwCmpStripHtml(d,C){
   const{k,ap,s,strip}=C;
-  const h=`<h4 class="dw-cs-h">${i18n(ap?"Сработки с новыми настройками":`Сработки за последние ${dw.per} мин`)}<span class="sub">${i18n("новые слева")}</span></h4>`;
+  const h=`<h4 class="dw-cs-h">${ap?i18n("Сработки с новыми настройками"):`${i18n("Сработки за последние")} ${dw.per} ${i18n("мин")}`}<span class="sub">${i18n("новые слева")}</span></h4>`;
   return`<section class="dw-cs">${h}${strip.length?dwStripHtml(strip,s,k,20):`<p class="sub">${i18n(ap?"С новыми настройками детектор ещё не сработал.":"За этот период детектор не сработал.")}</p>`}</section>`;
 }
 function dwDur(sec){sec=Math.floor(sec);return sec<60?`${sec} ${i18n("с")}`:`${Math.floor(sec/60)} ${i18n("мин")}${sec%60?` ${sec%60} ${i18n("с")}`:""}`}
 // ── Панель настроек ──
 function dwSec(title,body,x=""){return`<section class="dw-sec"><h4>${i18n(title)}${x}</h4>${body}</section>`}
 function dwHelp(t){return`<p class="sub dw-help">${i18n(t)}</p>`}
-function dwRange(id,key,l,min,max,step,unit,help,hist){
+function dwRange(id,key,l,min,max,step,unit,help){
   const c=dwC(detNodeOf(id)),v=key.includes(".")?c[key.split(".")[0]][+key.split(".")[1]]:c[key];
   const shown=unit==="%f"?Math.round(v*100):v;
   return`<div class="dw-f"><label>${i18n(l)} <b data-dw-out="${key}">${shown}${unit==="%f"?"%":unit?" "+i18n(unit):""}</b></label>
-    <input type="range" min="${min}" max="${max}" step="${step}" value="${unit==="%f"?Math.round(v*1000)/10:v}" ${onEv("input",["dwSet",id,key,onEv.value])}>
+    <input type="range" min="${min}" max="${max}" step="${step}" value="${unit==="%f"?Math.round(v*1000)/10:v}" ${onEv("input",["dwSet",id,key,onEv.value,onEv.el])}>
     ${help?dwHelp(help):""}</div>`;
 }
 function dwNum(id,key,l,min,max,unit,help){
   const c=dwC(detNodeOf(id));
-  return`<div class="dw-f dw-num"><label>${i18n(l)}</label><span class="dw-in"><input type="number" min="${min}" max="${max}" value="${c[key]}" ${onEv("input",["dwSet",id,key,onEv.value])}><span>${i18n(unit)}</span></span>${help?dwHelp(help):""}</div>`;
+  return`<div class="dw-f dw-num"><label>${i18n(l)}</label><span class="dw-in"><input type="number" min="${min}" max="${max}" value="${c[key]}" ${onEv("input",["dwSet",id,key,onEv.value,onEv.el])}><span>${i18n(unit)}</span></span>${help?dwHelp(help):""}</div>`;
 }
 function dwChips(id,list,cur,fn,sid=""){
   return`<div class="dw-chips">${list.map(cl=>`<button type="button" class="dw-chip${cur.includes(cl)?" on":""}" aria-pressed="${cur.includes(cl)}" ${onEv("click",sid?[fn,id,sid,cl]:[fn,id,cl])}>${cur.includes(cl)?lu("check",12):""}${i18n(DW_CLS[cl])}</button>`).join("")}</div>`;
 }
-// Распределение за час: серые столбцы — помехи, синие — люди и машины; светлая полоса — что детектор замечает
-function dwHistHtml(d,what){
-  const k=dwKindOf(d),c=dwC(d);
-  const sc=dwScene().filter(o=>!(o.cls==="noise"&&!DW_PIX.has(k))&&(k!=="lpr"||o.cls==="car")&&(k!=="neural"||c.classes.includes(o.cls)));
-  const val=o=>what==="sens"?o.str:what==="conf"?o.conf:what==="pw"?o.pw/.08:o.h;
-  const[lo,hi]=what==="sens"?[1-c.sens/100,1]:what==="conf"?[c.conf/100,1]:what==="pw"?[c.pw[0]/.08,c.pw[1]/.08]:[c.min[1],Math.min(1,c.max[1])];
-  const B=30,a=new Array(B).fill(0),b=new Array(B).fill(0);
-  sc.forEach(o=>{const v=Math.min(.999,Math.max(0,what==="size"?val(o)/.3:val(o))),i=v*B|0;(o.cls==="noise"?a:b)[i]++});
-  const L=what==="size"?lo/.3:lo,H=what==="size"?Math.min(1,hi/.3):hi;
-  const mx=Math.max(1,...a.map((v,i)=>v+b[i]));
-  let bars="";
-  for(let i=0;i<B;i++){const x=i/B*100,w=100/B-.6,inR=(i+.5)/B>=L&&(i+.5)/B<=H;
-    const hb=b[i]/mx*30,ha=a[i]/mx*30;
-    bars+=`<rect x="${x}%" width="${w}%" y="${32-hb}" height="${hb}" fill="var(--bl)" opacity="${inR?1:.3}"/><rect x="${x}%" width="${w}%" y="${32-hb-ha}" height="${ha}" fill="var(--mu)" opacity="${inR?.9:.3}"/>`}
-  return`<svg width="100%" height="34" preserveAspectRatio="none"><rect x="${L*100}%" width="${Math.max(0,(H-L)*100)}%" y="0" height="34" fill="var(--one-info-bg)"/>${bars}
-    <line x1="${L*100}%" x2="${L*100}%" y1="0" y2="34" stroke="var(--bl)" stroke-width="1.5"/>${H<1?`<line x1="${H*100}%" x2="${H*100}%" y1="0" y2="34" stroke="var(--bl)" stroke-width="1.5"/>`:""}</svg>
-    <div class="dw-hist-x"><span>${i18n(what==="sens"?"слабое движение":what==="conf"?"0%":what==="pw"?"узкий номер":"мелкие")}</span><span>${i18n(what==="sens"?"сильное":what==="conf"?"100%":what==="pw"?"широкий":"крупные")}</span></div>`;
-}
 function dwSizeHtml(id){
   const c=dwC(detNodeOf(id)),p=v=>Math.round(v*1000)/10;
-  const row=(m,l)=>`<div class="dw-sz-r"><span>${i18n(l)}</span><span class="dw-in"><input type="number" min="1" max="100" step="0.5" value="${p(c[m][0])}" ${onEv("input",["dwSet",id,m+".0",onEv.value])}><span>×</span><input type="number" min="1" max="100" step="0.5" value="${p(c[m][1])}" ${onEv("input",["dwSet",id,m+".1",onEv.value])}><span>% ${i18n("кадра")}</span></span></div>`;
+  const row=(m,l)=>`<div class="dw-sz-r"><span>${i18n(l)}</span><span class="dw-in"><input type="number" min="1" max="100" step="0.5" value="${p(c[m][0])}" data-dw-size="${m}.0" ${onEv("input",["dwSet",id,m+".0",onEv.value,onEv.el])}><span>×</span><input type="number" min="1" max="100" step="0.5" value="${p(c[m][1])}" data-dw-size="${m}.1" ${onEv("input",["dwSet",id,m+".1",onEv.value,onEv.el])}><span>% ${i18n("кадра")}</span></span></div>`;
   return`<div class="dw-f"><label>${i18n("Размер объекта")} <button type="button" class="lk" ${onEv("click",["dwLay","size"])}>${i18n(dw.lay.size?"Скрыть на кадре":"Показать на кадре")}</button></label>
     ${row("min","Не меньше")}${row("max","Не больше")}
-    ${dwHelp("Детектор не замечает объекты меньше и больше этих размеров. Ширина × высота — в процентах кадра.")}</div>`;
+    ${dwHelp("Детектор не замечает объекты меньше и больше этих размеров. Консоль считает ширину и высоту в процентах кадра.")}</div>`;
 }
 function dwAreasHtml(id,k,c){
   const rows=c.areas.map(a=>`<div class="dw-ar${dw.sel===a.id?" sel":""}"><i class="dw-sw" style="background:var(--dw-${a.type})"></i>
@@ -15071,11 +15055,11 @@ function dwSubsHtml(id,k,c){
   return rows+empty+add+dwHelp("Детектор находит объекты, а поддетектор решает, когда сработать. Зоны и размеры детектора действуют на все его поддетекторы.");
 }
 function dwSubBodyHtml(id,k,s){
-  const num=(key,l,min,max,unit,help)=>`<div class="dw-f dw-num"><label>${i18n(l)}</label><span class="dw-in"><input type="number" min="${min}" max="${max}" value="${s[key]}" ${onEv("input",["dwSubSet",id,s.id,key,onEv.value])}>${unit?`<span>${i18n(unit)}</span>`:""}</span>${help?dwHelp(help):""}</div>`;
+  const num=(key,l,min,max,unit,help)=>`<div class="dw-f dw-num"><label>${i18n(l)}</label><span class="dw-in"><input type="number" min="${min}" max="${max}" value="${s[key]}" ${onEv("input",["dwSubSet",id,s.id,key,onEv.value,onEv.el])}>${unit?`<span>${i18n(unit)}</span>`:""}</span>${help?dwHelp(help):""}</div>`;
   const seg=o=>`<span class="dw-seg">${o.map(([v,l])=>`<button type="button" class="${s.mode===v?"on":""}" ${onEv("click",["dwSubMode",id,s.id,v])}>${i18n(l)}</button>`).join("")}</span>`;
   const f=[`<div class="dw-f"><label>${i18n("Имя")}</label><input type="text" class="dw-txt" value="${escHtml(s.name)}" aria-label="${i18n("Имя поддетектора")}" ${onEv("input",["dwSubName",id,s.id,onEv.value])}></div>`];
-  if(s.kind==="line")f.push(`<div class="dw-f"><label>${i18n("Направление")}</label>${dwDirHtml(id,s.dir,"dwSubDir",s.id)}${dwHelp("Линия поддетектора — на кадре. Концы линии тянуть мышью.")}</div>`);
-  else f.push(dwHelp(s.kind==="a2a"?"Области 1 и 2 — на кадре. Области и их точки тянуть мышью.":"Область поддетектора — на кадре. Область и её точки тянуть мышью."));
+  if(s.kind==="line")f.push(`<div class="dw-f"><label>${i18n("Направление")}</label>${dwDirHtml(id,s.dir,"dwSubDir",s.id)}${dwHelp("Линия поддетектора показана на кадре. Чтобы изменить линию, тянуть её концы мышью.")}</div>`);
+  else f.push(dwHelp(s.kind==="a2a"?"Области 1 и 2 показаны на кадре. Чтобы изменить область, тянуть её или её точки мышью.":"Область поддетектора показана на кадре. Чтобы изменить область, тянуть её или её точки мышью."));
   if(s.kind==="dwell")f.push(`<div class="dw-f"><label>${i18n("Сработать, если объект в области")}</label>${seg([["gt","дольше"],["lt","меньше"],["eq","ровно"]])}</div>`,
     num("time","Время",0,172800,"с",s.mode==="gt"?"Поддетектор сработает, когда объект пробудет в области это время.":"Поддетектор сработает, когда объект выйдет из области."));
   if(s.kind==="stop")f.push(num("time","Сработать, если объект стоит дольше",1,172800,"с"));
@@ -15084,10 +15068,10 @@ function dwSubBodyHtml(id,k,s){
   if(s.kind==="multi")f.push(num("count","Объектов в области не меньше",1,100,"","Поддетектор сработает, когда в области одновременно находится столько объектов."));
   if(k!=="motion"&&s.kind!=="mask"&&s.kind!=="abandoned")f.push(`<div class="dw-f"><label>${i18n("Кого считать")}</label>${dwChips(id,["person","car","bike"],s.classes,"dwSubClass",s.id)}</div>`);
   if(s.kind!=="mask"){
-    const inp=(key,i,min,max,l)=>`<input type="number" min="${min}" max="${max}" value="${s[key][i]}" aria-label="${i18n(l)}" ${onEv("input",["dwSubSet",id,s.id,`${key}.${i}`,onEv.value])}>`;
+    const inp=(key,i,min,max,l)=>`<input type="number" min="${min}" max="${max}" value="${s[key][i]}" aria-label="${i18n(l)}" ${onEv("input",["dwSubSet",id,s.id,`${key}.${i}`,onEv.value,onEv.el])}>`;
     f.push(`<details class="dw-adv"${dw.subAdv?" open":""}><summary>${i18n("Дополнительно")}</summary><div class="dw-adv-b">
       <div class="dw-f dw-num"><label>${i18n("Скорость объекта")}</label><span class="dw-in"><span>${i18n("от")}</span>${inp("spd",0,0,500,"Скорость не меньше")}<span>${i18n("до")}</span>${inp("spd",1,0,500,"Скорость не больше")}</span>${dwHelp("Поддетектор пропускает объекты медленнее и быстрее этих значений. Значения — от 0 до 500.")}</div>
-      <div class="dw-f dw-num"><label>${i18n("Смещение по X и Y")}</label><span class="dw-in">${inp("off",0,1,40,"Смещение по X")}<span>×</span>${inp("off",1,1,40,"Смещение по Y")}<span>% ${i18n("рамки")}</span></span>${dwHelp("Смещение — в процентах рамки объекта, от 1 до 40.")}</div>
+      <div class="dw-f dw-num"><label>${i18n("Смещение по X и Y")}</label><span class="dw-in">${inp("off",0,1,40,"Смещение по X")}<span>×</span>${inp("off",1,1,40,"Смещение по Y")}<span>% ${i18n("рамки")}</span></span>${dwHelp("Консоль считает смещение в процентах рамки объекта. Значение может быть от 1 до 40.")}</div>
       <div class="dw-f"><label class="dw-swl"><span class="sw ${s.grp?"on":""}" role="switch" aria-checked="${s.grp}" ${onEv("click",["dwSubGrp",id,s.id])}></span>${i18n("Сработать на группу объектов")}</label>
         ${s.grp?num("gn","Объектов в группе не меньше",1,100,"")+num("gh","Ждать следующие объекты группы",0,86400,"с","Поддетектор ждёт это время после первого объекта группы. Если за это время пришло нужное число объектов, поддетектор сработает."):""}</div>
       ${dwHelp("Размер объекта поддетектор берёт у детектора.")}
@@ -15108,7 +15092,7 @@ function dwSubNewHtml(id,k){
 }
 function dwStateHtml(d){
   const n=dwDiffRows(d).length;
-  if(!n)return`<span class="sub">${i18n("Настройки применены")}</span>`;
+  if(!n)return`<span class="sub">${i18n("Детектор работает с этими настройками")}</span>`;
   return`<span class="dw-dirty">${i18n("Не применено")}: ${n} ${i18n(plural(n,"изменение|изменения|изменений"))}</span>`;
 }
 // ── План и «Применить»: как у карточки объекта (cardFootHtml → cardPlanOpen → очередь) ──
@@ -15118,8 +15102,8 @@ function dwDiffRows(d){
   const ne=(a,b)=>JSON.stringify(a)!==JSON.stringify(b),pc=v=>(v*100).toFixed(1).replace(/\.0$/,"");
   const row=(keys,label,fromT,toT)=>out.push({keys,label,fromT:String(fromT),toT:String(toT)});
   const zn=a=>`${a.filter(x=>x.type==="in").length} ${i18n("зон")}, ${a.filter(x=>x.type==="ex").length} ${i18n("исключ.")}`;
-  if(ne(c.areas,s.areas)){const a=zn(s.areas),b=zn(c.areas);row(["areas"],"Зоны",a,a===b?i18n("изменены на кадре"):b)}
-  if(ne(c.line,s.line))row(["line"],"Линия A → B",s.line?i18n("есть"):"—",c.line?i18n("изменена на кадре"):"—");
+  if(ne(c.areas,s.areas)){const a=zn(s.areas),b=zn(c.areas);row(["areas"],"Зоны",a,a===b?i18n("другие точки на кадре"):b)}
+  if(ne(c.line,s.line))row(["line"],"Линия A → B",s.line?i18n("есть"):"—",c.line?i18n("другие точки на кадре"):"—");
   if(c.dir!==s.dir)row(["dir"],"Направление",i18n(DW_DIR_RU[s.dir]),i18n(DW_DIR_RU[c.dir]));
   if(ne(c.min,s.min))row(["min","minAt"],"Размер объекта не меньше",`${pc(s.min[0])} × ${pc(s.min[1])} % ${i18n("кадра")}`,`${pc(c.min[0])} × ${pc(c.min[1])} % ${i18n("кадра")}`);
   if(ne(c.max,s.max))row(["max","maxAt"],"Размер объекта не больше",`${pc(s.max[0])} × ${pc(s.max[1])} % ${i18n("кадра")}`,`${pc(c.max[0])} × ${pc(c.max[1])} % ${i18n("кадра")}`);
@@ -15133,9 +15117,9 @@ function dwDiffRows(d){
   if(c.stay!==s.stay)row(["stay"],"Предмет лежит дольше",`${s.stay} ${i18n("с")}`,`${c.stay} ${i18n("с")}`);
   if(ne(c.subs,s.subs)){
     const was=new Map(s.subs.map(x=>[x.id,x]));
-    c.subs.forEach(x=>{const o=was.get(x.id);if(!o)row(["subs"],`${i18n("Поддетектор")} «${x.name}»`,"—",i18n("будет добавлен"));
-      else if(ne(o,x))row(["subs"],`${i18n("Поддетектор")} «${x.name}»`,i18n(o.on?"вкл":"выкл"),o.on!==x.on?i18n(x.on?"вкл":"выкл"):i18n("изменён"))});
-    s.subs.forEach(o=>{if(!c.subs.some(x=>x.id===o.id))row(["subs"],`${i18n("Поддетектор")} «${o.name}»`,i18n(o.on?"вкл":"выкл"),i18n("будет удалён"))});
+    c.subs.forEach(x=>{const o=was.get(x.id);if(!o)row(["subs"],`${i18n("Поддетектор")} «${x.name}»`,"—",i18n("консоль добавит"));
+      else if(ne(o,x))row(["subs"],`${i18n("Поддетектор")} «${x.name}»`,i18n(o.on?"вкл":"выкл"),o.on!==x.on?i18n(x.on?"вкл":"выкл"):i18n("другие настройки"))});
+    s.subs.forEach(o=>{if(!c.subs.some(x=>x.id===o.id))row(["subs"],`${i18n("Поддетектор")} «${o.name}»`,i18n(o.on?"вкл":"выкл"),i18n("консоль удалит"))});
   }
   return out;
 }
@@ -15143,15 +15127,17 @@ function dwDiffRows(d){
 function dwFootHtml(){
   if(app!=="hw")return null;
   const n=find(sel)?.n;if(!n||n.type!=="det"||dwKindOf(n)==="other")return null;
-  const d=dwDiffRows(n);
+  // Правки полей контракта («Включён», «Дополнительно») идут прежним черновиком карточки (cardDiff) — их строки тоже здесь
+  const d=[...dwDiffRows(n),...dwCardRows(n)];
   if(!d.length)return`<div id="cardFoot" hidden></div>`;
   const busy=bq&&!bq.finished;
   return`<div class="main-actions bk-foot card-foot" id="cardFoot"><span class="sub bk-foot-text">${i18n("Не применено")}: <b>${d.length}</b> ${i18n(plural(d.length,"изменение|изменения|изменений"))} — ${escHtml(d.slice(0,2).map(r=>i18n(r.label)).join(", "))}${d.length>2?"…":""}</span><span class="tfoot-gap"></span>
     <button type="button" class="btn s" ${onEv("click",["dwRevert",`${n.id}`])}>${i18n("Сбросить")}</button>
     <button type="button" class="btn s pri" ${busy?`disabled title="${i18n("Консоль выполняет групповую операцию. План можно применить после конца операции")}"`:""} ${onEv("click",["dwPlan",`${n.id}`])}>${i18n("Показать план")} (${d.length})</button></div>`;
 }
+function dwCardRows(n){return cardDraft&&cardDraft.id===n.id?cardDiff():[]}
 function dwPlan(id){
-  const n=detNodeOf(id),d=dwDiffRows(n);if(!d.length){toast("Нечего применять");return}
+  const n=detNodeOf(id),d=[...dwDiffRows(n),...dwCardRows(n)];if(!d.length){toast("Нечего применять");return}
   if(bq&&!bq.finished){toast("Групповая операция ещё не закончена. Подождать её конца");return}
   const rows=d.map((r,i)=>`<tr><td class="bk-num">${i+1}</td><td>${escHtml(i18n(r.label))}</td><td class="bk-note">${escHtml(r.fromT)}</td><td><b>${escHtml(r.toT)}</b></td></tr>`).join("");
   const k=dwKindOf(n),P=dw.per*60,nb=dwFiresIn(dwSaved(n),k,dw.T-P,dw.T).length;
@@ -15162,11 +15148,15 @@ function dwPlan(id){
     `<button type="button" class="btn" ${onEv("click",["closeBulkModal"])}>${i18n("Назад")}</button><button type="button" class="btn pri" ${onEv("click",["closeBulkModal"],["dwApply",`${id}`])}>${i18n("Применить")} (${d.length})</button>`,"bbox-wide");
 }
 function dwApply(id){
-  const n=detNodeOf(id),key=dwKey(n),d=dwDiffRows(n);if(!d.length)return;
+  const n=detNodeOf(id),key=dwKey(n),d=dwDiffRows(n),cr=dwCardRows(n);if(!d.length&&!cr.length)return;
   if(bq&&!bq.finished){toast("Групповая операция ещё не закончена. Подождать её конца");return}
-  dw.ap[key]={T:dw.T,prev:dwClone(dw.saved[key])};dw.pv="cmp";
-  const ops=d.map(r=>({...mkOp(n,`${i18n(r.label)}: ${r.toT}`,"param",()=>{r.keys.forEach(x=>{dw.saved[key][x]=dwClone(dw.cfg[key][x])})}),state:"wait",msg:"",done:false}));
-  startQueue([{label:`«${locName(n)}»: ${d.length} ${plural(d.length,"изменение|изменения|изменений")}`,ops}],`«${locName(n)}»`,{undo:false});
+  if(!d.length){cardApply();return}
+  const prev=dwClone(dw.saved[key]);let first=true;
+  const ops=d.map(r=>{const vals=Object.fromEntries(r.keys.map(x=>[x,dwClone(dw.cfg[key][x])]));
+    return{...mkOp(n,`${i18n(r.label)}: ${r.toT}`,"param",()=>{if(first){first=false;dw.ap[key]={T:dw.T,prev}}Object.assign(dw.saved[key],dwClone(vals))}),state:"wait",msg:"",done:false}});
+  dw.pv="cmp";
+  // Поля контракта и настройки окна — две очереди подряд нельзя: поля контракта уходят своим cardApply после этой
+  startQueue([{label:`«${locName(n)}»: ${d.length} ${plural(d.length,"изменение|изменения|изменений")}`,ops}],`«${locName(n)}»`,{undo:false,afterOk:cr.length?()=>setTimeout(()=>{if(dwCardRows(n).length)cardApply()},0):null});
   gear();
 }
 function dwPanelHtml(cam,d,k,c){
@@ -15180,7 +15170,7 @@ function dwPanelHtml(cam,d,k,c){
   if(k==="motion"||k==="tracker")when.push(dwRange(id,"sens","Чувствительность",1,100,1,"","Чем выше чувствительность, тем более слабое движение замечает детектор.","sens"));
   if(k==="neural"||k==="lpr")when.push(dwRange(id,"conf","Уверенность нейросети не ниже",10,99,1,"%","Детектор сработает, только если нейросеть уверена в объекте не меньше этого значения.","conf"));
   if(k==="lpr")when.push(`<div class="dw-f"><label>${i18n("Ширина номера")} <b data-dw-out="pw">${(c.pw[0]*100).toFixed(1)}–${(c.pw[1]*100).toFixed(1)}%</b></label>
-      <div class="dw-2r"><input type="range" min="1" max="8" step="0.1" value="${c.pw[0]*100}" ${onEv("input",["dwSet",id,"pw.0",onEv.value])}><input type="range" min="1" max="8" step="0.1" value="${c.pw[1]*100}" ${onEv("input",["dwSet",id,"pw.1",onEv.value])}></div>
+      <div class="dw-2r"><input type="range" min="1" max="8" step="0.1" value="${c.pw[0]*100}" ${onEv("input",["dwSet",id,"pw.0",onEv.value,onEv.el])}><input type="range" min="1" max="8" step="0.1" value="${c.pw[1]*100}" ${onEv("input",["dwSet",id,"pw.1",onEv.value,onEv.el])}></div>
       ${dwHelp("Ширина номера — в процентах ширины кадра. Номера уже или шире детектор пропускает.")}</div>`);
   if(k==="linecross")when.push(`<div class="dw-f"><label>${i18n("Направление")}</label>${dwDirHtml(id,c.dir,"dwDir")}${dwHelp("Детектор сработает, только когда объект пересечёт линию в этом направлении.")}</div>`);
   if(k==="motion")when.push(dwNum(id,"delay","Сработать, если движение длится не меньше",0,30,"с","Короткое движение, например блик или птица, детектор пропустит."));
@@ -15198,7 +15188,7 @@ function dwRefresh(){
   const root=dwRoot(),d=dwD();if(!root||!d)return;
   const c=dwC(d);
   root.querySelectorAll("[data-dw-out]").forEach(el=>{const k=el.dataset.dwOut;el.textContent=k==="pw"?`${(c.pw[0]*100).toFixed(1)}–${(c.pw[1]*100).toFixed(1)}%`:k==="conf"?c.conf+"%":String(c[k])});
-  root.querySelectorAll("[data-dw-hist]").forEach(el=>el.innerHTML=dwHistHtml(d,el.dataset.dwHist));
+  root.querySelectorAll("[data-dw-size]").forEach(el=>{if(el===document.activeElement)return;const[a,i]=el.dataset.dwSize.split(".");el.value=Math.round(c[a][+i]*1000)/10});
   const p=root.querySelector("[data-dw-prev]");if(p)p.innerHTML=dwPrevHtml(d);
   const s=root.querySelector("[data-dw-st]");if(s)s.innerHTML=dwStateHtml(d);
   root.querySelectorAll("[data-dw-sub]").forEach(el=>{const sb=c.subs.find(x=>x.id===el.dataset.dwSub),nn=el.querySelector(".dw-sub-n");if(sb&&nn&&sb.kind!=="mask")nn.textContent=`${dwEval(c,dwKindOf(d)).fires.filter(f=>f.sub===sb.id).length} ${i18n("сраб.")}`});
@@ -15214,7 +15204,7 @@ function dwPaintObj(){
   const nw=root.querySelector("[data-dw-now]");if(nw)nw.textContent=dw.now!=null&&dwKindOf(d)!=="other"?`${i18n("Детектор видит в кадре")}: ${dw.now}`:"";
   // Раз в секунду живого времени: графики «до и после», лента, итог плана после очереди
   const sec=Math.floor(dw.T);if(sec!==dw.shown){dw.shown=sec;
-    const sj=JSON.stringify(dwSaved(d));if(sj!==dw.sj){const first=!dw.sj;dw.sj=sj;if(!first){dwRefresh();renderTree();return}}
+    const sk=dwKey(d),sj=JSON.stringify(dwSaved(d)),was=(dw.sjm||(dw.sjm={}))[sk];if(sj!==was){dw.sjm[sk]=sj;if(was!=null){dwRefresh();renderTree();return}}
     const cm=root.querySelector("[data-dw-cmp]");if(cm){const C=dwCmpData(d);cm.innerHTML=dwCmpHtml(d,C);
       const cs=root.querySelector("[data-dw-cstrip]");if(cs&&+cs.dataset.dwCstrip!==C.strip.length){cs.dataset.dwCstrip=C.strip.length;cs.innerHTML=dwCmpStripHtml(d,C)}}
     const st=root.querySelector("[data-dw-strip]");if(st){const n=dwFiresIn(dwSaved(d),dwKindOf(d),dw.T-DW_T,dw.T).length;if(+st.dataset.dwStrip!==n)dwPv("live")}}
@@ -15237,9 +15227,11 @@ function dwKindPick(id,v){dw.kind[id]=v;dw.tool=null;gear()}
 function dwTool(t){dw.tool=dw.tool===t?null:t;gear()}
 function dwLay(key){dw.lay[key]=!dw.lay[key];gear()}
 function dwSelect(aid){dw.sel=dw.sel===aid?null:aid;gear()}
-function dwSet(id,key,v){
-  const c=dwC(detNodeOf(id));v=+v;if(!Number.isFinite(v))return;
-  if(key.includes(".")){const[a,i]=key.split(".");c[a][+i]=a==="pw"||a==="min"||a==="max"?v/100:v;if(a==="pw"&&c.pw[0]>c.pw[1])c.pw[+i?0:1]=c.pw[+i]}
+function dwSet(id,key,v,el){
+  const c=dwC(detNodeOf(id));if(v===""||v==null)return;v=+v;if(!Number.isFinite(v))return;
+  if(el&&el.min!==""&&v<+el.min)v=+el.min;if(el&&el.max!==""&&v>+el.max)v=+el.max;
+  if(key.includes(".")){const[a,i]=key.split(".");c[a][+i]=a==="pw"||a==="min"||a==="max"?v/100:v;if(a==="pw"&&c.pw[0]>c.pw[1])c.pw[+i?0:1]=c.pw[+i];
+    if(a==="min"&&c.min[+i]>c.max[+i])c.max[+i]=c.min[+i];if(a==="max"&&c.max[+i]<c.min[+i])c.min[+i]=c.max[+i]}
   else c[key]=v;
   dwSoon();
 }
@@ -15248,9 +15240,10 @@ function dwDir(id,v){dwC(detNodeOf(id)).dir=v;gear()}
 function dwAreaDel(id,aid){const c=dwC(detNodeOf(id));c.areas=c.areas.filter(a=>a.id!==aid);gear()}
 function dwSubOf(id,sid){return dwC(detNodeOf(id)).subs.find(s=>s.id===sid)}
 function dwSubOn(id,sid){const s=dwSubOf(id,sid);if(s)s.on=!s.on;gear()}
-function dwSubSet(id,sid,key,v){
-  const s=dwSubOf(id,sid);v=+v;if(!s||!Number.isFinite(v)||v<0)return;
-  if(key.includes(".")){const[a,i]=key.split(".");s[a][+i]=v}else s[key]=v;
+function dwSubSet(id,sid,key,v,el){
+  const s=dwSubOf(id,sid);if(v===""||v==null)return;v=+v;if(!s||!Number.isFinite(v)||v<0)return;
+  if(el&&el.min!==""&&v<+el.min)v=+el.min;if(el&&el.max!==""&&v>+el.max)v=+el.max;
+  if(key.includes(".")){const[a,i]=key.split(".");s[a][+i]=v;if(a==="spd"&&s.spd[0]>s.spd[1])s.spd[+i?0:1]=v}else s[key]=v;
   dwSoon();
 }
 function dwSubDir(id,sid,v){const s=dwSubOf(id,sid);if(s)s.dir=v;gear()}
@@ -15284,10 +15277,10 @@ function dwSubDel(id,sid){
   const saved=dwSaved(d).subs.some(x=>x.id===sid);
   askConfirm(`${i18n("Удалить поддетектор")} «${s.name}»?`,`<ul class="bk-del">
       <li>${i18n(s.kind==="line"?"Пропадут линия и настройки поддетектора.":s.kind==="a2a"?"Пропадут две области и настройки поддетектора.":"Пропадут область и настройки поддетектора.")}</li>
-      <li>${i18n(saved?"Детектор перестанет создавать события этого поддетектора после «Применить».":"Поддетектор ещё не применён: детектор о нём не знает.")}</li>
+      <li>${i18n(saved?"Детектор перестанет создавать события этого поддетектора после «Применить».":"Детектор ещё не работает с этим поддетектором: его нет в применённых настройках.")}</li>
       <li>${i18n("Останутся")}: ${i18n("детектор")} «${escHtml(locName(d))}», ${i18n("другие поддетекторы, события в архиве")}.</li></ul>`,"","Удалить",()=>{
     const i=c.subs.indexOf(s);if(i<0)return;c.subs.splice(i,1);if(dw.subSel===sid)dw.subSel=null;gear();
-    toastAction("dwsub",`${i18n("Консоль убрала поддетектор из черновика")}: «${s.name}»`,i18n("Отменить"),()=>{c.subs.splice(Math.min(i,c.subs.length),0,s);dw.subSel=sid;gear()},10000);
+    toastAction("dwsub",`${i18n("Консоль убрала поддетектор из черновика")}: «${s.name}»`,i18n("Отменить"),()=>{const cc=dwC(detNodeOf(id));if(!cc||cc.subs.some(x=>x.id===sid))return;cc.subs.splice(Math.min(i,cc.subs.length),0,s);if(sel===id)dw.subSel=sid;gear();renderTree()},10000);
   },{html:true,rawTitle:true,typeCount:1});
 }
 // Из дерева и со вкладки камеры: открыть детектор, раскрыть поддетектор; переход по ссылке моргает карточкой поддетектора
@@ -15298,17 +15291,24 @@ function dwSubPick(did,sid,link){
 }
 // Меню поддетектора — по «⋮» в строке дерева и по правой кнопке: те же действия, что в карточке
 function dwSubCtx(did,sid,xy,el){
-  const d=detNodeOf(did),s=d&&dwC(d).subs.find(x=>x.id===sid);if(!s)return;
+  const d=detNodeOf(did);if(!d)return;
+  const s=dwC(d).subs.find(x=>x.id===sid);
+  if(!s){const o=dwSaved(d).subs.find(x=>x.id===sid);if(!o)return;
+    rcShow([tctxItem(i18n("Открыть детектор"),["rcRun","pick",did],null,false,"tctx-default"),tctxItem(i18n("Вернуть поддетектор"),["dwSubBack",did,sid])].join(tctxSep()),xy);rcMark(el);return}
   const open=sel===did&&dw.subSel===sid?[]:[tctxItem(i18n("Открыть"),["rcRun","dwSubPick",did,sid],null,false,"tctx-default")];
   const g=[open,[tctxItem(i18n(s.on?"Выключить":"Включить"),["dwSubTreeOn",did,sid])],[tctxDanger(i18n("Удалить поддетектор…"),["dwSubTreeDel",did,sid])]];
   rcShow(g.filter(x=>x.length).map(x=>x.join("")).join(tctxSep()),xy);rcMark(el);
+}
+function dwSubBack(did,sid){
+  closeTreeCtx();const d=detNodeOf(did),c=dwC(d),o=dwSaved(d).subs.find(x=>x.id===sid);
+  if(!o||c.subs.some(x=>x.id===sid))return;c.subs.push(dwClone(o));dwSubPick(did,sid);renderTree();
 }
 function dwSubMenu(e,did,sid){
   e.preventDefault();e.stopPropagation();
   const b=e.currentTarget,r=b.getBoundingClientRect();
   dwSubCtx(did,sid,{x:r.left,y:r.bottom+4},b.closest(".n"));
 }
-function dwSubTreeOn(did,sid){closeTreeCtx();dwSubPick(did,sid);dwSubOn(did,sid)}
+function dwSubTreeOn(did,sid){closeTreeCtx();dwSubPick(did,sid);dwSubOn(did,sid);renderTree()}
 function dwSubTreeDel(did,sid){closeTreeCtx();dwSubPick(did,sid);dwSubDel(did,sid)}
 function dwSubCreate(did){
   const d=detNodeOf(did);if(!d)return;
@@ -15320,12 +15320,12 @@ function dwLand(){
   if(dw.subNew){const q=r.querySelector(".dw-new-q");if(q&&document.activeElement!==q){q.scrollIntoView({block:"nearest"});q.focus()}}
   if(dw.subFlash&&dw.subSel){dw.subFlash=false;const el=r.querySelector(`[data-dw-sub="${CSS.escape(dw.subSel)}"]`);if(el){el.scrollIntoView({block:"nearest"});el.classList.remove("acc-flash");void el.offsetWidth;el.classList.add("acc-flash")}}
 }
-function dwRevert(id){const d=detNodeOf(id);dw.cfg[dwKey(d)]=dwClone(dwSaved(d));gear();toast("Изменения сброшены")}
+function dwRevert(id){const d=detNodeOf(id);dw.cfg[dwKey(d)]=dwClone(dwSaved(d));if(dwCardRows(d).length)cardRestore();gear();toast("Консоль сбросила изменения")}
 // Рисование и правка на кадре: инструмент — протяжкой; без инструмента — точки и фигуры тянутся мышью
-function dwXY(st,e){const r=st.getBoundingClientRect();return[+Math.min(1,Math.max(0,(e.clientX-r.left)/r.width)).toFixed(4),+Math.min(1,Math.max(0,(e.clientY-r.top)/r.height)).toFixed(4)]}
+function dwXY(st,e){const r=st.getBoundingClientRect();if(!r.width||!r.height)return null;return[+Math.min(1,Math.max(0,(e.clientX-r.left)/r.width)).toFixed(4),+Math.min(1,Math.max(0,(e.clientY-r.top)/r.height)).toFixed(4)]}
 function dwDown(st,e){
   const d=dwD();if(!d||e.button)return;
-  const c=dwC(d),p0=dwXY(st,e),h=e.target.dataset?.h,b=e.target.dataset?.b;
+  const c=dwC(d),p0=dwXY(st,e),h=e.target.dataset?.h,b=e.target.dataset?.b;if(!p0)return;
   let move=null,done=null,reSel=false;
   const subPick=(kd,id)=>{if(/^sub/.test(kd)&&dw.subSel!==id){dw.subSel=id;dw.subNew=false;reSel=true}};
   if(dw.tool){
@@ -15358,7 +15358,7 @@ function dwDown(st,e){
   }
   if(!move){if(reSel){gear();renderTree()}return}
   dw.drag=true;
-  const mm=ev=>{move(dwXY(st,ev));dwPaintGeo();dwSoon()};
+  const mm=ev=>{const q=st.isConnected&&dwD()===d?dwXY(st,ev):null;if(!q){up();return}move(q);dwPaintGeo();dwSoon()};
   const up=()=>{window.removeEventListener("mousemove",mm);window.removeEventListener("mouseup",up);dw.drag=false;done?.();if(dw.tool){dw.tool=null;gear()}else if(reSel){gear();renderTree()}else dwRefresh()};
   window.addEventListener("mousemove",mm);window.addEventListener("mouseup",up);
 }
