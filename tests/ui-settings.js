@@ -16,8 +16,8 @@ UiCheck(async ({ ok, until }) => {
   ok(/Professional/.test(document.body.textContent) && /72785-4410/.test(document.body.textContent), "лицензии — карточки ключей");
   // Журнал
   goApp("log");
-  ok(LOG_ROWS.length === 25 && /^\d\d:\d\d$/.test(LOG_ROWS[0][0]), "журнал с сервера: " + LOG_ROWS.length + ", первое в " + LOG_ROWS[0][0]);
-  ok(LOG_BY_CAT.alarm.length > 0 && LOG_BY_CAT.alarm.every((x) => x[1] === "Тревога"), "по категориям");
+  ok(LOG_ROWS.length > 0 && /^\d\d:\d\d$/.test(LOG_ROWS[0][0]), "журнал с сервера: " + LOG_ROWS.length + ", первое в " + LOG_ROWS[0][0]);
+  ok(LOG_ROWS.some((x) => x[1] === "Тревога"), "категории записей — словами");
   // Хранение: сроки событий и тревог; ключа нет у сервера — поля нет
   sys = "keep";
   goApp("sys");

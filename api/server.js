@@ -717,11 +717,12 @@
       if (!jKindText) jKindText = new Map(journalKinds().map((k) => [k.id, k.label.text]));
       return jKindText.get(id) || "";
     };
-    // Текст для поиска: запись, подпись вида, автор, адрес. Имя объекта — отдельно: его могут переименовать
+    // Текст для поиска: запись, подпись вида, группа, автор, адрес. Имя объекта — отдельно: его могут переименовать
     let jHay = new WeakMap();
+    const J_LEVEL_TEXT = { alarm: "Тревога", error: "Ошибка", audit: "Аудит", info: "Информация", service: "Служебное" };
     const jHayOf = (e) => {
       let h = jHay.get(e);
-      if (h === undefined) { h = normText(`${e.text || ""} ${jKindLabel(e.kind)} ${e.actor || ""} ${(e.fields && e.fields.ip) || ""}`); jHay.set(e, h); }
+      if (h === undefined) { h = normText(`${e.text || ""} ${jKindLabel(e.kind)} ${J_LEVEL_TEXT[jLevelOf(e)]} ${e.actor || ""} ${(e.fields && e.fields.ip) || ""}`); jHay.set(e, h); }
       return h;
     };
     // q: «|» — ИЛИ между группами, пробел — И, кавычки — фраза, «-слово» — без него
@@ -774,7 +775,7 @@
     function jPasser(w) {
       const name = jNameOf();
       const base = (e) => {
-        if (w.from !== null || w.to !== null) { const t = jWhen(e); if ((w.from !== null && t < w.from) || (w.to !== null && t > w.to)) return false; }
+        if (w.from !== null || w.to !== null) { const t = jWhen(e); if ((w.from !== null && !(t >= w.from)) || (w.to !== null && !(t <= w.to))) return false; }
         if (w.source && e.source !== w.source) return false;
         if ((w.cat && !w.cat.has(e.category)) || (w.catNot && w.catNot.has(e.category))) return false;
         return !w.text || jTextOk(w.text, jHayOf(e), name(e.deviceId));
@@ -794,7 +795,7 @@
       const serviceHidden = (w.level && !w.level.has("service")) || (w.levelNot && w.levelNot.has("service"));
       let total = 0, periodTotal = 0;
       for (const e of db.journal) {
-        if (w.from !== null || w.to !== null) { const t = jWhen(e); if ((w.from !== null && t < w.from) || (w.to !== null && t > w.to)) continue; }
+        if (w.from !== null || w.to !== null) { const t = jWhen(e); if ((w.from !== null && !(t >= w.from)) || (w.to !== null && !(t <= w.to))) continue; }
         const lv = jLevelOf(e);
         if (!(serviceHidden && lv === "service")) periodTotal++;
         if (!P.base(e)) continue;
@@ -5188,6 +5189,8 @@
       ["PUT", "/test/kinds/{kind}", (p, q, body) => {
         if (body.kind !== p.kind) return errsProblem([err("VALIDATION_FAILED", "/kind", { keyword: "const", value: p.kind })], "Код вида в теле — не тот, что в пути");
         kinds.put(clone(body));
+        // Подписи видов в поиске журнала — заново
+        jKindText = null; jHay = new WeakMap();
         send("kinds.changed", { payload: { kinds: [p.kind] } });
         return { status: 200, body: clone(kinds.get(p.kind)) };
       }],

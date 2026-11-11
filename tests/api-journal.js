@@ -91,6 +91,11 @@
     const kindSum = f.facets.kind.reduce((s, x) => s + x.count, 0);
     assert.eq(kindSum, f.total - all.filter((e) => ["audit", "info"].includes(levelOf(e)) && !e.kind).length, "сумма по kind — записи с kind");
     assert.ok(f.facets.kind.every((x, i, a) => !i || a[i - 1].count >= x.count), "больше — первыми");
+    const k0 = f.facets.kind[0].value, fk = await env.ok("GET", `/journal/facets?${q}&kind=${encodeURIComponent(k0)}`);
+    assert.eq(JSON.stringify(fk.facets.kind), JSON.stringify(f.facets.kind), "kind — без условия на kind");
+    assert.eq(fk.total, f.facets.kind[0].count, "total — с условием на kind");
+    const bad = await env.list("/journal?limit=1000&from=garbage");
+    assert.eq(bad.length, 0, "from не дата — записей нет, как до 0.8.0");
     const cut = await env.ok("GET", "/journal/facets?facetLimit=1");
     assert.ok(Object.values(cut.facets).every((a) => a.length <= 1), "facetLimit режет");
     const kinds = new Set(all.map((e) => e.kind).filter(Boolean)).size;

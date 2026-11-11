@@ -342,6 +342,15 @@ const STEPS = [
     // повторяемый шаг). Поиск меряется в «Оборудовании», как «Камера» и «Кластер»
     prep: [`if(app!=="hw")goApp("hw")`, `clearTreeQ();goClose()`, `document.getElementById("gq").focus()`],
   },
+  // Журнал (контракт 0.8.0): на large 200 000 записей за 30 суток; отбор и счётчики — на сервере
+  {
+    id: "log-enter", title: "«Журнал»: вход (200 000 записей)", limit: "coarse", prep: [`goApp("hw")`, `pjRes=null;pjQ=pjQ0();pjaClearText()`], act: `goApp("log")`,
+    expect: [[`app==="log"&&!!pjRes&&pjRes.total>0`, "нет записей журнала"], [`!!document.querySelector("#pjList .pj-r[data-id]")`, "нет строк списка"], [`!!document.querySelector("#tree .pjb-sec")`, "нет счётчиков слева"]],
+  },
+  {
+    id: "log-filter", title: "«Журнал»: категория «Аудит»", limit: "coarse", prep: [`if(app!=="log")goApp("log")`, `pjQ=pjQ0();pjaClearText();pjPaint()`], act: `pjToggle("cats","audit")`,
+    expect: [[`!!pjRes&&pjRes.p.level==="audit"&&pjRes.items.every(e=>pjLevelOf(e)==="audit")`, "категория не отобрана"], [`!!document.querySelector('#pjaConds [data-ck="pjToggle:cats:audit"]')`, "нет условия над списком"]],
+  },
   ...BEHAVE_STEPS,
 ];
 const KNOWN = new Set(STEPS.map((s) => s.id));

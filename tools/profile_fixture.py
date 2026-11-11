@@ -69,6 +69,8 @@ RULE_ONLY_KINDS = ["sensor", "relay", "eventsrc", "acfa", "acfa_sensor", "acfa_l
 MISSING = ["startTalk", "listArchiveWatches", "createArchiveWatch", "patchArchiveWatch", "deleteArchiveWatch", "runDeviceOperation", "assistTurn", "createDomain", "deleteDomain", "createVolume", "deleteVolume", "listLicenses", "getDiscovery", "startDiscovery", "stopDiscovery", "syncCatalog"]
 # Выгрузка первой генерации VMS (ADR-0117 § 8, доп. (1) п. 3): треки, маска, плеер, облако, титры событий — позже
 FEATURES = ["exportVideo", "exportFrame", "exportLiveFrame", "exportArea", "exportMultiCamera", "exportMultiPeriod", "exportSingleFile", "exportTranscode", "exportTitles", "exportAudio", "exportPassword"]
+# Поиск в журнале (контракт 0.8.0): q, списки и «скрыть», счётчики по полям
+FEATURES += ["journalSearch"]
 # «Автоматизация» по части каталога, как у w2c: этих действий система не исполняет, запись — только на минуты
 # Команды видов (UnitKind.actions, ruleOnly), которых в профиле нет; действия системы (reference.ruleActions) — ACTIONS_OFF: к ним
 # добавлены ntf.push и client.*, которых у профиля нет, но команды видов с теми же кодами (program сервера) остаются

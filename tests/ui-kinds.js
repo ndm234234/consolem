@@ -349,17 +349,27 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   goTab("gen");
   ok(/Метки сервера/.test(main().textContent), "метки в карточке сервера");
 
-  // Журнал: отбор на сервере
+  // Журнал: поиск, условия и счётчики — на сервере (контракт 0.8.0)
   goApp("log");
   logGo("all");
-  ok(!!document.querySelector(".log-filter"), "отбор журнала");
-  const rowsAll = (await API.get("/journal")).items.length;
-  logSet("limit", "50");
-  logSet("limit", "");
-  logSet("source", "backend");
-  ok(await until(() => logRes && logRes.items.every((e) => e.source === "backend") && logRes.items.length < rowsAll), "подсистема отобрана на сервере");
-  logReset();
-  ok(await until(() => logRes === null), "отбор снят");
+  ok(await until(() => pjRes && document.getElementById("pjList") && pjRes.fac), "журнал: список и счётчики с сервера");
+  ok(pjRes.p.levelNot === "service" && pjRes.base >= pjRes.total, "служебные скрыты, «из M» — события периода");
+  pjToggle("cats", "audit");
+  ok(await until(() => pjRes.p.level === "audit" && pjRes.items.every((e) => pjLevelOf(e) === "audit")), "категория отобрана на сервере");
+  ok(!!document.querySelector('#pjaConds [data-ck="pjToggle:cats:audit"]'), "условие — чипом над списком");
+  pjaIn = "Вход";
+  pjaCommitText();
+  ok(await until(() => pjRes.p.q === "Вход" && pjRes.items.every((e) => /вход/i.test(e.text + pjKindName(e.kind)))), "текст — в q");
+  pjaResetAll();
+  ok(await until(() => !pjRes.p.level && !pjRes.p.q && pjRes.p.levelNot === "service"), "«Сбросить всё»: исходный вид");
+  const jev = pjRes.items.find((e) => e.deviceId);
+  pjSelId = jev.id;
+  pjSelEv = jev;
+  pjMountDet();
+  ok(await until(() => document.querySelector(`#pjDet .pj-nr.on[data-v="${jev.id}"]`)), "«Рядом» — страница вокруг записи с сервера");
+  pjAct("inc", jev.deviceId, "objs");
+  ok(await until(() => pjRes.p.deviceId === jev.deviceId && pjRes.p.deviceMatch === "exact" && pjRes.items.every((e) => e.deviceId === jev.deviceId)), "«=» у объекта — условие deviceId");
+  pjaResetAll();
 
   // Учётки потоков: пароль один раз, удаление с вводом числа
   goApp("acc");
