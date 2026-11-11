@@ -3055,7 +3055,7 @@ body.pj-hdlog .gojump{display:none}
 .dw-k{display:flex;flex-direction:column;gap:2px;padding:8px 12px;border:1px solid var(--ln);border-left:4px solid var(--c);border-radius:8px;background:var(--p2);min-width:0}
 .dw-k.b0{--c:var(--mu)}.dw-k.b1{--c:var(--rd)}.dw-k.fc{--c:var(--rd);border-left-style:dashed}
 .dw-k.off{opacity:.6}
-.dw-k-l{font-size:12px;color:var(--mu);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dw-k-l{font-size:12px;color:var(--mu);overflow-wrap:anywhere;text-wrap:balance}
 .dw-k-v{display:flex;align-items:center;gap:8px}
 .dw-k-v b{font-size:26px;line-height:1.1;font-variant-numeric:tabular-nums}
 .dw-k-s{font-size:12px;color:var(--mu)}
@@ -14945,7 +14945,7 @@ function dwPrevHtml(d){
   const k=dwKindOf(d);
   if(k==="other")return`<div class="dw-prev-h"><b>${i18n("Сработки")}</b></div><p class="sub">${i18n("Для этого вида превью пока нет.")}</p>`;
   const pv=dw.pv||"cmp";
-  const tabs=`<span class="dw-seg dw-pv">${[["cmp","До и после применения"],["live","Лента сработок"]].map(([v,l])=>`<button type="button" class="${pv===v?"on":""}" ${onEv("click",["dwPv",v])}>${i18n(l)}</button>`).join("")}</span>`;
+  const tabs=`<span class="dw-seg dw-pv">${[["cmp","Сработки до и после новых настроек"],["live","Лента сработок"]].map(([v,l])=>`<button type="button" class="${pv===v?"on":""}" ${onEv("click",["dwPv",v])}>${i18n(l)}</button>`).join("")}</span>`;
   if(pv==="live"){
     const s=dwSaved(d),last=dwFiresIn(s,k,dw.T-DW_T,dw.T).reverse();
     return`<div class="dw-prev-h">${tabs}<span class="sub">${i18n("Сработки детектора с применёнными настройками за последний час. Новые сработки появляются слева.")}</span></div>
@@ -14957,8 +14957,9 @@ function dwPrevHtml(d){
     <div data-dw-cmp>${dwCmpHtml(d,C)}</div>
     <div data-dw-cstrip="${C.strip.length}">${dwCmpStripHtml(d,C)}</div>`;
 }
-// «До и после применения». Верхний ряд — сработки прежних настроек за период до применения: эталон, он не меняется.
-// Нижний ряд заполняется сработками с момента применения. Прогноз: число сработок / прошедшее время × период
+// «Сработки до и после новых настроек». Верхний ряд — сработки прежних настроек за период до «Применить»: эталон, он не
+// меняется. Нижний ряд заполняется сработками новых настроек с момента «Применить». Одна пара терминов во всей вкладке:
+// «прежние» (до «Применить» — «текущие») и «новые» настройки. Прогноз: число сработок / прошедшее время × период
 function dwCmpData(d){
   const k=dwKindOf(d),ap=dw.ap[dwKey(d)],s=dwSaved(d),P=dw.per*60,T=dw.T;
   const A0=(ap?ap.T:T)-P,before=dwFiresIn(ap?ap.prev:s,k,A0,A0+P);
@@ -14977,11 +14978,11 @@ function dwCmpHtml(d,C){
   // Плитки: цвет полосы слева — тот же, что у ряда на шкале
   const tile=(cls,l,n,s,x="")=>`<div class="dw-k ${cls}"><span class="dw-k-l">${l}</span><span class="dw-k-v"><b>${n}</b>${x}</span><span class="dw-k-s">${s}</span></div>`;
   const kpi=`<div class="dw-kpi">
-    ${tile("b0",ap?i18n("До применения"):`${i18n("Последние")} ${per} ${i18n("мин")}`,nb,ap?`${sw(nb)} ${i18n("за")} ${per} ${i18n("мин")}`:sw(nb))}
-    ${ap?tile("b1",i18n("После применения"),after.length,`${sw(after.length)} ${i18n("за")} ${dwDur(el)}`):tile("b1 off",i18n("После применения"),"—",i18n("Применить настройки через план"))}
-    ${!ap?tile("fc off",`${i18n("Прогноз на")} ${per} ${i18n("мин")}`,"—",i18n("Появится после применения"))
+    ${tile("b0",i18n(ap?"Прежние настройки":"Текущие настройки"),nb,`${sw(nb)} ${i18n("за")} ${per} ${i18n("мин")}`)}
+    ${ap?tile("b1",i18n("Новые настройки"),after.length,`${sw(after.length)} ${i18n("за")} ${dwDur(el)}`):tile("b1 off",i18n("Новые настройки"),"—",i18n("Применить настройки через план"))}
+    ${!ap?tile("fc off",`${i18n("Прогноз на")} ${per} ${i18n("мин")}`,"—",i18n("Появится после «Применить»"))
       :fc==null?tile("fc off",`${i18n("Прогноз на")} ${per} ${i18n("мин")}`,"…",`${i18n("Появится через")} ${Math.ceil(30-el)} ${i18n("с")}`)
-      :tile("fc",i18n(el<P?`Прогноз на ${per} мин`:`Итог за ${per} мин`),(el<P?"≈":"")+fc,i18n(dl<0?"меньше, чем до применения":dl>0?"больше, чем до применения":"столько же, сколько до применения"),
+      :tile("fc",i18n(el<P?`Прогноз на ${per} мин`:`Итог за ${per} мин`),(el<P?"≈":"")+fc,i18n(dl<0?"меньше, чем с прежними настройками":dl>0?"больше, чем с прежними настройками":"столько же, сколько с прежними настройками"),
         `<span class="dw-dl ${dl<0?"dn":dl>0?"up":""}">${dl>0?"+":dl<0?"−":"±"}${Math.abs(dl)}</span>`)}
   </div>`;
   const nowX=ap&&el<P?+(el/P*100).toFixed(2):null;
@@ -14990,16 +14991,16 @@ function dwCmpHtml(d,C){
     <div class="dw-rt${empty?" off":""}"><svg width="100%" height="32" preserveAspectRatio="none">
       <defs><pattern id="dwFc" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2" height="6" fill="var(--rd)" opacity=".28"/></pattern></defs>${body}</svg></div>`;
   return kpi+`<div class="dw-rows">
-    ${row("b0",i18n("До"),sp(A0),A0,ticks(before,A0,"var(--mu)"))}
-    ${row("b1",i18n("После"),ap?sp(A1):"—",ap?A1:null,ap?ticks(after,A1,"var(--rd)")+fcBand:"",!ap)}
+    ${row("b0",i18n(ap?"Прежние":"Текущие"),sp(A0),A0,ticks(before,A0,"var(--mu)"))}
+    ${row("b1",i18n("Новые"),ap?sp(A1):"—",ap?A1:null,ap?ticks(after,A1,"var(--rd)")+fcBand:"",!ap)}
     <span></span><div class="dw-tl-x">${[0,.25,.5,.75,1].map(p=>`<span>${p?`+${Math.round(p*per)} ${i18n("мин")}`:"0"}</span>`).join("")}</div>
   </div>
-  <div class="dw-lg"><span><i class="b0"></i>${i18n("сработка до применения")}</span><span><i class="b1"></i>${i18n("сработка после применения")}</span>${nowX!=null?`<span><i class="fc"></i>${i18n("прогноз до конца периода")}</span>`:""}${ap?"":`<span class="sub">${i18n("Нижний ряд начнёт заполняться после «Применить».")}</span>`}</div>`;
+  <div class="dw-lg"><span><i class="b0"></i>${i18n(ap?"сработка с прежними настройками":"сработка с текущими настройками")}</span><span><i class="b1"></i>${i18n("сработка с новыми настройками")}</span>${nowX!=null?`<span><i class="fc"></i>${i18n("прогноз до конца периода")}</span>`:""}${ap?"":`<span class="sub">${i18n("Нажать «Применить», чтобы сравнить сработки текущих и новых настроек.")}</span>`}</div>`;
 }
 function dwCmpStripHtml(d,C){
   const{k,ap,s,strip}=C;
-  const h=`<h4 class="dw-cs-h">${i18n(ap?"Сработки после применения":`Сработки за последние ${dw.per} мин`)}<span class="sub">${i18n("новые слева")}</span></h4>`;
-  return`<section class="dw-cs">${h}${strip.length?dwStripHtml(strip,s,k,20):`<p class="sub">${i18n(ap?"После применения детектор ещё не сработал.":"За этот период детектор не сработал.")}</p>`}</section>`;
+  const h=`<h4 class="dw-cs-h">${i18n(ap?"Сработки с новыми настройками":`Сработки за последние ${dw.per} мин`)}<span class="sub">${i18n("новые слева")}</span></h4>`;
+  return`<section class="dw-cs">${h}${strip.length?dwStripHtml(strip,s,k,20):`<p class="sub">${i18n(ap?"С новыми настройками детектор ещё не сработал.":"За этот период детектор не сработал.")}</p>`}</section>`;
 }
 function dwDur(sec){sec=Math.floor(sec);return sec<60?`${sec} ${i18n("с")}`:`${Math.floor(sec/60)} ${i18n("мин")}${sec%60?` ${sec%60} ${i18n("с")}`:""}`}
 // ── Панель настроек ──
@@ -15156,7 +15157,7 @@ function dwPlan(id){
   const k=dwKindOf(n),P=dw.per*60,nb=dwFiresIn(dwSaved(n),k,dw.T-P,dw.T).length;
   openBulkModal(`${i18n("План")}: «${escHtml(locName(n))}», ${d.length} ${i18n(plural(d.length,"изменение|изменения|изменений"))}`,
     `<table class="bk-table"><thead><tr><th>#</th><th>${i18n("Параметр")}</th><th>${i18n("Было")}</th><th>${i18n("Станет")}</th></tr></thead><tbody>${rows}</tbody></table>
-     <p class="sub" style="margin:10px 0 0">${i18n("Детектор начнёт работать с новыми настройками после «Применить». Под кадром «До и после применения» покажет сработки до и после этого момента.")} ${i18n("За последние")} ${dw.per} ${i18n("мин")}: ${nb} ${i18n(plural(nb,"сработка|сработки|сработок"))}.</p>
+     <p class="sub" style="margin:10px 0 0">${i18n("Детектор начнёт работать с новыми настройками после «Применить». Вкладка «Сработки до и после новых настроек» под кадром покажет сработки прежних и новых настроек.")} ${i18n("За последние")} ${dw.per} ${i18n("мин")}: ${nb} ${i18n(plural(nb,"сработка|сработки|сработок"))}.</p>
      <p class="sub" data-plan-stub>${i18n("Заглушка прототипа 53: консоль не отправляет эти настройки на сервер, прототип хранит их в памяти страницы.")}</p>`,
     `<button type="button" class="btn" ${onEv("click",["closeBulkModal"])}>${i18n("Назад")}</button><button type="button" class="btn pri" ${onEv("click",["closeBulkModal"],["dwApply",`${id}`])}>${i18n("Применить")} (${d.length})</button>`,"bbox-wide");
 }
