@@ -2891,6 +2891,51 @@ body.pj-hdlog .gojump{display:none}
 .pja-hd .pja-sug{min-width:min(560px,90vw)}
 .pj.pj-nohd{padding-top:12px}
 .pj-r.pj-r-more{cursor:default;background:none}
+
+/* ── Вкладка «Просмотр»: проигрыватель, шкала под видео, панель вкладками ── */
+.vw{container-type:inline-size;display:grid;gap:12px;min-width:0}
+.vw-player{display:grid;gap:8px;min-width:0;background:var(--p1,var(--p2));border:1px solid var(--ln);border-radius:10px;padding:10px}
+.vw .vw-vid{max-width:none;width:100%;margin:0;border-radius:6px}
+.vw-a .vw-vid{width:min(100%,calc((100vh - 430px)*16/9));min-width:min(100%,480px);justify-self:center}
+.vw .live-view .live-note{top:36px}
+.vw-mode{position:absolute;left:8px;top:8px;z-index:3;display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#fff;background:#000b;padding:3px 8px;border-radius:6px;pointer-events:none;letter-spacing:.02em}
+.vw-mode[hidden]{display:none}.vw-mode.arc{background:#1f4e8ccc}
+.vw-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#e74c3c;box-shadow:0 0 0 2px #e74c3c44}
+.vw-bar{gap:8px}.vw-bar .btn{display:inline-flex;align-items:center;gap:5px}
+.vw-grow{flex:1 1 0}.vw-sep{width:1px;align-self:stretch;background:var(--ln);margin:0 2px}
+.vw-golive{border-color:#e74c3c88}
+.vw-tl{display:grid;gap:4px}
+.vw-tl .tl{height:44px;margin:2px 0 0}
+.vw-tl .tl-ax{display:flex;justify-content:space-between}
+.vw-tlh{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.vw-seg{display:inline-flex;border:1px solid var(--ln);border-radius:7px;overflow:hidden}
+.vw-segb{background:transparent;border:0;color:inherit;font:inherit;font-size:12px;padding:4px 10px;cursor:pointer}
+.vw-segb+.vw-segb{border-left:1px solid var(--ln)}
+.vw-segb[aria-pressed="true"]{background:var(--bl);color:#fff}
+.vw-src{display:inline-flex;gap:6px;align-items:center;margin:0;font-size:12px}.vw-src select{width:auto}
+.vw-lgs{display:inline-flex;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--mu,#8a94a3)}
+.vw-lg{display:inline-flex;align-items:center;gap:4px}
+.vw-lg i{position:static;display:inline-block;width:12px;height:8px;border-radius:2px}
+.vw-lg i.tl-e{width:2px;height:10px}.vw-lg i.tl-m{width:3px;height:10px}
+.vw-tlhint{margin:0;font-size:11px}
+.vw-panel{border:1px solid var(--ln);border-radius:10px;min-width:0;display:flex;flex-direction:column;background:var(--p1,var(--p2))}
+.vw-tabs{display:flex;gap:2px;border-bottom:1px solid var(--ln);padding:0 8px;flex:none;overflow-x:auto}
+.vw-tab{background:transparent;border:0;border-bottom:2px solid transparent;color:inherit;font:inherit;font-size:13px;padding:9px 10px 7px;cursor:pointer;white-space:nowrap;opacity:.75}
+.vw-tab[aria-selected="true"]{border-bottom-color:var(--bl);opacity:1;font-weight:600}
+.vw-cnt{font-size:11px;font-weight:400;color:var(--mu,#8a94a3)}
+.vw-panes{padding:10px 12px;min-height:0;overflow:auto;scrollbar-gutter:stable}
+.vw [hidden]{display:none!important}
+.vw-ph{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--mu,#8a94a3);margin:2px 0 6px}
+.vw-live-feed{margin-bottom:12px}
+.vw-pane .tl-ev{margin:0}
+.vw-relays td{vertical-align:middle}.vw .btn{white-space:nowrap}.vw-relays td.ca-x{display:flex;flex-wrap:wrap;gap:4px}
+/* Вариант B: панель справа от видео, своя прокрутка; узко — под видео */
+.vw-b{grid-template-columns:minmax(0,1fr) minmax(300px,360px);align-items:stretch}
+.vw-b .vw-vid{width:100%}
+.vw-b .vw-panel{max-height:calc(100vh - 210px);position:sticky;top:0}
+.vw-b .vw-relays td.ca-x{white-space:normal}
+@container (max-width:900px){.vw-b{grid-template-columns:minmax(0,1fr)}.vw-b .vw-panel{max-height:none;position:static}}
+@media (prefers-reduced-motion:reduce){.vw *{transition:none!important}}
 </style>
 <!-- ONE PSIM: мост по ONE.PSIM.PrototypeKit, подключён после стилей прототипа -->
 <link rel="stylesheet" href="assets/one-psim/bridge.css">
@@ -15859,6 +15904,7 @@ function pbDrop(v){
   if(liveEl&&lv===v){liveEl.onended=liveEl.onerror=liveEl.ontimeupdate=liveEl.onloadedmetadata=null;if(liveEl.hasAttribute("src")){liveEl.removeAttribute("src");liveEl.load()}}
 }
 function pbHead(v,ms){
+  v.tlHeadMs=ms;vwModeShow(v,ms);
   const el=document.querySelector("#main [data-tl-head]");if(!el||!v.tl)return;
   el.hidden=false;el.style.left=`${tlPos(v.tl,ms)}%`;
 }
@@ -16547,9 +16593,10 @@ function viewFill(){
   const n=find(v.id)?.n;if(!n)return;
   const put=(sel,html)=>{const el=document.querySelector(`#main ${sel}`);if(el&&el._html!==html){const keep=el.querySelector("input")?.value;el.innerHTML=html;el._html=html;if(keep){const i=el.querySelector("input");if(i)i.value=keep}}};
   put("[data-feed]",liveFeedHtml(v));
-  put("[data-relay-card]",relayCardHtml(v));
+  put("[data-relay-card]",vwRelayHtml(v));
   const tk=document.querySelector("#main [data-talk]");if(tk)tk.hidden=!talkSpk(v)&&!talk;
-  if(v.tl)put("[data-tl]",tlCardHtml(v,n));
+  if(v.tl){put("[data-tl]",vwTlHtml(v,n));put("[data-tl-ev]",vwTlEvHtml(v));if(v.pb&&v.tlHeadMs)pbHead(v,v.tlHeadMs)}
+  vwCounts(v);vwModeShow(v);
   put("[data-holds]",holdsCardHtml(v));
   put("[data-marks]",marksCardHtml(v));
   const tt=document.querySelector("#main [data-live-titles]");
@@ -16657,21 +16704,94 @@ function liveFrameHtml(n,inner=""){
   return`<div class="vid live-frame" data-live="${escHtml(n?.id||"")}" ${off?"":"data-live-auto=\"1\""}>${off?"":liveSceneSvg()}${inner}<span class="live-note"></span>${liveActsHtml()}</div>`;
 }
 // Закладка «Просмотр»: одна камера, старт и стоп рукой. Выбор потока и сети не хранится
+// Вкладка «Просмотр»: один проигрыватель для живого и архива. Шкала — сразу под видео, щелчок по шкале — архив,
+// «Смотреть живое» — назад. События, отметки, удержания и реле — вкладками в панели (VW_LAYOUT: "a" — под шкалой,
+// "b" — справа от видео). Разметка постоянна, данные пишет viewFill — как раньше
+const VW_LAYOUT="a";
+let vwTab="ev";
 function camViewHtml(n){
   const streams=camStreams(n).map(s=>`<option value="${escHtml(s.id)}" ${s.online===false?"disabled":""}>${escHtml(s.name)}${s.res?` · ${escHtml(s.res)}`:""}${s.online===false?` · ${i18n("нет сигнала")}`:""}</option>`).join("");
-  return card("Просмотр",`<div class="vid live-frame live-view" data-live="${escHtml(n.id)}" data-live-view="1"><div class="live-titles" data-live-titles hidden></div><span class="live-note"></span>${liveActsHtml()}</div>
-    <div class="live-row"><button type="button" class="btn s pri" data-live-go ${onEv("click",["liveToggle"])}>${i18n("Смотреть")}</button>
+  const ptz=!!n.ptz&&can("putUnitPtz");
+  const exp=can("createExport")?`<span class="vw-sep" aria-hidden="true"></span>${can("feature:exportLiveFrame")?`<button type="button" class="btn s" data-exp-live title="${i18n("Сохранить кадр живого видео")}" ${onEv("click",["expFromCam",n.id,"live"])}>${lu("camera",14)}${i18n("Кадр")}</button>`:""}${can("feature:exportArea")?`<button type="button" class="btn s" data-exp-area-go title="${i18n("Выбрать область кадра")}" ${onEv("click",["expCropStart",n.id])}>${i18n("Область")}</button>`:""}<button type="button" class="btn s" data-exp-cam-go ${onEv("click",["expFromCam",n.id,"video"])}>${lu("download",14)}${i18n("Экспорт…")}</button>`:"";
+  const mark=can("createUnitBookmark")?`<button type="button" class="btn s" data-vw-mark ${onEv("click",["vwMarkGo"])}>${i18n("Отметить")}</button>`:"";
+  const player=`<div class="vw-player">
+    <div class="vid live-frame live-view vw-vid" data-live="${escHtml(n.id)}" data-live-view="1">${ptz?cvSimHtml(n)+cvOnVidHtml(n):""}<div class="live-titles" data-live-titles hidden></div><span class="live-note"></span><span class="vw-mode" data-vw-mode hidden></span>${liveActsHtml()}</div>
+    <div class="vw-bar live-row">
+      <button type="button" class="btn s pri" data-live-go ${onEv("click",["liveToggle"])}>${i18n("Смотреть")}</button>
+      <button type="button" class="btn s vw-golive" data-vw-golive hidden ${onEv("click",["vwGoLive"])}><i class="vw-dot" aria-hidden="true"></i>${i18n("Смотреть живое")}</button>
       <label>${i18n("Поток")} <select data-live-stream ${onEv("change",["liveStreamSet",onEv.value])}><option value="">${i18n("Под размер окна")}</option>${streams}</select></label>
       <label>${i18n("Сеть")} <select data-live-net ${onEv("change",["liveNetSet",onEv.value])}><option value="local">${i18n("Из локальной сети")}</option><option value="outside">${i18n("Извне")}</option></select></label>
-      <button type="button" class="btn s" data-talk hidden ${onEv("click",["talkToggle",`${n.id}`])}>${i18n("Говорить")}</button><span class="sub" data-talk-state></span>
-      <span class="sub" data-live-state role="status" aria-live="polite"></span>
-      ${can("createExport")?`<button type="button" class="btn s" data-exp-cam-go ${onEv("click",["expFromCam",n.id,"video"])}>${lu("download")}${i18n("Экспорт…")}</button>${can("feature:exportLiveFrame")?`<button type="button" class="btn s" data-exp-live ${onEv("click",["expFromCam",n.id,"live"])}>${i18n("Кадр сейчас")}</button>`:""}${can("feature:exportArea")?`<button type="button" class="btn s" data-exp-area-go ${onEv("click",["expCropStart",n.id])}>${i18n("Выбрать область кадра")}</button>`:""}`:""}</div>`)
-    +(n.ptz&&can("putUnitPtz")?card("Поворот",`${ptzPadHtml(n)}<p class="sub">${i18n("Камера движется, пока вы держите кнопку")}</p>`):"")
-    +(can("listJournal")?card("События",`<div data-feed></div>`):"")
-    +`<div data-relay-card></div>`
-    +(can("getUnitTimeline")?card("Шкала времени",`<div data-tl></div>`):"")
-    +(can("listUnitHolds")?card("Удержания",`<div data-holds></div>`):"")
-    +(can("listUnitBookmarks")?card("Отметки",`<div data-marks></div>`):"");
+      <button type="button" class="btn s" data-talk hidden ${onEv("click",["talkToggle",`${n.id}`])}>${lu("mic",14)}${i18n("Говорить")}</button><span class="sub" data-talk-state></span>
+      <span class="vw-grow"></span>${mark}${exp}
+    </div>
+    ${can("getUnitTimeline")?`<div class="vw-tl" data-tl></div>`:""}
+  </div>`;
+  const tabs=[["ev","События",can("listJournal")],["marks","Отметки",can("listUnitBookmarks")],["holds","Удержания",can("listUnitHolds")],["relay","Реле",can("runUnitAction")]].filter(t=>t[2]);
+  if(!tabs.some(t=>t[0]===vwTab))vwTab=tabs[0]?.[0]||"ev";
+  const pane=(k,html)=>`<div class="vw-pane" role="tabpanel" data-vw-pane="${k}" ${vwTab===k?"":"hidden"}>${html}</div>`;
+  const panel=tabs.length?`<section class="vw-panel" aria-label="${i18n("События и действия")}">
+    <div class="vw-tabs" role="tablist">${tabs.map(([k,l])=>`<button type="button" role="tab" class="vw-tab" data-vw-tab="${k}" aria-selected="${vwTab===k}" ${onEv("click",["vwTabSet",k])}>${i18n(l)} <span class="vw-cnt" data-vw-cnt="${k}"></span></button>`).join("")}</div>
+    <div class="vw-panes">
+    ${pane("ev",`<div class="vw-live-feed" data-vw-feed-wrap hidden><div class="vw-ph">${i18n("Пока вы смотрите")}</div><div data-feed></div></div><div class="vw-ph" data-vw-tlev-h>${i18n("За период на шкале")}</div><div data-tl-ev></div>`)}
+    ${pane("marks",`<div data-marks></div>`)}
+    ${pane("holds",`<div data-holds></div>`)}
+    ${pane("relay",`<div data-relay-card></div>`)}
+    </div></section>`:"";
+  return`<div class="vw vw-${VW_LAYOUT}" data-vw>${player}${panel}</div>`;
+}
+function vwTabSet(k){
+  vwTab=k;
+  document.querySelectorAll("#main [data-vw-tab]").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.vwTab===k)));
+  document.querySelectorAll("#main [data-vw-pane]").forEach(p=>p.hidden=p.dataset.vwPane!==k);
+}
+function vwMarkGo(){vwTabSet("marks");const i=document.querySelector("#main [data-mark-note]");if(i){i.focus();i.closest(".vw-pane")?.scrollIntoView({block:"nearest",behavior:"smooth"})}}
+function vwGoLive(){if(lv){lv.tlHeadMs=null;liveStart()}}
+// Метка режима поверх видео: «Живое» (красная точка) или «Архив» с моментом; «Смотреть живое» — только в архиве
+function vwModeShow(v,ms){
+  const el=document.querySelector("#main [data-vw-mode]");if(!el||!v)return;
+  const going=v.state!=="idle"&&v.state!=="refused";
+  const pb=!!v.pb,at=ms??pbMoment(v);
+  el.hidden=!going;el.classList.toggle("arc",pb);
+  el.innerHTML=pb?`${lu("clock",13)}${i18n("Архив")}${at?` · ${escHtml(tlDate(at))}:${String(new Date(at).getSeconds()).padStart(2,"0")}`:""}`:`<i class="vw-dot" aria-hidden="true"></i>${i18n("Живое")}`;
+  const gl=document.querySelector("#main [data-vw-golive]");if(gl)gl.hidden=!pb;
+  if(!pb){const h=document.querySelector("#main [data-tl-head]");if(h)h.hidden=true}
+}
+// Шкала: окно, подсистема и легенда — над полосой; список событий — в панели «События»
+function vwTlHtml(v,n){
+  const t=v.tl,fix=can("fetchUnitArchive")&&n.arch?tlFixable(t):[];
+  const lg=(c,l)=>`<span class="vw-lg"><i class="${c}"></i>${i18n(l)}</span>`;
+  return`<div class="vw-tlh"><div class="vw-seg" role="group" aria-label="${i18n("Период на шкале")}">${TL_WINDOWS.map(([k,l])=>`<button type="button" class="vw-segb" aria-pressed="${t.win===k}" data-tl-win="${k}" ${onEv("click",["tlWin",k])}>${i18n(l)}</button>`).join("")}</div>
+      <label class="vw-src">${i18n("Подсистема")} <select data-tl-source ${onEv("change",["tlSource",onEv.value])}><option value="">${i18n("Все")}</option>${t.sources.map(s=>`<option value="${escHtml(s)}" ${s===t.source?"selected":""}>${escHtml(s)}</option>`).join("")}</select></label>
+      <span class="sub">${t.busy?i18n("Загрузка…"):t.spans.length?"":i18n("За этот период записей нет")}</span>
+      <span class="vw-grow"></span>
+      <span class="vw-lgs">${lg("tl-s","Запись")}${lg("tl-s bak","Только в резервном")}${lg("tl-s dev","На устройстве")}${lg("tl-e","Событие")}${lg("tl-m","Отметка")}</span></div>
+    ${tlBarHtml(v)}
+    <p class="vw-tlhint sub">${i18n("Щёлкнуть по шкале, чтобы смотреть запись с этого момента")}</p>
+    ${t.next?`<button type="button" class="lk" data-tl-more ${onEv("click",["tlMore"])}>${i18n("Показать дальше")}</button>`:""}
+    ${t.err?`<div class="nt bk-warn">${escHtml(t.err)}</div>`:""}
+    ${t.gone.map(g=>`<div class="nt" data-tl-gone>${tlGoneWords(g)}</div>`).join("")}
+    ${fix.map((x,i)=>`<div class="ln"><div>${i18n("Только в резервном или на устройстве")}: ${escHtml(tlDate(x.from))}–${escHtml(tlClock(x.to))}</div><button type="button" class="btn s" data-tl-fix ${onEv("click",["tlFetch",i])}>${i18n("Закрепить")}</button></div>`).join("")}`;
+}
+function vwTlEvHtml(v){
+  const t=v.tl;if(!t)return"";
+  const ev=t.ev.map(e=>{const late=Date.parse(e.at)-eventMs(e)>=2000;
+    return`<li class="tl-go" ${onEv("click",["pbEvent",eventMs(e)])}><span class="sub">${escHtml(tlDate(eventMs(e)))}</span> ${escHtml(e.text)}${late?` <span class="sub">${i18n("записано в")} ${escHtml(tlClock(Date.parse(e.at)))}</span>`:""}</li>`}).join("");
+  return(ev?`<ul class="tl-ev">${ev}</ul>`:`<p class="sub">${i18n(t.busy?"Загрузка…":"За этот период событий нет")}</p>`)
+    +(t.trunc?`<p class="sub">${i18n("Показаны последние 200 событий")}</p>`:"")+(t.withheld?`<p class="sub">${i18n("Скрыто правами")}: ${t.withheld}</p>`:"");
+}
+function vwRelayHtml(v){
+  if(!can("runUnitAction"))return"";
+  const rows=(v.kids||[]).filter(d=>d.type==="relay").map(d=>{
+    const off=d.online===false?"disabled":"";
+    return`<tr data-relay="${escHtml(d.id)}"><td>${escHtml(locName(d))}</td><td class="ca-x"><button type="button" class="btn s" ${off} ${onEv("click",["relaySet",`${d.id}`,true])}>${i18n("Замкнуть")}</button> <button type="button" class="btn s" ${off} ${onEv("click",["relaySet",`${d.id}`,false])}>${i18n("Разомкнуть")}</button> <button type="button" class="btn s" ${off} ${onEv("click",["relaySet",`${d.id}`,true,1000])}>${i18n("Импульс 1 с")}</button></td></tr>`;
+  }).join("");
+  return rows?`<table class="ca-tbl vw-relays"><tbody>${rows}</tbody></table>`:`<p class="sub">${i18n("У камеры нет реле")}</p>`;
+}
+function vwCounts(v){
+  const set=(k,nm)=>{const el=document.querySelector(`#main [data-vw-cnt="${k}"]`);if(el)el.textContent=nm?String(nm):""};
+  set("ev",(v.tl?.ev?.length||0)+(v.feed?.length||0));set("marks",v.marks?.length||0);set("holds",v.holds?.length||0);
+  set("relay",(v.kids||[]).filter(d=>d.type==="relay").length);
+  const fw=document.querySelector("#main [data-vw-feed-wrap]");if(fw)fw.hidden=!v.feedOn;
 }
 // Потоки камеры: первый — основной, Device.res и Device.fps — это он
 function camStreams(n){return n?.streams?.length?n.streams:[{id:"main",name:"Основной"}]}
