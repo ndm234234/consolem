@@ -57,7 +57,7 @@ try {
   await sleep(500);
   await ev(`window.uiCam=devicePool.find(n=>n.type==="camera"&&n.online!==false&&!n._row)||devicePool.find(n=>n.type==="camera"&&n.online!==false);pick(uiCam.id,{force:true});null`);
   await until(`!uiCam._row&&sel===uiCam.id`);
-  ok(await click(`#main .tab:nth-child(2)`), "закладка «Просмотр»: мышью");
+  ok(await click(`#main .tab[data-tab="view"]`), "закладка «Просмотр»: мышью");
   ok(await until(`tab==="view"`), "открылась");
   ok(await click(`[data-live-go]`), "«Смотреть»: мышью");
   ok(await until(`/Идёт/.test(document.querySelector("[data-live-state]").textContent)`), "идёт: " + (await ev(`document.querySelector("[data-live-state]").textContent`)));
@@ -75,7 +75,7 @@ try {
   if (await ev(`!!uiPtz`)) {
     await ev(`pick(uiPtz.id,{force:true});null`);
     await until(`!uiPtz._row&&sel===uiPtz.id`);
-    await click(`#main .tab:nth-child(2)`);
+    await click(`#main .tab[data-tab="view"]`);
     await until(`tab==="view"`);
     const b = await box(`[data-cv-onvid] .cv-hold`);
     await cmd("Input.dispatchMouseEvent", { type: "mouseMoved", x: b.x, y: b.y });
@@ -88,7 +88,7 @@ try {
   }
   await ev(`window.uiSpk=devicePool.find(n=>n.type==="camera"&&n.name==="Главный вход");pick(uiSpk.id,{force:true});null`);
   await until(`!uiSpk._row&&sel===uiSpk.id`);
-  await click(`#main .tab:nth-child(2)`);
+  await click(`#main .tab[data-tab="view"]`);
   await until(`tab==="view"&&!!document.querySelector("[data-tl-bar]")&&!document.querySelector("[data-talk]").hidden`);
   ok(await click(`[data-talk]`), "«Говорить»: мышью");
   ok(await until(`talk?.sess&&talk.pc.connectionState==="connected"`), "разговор соединён: " + (await ev(`document.querySelector("[data-talk-state]").textContent`)));

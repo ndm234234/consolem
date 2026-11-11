@@ -11843,7 +11843,7 @@ function tabsForHand(n){
 
   // У папки одно окно содержимого, как в Проводнике: вложенные — переключателем, а добавление — отдельным шагом
   if(n.type==="folder")return[];
-  if(n.type==="camera")return[["gen","Подключение"]].concat(can("startUnitLive")?[["view","Просмотр"]]:[],[["vid","Видео"],["rec","Архив"],["det","Детекторы"],["io","Периферия"],["acc","Доступ"]]);
+  if(n.type==="camera")return(can("startUnitLive")?[["view","Просмотр"]]:[]).concat([["gen","Подключение"],["vid","Видео"],["rec","Архив"],["det","Детекторы"],["io","Периферия"],["acc","Доступ"]]);
   if(n.type==="ipsrv")return ipsrvCameras(n).length?[["gen","Подключение"],["rec","Архив"],["kids","Дочерние"]]:[["gen","Подключение"],["kids","Дочерние"]];
   if(n.type==="channel")return[["gen","Основные"],["kids","Дочерние"]];
   if(n.type==="eventsrc")return[["gen","Подключение"],["overlay","Титры"]];
@@ -11911,7 +11911,7 @@ function gear(){
   if(n.type==="eventsrc"&&tab==="words")tab="overlay"; // прежняя вкладка «Подсветка» теперь внутри «Титров»
   if(tabs.length&&!tabs.some(([id])=>id===tab))tab=tabs[0][0];
   const csOpen=n.type==="camera"&&!isSchemaNode(n)?csOpenTabs(n):new Set();
-  const tabsH=tabs.map(([id,x])=>`<button class="tab ${tab===id?"on":""}" ${onEv("click",["tabGo",id])}>${i18n(x)}${csOpen.has(id)?`<span class="tab-dot" role="img" title="${i18n("На этой вкладке вы не закончили правку блока")}" aria-label="${i18n("На этой вкладке вы не закончили правку блока")}"></span>`:""}</button>`).join("");
+  const tabsH=tabs.map(([id,x])=>`<button class="tab ${tab===id?"on":""}" data-tab="${id}" ${onEv("click",["tabGo",id])}>${i18n(x)}${csOpen.has(id)?`<span class="tab-dot" role="img" title="${i18n("На этой вкладке вы не закончили правку блока")}" aria-label="${i18n("На этой вкладке вы не закончили правку блока")}"></span>`:""}</button>`).join("");
   // Слева направо — вход добавления устройств (он один, остальное — стрелкой рядом);
   // дальше собственные действия объекта, а звезда последней и без подписи.
   const addBtn=(n.type==="folder"?folderAddBtn():slice==="arch"?archCreateBtn(n)+(n.type==="archive"||n.type==="vol"?inspectorAddBtn(n):""):(lanHost(n)||n.type==="found")?addSplitBtn(n):inspectorAddBtn(n))+schemaRootBtn(n)+bulkCopyBtn(n)+detDeleteBtn(n)+cardMoreBtn(n)+favCardBtn(n)+fullCardBtn();
@@ -33450,7 +33450,7 @@ function bulkCardHtml(){
   const sel=bulkSelNodes(),scope=bulkScopeNodes(),nodes=scope.filter(n=>!bulkSolo(n)),st=bulkStats(nodes),tabs=bulkTabs(nodes);
   if(!tabs.some(([id])=>id===tab))tab=tabs[0][0];
   bulkLastTab=tab;
-  const tabsH=tabs.map(([id,x])=>`<button class="tab ${tab===id?"on":""}" ${onEv("click",["tabGo",id])}>${i18n(x)}</button>`).join("");
+  const tabsH=tabs.map(([id,x])=>`<button class="tab ${tab===id?"on":""}" data-tab="${id}" ${onEv("click",["tabGo",id])}>${i18n(x)}</button>`).join("");
   const allCams=nodes.length>0&&nodes.every(n=>n.type==="camera");
   const unit=BULK_UNITS[sel[0]?.type]&&sel.every(n=>n.type===sel[0].type)?BULK_UNITS[sel[0].type]:"объект|объекта|объектов";
   const title=`<span class="hd-ic bk-hd-ic">${SEL_IC}</span>${sel.length} ${i18n(plural(sel.length,unit))}`;
