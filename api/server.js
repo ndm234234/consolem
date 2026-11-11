@@ -467,6 +467,16 @@
       Object.entries(SPEC.paths).forEach(([path, item]) =>
         Object.entries(item).forEach(([m, o]) => o && o.operationId && (OPERATION[`${m.toUpperCase()} ${shape(path)}`] = o.operationId))
       );
+    // Подпись операции для записи аудита — summary контракта; методы, которые меняют систему, — для каталога видов журнала
+    const OP_SUMMARY = new Map(), OP_WRITES = [];
+    if (SPEC)
+      Object.entries(SPEC.paths).forEach(([path, item]) =>
+        Object.entries(item).forEach(([m, o]) => {
+          if (!o || !o.operationId) return;
+          OP_SUMMARY.set(o.operationId, o.summary || o.operationId);
+          if (["post", "put", "patch", "delete"].includes(m) && !path.startsWith("/test/")) OP_WRITES.push(o.operationId);
+        })
+      );
     const testSupport = !!opts.testSupport;
 
     // Часы. Тестовый стенд их останавливает и сдвигает (/test/clock), иначе идут вместе с настоящими
@@ -676,8 +686,12 @@
       if (n === undefined) { n = ++jNext; jSeq.set(e, n); }
       return String(1e12 - n).padStart(13, "0");
     };
+    // Кто сделал (0.9.0): у каждой записи. Запись в ходе запроса — пользователь запроса, иначе «система»
+    let reqActor = null, reqIp = null;
+    const J_SYSTEM = "система";
     function journalAdd(e) {
       if (!e.level) e.level = jLevelOf(e);
+      if (!e.actor) e.actor = reqActor || J_SYSTEM;
       db.journal.unshift(e);
       jSeq.set(e, ++jNext);
     }
@@ -710,6 +724,7 @@
       J_STAND_KINDS.forEach(([id, level, text]) => put(id, text, level));
       kinds.list().forEach((k) => (k.events || []).forEach((ev) => put(ev.id, (ev.label || {}).text || ev.id, jLevelOfSeverity(ev.severity), (ev.label || {}).key)));
       put("audit", "Аудит", "audit"); put("alarm", "Тревога", "alarm"); put("info", "Информация", "info");
+      OP_WRITES.filter((op) => !AUDIT_SKIP.has(op)).forEach((op) => put(`api.${op}`, OP_SUMMARY.get(op), "audit"));
       return [...out.values()];
     }
     let jKindText = null;
@@ -825,10 +840,158 @@
         const i = hit.indexOf(a), from = Math.max(0, Math.min(i - Math.floor((limit - 1) / 2), hit.length - limit));
         return { status: 200, body: { items: hit.slice(from, from + limit).map(jShow), truncated: hit.length > limit, withheldCount: 0 } };
       }
-      // Встроенный сервер права на журнал не проверяет: скрытых записей у него нет
-      const res = pageList(q, "journal", db.journal.filter(P.all), jRank, jShow);
-      if (res.status !== 200) return res;
-      return { status: 200, body: Object.assign(res.body, { truncated: !!res.body.nextCursor, withheldCount: 0 }) };
+      // Встроенный сервер права на журнал не проверяет: скрытых записей у него нет.
+      // Страница по ключу записи, как pageList: вставка новых записей не сдвигает. prevCursor (0.9.0) — страница перед
+      // первой записью этой; offset — сколько записей отбора перед страницей («Записи 101–200 из N»)
+      const limit = limitOf(q);
+      if (limit === null) return limitBad();
+      const scope = scopeOf("journal", q), cur = cursorRead(q, scope);
+      if (cur.bad) return cur.bad;
+      const rows = db.journal.filter(P.all);
+      let start = 0;
+      if (cur.at !== null) {
+        let i = rows.findIndex((e) => (cur.back ? !(jRank(e) < cur.at) : jRank(e) > cur.at));
+        if (i < 0) i = rows.length;
+        start = cur.back ? Math.max(0, i - limit) : i;
+      }
+      const page = rows.slice(start, start + limit), more = start + page.length < rows.length;
+      const body = { items: page.map(jShow), truncated: more, withheldCount: 0, offset: start };
+      if (more && page.length) body.nextCursor = cursorMake(scope, jRank(page[page.length - 1]), cur.exp);
+      if (start > 0 && page.length) body.prevCursor = cursorMake(scope, jRank(page[0]), cur.exp, true);
+      return { status: 200, body };
+    }
+    // Время ISO 8601 со смещением пояса tz: 2026-11-11T13:02:05+03:00. Смещение — одно на час, по кэшу
+    function jIsoIn(tz) {
+      const f = new Intl.DateTimeFormat("en-US", { timeZone: tz, timeZoneName: "longOffset", year: "numeric" }), memo = new Map();
+      const offOf = (t) => {
+        const h = Math.floor(t / 36e5);
+        let o = memo.get(h);
+        if (o === undefined) {
+          const m = (f.formatToParts(new Date(h * 36e5)).find((x) => x.type === "timeZoneName") || {}).value || "GMT";
+          const g = m.match(/GMT([+-])(\d{1,2})(?::?(\d{2}))?/);
+          o = g ? (g[1] === "-" ? -1 : 1) * (Number(g[2]) * 60 + Number(g[3] || 0)) : 0;
+          memo.set(h, o);
+        }
+        return o;
+      };
+      const p2 = (x) => String(x).padStart(2, "0");
+      return (t) => {
+        const o = offOf(t), d = new Date(t + o * 6e4), a = Math.abs(o);
+        return `${d.toISOString().slice(0, 19)}${o < 0 ? "-" : "+"}${p2(Math.floor(a / 60))}:${p2(a % 60)}`;
+      };
+    }
+    // Выгрузка CSV (0.9.0): записи отбора GET /journal целиком, без курсора и предела. Время — в поясе tz (умолчание —
+    // Me.timezone), со смещением. Заголовки — lang (ru, en); разделитель — delimiter. Значение с «=», «+», «-», «@» в начале —
+    // с апострофом: иначе Excel выполнит его как формулу. Выгрузка сама — запись аудита «Экспорт журнала»
+    const J_LEVEL_EN = { alarm: "Alarm", error: "Error", audit: "Audit", info: "Information", service: "Service" };
+    function journalExport(q) {
+      const tz = q.tz || db.timezone || "UTC";
+      try { new Intl.DateTimeFormat("en-US", { timeZone: tz }); } catch (e) { return problem(422, "VALIDATION_FAILED", "tz — имя часового пояса IANA, например Europe/Moscow", { field: "tz" }); }
+      const sep = q.delimiter === undefined ? "," : q.delimiter;
+      if (sep !== "," && sep !== ";") return problem(422, "VALIDATION_FAILED", "delimiter — «,» или «;»", { field: "delimiter" });
+      if (q.lang !== undefined && !["ru", "en"].includes(q.lang)) return problem(422, "VALIDATION_FAILED", "lang — ru или en", { field: "lang" });
+      const en = q.lang === "en", P = jPasser(jWhere(q)), at = jIsoIn(tz);
+      const cell = (x) => { x = String(x == null ? "" : x); if (/^[=+\-@\t\r]/.test(x)) x = "'" + x; return /["\n\r,;]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x; };
+      const head = en ? ["ID", "Occurred", "Recorded", "Group", "Event code", "Event", "Object", "Object ID", "Who", "IP address", "Change", "Description"]
+        : ["ID", "Случилось", "Записано", "Группа", "Код события", "Событие", "Объект", "ID объекта", "Кто", "IP-адрес", "Было → стало", "Описание"];
+      const out = ["\ufeff" + head.map(cell).join(sep)], names = new Map();
+      const nameOf = (id) => { if (!id) return ""; if (!names.has(id)) { const u = store.get(id); names.set(id, u ? u.name || "" : ""); } return names.get(id); };
+      let n = 0;
+      for (const e of db.journal) {
+        if (!P.all(e)) continue;
+        n++;
+        const lv = jLevelOf(e), f = e.fields || {}, ch = f.change, t = Date.parse(e.occurredAt || e.at);
+        out.push([e.id, at(t), at(Date.parse(e.at)), en ? J_LEVEL_EN[lv] : J_LEVEL_TEXT[lv], e.kind || "", jKindLabel(e.kind) || "", nameOf(e.deviceId), e.deviceId || "",
+          e.actor || J_SYSTEM, f.ip || "", ch ? `${ch.field}: ${ch.before} → ${ch.after}` : "", e.text].map(cell).join(sep));
+      }
+      const stamp = at(now()).slice(0, 16).replace(/[-:]/g, "").replace("T", "-");
+      journalAdd({ id: uuid("journal"), at: iso(now()), occurredAt: iso(now()), category: "audit", level: "audit", kind: "jexport", source: "backend",
+        text: `Экспорт журнала в CSV: ${n} ${n % 10 === 1 && n % 100 !== 11 ? "запись" : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? "записи" : "записей"}`,
+        fields: Object.assign({ rows: n, operation: "exportJournal" }, reqIp ? { ip: reqIp } : {}) });
+      return { status: 200, body: out.join("\r\n") + "\r\n", headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="journal-${stamp}.csv"` } };
+    }
+    /* Аудит (0.9.0): каждый запрос, который меняет систему (POST, PUT, PATCH, DELETE с ответом 2xx), — запись журнала:
+       кто (логин пользователя запроса), откуда (ip), операция контракта и для PUT и PATCH — «было → стало» по чтению того же
+       пути до и после. Не пишутся: разговор с ассистентом, наблюдение потока, проверки без записи. Частые команды (PTZ,
+       живое видео, разговор) того же пользователя по тому же пути за 30 с — одна запись; остальные — каждая.
+       Секреты не попадают в журнал: ключи с паролем, токеном, заголовками — «••••», в адресе — без имени и пароля,
+       в тексте — «Authorization: ••••» */
+    const AUDIT_SKIP = new Set(["assistTurn", "putStreamWatch", "validateUnits", "checkExport", "testRule"]);
+    const AUDIT_SAME_MS = 30000;
+    const AUDIT_SAME_OPS = new Set(["putUnitPtz", "deleteUnitPtz", "startUnitLive", "moveUnitLive", "startUnitTalk"]);
+    const AUDIT_HIDE = /pass(word)?|secret|token|apikey|api_key|private|credential|authorization|cookie|headers/i;
+    const AUDIT_SKIP_KEYS = new Set(["version", "status", "hasChildren", "updatedAt", "createdAt", "createdBy", "changedAt", "changedBy", "etag", "links"]);
+    const AUDIT_MASK = "••••";
+    // Строка без секретов: имя и пароль в адресе, «Authorization: …», «Bearer …», «password=…»
+    const auditText = (v) => String(v).replace(/(\/\/)[^/\s:@]+:[^/\s@]+@/g, `$1${AUDIT_MASK}@`)
+      .replace(/\b(authorization|bearer|password|passwd|pwd|token|secret|api[-_]?key)(\s*[:=]\s*|\s+)(?:bearer\s+|basic\s+)?[^\s,;&"']+/gi, `$1$2${AUDIT_MASK}`);
+    // Значение без секретов: ключи секретов — «••••», строки — через auditText, вглубь объектов и массивов
+    const auditMask = (v, key) => {
+      if (key && AUDIT_HIDE.test(key) && v !== null && v !== undefined && v !== "") return AUDIT_MASK;
+      if (typeof v === "string") return auditText(v);
+      if (Array.isArray(v)) return v.map((x) => auditMask(x));
+      if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, auditMask(x, k)]));
+      return v;
+    };
+    function auditSnap(path) {
+      const r = compiled.filter((x) => x.method === "GET" && !x.test && x.re.test(path)).sort((a, b) => a.names.length - b.names.length)[0];
+      if (!r) return null;
+      const m = path.match(r.re), params = {};
+      r.names.forEach((name, i) => (params[name] = decodeURIComponent(m[i + 1])));
+      const was = coreMode;
+      coreMode = /^\/units(\/|$)/.test(path);
+      try {
+        const res = r.fn(params, {}, {}, {});
+        return res && res.status === 200 && res.body && typeof res.body === "object" && !Array.isArray(res.body.items) ? clone(res.body) : null;
+      } catch (e) {
+        return null;
+      } finally {
+        coreMode = was;
+      }
+    }
+    // Плоский вид для сравнения: путь → значение; вглубь объектов и массивов (steps[0].url), глубже 4 — целиком, без секретов
+    function auditFlat(o, pre, out, depth) {
+      Object.entries(o || {}).forEach(([k, v]) => {
+        if (!pre && AUDIT_SKIP_KEYS.has(k)) return;
+        if (/Options$/.test(k)) return;
+        const key = pre ? (Array.isArray(o) ? `${pre}[${k}]` : `${pre}.${k}`) : k;
+        if (AUDIT_HIDE.test(k) && v !== null && v !== undefined && v !== "" && !(v && typeof v === "object" && !Object.keys(v).length)) out.set(key, { $secret: JSON.stringify(v) });
+        else if (v && typeof v === "object" && depth < 4 && Object.keys(v).length) auditFlat(v, key, out, depth + 1);
+        else out.set(key, auditMask(v));
+      });
+      return out;
+    }
+    function auditDiff(before, after) {
+      if (!before || !after) return [];
+      const a = auditFlat(before, "", new Map(), 0), b = auditFlat(after, "", new Map(), 0), out = [];
+      const schema = (((kinds && after.kind && kinds.get(after.kind)) || {}).schema || {}).properties || {};
+      const LABEL = { name: "Имя", parentId: "Родитель", folders: "Папки", enabled: "Включено" };
+      const show = (v) => (v === undefined || v === null || v === "" ? "—" : typeof v === "string" ? v : JSON.stringify(v)).slice(0, 200);
+      new Set([...a.keys(), ...b.keys()]).forEach((k) => {
+        if (out.length >= 20 || JSON.stringify(a.get(k)) === JSON.stringify(b.get(k))) return;
+        const prop = k.startsWith("properties.") ? schema[k.slice(11).split(/[.[]/)[0]] : null;
+        const hide = (x) => (x && x.$secret !== undefined) || (prop && prop.writeOnly);
+        const val = (x) => (hide(x) ? (x === undefined || x === null ? "—" : AUDIT_MASK) : show(x));
+        const field = (prop && prop["x-label"] && prop["x-label"].text) || LABEL[k] || k.replace(/^properties\./, "");
+        out.push({ field, before: val(a.get(k)), after: val(b.get(k)) });
+      });
+      return out;
+    }
+    function auditAdd(operationId, method, path, params, body, res, before, after) {
+      const summary = OP_SUMMARY.get(operationId) || operationId, kind = `api.${operationId}`, actor = reqActor || J_SYSTEM;
+      const uid = params.uid || (res.body && typeof res.body.uid === "string" ? res.body.uid : null);
+      const u = uid ? store.get(uid) : null;
+      const pick = (o) => (o && typeof o.name === "string" ? o.name : "");
+      const name = (u && u.name) || pick(after) || pick(before) || pick(res.body) || pick(body);
+      const changes = method === "PUT" || method === "PATCH" ? auditDiff(before, after) : [];
+      const top = db.journal[0];
+      if (AUDIT_SAME_OPS.has(operationId) && top && top.kind === kind && top.actor === actor && top.fields && top.fields.path === path && now() - Date.parse(top.at) < AUDIT_SAME_MS) return;
+      const at = iso(now());
+      const ruleId = params.ruleId || (/^\/rules\/[^/]+/.test(path) && params.id) || null;
+      const fields = Object.assign({ operation: operationId, method, path }, reqIp ? { ip: reqIp } : {}, ruleId ? { ruleId } : {},
+        changes.length ? { change: changes[0] } : {}, changes.length > 1 ? { changes } : {});
+      journalAdd(Object.assign({ id: uuid("journal"), at, occurredAt: at, category: "audit", level: "audit", kind, source: "backend", actor,
+        text: name ? `${summary}: ${name}` : summary, fields }, uid ? { deviceId: uid } : {}, u && u.kind === "camera" ? { cameraId: uid } : {}));
     }
     // Записи стенда (stand.journal: count, days, seed): события камер, серверов, правил и людей за days суток до «сейчас».
     // Как бэкенд с большим журналом: набор в файле не растёт. Записи набора остаются, всё вместе — по времени, новые первыми
@@ -896,7 +1059,7 @@
         if (k[3]) { const ui = bs(uc, r() * uc[uc.length - 1]); v.u = logins[ui]; v.ip = ipOf(ui); }
         const [text, extra] = k[4](v), at = iso(t), level = LV.get(k[0]);
         out[i] = Object.assign({ id: uuid("journal"), at, occurredAt: at, category: CAT[level], level, text, source: k[1] === "none" || k[1] === "rule" ? "backend" : k[1] === "srv" ? "rec" : "cam", kind: k[0] },
-          deviceId ? { deviceId } : {}, cameraId ? { cameraId } : {}, k[3] ? { actor: v.u } : {}, { fields: Object.assign({}, extra || {}, ruleId ? { ruleId } : {}) });
+          deviceId ? { deviceId } : {}, cameraId ? { cameraId } : {}, k[3] ? { actor: v.u } : {}, { fields: Object.assign({}, extra || {}, k[3] ? { ip: v.ip } : {}, ruleId ? { ruleId } : {}) });
       }
       return out;
     }
@@ -904,7 +1067,7 @@
     function journalInit() {
       jSeq = new WeakMap(); jTime = new WeakMap(); jHay = new WeakMap(); jKindText = null; jNext = 0;
       const all = (db.journal || []).concat(db.stand.journal ? journalStand(db.stand.journal) : []);
-      all.forEach((e) => { if (!e.level) e.level = jLevelOf(e); });
+      all.forEach((e) => { if (!e.level) e.level = jLevelOf(e); if (!e.actor) e.actor = J_SYSTEM; });
       if (db.stand.journal) all.sort((a, b) => jWhen(b) - jWhen(a));
       db.journal = all;
       for (let i = all.length - 1; i >= 0; i--) jSeq.set(all[i], ++jNext);
@@ -2355,13 +2518,14 @@
       return fields.some((f) => f != null && normText(f).includes(needle));
     };
     const scopeOf = (name, q) => hashOf(name + JSON.stringify(Object.keys(q).filter((k) => k !== "limit" && k !== "cursor").sort().map((k) => [k, q[k]]))).toString(36);
-    const cursorMake = (scope, at, exp) => btoa(encodeURIComponent(JSON.stringify({ s: scope, a: at, e: exp || now() + VIEW_ROUND_MS })));
+    // back — курсор назад (prevCursor журнала): страница кончается перед ключом at
+    const cursorMake = (scope, at, exp, back) => btoa(encodeURIComponent(JSON.stringify(Object.assign({ s: scope, a: at, e: exp || now() + VIEW_ROUND_MS }, back ? { b: 1 } : {}))));
     function cursorRead(q, scope) {
       if (q.cursor === undefined) return { at: null };
       let c = null;
       try { c = JSON.parse(decodeURIComponent(atob(q.cursor))); } catch (e) { c = null; }
       if (!c || c.s !== scope || !(now() <= c.e)) return { bad: problem(422, "INVALID_CURSOR", "Курсор просрочен или чужой: читайте с начала", { field: "cursor" }) };
-      return { at: c.a, exp: c.e };
+      return { at: c.a, exp: c.e, back: c.b === 1 };
     }
     function limitOf(q) {
       if (q.limit === undefined) return 200;
@@ -4885,6 +5049,7 @@
         (p, q) => journalList(q),
       ],
       ["GET", "/journal/facets", (p, q) => journalFacets(q)],
+      ["GET", "/journal/export", (p, q) => journalExport(q)],
       ["GET", "/journal/kinds", () => items(journalKinds())],
       /* ----- Учётки потоков ----- */
       ["GET", "/archive-watches", (p, q) => pageList(q, "archive-watches", db.archiveWatches.filter((w) => !q.deviceId || w.deviceId === q.deviceId), (w) => partKey(w.id), clone)],
@@ -5837,12 +6002,23 @@
       const key = method === "POST" && body && body.idempotencyKey ? `${method} ${path} ${body.idempotencyKey}` : null;
       answered.forEach((a, k) => now() - a.at >= IDEMPOTENCY_MS && answered.delete(k));
       if (key && answered.has(key)) return clone(answered.get(key).res);
+      const audited = !route.test && method !== "GET" && !!operationId && !AUDIT_SKIP.has(operationId);
+      if (!route.test) {
+        reqActor = (db.access.users.find((u) => u.id === me) || {}).login || null;
+        // Адрес клиента: стенд за прокси берёт последний адрес X-Forwarded-For — его дописал ближайший прокси, а не клиент
+        reqIp = (h["x-forwarded-for"] || "").split(",").pop().trim() || h["x-real-ip"] || "127.0.0.1";
+      }
+      const before = audited && method !== "POST" ? auditSnap(path) : null;
       coreMode = /^\/units(\/|$)/.test(path);
       let res;
       try {
         res = route.fn(params, q, body || {}, h);
+        // Запись аудита не ломает запрос: сбой здесь — ошибка сервера, а не отказ операции
+        if (audited && res.status < 300) try { auditAdd(operationId, method, path, params, body, res, before, method === "PUT" || method === "PATCH" ? auditSnap(path) : null); } catch (e) { console.error("аудит:", e); }
       } finally {
         coreMode = false;
+        reqActor = null;
+        reqIp = null;
       }
       const out = { status: res.status, body: res.body === undefined ? null : res.body, headers: res.headers || {} };
       if (key && res.status < 300) answered.set(key, { at: now(), res: clone(out) });

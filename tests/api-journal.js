@@ -114,5 +114,87 @@
     assert.ok(events.every((id) => known.has(id)), "события видов объектов — в каталоге");
   }, { needs: ["listJournalKinds"] });
 
+  test("Журнал: страницы назад — prevCursor и offset (0.9.0)", async () => {
+    const env = await makeEnv();
+    const all = await env.list("/journal?limit=1000&level=audit,info");
+    const p1 = await env.ok("GET", "/journal?limit=5&level=audit,info");
+    assert.ok(!p1.prevCursor, "у первой страницы prevCursor нет");
+    if (p1.offset !== undefined) assert.eq(p1.offset, 0, "offset первой страницы");
+    const p2 = await env.ok("GET", `/journal?limit=5&level=audit,info&cursor=${encodeURIComponent(p1.nextCursor)}`);
+    const p3 = await env.ok("GET", `/journal?limit=5&level=audit,info&cursor=${encodeURIComponent(p2.nextCursor)}`);
+    assert.eq(ids(p3.items), ids(all.slice(10, 15)), "третья страница по nextCursor");
+    if (p3.offset !== undefined) assert.eq(p3.offset, 10, "offset третьей страницы");
+    assert.ok(p3.prevCursor, "у третьей страницы есть prevCursor");
+    const back = await env.ok("GET", `/journal?limit=5&level=audit,info&cursor=${encodeURIComponent(p3.prevCursor)}`);
+    assert.eq(ids(back.items), ids(p2.items), "prevCursor — предыдущая страница");
+    const first = await env.ok("GET", `/journal?limit=5&level=audit,info&cursor=${encodeURIComponent(back.prevCursor)}`);
+    assert.eq(ids(first.items), ids(p1.items), "назад до первой");
+    assert.ok(!first.prevCursor, "у первой — без prevCursor");
+    const wide = await env.ok("GET", `/journal?limit=12&level=audit,info&cursor=${encodeURIComponent(p3.prevCursor)}`);
+    assert.eq(ids(wide.items), ids(all.slice(0, 12)), "назад у начала — первая страница целиком");
+  }, { needs: ["feature:journalSearch", "feature:journalAudit", "listJournal"] });
+
+  test("Журнал: аудит — изменение через API даёт запись: кто, адрес, операция, «было → стало» (0.9.0)", async () => {
+    const env = await makeEnv();
+    const me = await env.ok("GET", "/me");
+    const all = await env.list("/journal?limit=1000");
+    assert.ok(all.every((e) => typeof e.actor === "string" && e.actor), "автор у каждой записи");
+    const cam = (await env.ok("GET", "/units?kind=camera&limit=1")).items[0];
+    await env.ok("PATCH", `/units/${cam.uid}`, { name: `${cam.name} (проба)` }, { "If-Match": `"${cam.version}"` });
+    const top = (await env.ok("GET", "/journal?limit=1")).items[0];
+    assert.eq(top.kind, "api.patchUnit", "вид записи — операция");
+    assert.eq(top.level, "audit", "группа — аудит");
+    assert.eq(top.actor, me.login, "кто — пользователь запроса");
+    assert.eq(top.deviceId, cam.uid, "объект записи");
+    assert.ok(top.fields && top.fields.ip, "адрес запроса");
+    assert.eq(top.fields.operation, "patchUnit", "operation");
+    assert.eq(JSON.stringify(top.fields.change), JSON.stringify({ field: "Имя", before: cam.name, after: `${cam.name} (проба)` }), "было → стало");
+    const kinds = (await env.ok("GET", "/journal/kinds")).items;
+    assert.ok(kinds.some((k) => k.id === "api.patchUnit" && k.level === "audit"), "вид записи — в каталоге");
+    const mine = await env.list(`/journal?limit=1000&actor=${encodeURIComponent(me.login)}&kind=api.patchUnit`);
+    assert.ok(mine.some((e) => e.id === top.id), "отбор по автору находит запись");
+  }, { needs: ["feature:journalSearch", "feature:journalAudit", "listJournal", "patchUnit"] });
+
+  test("Журнал: аудит — секреты не попадают в запись и в CSV; каждое удаление — своя запись с именем (0.9.0)", async () => {
+    const env = await makeEnv();
+    const r = (await env.ok("GET", "/rules?limit=1")).items[0];
+    const got = await env.call("GET", `/rules/${r.id}`);
+    const body = JSON.parse(JSON.stringify(got.body));
+    ["id", "version", "status", "createdAt", "createdBy", "changedAt", "changedBy", "mute", "order"].forEach((k) => delete body[k]);
+    body.steps = [{ source: "net", action: "http", method: "POST", url: "https://admin:S3cr3tPw@hook.example/x?token=abc123", auth: "bearer", headers: "Authorization: Bearer TOPSECRET" }];
+    await env.ok("PUT", `/rules/${r.id}`, body, { "If-Match": `"${got.body.version}"` });
+    const top = (await env.ok("GET", "/journal?limit=1")).items[0];
+    assert.eq(top.kind, "api.putRule", "запись о правиле");
+    assert.eq(top.fields.ruleId, r.id, "ссылка на правило");
+    const csv = await env.call("GET", "/journal/export?level=audit");
+    const text = JSON.stringify(top) + (csv.status === 200 ? csv.body : "");
+    assert.ok(!/S3cr3tPw|TOPSECRET|abc123/.test(text), "пароль в адресе, заголовок и токен скрыты");
+    const sched = (await env.ok("GET", "/schedules?limit=3")).items.slice(0, 2);
+    for (const x of sched) await env.ok("DELETE", `/schedules/${x.id}`, undefined, { "If-Match": `"${x.version}"` });
+    const del = (await env.ok("GET", "/journal?limit=5&kind=api.deleteSchedule")).items;
+    assert.eq(del.length, sched.length, "каждое удаление — своя запись");
+    assert.ok(sched.every((x) => del.some((e) => e.text.includes(x.name))), "в записи — имя удалённого");
+  }, { needs: ["feature:journalSearch", "feature:journalAudit", "listJournal", "getRule", "putRule", "deleteSchedule", "exportJournal"] });
+
+  test("Журнал: выгрузка CSV — весь отбор, время со смещением пояса, «Кто», защита от формул (0.9.0)", async () => {
+    const env = await makeEnv();
+    const list = await env.list("/journal?limit=1000&level=audit");
+    const res = await env.call("GET", "/journal/export?level=audit&tz=Asia/Tokyo&delimiter=%3B&lang=en");
+    assert.eq(res.status, 200, "ответ 200");
+    assert.ok(/text\/csv/.test(res.headers["content-type"] || ""), "тип text/csv");
+    assert.ok(/attachment; filename="journal-\d{8}-\d{4}\.csv"/.test(res.headers["content-disposition"] || ""), "имя файла");
+    const lines = res.body.replace(/^\ufeff/, "").split("\r\n").filter(Boolean);
+    assert.eq(lines.length, list.length + 1, "заголовок и все записи отбора");
+    assert.eq(lines[0].split(";")[0], "ID", "заголовок по lang");
+    const row = lines[1].split(";");
+    assert.eq(row[0], list[0].id, "новые первыми");
+    assert.ok(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\+09:00$/.test(row[1]), `время со смещением tz: ${row[1]}`);
+    assert.eq(Date.parse(row[1]), Date.parse(list[0].occurredAt || list[0].at), "то же мгновение");
+    assert.ok(lines.slice(1).every((l) => !/^[=+@-]/.test(l.split(";").pop())), "описание не начинается с формулы");
+    const top = (await env.ok("GET", "/journal?limit=1")).items[0];
+    assert.eq(top.kind, "jexport", "выгрузка — запись аудита");
+    assert.eq((await env.call("GET", "/journal/export?tz=Mars/Base")).status, 422, "неизвестный пояс — 422");
+  }, { needs: ["feature:journalSearch", "exportJournal"] });
+
   ApiTest.loaded("api-journal.js");
 })();

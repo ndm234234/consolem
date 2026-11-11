@@ -95,7 +95,9 @@
           // бэкенд перечислил его в Access-Control-Expose-Headers
           const got = {};
           res.headers.forEach((value, name) => (got[name] = value));
-          return later({ status: res.status, body: text ? JSON.parse(text) : null, headers: got });
+          // Тело — JSON; ответ другого типа (text/csv выгрузки журнала) — строкой
+          const type = got["content-type"] || "";
+          return later({ status: res.status, body: text ? (!type || /json/.test(type) ? JSON.parse(text) : text) : null, headers: got });
         });
       // onReconnect — поток переподключился после обрыва: пока он стоял, могло пропасть то, что сервер
       // не дошлёт по Last-Event-ID, — клиент перечитывает данные.

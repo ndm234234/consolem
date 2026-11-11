@@ -138,7 +138,7 @@ function cors(req, res) {
   res.setHeader("Access-Control-Allow-Credentials", "true");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, If-Match, If-None-Match, Last-Event-ID");
-  res.setHeader("Access-Control-Expose-Headers", "ETag, Location, Retry-After");
+  res.setHeader("Access-Control-Expose-Headers", "ETag, Location, Retry-After, Content-Disposition");
   res.setHeader("Vary", "Origin");
 }
 
@@ -196,6 +196,12 @@ http
       if (out.headers && out.headers["Content-Type"] === "text/event-stream") {
         res.writeHead(out.status, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" });
         return res.end(out.body.map((m) => `data: ${JSON.stringify(m)}\n\n`).join(""));
+      }
+      // Файл (выгрузка журнала, text/csv) — тело как есть, со своим типом и Content-Disposition
+      const type = out.headers && out.headers["Content-Type"];
+      if (out.status < 400 && type && !/json/.test(type) && typeof out.body === "string") {
+        res.writeHead(out.status, Object.assign({ "Content-Type": type }, out.headers["Content-Disposition"] ? { "Content-Disposition": out.headers["Content-Disposition"] } : {}));
+        return res.end(out.body);
       }
       res.writeHead(out.status, { "Content-Type": out.status >= 400 ? "application/problem+json" : "application/json" });
       res.end(JSON.stringify(out.body));

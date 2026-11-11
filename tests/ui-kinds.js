@@ -370,6 +370,36 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   pjAct("inc", jev.deviceId, "objs");
   ok(await until(() => pjRes.p.deviceId === jev.deviceId && pjRes.p.deviceMatch === "exact" && pjRes.items.every((e) => e.deviceId === jev.deviceId)), "«=» у объекта — условие deviceId");
   pjaResetAll();
+  // Контракт 0.9.0: страницы «Назад» и «Вперёд», пояс в списке, два времени и «Кто» в панели, CSV на сервере
+  ok(await until(() => /Записи 1–\d+/.test(document.getElementById("pjPg")?.textContent || "")), "листалка: «Записи 1–N из M»");
+  ok(/UTC[+-]\d\d:\d\d/.test(document.querySelector(".pj-lh")?.textContent || ""), "пояс в заголовке «Время»");
+  pjSetRange("30d");
+  ok(await until(() => pjQ.range === "30d" && pjRes.key === pjKey()), "период 30 дней");
+  pjSetPageSize(50);
+  ok(await until(() => pjRes.items.length === 50 && !!pjRes.next), "размер страницы 50");
+  const p1 = pjRes.items[0].id;
+  pjPage(1);
+  ok(await until(() => pjRes.off === 50 && pjRes.items[0].id !== p1 && /Записи 51–/.test(document.getElementById("pjPg").textContent)), "«Вперёд» — следующая страница");
+  pjPage(-1);
+  ok(await until(() => pjRes.off === 0 && pjRes.items[0].id === p1 && document.querySelector("#pjPg .pg-b").disabled), "«Назад» — первая страница, «Назад» неактивна");
+  pjSetPageSize(100);
+  ok(await until(() => pjRes.items.length > 50 || !pjRes.next), "размер страницы 100");
+  pjSelId = pjRes.items[0].id;
+  pjSelEv = pjRes.items[0];
+  pjMountDet();
+  ok(/Случилось: .*\(UTC[+-]\d\d:\d\d\)/.test(document.getElementById("pjDet").textContent) && /Записано/.test(document.getElementById("pjDet").textContent) && /Кто/.test(document.getElementById("pjDet").textContent), "панель: «Случилось» с поясом, «Записано», «Кто»");
+  ok(pjRes.items.every((e) => !!e.actor), "«Кто» у каждой записи");
+  {
+    let blob = null;
+    const oc = URL.createObjectURL, ac = HTMLAnchorElement.prototype.click;
+    URL.createObjectURL = (b) => { blob = b; return oc.call(URL, b); };
+    HTMLAnchorElement.prototype.click = function () {};
+    try { await pjCsv(); } finally { URL.createObjectURL = oc; HTMLAnchorElement.prototype.click = ac; }
+    const text = blob ? await blob.text() : "";
+    const lines = text.split("\r\n").filter(Boolean);
+    ok(lines.length === pjRes.total + 1 && /T\d\d:\d\d:\d\d[+-]\d\d:\d\d/.test(lines[1] || ""), "CSV: все записи отбора, время ISO со смещением");
+  }
+  pjaResetAll();
 
   // Учётки потоков: пароль один раз, удаление с вводом числа
   goApp("acc");

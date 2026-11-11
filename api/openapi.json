@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Конфигуратор — API",
-    "version": "0.8.0",
+    "version": "0.9.0",
     "description": "Контракт конфигуратора: всё, что интерфейс читает и меняет. Источник истины: встроенный сервер прототипа (api/server.js) и бэкенд отвечают по нему. Договорённости — api/README.md: версии записей (ETag / If-Match, 428, 412), ошибки application/problem+json с машинным code, групповые операции с частичным успехом и idempotencyKey, поток событий SSE. Система может поддерживать не весь контракт: что она умеет — GET /reference → capabilities; остальные операции отвечают 404 NO_ROUTE, неподдержанные виды устройств и настройки — 422 NOT_SUPPORTED. Операции с тегом test-support есть только на тестовом стенде. Форма работает с одним адресом входа, другой — только если этот недоступен. Список операций, откат и память idempotencyKey у каждого адреса свои: после 5xx и смены адреса запись сперва перечитывается. Версия одной записи на разных адресах может отличаться: 412 и перечитывание. У изменений чужого кластера at — время, когда их увидели.",
     "license": {
       "name": "Внутренний документ",
@@ -2503,6 +2503,15 @@
                     "nextCursor": {
                       "type": "string",
                       "description": "Есть — читать дальше. Нет — конец. Непрозрачный, хранит место, а не номер строки: вставка не сдвигает страницы"
+                    },
+                    "prevCursor": {
+                      "type": "string",
+                      "description": "С 0.9.0: есть — перед этой страницей есть записи отбора; передать в cursor, чтобы прочитать страницу перед ней (limit записей, у начала — первую страницу). Нет — это первая страница. Непрозрачный, как nextCursor. У страницы around нет. Отдаёт система с возможностью journalAudit; без неё клиент листает назад по своему списку курсоров"
+                    },
+                    "offset": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "С 0.9.0: сколько записей отбора перед этой страницей, для подписи «Записи 101–200 из N». Нет поля — сервер не считает; клиент считает страницы сам. У страницы around нет"
                     }
                   },
                   "additionalProperties": false,
@@ -2693,7 +2702,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "nextCursor прошлой страницы как есть. Просроченный или чужой — 422 INVALID_CURSOR, читать с начала"
+            "description": "nextCursor или prevCursor (с 0.9.0) прошлой страницы как есть. Просроченный или чужой — 422 INVALID_CURSOR, читать с начала"
           }
         ],
         "description": "Порядок — порядок записи, новые первыми. from и to отбирают по occurredAt, если он есть, иначе по at. С 0.8.0 (возможность journalSearch): поиск q, несколько значений и «скрыть» (…Not) у полей, группа level, автор actor, точный deviceId (deviceMatch=exact), страница вокруг записи (around). Счётчики по полям — GET /journal/facets, подписи видов — GET /journal/kinds"
@@ -2883,6 +2892,215 @@
         }
       }
     },
+    "/journal/export": {
+      "get": {
+        "operationId": "exportJournal",
+        "tags": [
+          "journal"
+        ],
+        "summary": "Журнал: выгрузка в CSV (с 0.9.0)",
+        "description": "Все записи отбора GET /journal, новые первыми, без limit и cursor: сервер отдаёт файл целиком, потоком. Те же условия, что у GET /journal (без around). Столбцы: ID, «Случилось» (occurredAt), «Записано» (at) — ISO 8601 со смещением пояса tz (2026-11-11T13:02:05+03:00), группа (level), код события (kind), подпись вида, объект (имя), ID объекта, «Кто» (actor), IP-адрес (fields.ip), «Было → стало» (fields.change), описание (text). Файл в UTF-8 с BOM, строки через CRLF; значение с «=», «+», «-», «@» в начале — с апострофом (защита от формул). Сама выгрузка — запись аудита вида jexport. Необязательная операция: система объявляет её в capabilities.operations; без неё интерфейс собирает файл сам из страниц GET /journal",
+        "parameters": [
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Категория: audit, alarm, info; с 0.8.0 — несколько через запятую (ИЛИ). Без неё — все"
+          },
+          {
+            "name": "deviceId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Объект (uid): записи о нём, его детях, его камере и источниках событий с ней. С 0.8.0 — несколько через запятую (ИЛИ); точное совпадение — deviceMatch=exact"
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Не раньше"
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Не позже"
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Подсистема"
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Поиск по тексту записи, подписи вида события, подписи группы (level), имени объекта, автору и fields.ip. Слова через пробел — все должны встретиться (И); «|» — ИЛИ между группами слов; слова в кавычках — точная фраза; «-слово» — записи без него. Регистр не важен, «ё» = «е». Только с возможностью journalSearch (capabilities.features)"
+          },
+          {
+            "name": "level",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Группы JournalLevel через запятую (ИЛИ). Только с возможностью journalSearch (capabilities.features)"
+          },
+          {
+            "name": "levelNot",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Скрыть группы JournalLevel: через запятую (ИЛИ). Только с возможностью journalSearch (capabilities.features)"
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Виды события (JournalEvent.kind) через запятую (ИЛИ). Только с возможностью journalSearch (capabilities.features)"
+          },
+          {
+            "name": "kindNot",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Скрыть виды события: через запятую (ИЛИ). Только с возможностью journalSearch (capabilities.features)"
+          },
+          {
+            "name": "actor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Авторы (JournalEvent.actor) через запятую (ИЛИ). Только с возможностью journalSearch (capabilities.features)"
+          },
+          {
+            "name": "actorNot",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Скрыть авторов: через запятую (ИЛИ). Только с возможностью journalSearch (capabilities.features)"
+          },
+          {
+            "name": "categoryNot",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Скрыть категории: через запятую (ИЛИ). Только с возможностью journalSearch (capabilities.features)"
+          },
+          {
+            "name": "deviceIdNot",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Скрыть записи об этих объектах (uid через запятую), всегда точное совпадение deviceId. Только с возможностью journalSearch (capabilities.features)"
+          },
+          {
+            "name": "deviceMatch",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "related",
+                "exact"
+              ]
+            },
+            "description": "Как понимать deviceId: related (по умолчанию, как до 0.8.0) — объект, его дети, его камера и источники с ней; exact — только записи, где deviceId совпадает. Только с возможностью journalSearch (capabilities.features)"
+          },
+          {
+            "name": "tz",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Часовой пояс времени в файле, имя IANA (Europe/Moscow). Без него — Me.timezone. Неизвестный пояс — 422"
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ru",
+                "en"
+              ]
+            },
+            "description": "Язык заголовков и названий групп. Без него — ru"
+          },
+          {
+            "name": "delimiter",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                ",",
+                ";"
+              ]
+            },
+            "description": "Разделитель столбцов: «,» (умолчание) или «;» — для Excel с русскими настройками"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Файл CSV. Content-Disposition: attachment; filename=\"journal-ГГГГММДД-ЧЧММ.csv\"",
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
     "/journal/kinds": {
       "get": {
         "operationId": "listJournalKinds",
@@ -2890,7 +3108,7 @@
           "journal"
         ],
         "summary": "Журнал: виды событий с подписями и группой (с 0.8.0)",
-        "description": "Каталог видов событий журнала: и события объектов (UnitKind.events), и события без объекта — вход, выход, изменение настроек. Запись с kind, которого в каталоге нет, интерфейс подписывает кодом. Необязательная операция: объявление — в capabilities.operations",
+        "description": "Каталог видов событий журнала: и события объектов (UnitKind.events), и события без объекта — вход, выход, изменение настроек. Запись с kind, которого в каталоге нет, интерфейс подписывает кодом. Необязательная операция: объявление — в capabilities.operations. С 0.9.0 — и виды записей аудита: api.<operationId> (подпись — summary операции) и jexport (выгрузка журнала)",
         "responses": {
           "200": {
             "description": "Готово",
@@ -9225,11 +9443,53 @@
               },
               "ip": {
                 "type": "string",
-                "description": "Адрес, с которого вошёл или пытался войти пользователь (с 0.8.0)"
+                "description": "Адрес, с которого вошёл или пытался войти пользователь (с 0.8.0); с 0.9.0 — и адрес запроса у записи аудита"
+              },
+              "changes": {
+                "type": "array",
+                "description": "Все изменённые поля (с 0.9.0), если их больше одного; change — первое из них. Секреты (пароли, ключи) — «••••»",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "field",
+                    "before",
+                    "after"
+                  ],
+                  "properties": {
+                    "field": {
+                      "type": "string"
+                    },
+                    "before": {
+                      "type": "string"
+                    },
+                    "after": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "operation": {
+                "type": "string",
+                "description": "Запись аудита (с 0.9.0): operationId запроса, который изменил систему"
+              },
+              "method": {
+                "type": "string",
+                "enum": [
+                  "POST",
+                  "PUT",
+                  "PATCH",
+                  "DELETE"
+                ],
+                "description": "Запись аудита (с 0.9.0): метод запроса"
+              },
+              "path": {
+                "type": "string",
+                "description": "Запись аудита (с 0.9.0): путь запроса"
               }
             },
             "additionalProperties": true,
-            "description": "Подробности события. Известные ключи (с 0.8.0) — change и ip; остальные ключи — коды, подписи к ним даёт интерфейс"
+            "description": "Подробности события. Известные ключи: change и ip (с 0.8.0); changes, operation, method, path (с 0.9.0); остальные ключи — коды, подписи к ним даёт интерфейс"
           },
           "cameraId": {
             "type": "string",
@@ -9242,7 +9502,7 @@
           },
           "actor": {
             "type": "string",
-            "description": "Кто сделал (с 0.8.0): логин или «система», как actor в истории прав. Нет поля — автор неизвестен или это не действие человека"
+            "description": "Кто сделал (с 0.8.0): логин или «система», как actor в истории прав. Нет поля — автор неизвестен или это не действие человека. С 0.9.0 система с возможностью journalAudit заполняет его у каждой записи: логин пользователя запроса, у событий оборудования и расписаний — «система»"
           }
         },
         "additionalProperties": false,
@@ -9834,7 +10094,8 @@
           "exportPassword",
           "exportPlayer",
           "exportCloud",
-          "journalSearch"
+          "journalSearch",
+          "journalAudit"
         ],
         "description": "Необязательная возможность системы: без неё поле есть в записи, но менять его нельзя (422 NOT_SUPPORTED)",
         "x-enum-descriptions": {
@@ -9866,7 +10127,8 @@
           "exportPassword": "Пароль на файл",
           "exportPlayer": "Плеер в выдаче",
           "exportCloud": "Выгрузка в облако",
-          "journalSearch": "Поиск в журнале (с 0.8.0): у GET /journal параметры q, level, kind, actor, …Not, deviceMatch, around; в записи level и actor. Без неё интерфейс показывает журнал без поиска и фасетов"
+          "journalSearch": "Поиск в журнале (с 0.8.0): у GET /journal параметры q, level, kind, actor, …Not, deviceMatch, around; в записи level и actor. Без неё интерфейс показывает журнал без поиска и фасетов",
+          "journalAudit": "Аудит в журнале (с 0.9.0): у каждой записи actor (логин или «система»); каждое изменение через API с ответом 2xx — запись level audit, kind api.<operationId>, с fields.ip, operation, method, path и «было → стало»; в ответе GET /journal — prevCursor и offset. Без неё клиент не ждёт ни автора у каждой записи, ни записей аудита, ни prevCursor"
         }
       },
       "Capabilities": {
