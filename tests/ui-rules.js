@@ -103,7 +103,13 @@ UiCheck(async ({ ok, until, confirmWith }) => {
 
   // Годность действия и прочие поля события — в содержимом правила, состояние — от сервера, только показ
   ruleOpen(R1);
-  ok(r(R1).validFor === 30 && r(R1).status && document.querySelector("[data-rule-status]"), "годность 30, состояние от сервера: " + JSON.stringify(r(R1).status));
+  // Состояние «выключено режимом» карточка показывает полосой «Сейчас не действует», а не строкой «Сервер: …» (ruleSrvStatusHtml).
+  // Какое из двух — зависит от часов: «Рабочее время» набора действует в будни днём, поэтому проверка принимает оба
+  {
+    const st = r(R1).status, line = document.querySelector("[data-rule-status]");
+    const band = [...document.querySelectorAll(".nt[role=status]")].some((e) => /Сейчас не действует/.test(e.textContent));
+    ok(r(R1).validFor === 30 && st && (st.state === "off" ? band && !line : line), "годность 30, состояние от сервера: " + JSON.stringify(st));
+  }
   const statusV = autoVer.get(R1);
   setRuleField("validFor", "120");
   setTriggerExtra(0, '{"pass": 3}');
