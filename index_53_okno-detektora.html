@@ -3017,10 +3017,29 @@ body.pj-hdlog .gojump{display:none}
 .dw-live{display:inline-flex;align-items:center;gap:6px;font-weight:600}
 .dw-arch{padding:1px 8px;border-radius:6px;background:var(--one-info-bg);color:var(--x-link);font-weight:600;font-size:12px}
 .dw-play .btn:has(.dw-rec){display:inline-flex;align-items:center;gap:6px}
-.dw-tl2{height:58px}
-.dw-tl2 .dw-tl-lb{right:auto;left:4px;padding:0 4px;border-radius:3px;background:var(--p2);z-index:1}
-.dw-tl-empty{position:absolute;left:50%;bottom:9px;transform:translateX(-50%);font-size:11px;color:var(--mu);pointer-events:none;white-space:nowrap}
-.dw-tl-fc{position:absolute;bottom:3px;font-size:10.5px;color:var(--rd);pointer-events:none;white-space:nowrap}
+.dw-kpi{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:2px 0 12px}
+.dw-k{display:flex;flex-direction:column;gap:2px;padding:8px 12px;border:1px solid var(--ln);border-left:4px solid var(--c);border-radius:8px;background:var(--p2);min-width:0}
+.dw-k.b0{--c:var(--mu)}.dw-k.b1{--c:var(--rd)}.dw-k.fc{--c:var(--rd);border-left-style:dashed}
+.dw-k.off{opacity:.6}
+.dw-k-l{font-size:12px;color:var(--mu);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dw-k-v{display:flex;align-items:center;gap:8px}
+.dw-k-v b{font-size:26px;line-height:1.1;font-variant-numeric:tabular-nums}
+.dw-k-s{font-size:12px;color:var(--mu)}
+.dw-rows{display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 10px;align-items:center}
+.dw-rl{display:flex;flex-direction:column;line-height:1.2;font-size:12px;border-left:4px solid var(--c);padding-left:8px}
+.dw-rl.b0{--c:var(--mu)}.dw-rl.b1{--c:var(--rd)}
+.dw-rl span{color:var(--mu);font-size:11px;font-variant-numeric:tabular-nums}
+.dw-rt{height:32px;border:1px solid var(--ln);border-radius:6px;background:var(--p2);cursor:pointer;overflow:hidden}
+.dw-rt.off{cursor:default;background:repeating-linear-gradient(90deg,var(--p2) 0 8px,transparent 8px 10px)}
+.dw-rt svg{display:block}
+.dw-rows .dw-tl-x{margin:0}
+.dw-lg{display:flex;align-items:center;gap:6px 14px;flex-wrap:wrap;margin:8px 0 10px;font-size:12px}
+.dw-lg span{display:inline-flex;align-items:center;gap:6px}
+.dw-lg i{display:inline-block;width:3px;height:12px;border-radius:1px;background:var(--c)}
+.dw-lg i.b0{--c:var(--mu)}.dw-lg i.b1{--c:var(--rd)}
+.dw-lg i.fc{width:14px;background:repeating-linear-gradient(45deg,rgba(255,77,77,.45) 0 2px,transparent 2px 5px)}
+.dw-lg .sub{margin:0 0 0 auto}
+@media(max-width:700px){.dw-kpi{grid-template-columns:1fr}}
 .dw-cs-h{margin:0 0 6px;font-size:12px}
 @media(prefers-reduced-motion:reduce){.dw-hd:hover{r:1.7}}
 </style>
@@ -14829,39 +14848,39 @@ function dwCmpData(d){
   return{k,ap,s,P,A0,A1:ap?ap.T:null,before,after,el,fc,strip:(ap?after:before).slice().reverse()};
 }
 function dwCmpHtml(d,C){
-  C=C||dwCmpData(d);const{k,ap,P,A0,A1,before,after,el,fc}=C,nb=before.length,per=dw.per;
+  C=C||dwCmpData(d);const{ap,P,A0,A1,before,after,el,fc}=C,nb=before.length,per=dw.per;
   const x=(at,A)=>((at-A)/P*100).toFixed(2);
-  const tick=(f,A,y0,y1,col)=>`<line x1="${x(f.at,A)}%" x2="${x(f.at,A)}%" y1="${y0}" y2="${y1}" stroke="${col}"/>`;
-  const sp=(A)=>`${dwClock(A).slice(0,5)}–${dwClock(A+P).slice(0,5)}`;
-  const dl=fc==null?null:fc-nb,chip=dl==null?"":`<span class="dw-dl ${dl<0?"dn":dl>0?"up":""}">${dl>0?"+":dl<0?"−":"±"}${Math.abs(dl)}</span>`;
-  const cnt=ap?`<b class="dw-n">${after.length}</b><span>${i18n(plural(after.length,"сработка|сработки|сработок"))} ${i18n("после применения за")} ${dwDur(el)}</span>
-      <span class="dw-was">${i18n("до применения за")} ${per} ${i18n("мин")}: ${nb}</span>
-      ${fc==null?`<span class="dw-was">${i18n("Прогноз появится через")} ${Math.ceil(30-el)} ${i18n("с")}</span>`
-        :`<span>${i18n(el<P?`прогноз на ${per} мин`:`итог за ${per} мин`)}: <b>${el<P?"≈":""}${fc}</b></span>${chip}<span class="dw-was">${i18n(dl<0?"меньше сработок, чем до применения":dl>0?"больше сработок, чем до применения":"столько же сработок, сколько до применения")}</span>`}`
-    :`<b class="dw-n">${nb}</b><span>${i18n(plural(nb,"сработка|сработки|сработок"))} ${i18n("за последние")} ${per} ${i18n("мин")}</span>
-      <span class="dw-was">${i18n("Применить новые настройки через план. Нижний ряд начнёт заполняться с этого момента.")}</span>`;
-  const nowX=ap&&el<P?(el/P*100).toFixed(2):null;
-  return`<div class="dw-cnt">${cnt}</div>
-    <div class="dw-tl dw-tl2" ${onEv("mousedown",["dwCmpSeek",onEv.el,onEv.event,A0,A1??-1,P])}>
-      <svg width="100%" height="100%" preserveAspectRatio="none">
-        <line x1="0" x2="100%" y1="28" y2="28" stroke="var(--ln)"/>
-        ${before.map(f=>tick(f,A0,4,24,"var(--mu)")).join("")}
-        ${after.map(f=>tick(f,A1,32,52,dwFireColor(f,C.s))).join("")}
-        ${nowX!=null?`<rect x="${nowX}%" width="${(100-nowX).toFixed(2)}%" y="32" height="20" fill="url(#dwFc)"/><line x1="${nowX}%" x2="${nowX}%" y1="30" y2="56" stroke="var(--tx)" stroke-width="1.5"/>`:""}
-        <defs><pattern id="dwFc" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2" height="6" fill="var(--rd)" opacity=".22"/></pattern></defs>
-      </svg>
-      <span class="dw-tl-lb a">${i18n("до применения")} · ${sp(A0)}</span>
-      <span class="dw-tl-lb b">${ap?`${i18n("после применения")} · ${sp(A1)}`:i18n("после применения")}</span>
-      ${!ap?`<span class="dw-tl-empty">${i18n("Ряд заполнится после «Применить»")}</span>`:nowX!=null&&fc!=null?`<span class="dw-tl-fc" style="left:calc(${nowX}% + 6px)">${i18n("прогноз")} ≈${fc}</span>`:""}
-    </div>
-    <div class="dw-tl-x">${[0,.25,.5,.75,1].map(p=>`<span>${p?`+${Math.round(p*per)} ${i18n("мин")}`:i18n("начало периода")}</span>`).join("")}</div>`;
+  const ticks=(fs,A,col)=>fs.map(f=>`<line x1="${x(f.at,A)}%" x2="${x(f.at,A)}%" y1="4" y2="28" stroke="${col}" stroke-width="2"/>`).join("");
+  const sp=A=>`${dwClock(A).slice(0,5)}–${dwClock(A+P).slice(0,5)}`;
+  const sw=n=>i18n(plural(n,"сработка|сработки|сработок"));
+  const dl=fc==null?null:fc-nb;
+  // Плитки: цвет полосы слева — тот же, что у ряда на шкале
+  const tile=(cls,l,n,s,x="")=>`<div class="dw-k ${cls}"><span class="dw-k-l">${l}</span><span class="dw-k-v"><b>${n}</b>${x}</span><span class="dw-k-s">${s}</span></div>`;
+  const kpi=`<div class="dw-kpi">
+    ${tile("b0",ap?i18n("До применения"):`${i18n("Последние")} ${per} ${i18n("мин")}`,nb,ap?`${sw(nb)} ${i18n("за")} ${per} ${i18n("мин")}`:sw(nb))}
+    ${ap?tile("b1",i18n("После применения"),after.length,`${sw(after.length)} ${i18n("за")} ${dwDur(el)}`):tile("b1 off",i18n("После применения"),"—",i18n("Применить настройки через план"))}
+    ${!ap?tile("fc off",`${i18n("Прогноз на")} ${per} ${i18n("мин")}`,"—",i18n("Появится после применения"))
+      :fc==null?tile("fc off",`${i18n("Прогноз на")} ${per} ${i18n("мин")}`,"…",`${i18n("Появится через")} ${Math.ceil(30-el)} ${i18n("с")}`)
+      :tile("fc",i18n(el<P?`Прогноз на ${per} мин`:`Итог за ${per} мин`),(el<P?"≈":"")+fc,i18n(dl<0?"меньше, чем до применения":dl>0?"больше, чем до применения":"столько же, сколько до применения"),
+        `<span class="dw-dl ${dl<0?"dn":dl>0?"up":""}">${dl>0?"+":dl<0?"−":"±"}${Math.abs(dl)}</span>`)}
+  </div>`;
+  const nowX=ap&&el<P?+(el/P*100).toFixed(2):null;
+  const fcBand=nowX!=null?`<rect x="${nowX}%" width="${(100-nowX).toFixed(2)}%" y="0" height="32" fill="url(#dwFc)"/><line x1="${nowX}%" x2="${nowX}%" y1="0" y2="32" stroke="var(--tx)" stroke-width="2"/>`:"";
+  const row=(cls,l,range,A,body,empty)=>`<div class="dw-rl ${cls}"><b>${l}</b><span>${range}</span></div>
+    <div class="dw-rt${empty?" off":""}" ${A!=null?onEv("mousedown",["dwChartSeek",onEv.el,onEv.event,A,P]):""}><svg width="100%" height="32" preserveAspectRatio="none">
+      <defs><pattern id="dwFc" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2" height="6" fill="var(--rd)" opacity=".28"/></pattern></defs>${body}</svg></div>`;
+  return kpi+`<div class="dw-rows">
+    ${row("b0",i18n("До"),sp(A0),A0,ticks(before,A0,"var(--mu)"))}
+    ${row("b1",i18n("После"),ap?sp(A1):"—",ap?A1:null,ap?ticks(after,A1,"var(--rd)")+fcBand:"",!ap)}
+    <span></span><div class="dw-tl-x">${[0,.25,.5,.75,1].map(p=>`<span>${p?`+${Math.round(p*per)} ${i18n("мин")}`:"0"}</span>`).join("")}</div>
+  </div>
+  <div class="dw-lg"><span><i class="b0"></i>${i18n("сработка до применения")}</span><span><i class="b1"></i>${i18n("сработка после применения")}</span>${nowX!=null?`<span><i class="fc"></i>${i18n("прогноз до конца периода")}</span>`:""}<span class="sub">${i18n(ap?"Нажать на отметку, чтобы открыть архив на этом моменте.":"Нижний ряд начнёт заполняться после «Применить».")}</span></div>`;
 }
 function dwCmpStripHtml(d,C){
   const{k,ap,s,strip}=C;
   if(!strip.length)return`<p class="sub">${i18n(ap?"После применения детектор ещё не сработал.":"За этот период детектор не сработал.")}</p>`;
   return`<p class="sub dw-cs-h">${i18n(ap?"Сработки после применения, новые слева":"Сработки за период, новые слева")}</p>${dwStripHtml(strip,s,k,20)}`;
 }
-function dwCmpSeek(el,e,A0,A1,P){const r=el.getBoundingClientRect(),low=e.clientY-r.top>r.height/2,A=low?+A1:+A0;if(low&&A1<0)return;const at=A+(e.clientX-r.left)/r.width*+P;if(at<dw.T)dwArch(at)}
 function dwDur(sec){sec=Math.floor(sec);return sec<60?`${sec} ${i18n("с")}`:`${Math.floor(sec/60)} ${i18n("мин")}${sec%60?` ${sec%60} ${i18n("с")}`:""}`}
 // ── Панель настроек ──
 function dwSec(title,body,x=""){return`<section class="dw-sec"><h4>${i18n(title)}${x}</h4>${body}</section>`}
