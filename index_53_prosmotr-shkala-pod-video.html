@@ -2896,7 +2896,7 @@ body.pj-hdlog .gojump{display:none}
 .vw{container-type:inline-size;display:grid;gap:12px;min-width:0}
 .vw-player{display:grid;gap:8px;min-width:0;background:var(--p1,var(--p2));border:1px solid var(--ln);border-radius:10px;padding:10px}
 .vw .vw-vid{max-width:none;width:100%;margin:0;border-radius:6px}
-.vw-a .vw-vid{width:min(100%,calc((100vh - 430px)*16/9));min-width:min(100%,480px);justify-self:center}
+.vw-a .vw-vid{width:min(100%,calc((100vh - 430px)*16/9));min-width:min(100%,320px);justify-self:center}
 .vw .live-view .live-note{top:36px}
 .vw-mode{position:absolute;left:8px;top:8px;z-index:3;display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#fff;background:#000b;padding:3px 8px;border-radius:6px;pointer-events:none;letter-spacing:.02em}
 .vw-mode[hidden]{display:none}.vw-mode.arc{background:#1f4e8ccc}
@@ -2929,6 +2929,18 @@ body.pj-hdlog .gojump{display:none}
 .vw-live-feed{margin-bottom:12px}
 .vw-pane .tl-ev{margin:0}
 .vw-relays td{vertical-align:middle}.vw .btn{white-space:nowrap}.vw-relays td.ca-x{display:flex;flex-wrap:wrap;gap:4px}
+
+.vw-size{position:relative;height:14px;margin:-4px 0 -2px;cursor:ns-resize;display:grid;place-items:center;touch-action:none;border-radius:6px}
+.vw-size i{display:block;width:56px;height:4px;border-radius:2px;background:var(--ln);transition:background .15s,width .15s}
+.vw-size:hover i,.vw-size.on i,.vw-size:focus-visible i{background:var(--bl);width:80px}
+.vw-size:focus-visible{outline:2px solid var(--bl);outline-offset:1px}
+.vw-size-t{position:absolute;top:-30px;left:50%;transform:translateX(-50%);font-size:12px;color:#fff;background:#000c;padding:2px 8px;border-radius:6px;white-space:nowrap;pointer-events:none;font-variant-numeric:tabular-nums}
+.vw-player.vw-max{position:fixed;inset:0;z-index:1000;border:0;border-radius:0;background:#0b0e13;color:#e6eaf0;padding:12px;display:flex;flex-direction:column;gap:8px}
+.vw-player.vw-max .vw-vid{flex:1 1 auto;width:100%!important;min-height:0;aspect-ratio:auto;max-height:none}
+.vw-player.vw-max .vw-size{display:none}
+.vw-player:fullscreen{background:#0b0e13;color:#e6eaf0;padding:12px;display:flex;flex-direction:column;gap:8px}
+.vw-player:fullscreen .vw-vid{flex:1 1 auto;width:100%!important;min-height:0;aspect-ratio:auto;max-height:none}
+.vw-player:fullscreen .vw-size{display:none}
 /* Вариант B: панель справа от видео, своя прокрутка; узко — под видео */
 .vw-b{grid-template-columns:minmax(0,1fr) minmax(300px,360px);align-items:stretch}
 .vw-b .vw-vid{width:100%}
@@ -16715,14 +16727,15 @@ function camViewHtml(n){
   const exp=can("createExport")?`<span class="vw-sep" aria-hidden="true"></span>${can("feature:exportLiveFrame")?`<button type="button" class="btn s" data-exp-live title="${i18n("Сохранить кадр живого видео")}" ${onEv("click",["expFromCam",n.id,"live"])}>${lu("camera",14)}${i18n("Кадр")}</button>`:""}${can("feature:exportArea")?`<button type="button" class="btn s" data-exp-area-go title="${i18n("Выбрать область кадра")}" ${onEv("click",["expCropStart",n.id])}>${i18n("Область")}</button>`:""}<button type="button" class="btn s" data-exp-cam-go ${onEv("click",["expFromCam",n.id,"video"])}>${lu("download",14)}${i18n("Экспорт…")}</button>`:"";
   const mark=can("createUnitBookmark")?`<button type="button" class="btn s" data-vw-mark ${onEv("click",["vwMarkGo"])}>${i18n("Отметить")}</button>`:"";
   const player=`<div class="vw-player">
-    <div class="vid live-frame live-view vw-vid" data-live="${escHtml(n.id)}" data-live-view="1">${ptz?cvSimHtml(n)+cvOnVidHtml(n):""}<div class="live-titles" data-live-titles hidden></div><span class="live-note"></span><span class="vw-mode" data-vw-mode hidden></span>${liveActsHtml()}</div>
+    <div class="vid live-frame live-view vw-vid" data-live="${escHtml(n.id)}" data-live-view="1" ${vwH?`style="width:min(100%,${Math.round(vwH*16/9)}px)"`:""}>${ptz?cvSimHtml(n)+cvOnVidHtml(n):""}<div class="live-titles" data-live-titles hidden></div><span class="live-note"></span><span class="vw-mode" data-vw-mode hidden></span>${liveActsHtml()}</div>
+    <div class="vw-size" role="separator" aria-orientation="horizontal" tabindex="0" aria-label="${i18n("Размер видео")}" title="${i18n("Тянуть вверх или вниз, чтобы изменить размер видео. Двойной щелчок возвращает размер по окну")}" ${onEv("pointerdown",["vwSizeDown"])} ${onEv("dblclick",["vwSizeReset"])} ${onEv("keydown",["vwSizeKey"])}><i aria-hidden="true"></i><span class="vw-size-t" data-vw-size-t hidden></span></div>
     <div class="vw-bar live-row">
       <button type="button" class="btn s pri" data-live-go ${onEv("click",["liveToggle"])}>${i18n("Смотреть")}</button>
       <button type="button" class="btn s vw-golive" data-vw-golive hidden ${onEv("click",["vwGoLive"])}><i class="vw-dot" aria-hidden="true"></i>${i18n("Смотреть живое")}</button>
       <label>${i18n("Поток")} <select data-live-stream ${onEv("change",["liveStreamSet",onEv.value])}><option value="">${i18n("Под размер окна")}</option>${streams}</select></label>
       <label>${i18n("Сеть")} <select data-live-net ${onEv("change",["liveNetSet",onEv.value])}><option value="local">${i18n("Из локальной сети")}</option><option value="outside">${i18n("Извне")}</option></select></label>
       <button type="button" class="btn s" data-talk hidden ${onEv("click",["talkToggle",`${n.id}`])}>${lu("mic",14)}${i18n("Говорить")}</button><span class="sub" data-talk-state></span>
-      <span class="vw-grow"></span>${mark}${exp}
+      <span class="vw-grow"></span>${mark}${exp}<span class="vw-sep" aria-hidden="true"></span><button type="button" class="btn s" data-vw-full title="${i18n("Развернуть видео со шкалой на весь экран. Esc возвращает обратно")}" ${onEv("click",["vwFull"])}>${lu("maximize-2",14)}<span data-vw-full-t>${i18n("На весь экран")}</span></button>
     </div>
     ${can("getUnitTimeline")?`<div class="vw-tl" data-tl></div>`:""}
   </div>`;
@@ -16739,6 +16752,51 @@ function camViewHtml(n){
     </div></section>`:"";
   return`<div class="vw vw-${VW_LAYOUT}" data-vw>${player}${panel}</div>`;
 }
+// Размер видео: ручка под кадром. Высота меняет ширину (16:9); шире раздела видео не станет — min(100%,…).
+// vwH — высота в пикселях, null — размер по окну. Размер общий для всех камер до перезагрузки страницы
+let vwH=null;
+const VW_MIN_H=180;
+function vwBox(){return document.querySelector("#main .vw-vid")}
+function vwMaxH(){const p=document.querySelector("#main .vw-player");return p?(p.clientWidth-20)*9/16:2000}
+function vwSizeApply(h,show){
+  const box=vwBox();if(!box)return;
+  vwH=h==null?null:Math.round(Math.max(VW_MIN_H,Math.min(h,vwMaxH())));
+  box.style.width=vwH?`min(100%,${Math.round(vwH*16/9)}px)`:"";
+  const t=document.querySelector("#main [data-vw-size-t]");
+  if(t){const r=box.getBoundingClientRect();t.textContent=`${Math.round(r.width)} × ${Math.round(r.height)}`;t.hidden=!show}
+}
+function vwSizeDown(){
+  const e=onEv.now,box=vwBox();if(!box||e.button!==0)return;
+  e.preventDefault();
+  const y0=e.clientY,h0=box.getBoundingClientRect().height,grip=this;
+  grip.classList.add("on");grip.setPointerCapture?.(e.pointerId);
+  const mv=ev=>vwSizeApply(h0+(ev.clientY-y0),true);
+  const up=()=>{grip.classList.remove("on");document.removeEventListener("pointermove",mv);document.removeEventListener("pointerup",up);vwSizeApply(vwH,false)};
+  document.addEventListener("pointermove",mv);document.addEventListener("pointerup",up);
+}
+function vwSizeReset(){vwSizeApply(null,false)}
+function vwSizeKey(){
+  const e=onEv.now,d={ArrowDown:40,ArrowUp:-40}[e.key];
+  if(e.key==="Home"||e.key==="Escape"){e.preventDefault();vwSizeReset();return}
+  if(!d)return;e.preventDefault();
+  vwSizeApply((vwH||vwBox()?.getBoundingClientRect().height||360)+d,true);
+}
+// На весь экран — проигрыватель целиком: видео, кнопки и шкала. Esc или та же кнопка возвращают обратно
+// Браузер отказал (встроенное окно, запрет политики) — проигрыватель занимает всё окно браузера
+function vwFull(){
+  const p=document.querySelector("#main .vw-player");if(!p)return;
+  if(document.fullscreenElement){document.exitFullscreen?.();return}
+  if(p.classList.contains("vw-max")){vwMaxSet(p,false);return}
+  const fb=()=>vwMaxSet(p,true);
+  try{const r=p.requestFullscreen?.();if(r?.catch)r.catch(fb);else if(!r)fb()}catch(e){fb()}
+}
+function vwMaxSet(p,on){p.classList.toggle("vw-max",on);vwFullText()}
+function vwFullText(){
+  const p=document.querySelector("#main .vw-player"),on=!!document.fullscreenElement?.matches?.(".vw-player")||!!p?.classList.contains("vw-max");
+  const t=document.querySelector("#main [data-vw-full-t]");if(t)t.textContent=i18n(on?"Свернуть":"На весь экран");
+}
+document.addEventListener("fullscreenchange",vwFullText);
+document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;const p=document.querySelector("#main .vw-player.vw-max");if(p){e.preventDefault();vwMaxSet(p,false)}});
 function vwTabSet(k){
   vwTab=k;
   document.querySelectorAll("#main [data-vw-tab]").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.vwTab===k)));
