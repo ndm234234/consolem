@@ -2771,4 +2771,10 @@ window.I18N_EN={
 "Консоль не удалила тур":"The console did not delete the tour",
 "Консоль не удалила поток":"The console did not delete the stream",
 "Карточка камеры закрыта. Чтобы удалить, открыть камеру и удалить снова":"The camera card is closed. To delete, open the camera and delete again",
+// Симуляция PTZ на стенде (из прототипа 47): надписи в кадре и тосты
+"ВХОД":"ENTRANCE",
+"Пан":"Pan",
+"Наклон":"Tilt",
+"Прототип: в API нет такой команды. На стенде камеру поворачивает симуляция":"Prototype: the API has no such command. On the test stand, the simulation turns the camera",
+"Прототип: в API нет туров и перехода в пресет. На стенде камеру по точкам ведёт симуляция":"Prototype: the API has no tours and no move to a preset. On the test stand, the simulation moves the camera through the points",
 };
