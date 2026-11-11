@@ -2959,7 +2959,6 @@ body.pj-hdlog .gojump{display:none}
 .dw-tl-x{display:flex;justify-content:space-between;font-size:11px;color:var(--mu);margin:2px 0 8px}
 .dw-strip{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;scrollbar-gutter:stable}
 .dw-th{flex:none;width:132px;padding:0;border:1px solid var(--ln);border-radius:6px;background:var(--p2);text-align:left;overflow:hidden}
-.dw-th:hover{border-color:var(--bl)}
 .dw-th svg{display:block;width:100%;aspect-ratio:16/9;background:#080b10}
 .dw-th span{display:block;padding:3px 6px 4px;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dw-th b{margin-right:6px;font-variant-numeric:tabular-nums}
@@ -3010,13 +3009,10 @@ body.pj-hdlog .gojump{display:none}
 .dw-vs{display:inline-flex;align-items:center;gap:6px;margin-left:auto}
 .dw-vs .dw-seg button{padding:2px 8px}
 .dw-tag{position:absolute;top:8px;left:8px;z-index:1;display:inline-flex;align-items:center;gap:6px;padding:2px 8px;border-radius:6px;background:rgba(0,0,0,.62);color:#fff;font-size:12px;font-weight:600;pointer-events:none}
-.dw-tag.arch{background:rgba(30,64,175,.85)}
 .dw-now{position:absolute;top:8px;right:8px;z-index:1;padding:2px 8px;border-radius:6px;background:rgba(0,0,0,.62);color:#fff;font-size:12px;pointer-events:none}
 .dw-now:empty{display:none}
 .dw-rec{display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef4444;flex:none}
 .dw-live{display:inline-flex;align-items:center;gap:6px;font-weight:600}
-.dw-arch{padding:1px 8px;border-radius:6px;background:var(--one-info-bg);color:var(--x-link);font-weight:600;font-size:12px}
-.dw-play .btn:has(.dw-rec){display:inline-flex;align-items:center;gap:6px}
 .dw-kpi{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:2px 0 12px}
 .dw-k{display:flex;flex-direction:column;gap:2px;padding:8px 12px;border:1px solid var(--ln);border-left:4px solid var(--c);border-radius:8px;background:var(--p2);min-width:0}
 .dw-k.b0{--c:var(--mu)}.dw-k.b1{--c:var(--rd)}.dw-k.fc{--c:var(--rd);border-left-style:dashed}
@@ -3040,7 +3036,9 @@ body.pj-hdlog .gojump{display:none}
 .dw-lg i.fc{width:14px;background:repeating-linear-gradient(45deg,rgba(255,77,77,.45) 0 2px,transparent 2px 5px)}
 .dw-lg .sub{margin:0 0 0 auto}
 @media(max-width:700px){.dw-kpi{grid-template-columns:1fr}}
-.dw-cs-h{margin:0 0 6px;font-size:12px}
+.dw-cs{margin-top:14px;padding-top:12px;border-top:1px solid var(--ln)}
+.dw-cs-h{display:flex;align-items:baseline;gap:10px;margin:0 0 8px;font-size:14px}
+.dw-cs-h .sub{margin:0;font-size:12px;font-weight:400}
 @media(prefers-reduced-motion:reduce){.dw-hd:hover{r:1.7}}
 </style>
 <!-- ONE PSIM: мост по ONE.PSIM.PrototypeKit, подключён после стилей прототипа -->
@@ -14515,9 +14513,9 @@ const DW_CLS={person:"Человек",car:"Машина",bike:"Велосипе�
 const DW_SUBC=["#c084fc","#f59e0b","#22d3ee","#f472b6"];
 const DW_PIX=new Set(["motion","tracker","abandoned"]);
 const DW_SIZE=new Set(["motion","linecross","tracker","neural","abandoned"]);
-// T — время живого видео (секунды сцены, растёт без конца), at — время архива или null, когда кадр показывает живое видео,
+// T — время живого видео (секунды сцены, растёт без конца),
 // ap — когда применили настройки и какие были до этого
-const dw={cfg:{},saved:{},kind:{},T:1800,at:null,play:false,tsp:1,per:15,ap:{},now:null,shown:-1,sj:"",
+const dw={cfg:{},saved:{},kind:{},T:1800,tsp:1,per:15,ap:{},now:null,shown:-1,sj:"",
   lay:{obj:true,trk:true,why:true,size:false},sel:null,tool:null,drag:false,raf:0,last:0,id:null,memo:new Map(),soon:0};
 const dwClone=x=>JSON.parse(JSON.stringify(x));
 function dwRng(seed){let s=seed>>>0;return()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296}}
@@ -14649,7 +14647,7 @@ function dwClock(t){return new Date(DW_T0+t*1000).toLocaleTimeString("ru-RU",{ho
 // ── Карточка ──
 function detWindowHtml(cam,d){
   const k=dwKindOf(d),c=dwC(d);
-  if(dw.id!==d.id+k){dw.id=d.id+k;dw.sel=null;dw.tool=null;dw.at=null}
+  if(dw.id!==d.id+k){dw.id=d.id+k;dw.sel=null;dw.tool=null}
   setTimeout(dwStart,0);
   return detBackHtml(cam)+`<div class="dw" data-dw="${escHtml(d.id)}">
     ${dwStubHtml(d,k)}
@@ -14811,7 +14809,7 @@ function dwThumb(f,c,k){
   return`<svg viewBox="${x.toFixed(1)} ${y.toFixed(1)} ${W.toFixed(1)} ${H.toFixed(1)}" preserveAspectRatio="xMidYMid slice" aria-hidden="true">${dwSceneInner()}${sil}${bx}</svg>`;
 }
 function dwStripHtml(fires,c,k,max){
-  return`<div class="dw-strip">${fires.slice(0,max).map(f=>`<button type="button" class="dw-th" ${onEv("click",["dwJump",f.at])}>${dwThumb(f,c,k)}<span><b>${dwClock(f.at)}</b>${escHtml(dwFireLabel(f,c,k))}</span></button>`).join("")}
+  return`<div class="dw-strip">${fires.slice(0,max).map(f=>`<div class="dw-th">${dwThumb(f,c,k)}<span><b>${dwClock(f.at)}</b>${escHtml(dwFireLabel(f,c,k))}</span></div>`).join("")}
     ${fires.length>max?`<span class="sub dw-more">${i18n("и ещё")} ${fires.length-max}</span>`:""}</div>`;
 }
 // Сработки настроек c за отрезок [A,B) живого времени: сцена повторяется каждый час
@@ -14867,19 +14865,19 @@ function dwCmpHtml(d,C){
   const nowX=ap&&el<P?+(el/P*100).toFixed(2):null;
   const fcBand=nowX!=null?`<rect x="${nowX}%" width="${(100-nowX).toFixed(2)}%" y="0" height="32" fill="url(#dwFc)"/><line x1="${nowX}%" x2="${nowX}%" y1="0" y2="32" stroke="var(--tx)" stroke-width="2"/>`:"";
   const row=(cls,l,range,A,body,empty)=>`<div class="dw-rl ${cls}"><b>${l}</b><span>${range}</span></div>
-    <div class="dw-rt${empty?" off":""}" ${A!=null?onEv("mousedown",["dwChartSeek",onEv.el,onEv.event,A,P]):""}><svg width="100%" height="32" preserveAspectRatio="none">
+    <div class="dw-rt${empty?" off":""}"><svg width="100%" height="32" preserveAspectRatio="none">
       <defs><pattern id="dwFc" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2" height="6" fill="var(--rd)" opacity=".28"/></pattern></defs>${body}</svg></div>`;
   return kpi+`<div class="dw-rows">
     ${row("b0",i18n("До"),sp(A0),A0,ticks(before,A0,"var(--mu)"))}
     ${row("b1",i18n("После"),ap?sp(A1):"—",ap?A1:null,ap?ticks(after,A1,"var(--rd)")+fcBand:"",!ap)}
     <span></span><div class="dw-tl-x">${[0,.25,.5,.75,1].map(p=>`<span>${p?`+${Math.round(p*per)} ${i18n("мин")}`:"0"}</span>`).join("")}</div>
   </div>
-  <div class="dw-lg"><span><i class="b0"></i>${i18n("сработка до применения")}</span><span><i class="b1"></i>${i18n("сработка после применения")}</span>${nowX!=null?`<span><i class="fc"></i>${i18n("прогноз до конца периода")}</span>`:""}<span class="sub">${i18n(ap?"Нажать на отметку, чтобы открыть архив на этом моменте.":"Нижний ряд начнёт заполняться после «Применить».")}</span></div>`;
+  <div class="dw-lg"><span><i class="b0"></i>${i18n("сработка до применения")}</span><span><i class="b1"></i>${i18n("сработка после применения")}</span>${nowX!=null?`<span><i class="fc"></i>${i18n("прогноз до конца периода")}</span>`:""}${ap?"":`<span class="sub">${i18n("Нижний ряд начнёт заполняться после «Применить».")}</span>`}</div>`;
 }
 function dwCmpStripHtml(d,C){
   const{k,ap,s,strip}=C;
-  if(!strip.length)return`<p class="sub">${i18n(ap?"После применения детектор ещё не сработал.":"За этот период детектор не сработал.")}</p>`;
-  return`<p class="sub dw-cs-h">${i18n(ap?"Сработки после применения, новые слева":"Сработки за период, новые слева")}</p>${dwStripHtml(strip,s,k,20)}`;
+  const h=`<h4 class="dw-cs-h">${i18n(ap?"Сработки после применения":`Сработки за последние ${dw.per} мин`)}<span class="sub">${i18n("новые слева")}</span></h4>`;
+  return`<section class="dw-cs">${h}${strip.length?dwStripHtml(strip,s,k,20):`<p class="sub">${i18n(ap?"После применения детектор ещё не сработал.":"За этот период детектор не сработал.")}</p>`}</section>`;
 }
 function dwDur(sec){sec=Math.floor(sec);return sec<60?`${sec} ${i18n("с")}`:`${Math.floor(sec/60)} ${i18n("мин")}${sec%60?` ${sec%60} ${i18n("с")}`:""}`}
 // ── Панель настроек ──
@@ -15045,17 +15043,15 @@ function dwRefresh(){
   const s=root.querySelector("[data-dw-st]");if(s)s.innerHTML=dwStateHtml(d);
   root.querySelectorAll(".dw-sub-n").forEach((el,i)=>{const sb=c.subs[i];if(sb)el.textContent=`${dwEval(c,"tracker").fires.filter(f=>f.sub===sb.id).length} ${i18n("сраб.")}`});
   dwPaintGeo();dwPaintObj();cardFootRefresh();
-  const b=root.querySelector("[data-dw-bar]");if(b&&dw.at==null)b.innerHTML=dwBarHtml(d);
+  const b=root.querySelector("[data-dw-bar]");if(b)b.innerHTML=dwBarHtml(d);
 }
 function dwSoon(){if(dw.soon)return;dw.soon=setTimeout(()=>{dw.soon=0;dwRefresh()},30)}
 function dwPaintGeo(){const g=dwRoot()?.querySelector("[data-dw-geo]"),d=dwD();if(g&&d)g.innerHTML=dwGeoSvg(d)}
 function dwPaintObj(){
   const root=dwRoot(),d=dwD();if(!root||!d)return;
-  const t=dw.at??dw.T,g=root.querySelector("[data-dw-obj]");if(g)g.innerHTML=dwObjSvg(d,((t%DW_T)+DW_T)%DW_T);
+  const t=dw.T,g=root.querySelector("[data-dw-obj]");if(g)g.innerHTML=dwObjSvg(d,((t%DW_T)+DW_T)%DW_T);
   const ck=root.querySelector("[data-dw-clock]");if(ck)ck.textContent=dwClock(t);
-  const tg=root.querySelector("[data-dw-tag]");if(tg)tg.innerHTML=dwTagHtml();
   const nw=root.querySelector("[data-dw-now]");if(nw)nw.textContent=dw.now!=null&&dwKindOf(d)!=="other"?`${i18n("Детектор видит в кадре")}: ${dw.now}`:"";
-  const cur=root.querySelector("[data-dw-cur]");if(cur){const A=dw.T-DW_T,x=dw.at==null?"-10%":((dw.at-A)/DW_T*100).toFixed(2)+"%";cur.setAttribute("x1",x);cur.setAttribute("x2",x)}
   // Раз в секунду живого времени: графики «до и после», лента, итог плана после очереди
   const sec=Math.floor(dw.T);if(sec!==dw.shown){dw.shown=sec;
     const sj=JSON.stringify(dwSaved(d));if(sj!==dw.sj){const first=!dw.sj;dw.sj=sj;if(!first){dwRefresh();return}}
@@ -15068,24 +15064,13 @@ function dwLoop(ts){
   if(!dwRoot()){dw.raf=0;return}
   const dt=Math.min(.1,(ts-dw.last)/1000);dw.last=ts;
   dw.T+=dt*dw.tsp;
-  if(dw.at!=null&&dw.play&&!dw.drag){dw.at+=dt*dw.tsp;if(dw.at>=dw.T-1)dwLive()}
   dwPaintObj();dw.raf=requestAnimationFrame(dwLoop);
 }
-function dwPlayBtn(){const b=dwRoot()?.querySelector("[data-dw-pp]");if(b){b.innerHTML=lu(dw.play?"circle-pause":"circle-play",16);b.setAttribute("aria-label",i18n(dw.play?"Пауза":"Смотреть"))}}
-function dwPlay(){dw.play=!dw.play;dwPlayBtn()}
 function dwBarHtml(d){
-  if(dw.at==null)return`<span class="dw-live"><i class="dw-rec"></i>${i18n("Живое видео")}</span><b data-dw-clock>${dwClock(dw.T)}</b>
+  return`<span class="dw-live"><i class="dw-rec"></i>${i18n("Живое видео")}</span><b data-dw-clock>${dwClock(dw.T)}</b>
     <span class="sub">${i18n(dwChanged(d)?"Кадр показывает новые настройки. Детектор начнёт работать с ними после «Применить».":"Кадр показывает применённые настройки.")}</span>`;
-  return`<button type="button" class="btn s" data-dw-pp aria-label="${i18n(dw.play?"Пауза":"Смотреть")}" ${onEv("click",["dwPlay"])}>${lu(dw.play?"circle-pause":"circle-play",16)}</button>
-    <span class="dw-arch">${i18n("Архив")}</span><b data-dw-clock>${dwClock(dw.at)}</b>
-    <button type="button" class="btn s" ${onEv("click",["dwLive"])}><i class="dw-rec"></i>${i18n("Вернуться к живому видео")}</button>`;
 }
-function dwTagHtml(){return dw.at==null?`<i class="dw-rec"></i>${i18n("Живое видео")}`:`${i18n("Архив")} ${dwClock(dw.at)}`}
-function dwBar(){const r=dwRoot(),b=r?.querySelector("[data-dw-bar]"),d=dwD();if(b&&d)b.innerHTML=dwBarHtml(d);r?.querySelector("[data-dw-tag]")?.classList.toggle("arch",dw.at!=null);dwPaintObj()}
-function dwLive(){dw.at=null;dw.play=false;dwBar()}
-function dwArch(at){dw.at=Math.max(dw.T-DW_T,Math.min(dw.T-1,+at));dw.play=false;dwBar()}
-function dwJump(at){dwArch(+at+.5)}
-function dwChartSeek(el,e,A,P){const r=el.getBoundingClientRect(),at=+A+(e.clientX-r.left)/r.width*+P;if(at<dw.T)dwArch(at)}
+function dwTagHtml(){return`<i class="dw-rec"></i>${i18n("Живое видео")}`}
 function dwPer(v){dw.per=+v;dw.shown=-1;dwPv("cmp")}
 function dwTsp(v){dw.tsp=+v;gear()}
 function dwKindPick(id,v){dw.kind[id]=v;dw.tool=null;gear()}
