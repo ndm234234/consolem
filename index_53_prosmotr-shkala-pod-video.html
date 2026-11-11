@@ -3002,6 +3002,21 @@ body.pj-hdlog .gojump{display:none}
 .vw-cal-lg i{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:5px;vertical-align:middle;background:#2e7d5b}.vw-cal-lg i.no{background:transparent;box-shadow:inset 0 0 0 1px var(--mu,#8a94a3)}
 .vw-cal-f{display:flex;justify-content:flex-end;margin-top:8px}
 .vw-cal p{margin:6px 0 0;font-size:11px}
+/* Раунд 5: экспорт — одной группой, справка — кнопкой в строке под видео */
+.vw-expg{display:inline-flex}.vw-expg .btn{margin:0;border-radius:0}.vw-expg .btn+.btn{border-left-width:0}
+.vw-expg .btn:first-child{border-radius:6px 0 0 6px;font-weight:600}.vw-expg .btn:last-child{border-radius:0 6px 6px 0}.vw-expg .btn:only-child{border-radius:6px}
+.vw-bar .btn[data-vw-keys][aria-pressed="true"]{background:var(--bl);border-color:var(--bl);color:#fff}
+/* Раунд 5: шкала едет под неподвижной головой в центре */
+.vw-tl .tl{overflow:hidden;cursor:grab}
+.vw-tl .tl.drag{cursor:grabbing}
+.vw-tks{position:absolute;inset:0;pointer-events:none}
+.vw-trk{position:absolute;top:0;bottom:0;pointer-events:none}
+.vw-tl .tl .vw-trk .tl-s{min-width:2px}
+.vw-fut{position:absolute;top:0;bottom:0;right:0;pointer-events:none;background:repeating-linear-gradient(135deg,transparent 0 6px,#8a94a326 6px 7px)}
+.vw-tl .tl .tl-head{left:50%!important;top:0;bottom:0}
+.vw-tl .tl .tl-head::before{top:-1px}
+.vw-tlw{padding-top:6px}.vw-tlw .vw-tip{bottom:auto;top:-22px}
+.vw-ax .vw-now{right:auto;transform:translateX(-50%)}
 /* Вариант B: панель справа от видео, своя прокрутка; узко — под видео */
 .vw-b{grid-template-columns:minmax(0,1fr) minmax(300px,360px);align-items:stretch}
 .vw-b .vw-vid{width:100%}
@@ -15826,11 +15841,11 @@ function viewOpen(v){
   v.viewOn=true;v.tl=tlNew();v.feed=[];v.holds=[];v.marks=[];
   viewKidsLoad(v);tlLoad(v);holdsLoad(v);
 }
-function tlWin(win){if(!lv?.tl)return;lv.tl.win=win;lv.tl.day=null;tlLoad(lv)}
+function tlWin(win){if(!lv?.tl)return;lv.tl.win=win;lv.tl.day=null;lv.tl.range=null;tlLoad(lv)}
 function tlLoad(v){
   const t=v.tl;if(!can("getUnitTimeline")||!t)return;
   const gen=++t.gen,w=TL_WINDOWS.find(x=>x[0]===t.win),now=Date.now();
-  const dy=t.day?[t.day,Math.min(new Date(t.day).setDate(new Date(t.day).getDate()+1),now)]:null;
+  const dy=t.range?[t.range[0],Math.min(t.range[1],now)]:t.day?[t.day,Math.min(new Date(t.day).setDate(new Date(t.day).getDate()+1),now)]:null;t.at=now;
   t.to=dy?dy[1]:now;t.from=dy?dy[0]:w[2]?now-w[2]:0;t.busy=true;t.err="";t.spans=[];t.next=null;t.ev=[];
   viewFill();
   const q=dy||w[2]?{from:new Date(t.from).toISOString(),to:new Date(t.to).toISOString(),limit:TL_PAGE}:{limit:TL_PAGE};
@@ -15839,7 +15854,7 @@ function tlLoad(v){
     tlTake(t,r);t.busy=false;
     if(!t.from)t.from=t.spans.length?t.spans[0].startMs:t.to-864e5;
     viewFill();tlEvents(v);marksLoad(v);
-    if(t.dayPlay){t.dayPlay=false;vwDayGo(v)}
+    vwLoaded(v);
   }).catch(e=>{if(lv===v&&t.gen===gen){t.busy=false;t.err=problemText(e);viewFill()}});
 }
 function tlTake(t,r){
@@ -15982,9 +15997,9 @@ function pbDrop(v){
 }
 function pbHead(v,ms){
   if(v.scrub!=null)ms=v.scrub;
-  v.tlHeadMs=ms;vwModeShow(v,ms);
+  v.tlHeadMs=ms;if(v.tl&&!v.drag)v.tl.vc=ms;vwModeShow(v,ms);
   const el=document.querySelector("#main [data-tl-head]");if(!el||!v.tl)return;
-  el.hidden=false;el.classList.remove("live");el.style.left=`${tlPos(v.tl,ms)}%`;
+  el.classList.remove("live");
   const b=document.querySelector("#main [data-tl-bar]");if(b)b.setAttribute("aria-valuetext",vwTime(ms));
 }
 const pbMoment=v=>v?.pb?.piece&&liveEl?v.pb.piece.from+liveEl.currentTime*1000:null;
@@ -16791,7 +16806,8 @@ let vwTab="ev";
 function camViewHtml(n){
   const streams=camStreams(n).map(s=>`<option value="${escHtml(s.id)}" ${s.online===false?"disabled":""}>${escHtml(s.name)}${s.res?` · ${escHtml(s.res)}`:""}${s.online===false?` · ${i18n("нет сигнала")}`:""}</option>`).join("");
   const ptz=!!n.ptz&&can("putUnitPtz");
-  const exp=can("createExport")?`<span class="vw-sep" aria-hidden="true"></span>${can("feature:exportLiveFrame")?`<button type="button" class="btn s" data-exp-live title="${i18n("Сохранить кадр живого видео")}" ${onEv("click",["expFromCam",n.id,"live"])}>${lu("camera",14)}${i18n("Кадр")}</button>`:""}${can("feature:exportArea")?`<button type="button" class="btn s" data-exp-area-go title="${i18n("Выбрать область кадра")}" ${onEv("click",["expCropStart",n.id])}>${i18n("Область")}</button>`:""}<button type="button" class="btn s" data-exp-cam-go ${onEv("click",["expFromCam",n.id,"video"])}>${lu("download",14)}${i18n("Экспорт…")}</button>`:"";
+  // Экспорт — одной группой, «Экспорт…» первой: по ней видно, что «Кадр» и «Область» — тоже выгрузка (раунд 5)
+  const exp=can("createExport")?`<span class="vw-sep" aria-hidden="true"></span><span class="vw-expg" role="group" aria-label="${i18n("Экспорт")}"><button type="button" class="btn s" data-exp-cam-go title="${i18n("Выгрузить запись или живое видео в файл")}" ${onEv("click",["expFromCam",n.id,"video"])}>${lu("download",14)}${i18n("Экспорт…")}</button>${can("feature:exportLiveFrame")?`<button type="button" class="btn s" data-exp-live title="${i18n("Сохранить текущий кадр в файл")}" ${onEv("click",["expFromCam",n.id,"live"])}>${lu("camera",14)}${i18n("Кадр")}</button>`:""}${can("feature:exportArea")?`<button type="button" class="btn s" data-exp-area-go title="${i18n("Выбрать область кадра и сохранить её в файл")}" ${onEv("click",["expCropStart",n.id])}>${lu("crop",14)}${i18n("Область")}</button>`:""}</span>`:"";
   const mark=can("createUnitBookmark")?`<button type="button" class="btn s" data-vw-mark ${onEv("click",["vwMarkGo"])}>${i18n("Отметить")}</button>`:"";
   const player=`<div class="vw-player">
     <div class="vid live-frame live-view vw-vid vw-idle" data-live="${escHtml(n.id)}" data-live-view="1" tabindex="0" aria-label="${i18n("Видео. Пробел ставит на паузу, стрелки перематывают на 10 с")}" ${vwH?`style="width:min(100%,${Math.round(vwH*16/9)}px)"`:""} ${onEv("keydown",["vwKey"])} ${onEv("click",["vwVidClick"])} ${onEv("dblclick",["vwVidDbl"])}>${ptz?cvSimHtml(n)+cvOnVidHtml(n):""}<div class="live-titles" data-live-titles hidden></div><span class="live-note"></span><span class="vw-mode" data-vw-mode hidden></span>${vwCtlHtml()}${liveActsHtml()}</div>
@@ -16801,7 +16817,7 @@ function camViewHtml(n){
       <label>${i18n("Поток")} <select data-live-stream ${onEv("change",["liveStreamSet",onEv.value])}><option value="">${i18n("Под размер окна")}</option>${streams}</select></label>
       <label>${i18n("Сеть")} <select data-live-net ${onEv("change",["liveNetSet",onEv.value])}><option value="local">${i18n("Из локальной сети")}</option><option value="outside">${i18n("Извне")}</option></select></label>
       <button type="button" class="btn s" data-talk hidden ${onEv("click",["talkToggle",`${n.id}`])}>${lu("mic",14)}${i18n("Говорить")}</button><span class="sub" data-talk-state></span>
-      <span class="vw-grow"></span>${mark}${exp}
+      <span class="vw-grow"></span>${mark}${exp}<span class="vw-sep" aria-hidden="true"></span><button type="button" class="btn s" data-vw-keys title="${i18n("Показать горячие клавиши проигрывателя (?)")}" aria-pressed="false" ${onEv("click",["vwKeysToggle"])}>${lu("keyboard",14)}${i18n("Горячие клавиши")}</button>
     </div>
     ${can("getUnitTimeline")?`<div class="vw-tl" data-tl></div>`:""}
   </div>`;
@@ -16883,7 +16899,9 @@ function vwModeShow(v,ms){
   el.hidden=!going;el.classList.toggle("arc",pb);
   const html=pb?`${lu("clock",13)}${i18n("Архив")}${at?` · ${escHtml(vwTime(at))}`:""}${r!==1?` · ${vwRateText(r)}`:""}${ps}`:`<i class="vw-dot" aria-hidden="true"></i>${i18n("Живое")}${ps}`;
   if(el._h!==html){el._h=html;el.innerHTML=html}
-  if(!pb&&v.scrub==null){const h=document.querySelector("#main [data-tl-head]");if(h){h.hidden=!going||Date.now()-(v.tl?.to||0)>6e5;h.classList.add("live");h.style.left="100%"}}
+  const h=document.querySelector("#main [data-tl-head]");if(h)h.classList.toggle("live",!pb&&going);
+  if(!pb&&going&&!v.drag&&v.tl)v.tl.vc=Date.now();
+  vwView(v);
   vwCtlShow(v);
 }
 // ── Управление на кадре (раунд 3): пауза, перемотка, события, кадры, скорость, звук — как в обычном видеоплеере ──
@@ -16933,10 +16951,13 @@ function vwPP(){
 }
 // Перейти к моменту: внутри поставленного куска — сдвинуть видео; иначе — новый кусок; у «Сейчас» — живое
 function vwSeekTo(v,ms){
+  if(v.tl)v.tl.vc=Math.min(ms,Date.now());
   if(ms>=Date.now()-1500){vwGoLive();return}
   const p=v.pb?.piece,el=liveEl;
   if(p&&el&&ms>=p.from&&ms<p.to&&isFinite(el.duration)&&(ms-p.from)/1000<el.duration){el.currentTime=(ms-p.from)/1000;pbHead(v,ms);return}
-  const over=(v.tl?.spans||[]).filter(x=>x.startMs<=ms&&ms<x.endMs),s=over.find(x=>!x.fenced)||over[0];
+  const sp=v.tl?.spans||[],over=sp.filter(x=>x.startMs<=ms&&ms<x.endMs);let s=over.find(x=>!x.fenced)||over[0];
+  // Под моментом записи нет — ближайшая запись после него, как в клиентах VMS; позже записи нет — живое
+  if(!s&&sp.length){const nx=sp.find(x=>x.startMs>ms&&!x.fenced);if(nx){s=nx;ms=nx.startMs;if(v.tl)v.tl.vc=ms}else if(ms>sp[sp.length-1].endMs){vwGoLive();return}}
   pbPlay(v,ms,s?.spanId,s);
 }
 function vwSkip(d){const v=lv;if(v)vwSeekTo(v,(pbMoment(v)??Date.now())+d*VW_SKIP)}
@@ -16959,14 +16980,14 @@ function vwRateStep(d){const v=lv;if(!v?.pb)return;const i=VW_RATES.indexOf(v.pb
 function vwMute(){if(!liveEl)return;vwMuted=!liveEl.muted;liveEl.muted=vwMuted;vwCtlShow(lv)}
 // Клавиши — по коду клавиши, поэтому они работают и в русской раскладке. Нет кода (экранная клавиатура,
 // автоматизация) — код по самой клавише
-const vwCode=e=>e.code||({" ":"Space",",":"Comma",".":"Period","<":"Comma",">":"Period"}[e.key])||(/^[a-z]$/i.test(e.key)?`Key${e.key.toUpperCase()}`:e.key);
+const vwCode=e=>e.code||({" ":"Space",",":"Comma",".":"Period","<":"Comma",">":"Period","-":"Minus","+":"Equal","=":"Equal"}[e.key])||(/^[a-z]$/i.test(e.key)?`Key${e.key.toUpperCase()}`:e.key);
 function vwKey(){
   const e=onEv.now,tg=e.target,tag=tg.tagName;
   if(tag==="SELECT"||tag==="INPUT"||(tag==="BUTTON"&&(e.key===" "||e.key==="Enter")))return;
   if(e.ctrlKey||e.metaKey||e.altKey)return;
   if(e.key==="?"||(e.code==="Slash"&&e.shiftKey)){e.preventDefault();vwKeysToggle();return}
   const act={Space:vwPP,KeyK:vwPP,ArrowLeft:()=>vwSkip(-1),KeyJ:()=>vwSkip(-1),ArrowRight:()=>vwSkip(1),KeyL:()=>vwSkip(1),
-    Comma:()=>e.shiftKey?vwRateStep(-1):vwFrame(-1),Period:()=>e.shiftKey?vwRateStep(1):vwFrame(1),KeyF:vwFull,KeyM:vwMute,End:vwGoLive}[vwCode(e)];
+    Comma:()=>e.shiftKey?vwRateStep(-1):vwFrame(-1),Period:()=>e.shiftKey?vwRateStep(1):vwFrame(1),KeyF:vwFull,KeyM:vwMute,End:vwGoLive,Minus:()=>vwZoomBy(1.25),NumpadSubtract:()=>vwZoomBy(1.25),Equal:()=>vwZoomBy(0.8),NumpadAdd:()=>vwZoomBy(0.8)}[vwCode(e)];
   if(!act)return;e.preventDefault();act();
 }
 // Щелчок по кадру, а не по кнопке. Путь события — на момент щелчка: кнопка могла перерисоваться в своём обработчике
@@ -16975,61 +16996,121 @@ const vwOnCtl=e=>e.composedPath().some(x=>x.matches?.(".vw-ctl,.vw-keys,.cv-onvi
 function vwVidClick(){if(!this.contains(document.activeElement))this.focus({preventScroll:true});if(!vwOnCtl(onEv.now))vwPP()}
 function vwVidDbl(){if(!vwOnCtl(onEv.now))vwFull()}
 
-// Полоса шкалы: деления времени, записи, события, отметки; голова с ручкой. Тянуть мышью — перемотка, как в видеоплеере:
-// внутри поставленного куска видео идёт за мышью сразу, иначе кусок запрашивается, когда кнопку отпустили
-const VW_STEPS=[6e4,3e5,6e5,9e5,18e5,36e5,72e5,108e5,216e5,432e5,864e5,1728e5,6048e5];
-const VW_MINOR={6e4:4,3e5:5,6e5:5,9e5:3,18e5:6,36e5:4,72e5:4,108e5:3,216e5:6,432e5:4,864e5:4,1728e5:2,6048e5:7};
-function vwTicks(t){
-  const span=Math.max(t.to-t.from,1),step=VW_STEPS.find(x=>span/x<=8)||VW_STEPS[VW_STEPS.length-1],mn=step/(VW_MINOR[step]||4);
-  const tz=new Date(t.from).getTimezoneOffset()*6e4;let lines="",labels="";
-  for(let x=Math.ceil((t.from-tz)/mn)*mn+tz;x<=t.to;x+=mn){
-    const mj=(x-tz)%step===0,p=tlPos(t,x);
+// Полоса шкалы (раунд 5): голова стоит в центре, тянут саму шкалу — как в клиентах VMS. Вид — центр t.vc и ширина
+// t.vz (мс). Записи, события и отметки — на дорожке под весь загруженный диапазон, её двигает vwView; деления — под вид.
+// Отпустили шкалу — запись с момента под головой; щелчок без сдвига — с момента под курсором. Колесо, «−» и «+» — масштаб.
+// Утащили за загруженный диапазон — шкала дочитывает его сама (tlLoad с t.range), не чаще раза в 0,35 с
+const VW_STEPS=[1e4,3e4,6e4,3e5,6e5,9e5,18e5,36e5,72e5,108e5,216e5,432e5,864e5,1728e5,6048e5];
+const VW_MINOR={1e4:5,3e4:3,6e4:4,3e5:5,6e5:5,9e5:3,18e5:6,36e5:4,72e5:4,108e5:3,216e5:6,432e5:4,864e5:4,1728e5:2,6048e5:7};
+const VW_ZMIN=6e4,VW_ZMAX=31*864e5;
+let vwEnsT=null;
+const vwDayText=ms=>new Date(ms).toLocaleDateString(uiLang==="ru"?"ru-RU":"en-GB",{weekday:"short",day:"2-digit",month:"2-digit",year:"numeric"});
+function vwTicksView(a,b){
+  const z=Math.max(b-a,1),step=VW_STEPS.find(x=>z/x<=8)||VW_STEPS[VW_STEPS.length-1],mn=step/(VW_MINOR[step]||4);
+  const tz=new Date(a).getTimezoneOffset()*6e4,fmt=uiLang==="ru"?"ru-RU":"en-GB";let lines="",labels="";
+  for(let x=Math.ceil((a-tz)/mn)*mn+tz;x<=b;x+=mn){
+    const mj=(x-tz)%step===0,p=(x-a)/z*100;
     lines+=`<i class="vw-tk${mj?" mj":""}" style="left:${p.toFixed(3)}%"></i>`;
-    if(mj&&p>2&&p<92){const d=new Date(x),day=step>=864e5||(d.getHours()===0&&d.getMinutes()===0);
-      labels+=`<span style="left:${p.toFixed(3)}%"${day?' class="day"':""}>${escHtml(day?d.toLocaleDateString(uiLang==="ru"?"ru-RU":"en-GB",{day:"2-digit",month:"2-digit"}):d.toLocaleTimeString(uiLang==="ru"?"ru-RU":"en-GB",{hour:"2-digit",minute:"2-digit"}))}</span>`}
+    if(mj&&p>3&&p<97&&Math.abs(x-Date.now())>z*.06){const d=new Date(x),day=step>=864e5||(d.getHours()===0&&d.getMinutes()===0&&d.getSeconds()===0);
+      labels+=`<span style="left:${p.toFixed(3)}%"${day?' class="day"':""}>${escHtml(day?d.toLocaleDateString(fmt,{day:"2-digit",month:"2-digit"}):d.toLocaleTimeString(fmt,step<6e4?{hour:"2-digit",minute:"2-digit",second:"2-digit"}:{hour:"2-digit",minute:"2-digit"}))}</span>`}
   }
   return{lines,labels};
 }
 function vwBarHtml(v){
-  const t=v.tl,left=ms=>tlPos(t,ms).toFixed(3),tk=vwTicks(t);
+  const t=v.tl,left=ms=>tlPos(t,ms).toFixed(4);
   const spans=t.spans.map((s,i)=>{const a=tlPos(t,s.startMs),b=tlPos(t,s.endMs);
-    return`<i class="tl-s${s.fenced?" fen":s.backupOnly?" bak":s.source==="device"?" dev":""}" data-span="${i}" style="left:${a.toFixed(3)}%;width:${Math.max(b-a,.15).toFixed(3)}%"></i>`}).join("");
+    return`<i class="tl-s${s.fenced?" fen":s.backupOnly?" bak":s.source==="device"?" dev":""}" data-span="${i}" style="left:${a.toFixed(4)}%;width:${(b-a).toFixed(4)}%"></i>`}).join("");
   const ev=t.ev.map(e=>`<b class="tl-e" style="left:${left(eventMs(e))}%"></b>`).join("");
-  const marks=(v.marks||[]).map(m=>m.type==="span"&&m.to?`<b class="tl-m span" style="left:${left(Date.parse(m.occurred))}%;width:${Math.max(tlPos(t,Date.parse(m.to))-tlPos(t,Date.parse(m.occurred)),.2).toFixed(3)}%"></b>`:`<b class="tl-m" style="left:${left(Date.parse(m.occurred))}%"></b>`).join("");
-  return`<div class="vw-tlw"><div class="tl" data-tl-bar role="slider" tabindex="0" aria-label="${i18n("Шкала времени. Тянуть мышью или нажать стрелки, чтобы перемотать запись")}" aria-valuemin="${t.from}" aria-valuemax="${t.to}" ${onEv("pointerdown",["vwTlDown"])} ${onEv("keydown",["vwTlKey"])}>${tk.lines}${spans}${ev}${marks}<em class="vw-hv" data-vw-hv hidden></em><em class="tl-head" data-tl-head hidden></em><span class="vw-tip" data-vw-tip hidden></span></div>
-    <div class="vw-ax">${tk.labels}${Date.now()-t.to<6e5?`<span class="vw-now">${i18n("Сейчас")}</span>`:""}</div></div>`;
+  const marks=(v.marks||[]).map(m=>m.type==="span"&&m.to?`<b class="tl-m span" style="left:${left(Date.parse(m.occurred))}%;width:${(tlPos(t,Date.parse(m.to))-tlPos(t,Date.parse(m.occurred))).toFixed(4)}%"></b>`:`<b class="tl-m" style="left:${left(Date.parse(m.occurred))}%"></b>`).join("");
+  return`<div class="vw-tlw"><span class="vw-tip" data-vw-tip hidden></span><div class="tl" data-tl-bar role="slider" tabindex="0" aria-label="${i18n("Шкала времени. Тянуть шкалу мышью или нажать стрелки, чтобы перемотать запись. Колесо мыши меняет масштаб")}" ${onEv("pointerdown",["vwTlDown"])} ${onEv("keydown",["vwTlKey"])}><div class="vw-tks" data-vw-tks></div><div class="vw-trk" data-vw-trk>${spans}${ev}${marks}</div><div class="vw-fut" data-vw-fut hidden></div><em class="vw-hv" data-vw-hv hidden></em><em class="tl-head" data-tl-head></em></div>
+    <div class="vw-ax" data-vw-ax></div></div>`;
 }
 function vwBarEl(){return document.querySelector("#main [data-tl-bar]")}
-function vwAt(x){const b=vwBarEl(),t=lv?.tl;if(!b||!t)return null;const r=b.getBoundingClientRect();return t.from+Math.max(0,Math.min(1,(x-r.left)/r.width))*(t.to-t.from)}
-function vwHoverAt(ms){
+// Вид: дорожка, деления, будущее справа от «Сейчас», подпись суток в календаре, нажатый масштаб
+function vwView(v){
+  const t=v?.tl,bar=vwBarEl();if(!t||!bar)return;
+  if(!t.vz)t.vz=TL_WINDOWS.find(x=>x[0]===(t.zk||"1h"))?.[2]||36e5;
+  if(!t.vc)t.vc=Date.now();
+  const z=t.vz,c=t.vc,a=c-z/2,b=c+z/2,now=Date.now();
+  const trk=bar.querySelector("[data-vw-trk]");
+  if(trk){trk.style.width=`${Math.max(t.to-t.from,1)/z*100}%`;trk.style.left=`${(t.from-a)/z*100}%`}
+  const fut=bar.querySelector("[data-vw-fut]"),pn=(now-a)/z*100;
+  if(fut){fut.hidden=pn>=100;fut.style.left=`${Math.max(0,pn)}%`}
+  const key=`${Math.round(a/250)}|${z}|${Math.round(now/1000)}`;
+  if(bar._tk!==key){bar._tk=key;const tk=vwTicksView(a,b);bar.querySelector("[data-vw-tks]").innerHTML=tk.lines;
+    const ax=document.querySelector("#main [data-vw-ax]");if(ax)ax.innerHTML=tk.labels+(pn>=0&&pn<=100?`<span class="vw-now" style="left:${Math.max(4,Math.min(96,pn)).toFixed(2)}%">${i18n("Сейчас")}</span>`:"")}
+  const ct=document.querySelector("#main [data-vw-calt]"),dt=vwDayText(c);if(ct&&ct.textContent!==dt)ct.textContent=dt;
+  bar.setAttribute("aria-valuetext",vwTime(c));
+}
+function vwAt(x){const b=vwBarEl(),t=lv?.tl;if(!b||!t)return null;const r=b.getBoundingClientRect();return t.vc+((x-r.left)/r.width-.5)*t.vz}
+function vwHoverAt(ms,center){
   const t=lv?.tl,hv=document.querySelector("#main [data-vw-hv]"),tip=document.querySelector("#main [data-vw-tip]");if(!t||!hv||!tip||ms==null)return;
-  const p=tlPos(t,ms),now=ms>=Date.now()-1500,rec=t.spans.some(s=>s.startMs<=ms&&ms<s.endMs);
-  vwHvOn=true;hv.hidden=false;hv.style.left=`${p}%`;
+  const p=center?50:(ms-t.vc)/t.vz*100+50,now=ms>=Date.now()-1500,rec=t.spans.some(s=>s.startMs<=ms&&ms<s.endMs);
+  vwHvOn=true;hv.hidden=!!center;hv.style.left=`${p}%`;
   tip.hidden=false;tip.style.left=`${Math.max(6,Math.min(94,p))}%`;
-  tip.textContent=now?i18n("Сейчас · живое видео"):`${vwTime(ms)}${rec?"":` · ${i18n("нет записи")}`}`;
+  tip.textContent=now?i18n("Сейчас · живое видео"):ms>Date.now()?i18n("Будущее"):`${vwTime(ms)}${rec?"":` · ${i18n("нет записи")}`}`;
 }
 function vwHoverHide(){document.querySelectorAll("#main [data-vw-hv],#main [data-vw-tip]").forEach(e=>e.hidden=true)}
 document.addEventListener("pointermove",e=>{
+  if(lv?.drag)return;
   const bar=e.target.closest?.("#main [data-tl-bar]");
-  if(!bar&&lv?.scrub==null){if(vwHvOn){vwHvOn=false;vwHoverHide()}return}
-  vwHvOn=true;vwHoverAt(lv?.scrub??vwAt(e.clientX));
+  if(!bar){if(vwHvOn){vwHvOn=false;vwHoverHide()}return}
+  vwHoverAt(vwAt(e.clientX));
 });
-function vwScrubTo(v,ms){
-  v.scrub=ms;vwHoverAt(ms);
-  const p=v.pb?.piece,el=liveEl;
-  if(p&&el&&ms>=p.from&&ms<p.to&&isFinite(el.duration)&&(ms-p.from)/1000<el.duration)el.currentTime=(ms-p.from)/1000;
-  pbHead(v,ms);
+// Колесо над шкалой — масштаб вокруг головы; страница при этом не прокручивается
+document.addEventListener("wheel",e=>{
+  if(!e.target.closest?.("#main [data-tl-bar]")||!lv?.tl||!e.deltaY)return;
+  e.preventDefault();vwZoomBy(e.deltaY>0?1.25:0.8);
+},{passive:false});
+function vwZoomBy(f){
+  const v=lv,t=v?.tl;if(!t)return;
+  t.vz=Math.max(VW_ZMIN,Math.min(VW_ZMAX,(t.vz||36e5)*f));t.zk="";
+  document.querySelectorAll("#main [data-tl-win]").forEach(b=>b.setAttribute("aria-pressed","false"));
+  vwView(v);vwEnsureData(v);
 }
+function vwWin(k){
+  const v=lv,t=v?.tl;if(!t)return;
+  t.zk=k;document.querySelectorAll("#main [data-tl-win]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.tlWin===k)));
+  if(k==="all"){t.fitAll=true;tlWin("all");return}
+  t.vz=TL_WINDOWS.find(x=>x[0]===k)[2];vwView(v);vwEnsureData(v);
+}
+// Загруженный диапазон не покрывает вид с запасом в ширину вида — дочитать вокруг головы
+function vwEnsureData(v){
+  clearTimeout(vwEnsT);
+  vwEnsT=setTimeout(()=>{
+    const t=v?.tl;if(lv!==v||!t||t.busy)return;
+    const now=Date.now(),a=t.vc-t.vz,b=Math.min(now,t.vc+t.vz),toNow=t.to>=(t.at||0)-1000;
+    if(a>=t.from-1000&&(toNow||b<=t.to+1000))return;
+    t.range=[Math.max(a-t.vz/2,now-366*864e5),Math.min(now,b+t.vz/2)];t.day=null;tlLoad(v);
+  },350);
+}
+function vwLoaded(v){
+  const t=v.tl;
+  if(t.fitAll){t.fitAll=false;t.vz=Math.max(VW_ZMIN,Math.min(VW_ZMAX,(t.to-t.from)*2))}
+  if(t.dayPlay){t.dayPlay=false;vwDayGo(v)}
+  vwView(v);
+}
+// Перетаскивание: шкала идёт за мышью, голова на месте; видео показывает момент под головой, если он в куске
 function vwTlDown(){
-  const e=onEv.now,v=lv;if(!v?.tl||e.button!==0)return;
-  e.preventDefault();this.focus?.({preventScroll:true});this.setPointerCapture?.(e.pointerId);this.classList.add("drag");
-  vwScrubTo(v,vwAt(e.clientX));
-  const mv=ev=>{if(lv===v)vwScrubTo(v,vwAt(ev.clientX))};
+  const e=onEv.now,v=lv,t=v?.tl;if(!t||e.button!==0)return;
+  e.preventDefault();this.focus?.({preventScroll:true});this.setPointerCapture?.(e.pointerId);
+  const r=this.getBoundingClientRect(),x0=e.clientX,c0=t.vc,z=t.vz;let moved=false;
+  const mv=ev=>{
+    if(lv!==v)return;
+    if(!moved&&Math.abs(ev.clientX-x0)<4)return;
+    if(!moved){moved=true;v.drag=true;vwBarEl()?.classList.add("drag")}
+    const ms=Math.min(Date.now(),c0-(ev.clientX-x0)/r.width*z);
+    t.vc=ms;v.scrub=ms;vwHoverAt(ms,true);
+    const p=v.pb?.piece,el=liveEl;
+    if(p&&el&&ms>=p.from&&ms<p.to&&isFinite(el.duration)&&(ms-p.from)/1000<el.duration)el.currentTime=(ms-p.from)/1000;
+    vwModeShow(v,ms);
+  };
   const up=()=>{
     ["pointermove","pointerup","pointercancel"].forEach((k,i)=>document.removeEventListener(k,i?up:mv));
-    vwBarEl()?.classList.remove("drag");
-    const ms=v.scrub;v.scrub=null;if(lv!==v||ms==null)return;
-    vwSeekTo(v,ms);
+    vwBarEl()?.classList.remove("drag");v.drag=false;v.scrub=null;vwHoverHide();
+    if(lv!==v)return;
+    const ms=moved?t.vc:c0+((x0-r.left)/r.width-.5)*z;
+    vwSeekTo(v,Math.min(ms,Date.now()));vwEnsureData(v);
   };
   document.addEventListener("pointermove",mv);document.addEventListener("pointerup",up);document.addEventListener("pointercancel",up);
 }
@@ -17037,16 +17118,18 @@ function vwTlKey(){
   const e=onEv.now,v=lv;if(!v?.tl)return;
   if(e.key==="?"||(e.code==="Slash"&&e.shiftKey)){e.preventDefault();vwKeysToggle();return}
   const act={ArrowLeft:()=>vwSkip(-1),ArrowRight:()=>vwSkip(1),PageUp:()=>vwSeekTo(v,(pbMoment(v)??Date.now())-6e4),PageDown:()=>vwSeekTo(v,(pbMoment(v)??Date.now())+6e4),
-    Home:()=>vwSeekTo(v,v.tl.from),End:vwGoLive,Space:vwPP,Enter:vwPP}[vwCode(e)];
+    Home:()=>vwSeekTo(v,v.tl.from),End:vwGoLive,Space:vwPP,Enter:vwPP,Minus:()=>vwZoomBy(1.25),NumpadSubtract:()=>vwZoomBy(1.25),Equal:()=>vwZoomBy(0.8),NumpadAdd:()=>vwZoomBy(0.8)}[vwCode(e)];
   if(!act)return;e.preventDefault();act();
 }
+// Живое: голова — «Сейчас», шкала едет влево раз в секунду
+setInterval(()=>{const v=lv;if(v?.tl&&!v.pb&&v.state==="live"&&!v.drag&&vwBarEl()){v.tl.vc=Date.now();vwView(v)}},1000);
 // ── Раунд 4: справка по клавишам и календарь ──
 // Справка — окно поверх кадра: видна и на весь экран. Открывают кнопка с клавиатурой на панели и клавиша «?»
-Object.assign(LU,{keyboard:'<path d="M10 8h.01"/><path d="M12 12h.01"/><path d="M14 8h.01"/><path d="M16 12h.01"/><path d="M18 8h.01"/><path d="M6 8h.01"/><path d="M7 16h10"/><path d="M8 12h.01"/><rect width="20" height="16" x="2" y="4" rx="2"/>'});
+Object.assign(LU,{crop:'<path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/>',keyboard:'<path d="M10 8h.01"/><path d="M12 12h.01"/><path d="M14 8h.01"/><path d="M16 12h.01"/><path d="M18 8h.01"/><path d="M6 8h.01"/><path d="M7 16h10"/><path d="M8 12h.01"/><rect width="20" height="16" x="2" y="4" rx="2"/>'});
 const VW_KEYS=[
-  ["Видео",[[["Пробел","K"],"Смотреть или поставить на паузу"],[["←","J"],"Перемотать назад на 10 с"],[["→","L"],"Перемотать вперёд на 10 с"],[[","],"Показать предыдущий кадр записи"],[["."],"Показать следующий кадр записи"],[["Shift + ,"],"Замедлить запись"],[["Shift + ."],"Ускорить запись"],[["End"],"Смотреть живое видео"],[["F"],"Развернуть на весь экран или свернуть"],[["M"],"Выключить или включить звук"],[["?"],"Показать или скрыть эту справку"],[["Esc"],"Закрыть справку или календарь"]]],
-  ["Шкала",[[["←","→"],"Перемотать на 10 с"],[["PageUp","PageDown"],"Перемотать на 1 мин"],[["Home"],"Перейти к началу шкалы"],[["End"],"Смотреть живое видео"],[["Enter"],"Смотреть или поставить на паузу"]]],
-  ["Мышь",[[["Щелчок по видео"],"Смотреть или поставить на паузу"],[["Двойной щелчок"],"Развернуть на весь экран"],[["Тянуть по шкале"],"Перемотать запись"]]]];
+  ["Видео",[[["Пробел","K"],"Смотреть или поставить на паузу"],[["←","J"],"Перемотать назад на 10 с"],[["→","L"],"Перемотать вперёд на 10 с"],[[","],"Показать предыдущий кадр записи"],[["."],"Показать следующий кадр записи"],[["Shift + ,"],"Замедлить запись"],[["Shift + ."],"Ускорить запись"],[["End"],"Смотреть живое видео"],[["F"],"Развернуть на весь экран или свернуть"],[["M"],"Выключить или включить звук"],[["?"],"Показать или скрыть эту справку"],[["−","+"],"Изменить масштаб шкалы"],[["Esc"],"Закрыть справку или календарь"]]],
+  ["Шкала",[[["←","→"],"Перемотать на 10 с"],[["PageUp","PageDown"],"Перемотать на 1 мин"],[["Home"],"Перейти к началу шкалы"],[["End"],"Смотреть живое видео"],[["Enter"],"Смотреть или поставить на паузу"],[["−","+"],"Изменить масштаб шкалы"]]],
+  ["Мышь",[[["Щелчок по видео"],"Смотреть или поставить на паузу"],[["Двойной щелчок"],"Развернуть на весь экран"],[["Тянуть шкалу"],"Перемотать запись: голова шкалы стоит в центре"],[["Щелчок по шкале"],"Смотреть запись с этого момента"],[["Колесо над шкалой"],"Изменить масштаб шкалы"]]]];
 function vwKeysHtml(){
   const kb=(ks,m)=>ks.map(k=>`<kbd${m?' class="m"':""}>${escHtml(i18n(k))}</kbd>`).join(`<span class="vw-or">${i18n("или")}</span>`);
   return`<div class="vw-keys" data-vw-keys-box role="dialog" aria-label="${i18n("Горячие клавиши")}" hidden>
@@ -17058,7 +17141,7 @@ function vwKeysHtml(){
 function vwKeysToggle(on){
   const k=document.querySelector("#main [data-vw-keys-box]");if(!k)return;
   k.hidden=on===false?true:on===true?false:!k.hidden;
-  document.querySelector("#main [data-vw-keys]")?.setAttribute("aria-pressed",String(!k.hidden));
+  document.querySelectorAll("#main [data-vw-keys]").forEach(b=>b.setAttribute("aria-pressed",String(!k.hidden)));
   if(k.hidden)vwBox()?.focus({preventScroll:true});
 }
 
@@ -17070,8 +17153,8 @@ const vwDayStart=ms=>{const d=new Date(ms);d.setHours(0,0,0,0);return d.getTime(
 function vwCalBtnHtml(v){
   if(!can("getUnitRecordingDays"))return"";
   const t=v.tl,day=t.day,today=vwDayStart(Date.now());
-  const txt=day?new Date(day).toLocaleDateString(uiLang==="ru"?"ru-RU":"en-GB",{weekday:"short",day:"2-digit",month:"2-digit",year:"numeric"}):i18n("Выбрать дату");
-  return`<span class="vw-calw"><span class="vw-seg vw-dayb"><button type="button" class="vw-segb" title="${i18n("Предыдущие сутки")}" aria-label="${i18n("Предыдущие сутки")}" ${onEv("click",["vwDayStep",-1])}>${lu("chevron-left",14)}</button><button type="button" class="vw-segb vw-calb" aria-haspopup="dialog" aria-expanded="${!!vwCal}" aria-pressed="${!!day}" ${onEv("click",["vwCalToggle"])}>${lu("calendar-days",14)}${escHtml(txt)}</button><button type="button" class="vw-segb" title="${i18n("Следующие сутки")}" aria-label="${i18n("Следующие сутки")}" ${!day||day>=today?"disabled":""} ${onEv("click",["vwDayStep",1])}>${lu("chevron-right",14)}</button></span>${vwCal?vwCalHtml(v):""}</span>`;
+  const txt=vwDayText(t.vc||Date.now());
+  return`<span class="vw-calw"><span class="vw-seg vw-dayb"><button type="button" class="vw-segb" title="${i18n("Предыдущие сутки")}" aria-label="${i18n("Предыдущие сутки")}" ${onEv("click",["vwDayStep",-1])}>${lu("chevron-left",14)}</button><button type="button" class="vw-segb vw-calb" aria-haspopup="dialog" aria-expanded="${!!vwCal}" aria-pressed="${!!day}" title="${i18n("Выбрать дату в календаре")}" ${onEv("click",["vwCalToggle"])}>${lu("calendar-days",14)}<span data-vw-calt>${escHtml(txt)}</span></button><button type="button" class="vw-segb" title="${i18n("Следующие сутки")}" aria-label="${i18n("Следующие сутки")}" ${onEv("click",["vwDayStep",1])}>${lu("chevron-right",14)}</button></span>${vwCal?vwCalHtml(v):""}</span>`;
 }
 function vwCalHtml(v){
   const p=vwCal,rec=vwDays[`${v.id}|${p.y}-${p.m}`],first=new Date(p.y,p.m,1),shift=(first.getDay()+6)%7,n=new Date(p.y,p.m+1,0).getDate();
@@ -17106,12 +17189,12 @@ function vwCalLoad(){
     const o={};r.days.forEach(x=>o[x.date]=x.recorded);vwDays[key]={days:o,gone:r.unavailable?.length>0};viewFill();
   }).catch(e=>{delete vwDays[key];toast(problemText(e))});
 }
-function vwDaySet(ms){const v=lv;if(!v?.tl)return;v.tl.day=vwDayStart(ms);v.tl.dayPlay=true;vwCal=null;tlLoad(v)}
+function vwDaySet(ms){const v=lv;if(!v?.tl)return;v.tl.day=vwDayStart(ms);v.tl.range=null;v.tl.dayPlay=true;vwCal=null;tlLoad(v)}
 function vwCalDay(day){if(vwCal)vwDaySet(new Date(vwCal.y,vwCal.m,day).getTime())}
 function vwCalToday(){vwDaySet(Date.now())}
 function vwDayStep(d){
   const t=lv?.tl;if(!t)return;
-  const base=new Date(t.day||vwDayStart(Date.now()));base.setDate(base.getDate()+d);
+  const base=new Date(vwDayStart(t.vc||Date.now()));base.setDate(base.getDate()+d);
   if(base.getTime()>Date.now())return;vwDaySet(base.getTime());
 }
 // Сутки загружены: запись — с первого отрезка суток; записей нет — сказать словами
@@ -17126,7 +17209,7 @@ document.addEventListener("pointerdown",e=>{if(vwCal&&!e.target.closest?.(".vw-c
 function vwTlHtml(v,n){
   const t=v.tl,fix=can("fetchUnitArchive")&&n.arch?tlFixable(t):[];
   const lg=(c,l)=>`<span class="vw-lg"><i class="${c}"></i>${i18n(l)}</span>`;
-  return`<div class="vw-tlh"><div class="vw-seg" role="group" aria-label="${i18n("Период на шкале")}">${TL_WINDOWS.map(([k,l])=>`<button type="button" class="vw-segb" aria-pressed="${t.win===k&&!t.day}" data-tl-win="${k}" ${onEv("click",["tlWin",k])}>${i18n(l)}</button>`).join("")}</div>${vwCalBtnHtml(v)}
+  return`<div class="vw-tlh"><div class="vw-seg" role="group" aria-label="${i18n("Период на шкале")}">${TL_WINDOWS.map(([k,l])=>`<button type="button" class="vw-segb" aria-pressed="${(t.zk||"1h")===k}" data-tl-win="${k}" title="${i18n("Масштаб шкалы")}" ${onEv("click",["vwWin",k])}>${i18n(l)}</button>`).join("")}</div>${vwCalBtnHtml(v)}
       <label class="vw-src">${i18n("Подсистема")} <select data-tl-source ${onEv("change",["tlSource",onEv.value])}><option value="">${i18n("Все")}</option>${t.sources.map(s=>`<option value="${escHtml(s)}" ${s===t.source?"selected":""}>${escHtml(s)}</option>`).join("")}</select></label>
       <span class="sub">${t.busy?i18n("Загрузка…"):t.spans.length?"":i18n("За этот период записей нет")}</span>
       <span class="vw-grow"></span>
