@@ -11437,12 +11437,14 @@ function gdetrow(d,l,ctx,parentHit=false){
   const q=qval();
   const hit=matchesStatus(d)&&(parentHit||matchesSearch(d,q));
   if(!hit)return"";
-  // Поддетекторы — под детектором, с меткой числа. Создать поддетектор — в карточке детектора (раздел «Поддетекторы»)
-  // и в меню строки («⋮», правая кнопка, «Ещё» в карточке): постоянной строки «Создать…» в дереве нет
+  // Поддетекторы — под детектором, с меткой числа. Создать поддетектор — «+» при наведении на строку, кнопка в карточке
+  // детектора (раздел «Поддетекторы») и пункт меню строки («⋮», правая кнопка, «Ещё» в карточке): постоянной строки
+  // «Создать…» в дереве нет
   const subs=dwHasSubs(d)?dwSaved(d).subs:[],sp=subs.length>0,ok=(ctx?ctx+"|":"")+d.id,op=sp&&open.has(ok);
   const badge=subs.length?`<span class="dw-tsub" title="${subs.length} ${i18n(plural(subs.length,"поддетектор|поддетектора|поддетекторов"))}">${lu("list-tree",12)}${subs.length}</span>`:"";
-  // Вариант B: «+» при наведении на строку, как в Notion и Confluence; меню «⋮» остаётся
-  const plus=dw.addv==="plus"&&dwHasSubs(d)?`<button type="button" class="dw-tplus" tabindex="-1" aria-label="${i18n("Создать поддетектор")}" title="${i18n("Создать поддетектор")}" ${onEv("click",onEv.stop,["dwSubCreate",d.id])}>${lu("plus",14)}</button>`:"";
+  // «+» при наведении на строку, как в Notion и Confluence: быстрый путь мышью. С клавиатуры и с сенсорного экрана —
+  // кнопка в карточке и пункт меню «⋮»
+  const plus=dwHasSubs(d)?`<button type="button" class="dw-tplus" tabindex="-1" aria-label="${i18n("Создать поддетектор")}" title="${i18n("Создать поддетектор")}" ${onEv("click",onEv.stop,["dwSubCreate",d.id])}>${lu("plus",14)}</button>`:"";
   let h=`<div class="n ${rowOn(d.id,ctx)}" style="--l:${l}"${treeRowPick(d.id,ctx)}${treeExpandMeta(ok,"node",sp)}>
     ${treeChevron(ok,"node",sp,op)}${ic("det")}<span class="nm" title="${escHtml(locName(d))} · ${escHtml(i18n(d.kind||DET_TYPES[0]))}">${hlText(locName(d),q)}</span>${badge}${treeTail({tags:plus,status:treeStatusSlot(d),acts:d.id,ctx})}</div>`;
   if(op)h+=subs.map((s,i)=>dwTreeSubRow(d,s,i,l+1)).join("");
@@ -14596,7 +14598,7 @@ const DW_PIX=new Set(["motion","tracker","abandoned"]);
 const DW_SIZE=new Set(["motion","linecross","tracker","neural","abandoned"]);
 // T — время живого видео (секунды сцены, растёт без конца),
 // ap — когда применили настройки и какие были до этого
-const dw={cfg:{},saved:{},kind:{},T:1800,tsp:1,per:15,addv:"menu",ap:{},now:null,shown:-1,sj:"",
+const dw={cfg:{},saved:{},kind:{},T:1800,tsp:1,per:15,ap:{},now:null,shown:-1,sj:"",
   lay:{obj:true,trk:true,why:true,size:false},sel:null,tool:null,drag:false,raf:0,last:0,id:null,memo:new Map(),soon:0};
 const dwClone=x=>JSON.parse(JSON.stringify(x));
 function dwRng(seed){let s=seed>>>0;return()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296}}
@@ -14787,8 +14789,7 @@ function dwStubHtml(d,k){
   return`<div class="dw-stub"><b>${i18n("Заглушка прототипа 53.")}</b><span>${i18n("Показать карточку вида")}</span>
     <select ${onEv("change",["dwKindPick",`${d.id}`,onEv.value])}>${DW_KINDS.map(([v,l])=>`<option value="${v}" ${v===k?"selected":""}>${i18n(l)}</option>`).join("")}${k==="other"?`<option value="other" selected>${escHtml(detKindText(d))}</option>`:""}</select>
     <span>${i18n("Видео, объекты и сработки создаёт браузер.")}</span>
-    <span class="dw-vs">${i18n("Время прототипа")} <span class="dw-seg">${[1,10,60].map(v=>`<button type="button" class="${dw.tsp===v?"on":""}" ${onEv("click",["dwTsp",v])}>×${v}</button>`).join("")}</span></span>
-    <span class="dw-vs">${i18n("Вариант создания поддетектора")} <span class="dw-seg">${[["menu","A: карточка и меню"],["plus","B: + в строке дерева"]].map(([v,l])=>`<button type="button" class="${dw.addv===v?"on":""}" aria-pressed="${dw.addv===v}" ${onEv("click",["dwAddV",v])}>${i18n(l)}</button>`).join("")}</span></span></div>`;
+    <span class="dw-vs">${i18n("Время прототипа")} <span class="dw-seg">${[1,10,60].map(v=>`<button type="button" class="${dw.tsp===v?"on":""}" ${onEv("click",["dwTsp",v])}>×${v}</button>`).join("")}</span></span></div>`;
 }
 function dwToolsHtml(d,k){
   if(k==="other")return"";
@@ -15231,8 +15232,6 @@ function dwBarHtml(d){
 function dwTagHtml(){return`<i class="dw-rec"></i>${i18n("Живое видео")}`}
 function dwPer(v){dw.per=+v;dw.shown=-1;dwPv("cmp")}
 function dwTsp(v){dw.tsp=+v;gear()}
-// Заглушка: вариант A — создать поддетектор из карточки и меню детектора; вариант B — то же и «+» при наведении на строку
-function dwAddV(v){dw.addv=v;gear();renderTree()}
 function dwKindPick(id,v){dw.kind[id]=v;dw.tool=null;gear()}
 function dwTool(t){dw.tool=dw.tool===t?null:t;gear()}
 function dwLay(key){dw.lay[key]=!dw.lay[key];gear()}
