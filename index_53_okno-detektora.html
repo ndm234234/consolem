@@ -3003,6 +3003,38 @@ body.pj-hdlog .gojump{display:none}
 .dw-sub.off .dw-sub-h{margin-bottom:0}
 .dw-sub-h .sub{margin:0;font-size:11.5px}
 .dw-sub-n{margin-left:auto;font-size:12px;color:var(--mu);white-space:nowrap}
+.dw-sub.sel{background:var(--p2)}
+.dw-sub-t{display:flex;align-items:center;gap:6px;min-width:0;flex:1 1 auto;padding:0;border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.dw-sub-t .tw{flex:none;width:14px}
+.dw-sub-tt{display:flex;flex-direction:column;min-width:0;line-height:1.25}
+.dw-sub-tt b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dw-sub-tt .sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dw-sub-b{padding-top:4px}
+.dw-txt{width:100%;box-sizing:border-box}
+.dw-sec-n{margin-left:6px;padding:0 7px;border-radius:9px;background:var(--p2);color:var(--mu);font-size:11.5px;font-weight:600;vertical-align:1px}
+.dw-swl{display:flex;align-items:center;gap:8px;cursor:pointer}
+.dw-sa.sel{fill-opacity:.24;stroke-width:1;stroke-dasharray:none}
+.dw-sa.dim{opacity:.45}
+.dw-sa.mask{fill:#0b0f14;fill-opacity:.6;stroke-dasharray:1 1}
+.dw-new{border:1px dashed var(--ln);border-radius:8px;padding:10px;margin-top:6px}
+.dw-new-h{display:flex;flex-direction:column;gap:2px;margin-bottom:8px}
+.dw-new-h .sub{margin:0;font-size:12px}
+.dw-new-q{width:100%;box-sizing:border-box;margin-bottom:8px}
+.dw-new-l{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px;max-height:330px;overflow:auto;scrollbar-gutter:stable}
+.dw-new-c{display:flex;flex-direction:column;gap:2px;text-align:left;padding:8px;border:1px solid var(--ln);border-radius:6px;background:none;color:inherit;font:inherit;cursor:pointer}
+.dw-new-c:hover,.dw-new-c.act{border-color:var(--bl);background:var(--one-info-bg)}
+.dw-new-c .sub{margin:0;font-size:11.5px}
+.dw-new-c[hidden]{display:none}
+.dw-new-x{margin:6px 0;font-size:12px}
+.dw-tsub{display:inline-flex;align-items:center;gap:2px;margin-left:6px;padding:0 5px;border-radius:8px;background:var(--one-info-bg);color:var(--x-link);font-size:11px;font-weight:600;flex:none}
+.dw-tdot{display:inline-block;width:8px;height:8px;border-radius:50%;flex:none;margin-right:6px}
+.dw-tsr{cursor:pointer}
+.dw-tsr .nm{flex:0 1 auto}
+.dw-tty{margin-left:6px;color:var(--mu);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.dw-csub{display:flex;flex-direction:column;margin:-2px 0 4px 34px;border-left:2px solid var(--ln)}
+.dw-csub-r{display:flex;align-items:center;gap:6px;padding:4px 10px;border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer;border-radius:4px}
+.dw-csub-r:hover{background:var(--one-control-hover)}
+.dw-csub-r small{color:var(--mu)}
 .dw-adv{padding:10px 14px}
 .dw-adv summary{cursor:pointer;font-weight:600;font-size:13px}
 .dw-adv-b{margin-top:10px}
@@ -11396,8 +11428,18 @@ function gdetrow(d,l,ctx,parentHit=false){
   const q=qval();
   const hit=matchesStatus(d)&&(parentHit||matchesSearch(d,q));
   if(!hit)return"";
-  return `<div class="n ${rowOn(d.id,ctx)}" style="--l:${l}"${treeRowPick(d.id,ctx)}>
-    <span class="tw"></span>${ic("det")}<span class="nm" title="${escHtml(locName(d))} · ${escHtml(i18n(d.kind||DET_TYPES[0]))}">${hlText(locName(d),q)}</span>${treeTail({status:treeStatusSlot(d)})}</div>`;
+  // Поддетекторы — как в Axxon One: под детектором, с меткой числа и строкой «Создать поддетектор…»
+  const sp=dwHasSubs(d),subs=sp?dwSaved(d).subs:[],ok=(ctx?ctx+"|":"")+d.id,op=sp&&open.has(ok);
+  const badge=subs.length?`<span class="dw-tsub" title="${subs.length} ${i18n(plural(subs.length,"поддетектор|поддетектора|поддетекторов"))}">${lu("list-tree",12)}${subs.length}</span>`:"";
+  let h=`<div class="n ${rowOn(d.id,ctx)}" style="--l:${l}"${treeRowPick(d.id,ctx)}${treeExpandMeta(ok,"node",sp)}>
+    ${treeChevron(ok,"node",sp,op)}${ic("det")}<span class="nm" title="${escHtml(locName(d))} · ${escHtml(i18n(d.kind||DET_TYPES[0]))}">${hlText(locName(d),q)}</span>${badge}${treeTail({status:treeStatusSlot(d)})}</div>`;
+  if(op)h+=subs.map((s,i)=>dwTreeSubRow(d,s,i,l+1)).join("")
+    +`<div class="n n-add" style="--l:${l+1}" ${onEv("click",["dwSubCreate",d.id])}><span class="tw"></span>${lu("plus",12)}<span class="nm">${i18n("Создать поддетектор…")}</span></div>`;
+  return h;
+}
+function dwTreeSubRow(d,s,i,l){
+  const on=sel===d.id&&dw.subSel===s.id,t=i18n(DW_SUBN[s.kind]);
+  return`<div class="n dw-tsr${on?" on":""}" style="--l:${l}" ${onEv("click",["dwSubPick",d.id,s.id])}><span class="tw"></span><i class="dw-tdot" style="background:${DW_SUBC[i%DW_SUBC.length]}"></i><span class="nm" title="${escHtml(s.name)} · ${escHtml(t)}">${escHtml(s.name)}</span><span class="dw-tty">${escHtml(t)}</span>${s.on?"":`<span class="bd off">${i18n("выкл")}</span>`}</div>`;
 }
 function gcamrow(cam,dets,l,ctx){
   if(treeHidQ(cam))return"";// камера под GPU сервера: строится не обходом дерева, метку смотрим здесь
@@ -14495,8 +14537,9 @@ function camDetectorsHtml(n){
     key:"det:"+n.id,
     title:"Детекторы камеры",
     items:dets,
-    text:d=>[detTitle(d),i18n(d.kind||DET_TYPES[0])],
-    row:d=>`<div class="it" ${onEv("click",["detFromCam",d.id])}><span>${ic("det")}</span><span>${escHtml(detTitle(d))}<small>${escHtml(detKindText(d,n))} · ${i18n(d.builtin?"встроенный":"серверный")} · ${escHtml(detZoneText(d))}</small></span>${pendingDelHas(d.id)?`<span class="bd off">${i18n("удаляется")}</span>`:`${bdg(d)}<button type="button" class="btn s det-row-del" ${onEv("click",onEv.stop,["deleteDetector",`${n.id}`,`${d.id}`])}>${i18n("Удалить")}…</button>`}</div>`,
+    text:d=>[detTitle(d),i18n(d.kind||DET_TYPES[0]),...(dwHasSubs(d)?dwSaved(d).subs.map(s=>s.name):[])],
+    row:d=>{const sb=dwHasSubs(d)?dwSaved(d).subs:[];return`<div class="it" ${onEv("click",["detFromCam",d.id])}><span>${ic("det")}</span><span>${escHtml(detTitle(d))}<small>${escHtml(detKindText(d,n))} · ${i18n(d.builtin?"встроенный":"серверный")} · ${escHtml(detZoneText(d))}${sb.length?` · ${sb.length} ${i18n(plural(sb.length,"поддетектор|поддетектора|поддетекторов"))}`:""}</small></span>${pendingDelHas(d.id)?`<span class="bd off">${i18n("удаляется")}</span>`:`${bdg(d)}<button type="button" class="btn s det-row-del" ${onEv("click",onEv.stop,["deleteDetector",`${n.id}`,`${d.id}`])}>${i18n("Удалить")}…</button>`}</div>`
+      +(sb.length?`<div class="dw-csub">${sb.map((s,i)=>`<button type="button" class="dw-csub-r" ${onEv("click",["dwSubPick",d.id,s.id,1])}><i class="dw-tdot" style="background:${DW_SUBC[i%DW_SUBC.length]}"></i><span>${escHtml(s.name)}</span><small>${escHtml(i18n(DW_SUBN[s.kind]))}${s.on?"":` · ${i18n("выкл")}`}</small></button>`).join("")}</div>`:"")},
     ph:"Имя или тип детектора…",
     unit:"детектор|детектора|детекторов",
     head:addBtn
@@ -14504,13 +14547,40 @@ function camDetectorsHtml(n){
 }
 // ── Окно детектора: что настраиваю и что получу (прототип 53) ───────────────
 // ЗАГЛУШКА прототипа 53. Сцену (объекты за последний час), виды «Трекер объектов» и «Нейросетевой трекер»,
-// подчинённые детекторы и превью сработок создаёт браузер. Контракт не менялся: настройки живут в памяти страницы.
+// поддетекторы и превью сработок создаёт браузер. Контракт не менялся: настройки живут в памяти страницы.
 // Карточка: слева кадр с зонами и объектами, под ним превью сработок за час; справа настройки по типам.
 // Превью считает сработки дважды: с черновиком и с сохранёнными настройками, — и показывает разницу.
 const DW_T=3600,DW_X=160,DW_Y=90,DW_T0=Date.now()-1800*1000;
 const DW_KINDS=[["motion","Движение"],["linecross","Пересечение линии"],["tracker","Трекер объектов"],["neural","Нейросетевой трекер"],["lpr","Номер"],["crowd","Скопление людей"],["abandoned","Оставленный предмет"]];
 const DW_CLS={person:"Человек",car:"Машина",bike:"Велосипед",bag:"Предмет",noise:"Помеха"};
 const DW_SUBC=["#c084fc","#f59e0b","#22d3ee","#f472b6"];
+// ── Поддетекторы, как в Axxon One: детектор находит объекты, поддетектор решает, когда сработать ──
+// Заглушка прототипа 53: в контракте нет вида «поддетектор», прототип хранит поддетекторы в настройках детектора в памяти страницы
+const DW_SUBP=new Set(["motion","tracker","neural"]);
+const DW_SUBK=[
+  ["line","Пересечение линии","Объект пересёк линию в выбранном направлении."],
+  ["enter","Вход в область","Объект вошёл в область."],
+  ["exit","Выход из области","Объект вышел из области."],
+  ["dwell","Пребывание в области","Объект находится в области дольше или меньше заданного времени."],
+  ["stop","Остановка в области","Объект остановился в области и стоит дольше заданного времени."],
+  ["move","Движение в области","Объект движется в области."],
+  ["multi","Множество объектов","В области одновременно находится не меньше заданного числа объектов."],
+  ["a2a","Переход из области в область","Объект перешёл из первой области во вторую."],
+  ["abandoned","Оставленный предмет","Предмет лежит в области без движения дольше заданного времени. Есть только у трекера объектов."],
+  ["mask","Маскирование треков","Детектор не ведёт объекты в области. Поддетектор не создаёт событий."]];
+const DW_SUBN=Object.fromEntries(DW_SUBK.map(([k,n])=>[k,n]));
+LU["list-tree"]='<path d="M21 12h-8"/><path d="M21 6H8"/><path d="M21 18h-8"/><path d="M3 6v4c0 1.1.9 2 2 2h3"/><path d="M3 10v6c0 1.1.9 2 2 2h3"/>';
+function dwSubKinds(k){return DW_SUBK.filter(([x])=>x!=="abandoned"||k==="tracker")}
+function dwHasSubs(d){return DW_SUBP.has(dwKindOf(d))}
+function dwSubNew(kind,name,id){
+  const r=(x0,y0,x1,y1)=>[[x0,y0],[x1,y0],[x1,y1],[x0,y1]];
+  return{id,kind,name,on:true,classes:["person","car","bike"],
+    area:{pts:kind==="mask"?r(.02,.3,.18,.62):kind==="stop"||kind==="abandoned"?r(.72,.66,.97,.88):kind==="multi"?r(.05,.6,.95,.98):r(.55,.6,.75,.8)},area2:kind==="a2a"?{pts:r(.78,.6,.96,.8)}:null,
+    line:kind==="line"?[[.6,.6],[.6,.95]]:null,dir:"both",
+    time:kind==="dwell"?30:kind==="stop"||kind==="abandoned"?10:0,mode:"gt",count:3,
+    spd:[0,500],grp:false,gn:2,gh:2,off:[15,10]};
+}
+function dwMasked(c,[x,y]){return c.subs.some(s=>s.on&&s.kind==="mask"&&dwIn(s.area.pts,x,y))}
 const DW_PIX=new Set(["motion","tracker","abandoned"]);
 const DW_SIZE=new Set(["motion","linecross","tracker","neural","abandoned"]);
 // T — время живого видео (секунды сцены, растёт без конца),
@@ -14579,8 +14649,9 @@ function dwDefault(d,k){
     sens:60,delay:1,classes:["person","car","bike"],conf:60,count:4,hold:10,stay:60,pw:[.025,.06],subs:[]};
   if(k==="linecross"){c.areas=[];c.line=ln;c.classes=["person","bike"];c.min=[.03,.06]}
   if(k==="tracker"){c.min=[.03,.06];c.subs=[
-    {id:"s1",kind:"dwell",name:"Долго у входа",on:true,area:{pts:[[.24,.56],[.4,.56],[.4,.66],[.24,.66]]},dwell:20,classes:["person"]},
-    {id:"s2",kind:"line",name:"Въезд на парковку",on:true,line:[[.76,.66],[.76,.97]],dir:"ab",classes:["car"]}]}
+    {...dwSubNew("dwell","Долго у входа","s1"),area:{pts:[[.24,.56],[.4,.56],[.4,.66],[.24,.66]]},time:20,classes:["person"]},
+    {...dwSubNew("line","Въезд на парковку","s2"),line:[[.76,.66],[.76,.97]],dir:"ab",classes:["car"]}]}
+  if(k==="motion")c.subs=[{...dwSubNew("enter","Вход у двери","s1"),area:{pts:[[.22,.5],[.4,.5],[.4,.68],[.22,.68]]}}];
   if(k==="neural"){c.classes=["person"];c.areas=[{id:"a1",type:"in",name:"Зона 1",pts:[[0,.45],[1,.45],[1,1],[0,1]]}];c.min=[.02,.05]}
   if(k==="lpr"){c.areas=[{id:"a1",type:"in",name:"Зона 1",pts:[[.05,.74],[.95,.74],[.95,.98],[.05,.98]]}];c.conf=70}
   if(k==="crowd")c.areas=[{id:"a1",type:"in",name:"Зона 1",pts:[[.12,.55],[.5,.55],[.5,.8],[.12,.8]]}];
@@ -14610,7 +14681,7 @@ function dwFail(c,k,o,pos){if(dwHidden(k,o))return{key:"hide",text:"hide"};for(c
 function dwWhy(c,k,o,pos){return dwFail(c,k,o,pos)?.text||""}
 function dwDirOk(dir,s){return dir&&(s==="both"||(s==="ab")===(dir>0))}
 function dwObjFires(c,k,o){
-  const out=[];let run=0,prev=null,fired=false,still=0;const sr={},sd={};
+  const out=[];let run=0,prev=null,fired=false,still=0;const ss={};
   for(let t=Math.ceil(o.t0);t<=o.t1;t++){
     const pos=dwAt(o,t);if(!pos)continue;
     const why=dwWhy(c,k,o,pos);
@@ -14618,14 +14689,38 @@ function dwObjFires(c,k,o){
     else if(k==="neural"||k==="lpr"){if(!why&&!fired){fired=true;out.push({t})}}
     else if(k==="linecross"){if(prev&&!why&&c.line&&dwDirOk(dwCross(c.line,prev,pos),c.dir))out.push({t})}
     else if(k==="abandoned"){const mv=prev?Math.hypot(pos[0]-prev[0],pos[1]-prev[1]):1;still=!why&&mv<.002?still+1:0;if(!fired&&still>=c.stay){fired=true;out.push({t})}}
-    else if(k==="tracker"&&!why)c.subs.forEach(s=>{
-      if(!s.on||!s.classes.includes(o.cls))return;
-      if(s.kind==="dwell"){sr[s.id]=dwIn(s.area.pts,pos[0],pos[1])?(sr[s.id]||0)+1:0;if(!sd[s.id]&&sr[s.id]>=s.dwell){sd[s.id]=1;out.push({t,sub:s.id})}}
-      if(s.kind==="line"&&prev&&dwDirOk(dwCross(s.line,prev,pos),s.dir))out.push({t,sub:s.id});
-    });
+    if(DW_SUBP.has(k)&&!why&&c.subs.length)dwSubStep(c,k,o,t,pos,prev,ss,out);
     prev=pos;
   }
   return out;
+}
+// Шаг поддетекторов за одну секунду: у каждого поддетектора своё состояние по объекту
+function dwSubStep(c,k,o,t,pos,prev,ss,out){
+  if(dwMasked(c,pos))return;
+  const[x,y]=pos,v=prev?Math.hypot(x-prev[0],y-prev[1])*100:0;
+  c.subs.forEach(s=>{
+    if(!s.on||s.kind==="mask"||s.kind==="multi")return;
+    if(s.kind==="abandoned"?o.cls==="person":k!=="motion"&&!s.classes.includes(o.cls))return;
+    if(prev&&(v<s.spd[0]||v>s.spd[1]))return;
+    const st=ss[s.id]||(ss[s.id]={in:null,run:0,done:false,a1:null,in2:false});
+    const fire=()=>out.push({t,sub:s.id});
+    if(s.kind==="line"){if(prev&&dwDirOk(dwCross(s.line,prev,pos),s.dir))fire();return}
+    const inA=dwIn(s.area.pts,x,y);
+    if(s.kind==="a2a"){
+      const in2=dwIn(s.area2.pts,x,y);if(inA)st.a1=t;
+      if(in2&&!st.in2&&!inA&&st.a1!=null){const dt=t-st.a1;if(!s.time||(s.mode==="lt"?dt<s.time:dt>s.time))fire();st.a1=null}
+      st.in2=in2;return;
+    }
+    if(s.kind==="enter"&&inA&&st.in===false)fire();
+    if(s.kind==="exit"&&!inA&&st.in===true)fire();
+    if(s.kind==="move"){if(inA&&v>.05&&!st.done){st.done=true;fire()}if(!inA)st.done=false}
+    if(s.kind==="stop"||s.kind==="abandoned"){st.run=inA&&prev&&v<.2?st.run+1:0;if(st.run>=Math.max(1,s.time)&&!st.done){st.done=true;fire()}if(!st.run)st.done=false}
+    if(s.kind==="dwell"){
+      if(inA){st.run++;if(s.mode==="gt"&&st.run===Math.max(1,s.time))fire()}
+      else if(st.in){if(s.mode==="lt"&&st.run<s.time)fire();if(s.mode==="eq"&&Math.abs(st.run-s.time)<=1)fire();st.run=0}
+    }
+    st.in=inA;
+  });
 }
 // Сработки за час: память на 6 последних наборов настроек, чтобы ползунок не пересчитывал одно и то же
 function dwEval(c,k){
@@ -14638,6 +14733,14 @@ function dwEval(c,k){
       if(n>=c.count){run++;if(armed&&run>=c.hold){armed=false;fires.push({t,n})}}else{run=0;armed=true}
     }
   }else if(k!=="other")sc.forEach(o=>dwObjFires(c,k,o).forEach(f=>{f.o=o;fires.push(f);if(!byObj.has(o.id))byObj.set(o.id,[]);byObj.get(o.id).push(f)}));
+  // «Множество объектов» считает объекты всей сцены, а не один объект
+  if(DW_SUBP.has(k))c.subs.filter(s=>s.on&&s.kind==="multi").forEach(s=>{
+    let armed=true;
+    for(let t=0;t<DW_T;t++){
+      let n=0;for(const o of sc){if(o.t0>t)break;if(t>o.t1||(k!=="motion"&&!s.classes.includes(o.cls)))continue;const pos=dwAt(o,t);if(pos&&dwIn(s.area.pts,pos[0],pos[1])&&!dwMasked(c,pos)&&!dwWhy(c,k,o,pos))n++}
+      if(n>=s.count){if(armed){armed=false;fires.push({t,n,sub:s.id})}}else armed=true;
+    }
+  });
   fires.sort((a,b)=>a.t-b.t);
   const r={fires,byObj};
   dw.memo.set(key,r);if(dw.memo.size>6)dw.memo.delete(dw.memo.keys().next().value);
@@ -14647,8 +14750,8 @@ function dwClock(t){return new Date(DW_T0+t*1000).toLocaleTimeString("ru-RU",{ho
 // ── Карточка ──
 function detWindowHtml(cam,d){
   const k=dwKindOf(d),c=dwC(d);
-  if(dw.id!==d.id+k){dw.id=d.id+k;dw.sel=null;dw.tool=null}
-  setTimeout(dwStart,0);
+  if(dw.id!==d.id+k){dw.id=d.id+k;dw.sel=null;dw.tool=null;dw.subSel=null;dw.subNew=false}
+  setTimeout(dwStart,0);setTimeout(dwLand,0);
   return detBackHtml(cam)+`<div class="dw" data-dw="${escHtml(d.id)}">
     ${dwStubHtml(d,k)}
     <div class="dw-grid">
@@ -14733,11 +14836,14 @@ function dwGeoSvg(d){
     if(!dw.tool)a.pts.forEach((p,i)=>h+=`<circle class="dw-hd" data-h="area:${a.id}:${i}" cx="${(p[0]*DW_X).toFixed(1)}" cy="${(p[1]*DW_Y).toFixed(1)}" r="1.7" style="--c:${ex?"var(--dw-ex)":"var(--dw-in)"}"/>`);
   });
   if(c.line)h+=dwLineSvg(c.line,c.dir,"line","var(--dw-ln)");
-  if(k==="tracker")c.subs.forEach((s,i)=>{
-    const col=DW_SUBC[i%DW_SUBC.length];if(!s.on)return;
-    if(s.kind==="dwell"){h+=`<polygon class="dw-sa" data-b="sub:${s.id}" points="${s.area.pts.map(dwP).join(" ")}" style="--c:${col}"/><text class="dw-tx" x="${(s.area.pts[0][0]*DW_X+1).toFixed(1)}" y="${(s.area.pts[0][1]*DW_Y-1.2).toFixed(1)}" style="fill:${col}">${escHtml(s.name)}</text>`;
-      if(!dw.tool)s.area.pts.forEach((p,j)=>h+=`<circle class="dw-hd" data-h="sub:${s.id}:${j}" cx="${(p[0]*DW_X).toFixed(1)}" cy="${(p[1]*DW_Y).toFixed(1)}" r="1.5" style="--c:${col}"/>`)}
+  if(DW_SUBP.has(k))c.subs.forEach((s,i)=>{
+    if(!s.on)return;
+    const col=DW_SUBC[i%DW_SUBC.length],on=dw.subSel===s.id,hd=!dw.tool&&(on||!dw.subSel);
+    const cls=`dw-sa${s.kind==="mask"?" mask":""}${on?" sel":dw.subSel?" dim":""}`;
+    const poly=(pts,b,lb)=>{h+=`<polygon class="${cls}" data-b="${b}:${s.id}" points="${pts.map(dwP).join(" ")}" style="--c:${col}"/><text class="dw-tx" x="${(pts[0][0]*DW_X+1).toFixed(1)}" y="${(pts[0][1]*DW_Y-1.2).toFixed(1)}" style="fill:${col}">${escHtml(lb)}</text>`;
+      if(hd)pts.forEach((p,j)=>h+=`<circle class="dw-hd" data-h="${b}:${s.id}:${j}" cx="${(p[0]*DW_X).toFixed(1)}" cy="${(p[1]*DW_Y).toFixed(1)}" r="1.5" style="--c:${col}"/>`)};
     if(s.kind==="line")h+=dwLineSvg(s.line,s.dir,`subl:${s.id}`,col,s.name);
+    else{poly(s.area.pts,"sub",s.kind==="a2a"?`1 · ${s.name}`:s.name);if(s.kind==="a2a")poly(s.area2.pts,"sub2","2")}
   });
   if(dw.lay.size&&DW_SIZE.has(k))["min","max"].forEach(m=>{
     const[w,hh]=c[m],[x,y]=c[m+"At"],X=(x-w/2)*DW_X,Y=(y-hh)*DW_Y;
@@ -14769,6 +14875,7 @@ function dwObjSvg(d,t){
     if(k==="crowd"&&!why)inZone++;
     // Детектор отдаёт только найденные объекты: отсеянные объекты на кадре не видны
     if(why)continue;
+    if(DW_SUBP.has(k)&&c.subs.length&&dwMasked(c,pos))continue;
     nOk++;
     if(!dw.lay.obj)continue;
     const f=E.byObj.get(o.id)||[],hot=f.find(x=>t>=x.t&&t-x.t<3);
@@ -14780,8 +14887,9 @@ function dwObjSvg(d,t){
     else if(k==="lpr")lb=o.plate;
     else if(k==="neural")lb=`${i18n(DW_CLS[o.cls])} ${Math.round(o.conf*100)}%`;
     else if(k==="abandoned"){const n=dwRun(o,t,(p,s)=>{const q=dwAt(o,s-1);return!dwWhy(c,k,o,p)&&q&&Math.hypot(p[0]-q[0],p[1]-q[1])<.002},c.stay);lb=`${i18n("лежит")} ${n} ${i18n("с из")} ${c.stay}`}
-    else if(k==="tracker"){const s=c.subs.find(s=>s.on&&s.kind==="dwell"&&s.classes.includes(o.cls)&&dwIn(s.area.pts,pos[0],pos[1]));if(s){const n=dwRun(o,t,p=>dwIn(s.area.pts,p[0],p[1]),s.dwell);lb=`${i18n("в зоне")} ${n} ${i18n("с из")} ${s.dwell}`}}
     else if(k==="motion"&&c.delay>1&&!f.some(x=>x.t<=t)){const n=dwRun(o,t,p=>!dwWhy(c,k,o,p),c.delay);lb=`${n} ${i18n("с из")} ${c.delay}`}
+    if(!lb&&DW_SUBP.has(k)){const s=c.subs.find(s=>s.on&&(s.kind==="dwell"||s.kind==="stop")&&s.time&&(k==="motion"||s.classes.includes(o.cls))&&dwIn(s.area.pts,pos[0],pos[1]));
+      if(s){const n=dwRun(o,t,p=>dwIn(s.area.pts,p[0],p[1]),s.time);lb=`${s.name}: ${n} ${i18n("с из")} ${s.time}`}}
     box+=`<rect class="dw-box ${st}" x="${X.toFixed(1)}" y="${Y.toFixed(1)}" width="${W.toFixed(1)}" height="${H.toFixed(1)}"/>`;
     if(lb){const end=X+W/2>DW_X*.7;box+=`<text class="dw-lb ${st}" x="${Math.min(DW_X-1,Math.max(1,end?X+W:X)).toFixed(1)}" y="${Math.max(3,Y-1).toFixed(1)}" text-anchor="${end?"end":"start"}">${escHtml(lb)}</text>`}
   }
@@ -14792,8 +14900,9 @@ function dwObjSvg(d,t){
 }
 // ── Превью сработок ──
 function dwFireLabel(f,c,k){
-  if(f.n)return`${f.n} ${i18n("человек в зоне")}`;
-  const o=f.o,sub=f.sub?c.subs.find(s=>s.id===f.sub):null;
+  const sub=f.sub?c.subs.find(s=>s.id===f.sub):null;
+  if(f.n)return sub?`${sub.name} · ${f.n} ${i18n("объектов в области")}`:`${f.n} ${i18n("человек в зоне")}`;
+  const o=f.o;
   const what=o.cls==="noise"?`${i18n("Помеха")}: ${i18n(o.src==="leaf"?"листва":"тень")}`:k==="lpr"?o.plate:i18n(DW_CLS[o.cls]);
   return sub?`${sub.name} · ${what}`:what;
 }
@@ -14803,7 +14912,7 @@ function dwThumb(f,c,k){
   const o=f.o;let cx=80,cy=60,bx="";
   if(o){const p=dwAt(o,f.t)||[o.p[0][1],o.p[0][2]];cx=p[0]*DW_X;cy=(p[1]-o.h/2)*DW_Y;
     bx=`<rect x="${((p[0]-o.w/2)*DW_X).toFixed(1)}" y="${((p[1]-o.h)*DW_Y).toFixed(1)}" width="${(o.w*DW_X).toFixed(1)}" height="${(o.h*DW_Y).toFixed(1)}" fill="none" stroke="${dwFireColor(f,c)}" stroke-width="1"/>`}
-  else if(c.areas[0]){const a=c.areas[0].pts;cx=a.reduce((s,p)=>s+p[0],0)/a.length*DW_X;cy=a.reduce((s,p)=>s+p[1],0)/a.length*DW_Y}
+  else{const a=(f.sub&&c.subs.find(s=>s.id===f.sub)?.area?.pts)||c.areas[0]?.pts;if(a)cx=a.reduce((s,p)=>s+p[0],0)/a.length*DW_X;if(a)cy=a.reduce((s,p)=>s+p[1],0)/a.length*DW_Y}
   const W=o?Math.max(36,o.w*DW_X*3):64,H=W*9/16,x=Math.min(DW_X-W,Math.max(0,cx-W/2)),y=Math.min(DW_Y-H,Math.max(0,cy-H/2));
   let sil="";for(const q of dwScene()){if(q.t0>f.t)break;if(f.t>q.t1)continue;const p=dwAt(q,f.t);if(p)sil+=dwSilSvg(q,p)}
   return`<svg viewBox="${x.toFixed(1)} ${y.toFixed(1)} ${W.toFixed(1)} ${H.toFixed(1)}" preserveAspectRatio="xMidYMid slice" aria-hidden="true">${dwSceneInner()}${sil}${bx}</svg>`;
@@ -14934,17 +15043,54 @@ function dwDirHtml(id,cur,fn,sid=""){
   const o=[["ab","A → B"],["ba","B → A"],["both","В обе стороны"]];
   return`<span class="dw-seg">${o.map(([v,l])=>`<button type="button" class="${cur===v?"on":""}" ${onEv("click",sid?[fn,id,sid,v]:[fn,id,v])}>${i18n(l)}</button>`).join("")}</span>`;
 }
-function dwSubsHtml(id,c){
-  const E=dwEval(c,"tracker");
-  return c.subs.map((s,i)=>{const col=DW_SUBC[i%DW_SUBC.length],n=E.fires.filter(f=>f.sub===s.id).length;
-    return`<div class="dw-sub${s.on?"":" off"}" style="--c:${col}"><div class="dw-sub-h"><i class="dw-sw" style="background:${col}"></i><b>${escHtml(s.name)}</b><span class="sub">${i18n(s.kind==="dwell"?"Время в зоне":"Пересечение линии")}</span>
-        <span class="dw-sub-n">${n} ${i18n("сраб.")}</span>
+function dwSubsHtml(id,k,c){
+  const E=dwEval(c,k);
+  const rows=c.subs.map((s,i)=>{
+    const col=DW_SUBC[i%DW_SUBC.length],n=E.fires.filter(f=>f.sub===s.id).length,op=dw.subSel===s.id;
+    return`<div class="dw-sub${s.on?"":" off"}${op?" sel":""}" style="--c:${col}" data-dw-sub="${escHtml(s.id)}">
+      <div class="dw-sub-h"><button type="button" class="dw-sub-t" aria-expanded="${op}" ${onEv("click",["dwSubSel",s.id])}><span class="tw">${op?TW_OPEN:TW_SHUT}</span><i class="dw-sw" style="background:${col}"></i><span class="dw-sub-tt"><b>${escHtml(s.name)}</b><span class="sub">${i18n(DW_SUBN[s.kind])}</span></span></button>
+        <span class="dw-sub-n">${s.kind==="mask"?i18n("без событий"):`${n} ${i18n("сраб.")}`}</span>
         <div class="sw ${s.on?"on":""}" role="switch" aria-checked="${s.on}" aria-label="${i18n("Включён")}" ${onEv("click",["dwSubOn",id,s.id])}></div></div>
-      ${s.on?`${s.kind==="dwell"?`<div class="dw-f dw-num"><label>${i18n("Сработать, если объект в зоне дольше")}</label><span class="dw-in"><input type="number" min="1" max="600" value="${s.dwell}" ${onEv("input",["dwSubSet",id,s.id,"dwell",onEv.value])}><span>${i18n("с")}</span></span></div>`
-        :`<div class="dw-f"><label>${i18n("Направление")}</label>${dwDirHtml(id,s.dir,"dwSubDir",s.id)}</div>`}
-      <div class="dw-f"><label>${i18n("Кого считать")}</label>${dwChips(id,["person","car","bike"],s.classes,"dwSubClass",s.id)}</div>`:""}</div>`}).join("")
-    +`<div class="dw-row"><button type="button" class="btn s" ${onEv("click",["dwSubAdd",id,"dwell"])}>${lu("plus",14)}${i18n("Время в зоне")}</button><button type="button" class="btn s" ${onEv("click",["dwSubAdd",id,"line"])}>${lu("plus",14)}${i18n("Пересечение линии")}</button></div>`
-    +dwHelp("Трекер находит объекты, а подчинённые детекторы решают, когда сработать. Зоны и размеры трекера действуют на все подчинённые детекторы.");
+      ${op?`<div class="dw-sub-b">${dwSubBodyHtml(id,k,s)}</div>`:""}</div>`}).join("");
+  const empty=c.subs.length?"":`<p class="sub">${i18n(k==="tracker"?"У трекера нет поддетекторов. Трекер сам не создаёт событий: чтобы получать события, создать поддетектор.":"Поддетекторов нет. Поддетектор добавляет к событиям детектора событие по своему условию: линия, область, время.")}</p>`;
+  const add=dw.subNew?dwSubNewHtml(id,k):`<div class="dw-row"><button type="button" class="btn s" ${onEv("click",["dwSubNewOpen"])}>${lu("plus",14)}${i18n("Создать поддетектор")}</button></div>`;
+  return rows+empty+add+dwHelp("Детектор находит объекты, а поддетектор решает, когда сработать. Зоны и размеры детектора действуют на все его поддетекторы.");
+}
+function dwSubBodyHtml(id,k,s){
+  const num=(key,l,min,max,unit,help)=>`<div class="dw-f dw-num"><label>${i18n(l)}</label><span class="dw-in"><input type="number" min="${min}" max="${max}" value="${s[key]}" ${onEv("input",["dwSubSet",id,s.id,key,onEv.value])}>${unit?`<span>${i18n(unit)}</span>`:""}</span>${help?dwHelp(help):""}</div>`;
+  const seg=o=>`<span class="dw-seg">${o.map(([v,l])=>`<button type="button" class="${s.mode===v?"on":""}" ${onEv("click",["dwSubMode",id,s.id,v])}>${i18n(l)}</button>`).join("")}</span>`;
+  const f=[`<div class="dw-f"><label>${i18n("Имя")}</label><input type="text" class="dw-txt" value="${escHtml(s.name)}" aria-label="${i18n("Имя поддетектора")}" ${onEv("input",["dwSubName",id,s.id,onEv.value])}></div>`];
+  if(s.kind==="line")f.push(`<div class="dw-f"><label>${i18n("Направление")}</label>${dwDirHtml(id,s.dir,"dwSubDir",s.id)}${dwHelp("Линия поддетектора — на кадре. Концы линии тянуть мышью.")}</div>`);
+  else f.push(dwHelp(s.kind==="a2a"?"Области 1 и 2 — на кадре. Области и их точки тянуть мышью.":"Область поддетектора — на кадре. Область и её точки тянуть мышью."));
+  if(s.kind==="dwell")f.push(`<div class="dw-f"><label>${i18n("Сработать, если объект в области")}</label>${seg([["gt","дольше"],["lt","меньше"],["eq","ровно"]])}</div>`,
+    num("time","Время",0,172800,"с",s.mode==="gt"?"Поддетектор сработает, когда объект пробудет в области это время.":"Поддетектор сработает, когда объект выйдет из области."));
+  if(s.kind==="stop")f.push(num("time","Сработать, если объект стоит дольше",1,172800,"с"));
+  if(s.kind==="abandoned")f.push(num("time","Сработать, если предмет лежит дольше",1,172800,"с"));
+  if(s.kind==="a2a")f.push(`<div class="dw-f"><label>${i18n("Время перехода из области 1 в область 2")}</label>${seg([["gt","дольше"],["lt","меньше"]])}</div>`,num("time","Время",0,172800,"с","Если время 0, поддетектор не проверяет время перехода."));
+  if(s.kind==="multi")f.push(num("count","Объектов в области не меньше",1,100,"","Поддетектор сработает, когда в области одновременно находится столько объектов."));
+  if(k!=="motion"&&s.kind!=="mask"&&s.kind!=="abandoned")f.push(`<div class="dw-f"><label>${i18n("Кого считать")}</label>${dwChips(id,["person","car","bike"],s.classes,"dwSubClass",s.id)}</div>`);
+  if(s.kind!=="mask"){
+    const inp=(key,i,min,max,l)=>`<input type="number" min="${min}" max="${max}" value="${s[key][i]}" aria-label="${i18n(l)}" ${onEv("input",["dwSubSet",id,s.id,`${key}.${i}`,onEv.value])}>`;
+    f.push(`<details class="dw-adv"${dw.subAdv?" open":""}><summary>${i18n("Дополнительно")}</summary><div class="dw-adv-b">
+      <div class="dw-f dw-num"><label>${i18n("Скорость объекта")}</label><span class="dw-in"><span>${i18n("от")}</span>${inp("spd",0,0,500,"Скорость не меньше")}<span>${i18n("до")}</span>${inp("spd",1,0,500,"Скорость не больше")}</span>${dwHelp("Поддетектор пропускает объекты медленнее и быстрее этих значений. Значения — от 0 до 500.")}</div>
+      <div class="dw-f dw-num"><label>${i18n("Смещение по X и Y")}</label><span class="dw-in">${inp("off",0,1,40,"Смещение по X")}<span>×</span>${inp("off",1,1,40,"Смещение по Y")}<span>% ${i18n("рамки")}</span></span>${dwHelp("Смещение — в процентах рамки объекта, от 1 до 40.")}</div>
+      <div class="dw-f"><label class="dw-swl"><span class="sw ${s.grp?"on":""}" role="switch" aria-checked="${s.grp}" ${onEv("click",["dwSubGrp",id,s.id])}></span>${i18n("Сработать на группу объектов")}</label>
+        ${s.grp?num("gn","Объектов в группе не меньше",1,100,"")+num("gh","Ждать следующие объекты группы",0,86400,"с","Поддетектор ждёт это время после первого объекта группы. Если за это время пришло нужное число объектов, поддетектор сработает."):""}</div>
+      ${dwHelp("Размер объекта поддетектор берёт у детектора.")}
+      <p class="sub" data-plan-stub>${i18n("Заглушка прототипа 53: превью не учитывает смещение и группу объектов.")}</p></div></details>`);
+  }
+  f.push(`<div class="dw-row"><button type="button" class="btn s" ${onEv("click",["dwSubDel",id,s.id])}>${lu("trash",14)}${i18n("Удалить поддетектор")}…</button></div>`);
+  return f.join("");
+}
+// Выбор типа: 10 типов — список с поиском, как у шаблонов правил
+function dwSubNewHtml(id,k){
+  const L=dwSubKinds(k);
+  return`<div class="dw-new" data-dw-new>
+    <div class="dw-new-h"><b>${i18n("Создать поддетектор")}</b><span class="sub">${i18n("Выбрать тип. Консоль добавит поддетектор в черновик. Детектор начнёт работать с ним после «Применить».")}</span></div>
+    <input type="search" class="dw-new-q" placeholder="${i18n("Найти тип поддетектора…")}" aria-label="${i18n("Найти тип поддетектора")}" ${onEv("input",["dwSubFilter",onEv.value])} ${onEv("keydown",["dwSubKey",id,onEv.event])}>
+    <div class="dw-new-l">${L.map(([v,n,t],i)=>`<button type="button" class="dw-new-c${i?"":" act"}" data-kind="${v}" data-nm="${escHtml(i18n(n))}" ${onEv("click",["dwSubAdd",id,v])}><b>${escHtml(i18n(n))}</b><span class="sub">${i18n(t)}</span></button>`).join("")}</div>
+    <p class="sub dw-new-x" data-dw-new-x>${i18n("Показано")} ${L.length} ${i18n("из")} ${L.length}</p>
+    <div class="dw-row"><button type="button" class="btn s" ${onEv("click",["dwSubNewOpen"])}>${i18n("Отменить")}</button></div></div>`;
 }
 function dwStateHtml(d){
   const n=dwDiffRows(d).length;
@@ -14973,9 +15119,9 @@ function dwDiffRows(d){
   if(c.stay!==s.stay)row(["stay"],"Предмет лежит дольше",`${s.stay} ${i18n("с")}`,`${c.stay} ${i18n("с")}`);
   if(ne(c.subs,s.subs)){
     const was=new Map(s.subs.map(x=>[x.id,x]));
-    c.subs.forEach(x=>{const o=was.get(x.id);if(!o)row(["subs"],`${i18n("Подчинённый детектор")} «${x.name}»`,"—",i18n("будет добавлен"));
-      else if(ne(o,x))row(["subs"],`${i18n("Подчинённый детектор")} «${x.name}»`,i18n(o.on?"вкл":"выкл"),o.on!==x.on?i18n(x.on?"вкл":"выкл"):i18n("изменён"))});
-    s.subs.forEach(o=>{if(!c.subs.some(x=>x.id===o.id))row(["subs"],`${i18n("Подчинённый детектор")} «${o.name}»`,i18n(o.on?"вкл":"выкл"),i18n("будет удалён"))});
+    c.subs.forEach(x=>{const o=was.get(x.id);if(!o)row(["subs"],`${i18n("Поддетектор")} «${x.name}»`,"—",i18n("будет добавлен"));
+      else if(ne(o,x))row(["subs"],`${i18n("Поддетектор")} «${x.name}»`,i18n(o.on?"вкл":"выкл"),o.on!==x.on?i18n(x.on?"вкл":"выкл"):i18n("изменён"))});
+    s.subs.forEach(o=>{if(!c.subs.some(x=>x.id===o.id))row(["subs"],`${i18n("Поддетектор")} «${o.name}»`,i18n(o.on?"вкл":"выкл"),i18n("будет удалён"))});
   }
   return out;
 }
@@ -15028,7 +15174,7 @@ function dwPanelHtml(cam,d,k,c){
   if(k==="abandoned")when.push(dwNum(id,"stay","Предмет лежит без движения дольше",5,1800,"с"));
   if(DW_SIZE.has(k))when.push(dwSizeHtml(id));
   const adv=`<details class="dw-adv"><summary>${i18n("Дополнительно")}</summary><div class="dw-adv-b">${detFieldsHtml(cam,d,"Имя")}${cam?detServerNoteHtml(cam,d):""}</div></details>`;
-  const where=dwSec("Где смотреть",dwAreasHtml(id,k,c)),wh=dwSec("Когда сработать",when.join("")),subs=k==="tracker"?dwSec("Подчинённые детекторы",dwSubsHtml(id,c)):"";
+  const where=dwSec("Где смотреть",dwAreasHtml(id,k,c)),wh=dwSec("Когда сработать",when.join("")),subs=DW_SUBP.has(k)?dwSec("Поддетекторы",dwSubsHtml(id,k,c),`<span class="dw-sec-n">${c.subs.length}</span>`):"";
   return head+what+where+wh+subs+adv;
 }
 // ── Действия ──
@@ -15041,7 +15187,7 @@ function dwRefresh(){
   root.querySelectorAll("[data-dw-hist]").forEach(el=>el.innerHTML=dwHistHtml(d,el.dataset.dwHist));
   const p=root.querySelector("[data-dw-prev]");if(p)p.innerHTML=dwPrevHtml(d);
   const s=root.querySelector("[data-dw-st]");if(s)s.innerHTML=dwStateHtml(d);
-  root.querySelectorAll(".dw-sub-n").forEach((el,i)=>{const sb=c.subs[i];if(sb)el.textContent=`${dwEval(c,"tracker").fires.filter(f=>f.sub===sb.id).length} ${i18n("сраб.")}`});
+  root.querySelectorAll("[data-dw-sub]").forEach(el=>{const sb=c.subs.find(x=>x.id===el.dataset.dwSub),nn=el.querySelector(".dw-sub-n");if(sb&&nn&&sb.kind!=="mask")nn.textContent=`${dwEval(c,dwKindOf(d)).fires.filter(f=>f.sub===sb.id).length} ${i18n("сраб.")}`});
   dwPaintGeo();dwPaintObj();cardFootRefresh();
   const b=root.querySelector("[data-dw-bar]");if(b)b.innerHTML=dwBarHtml(d);
 }
@@ -15054,7 +15200,7 @@ function dwPaintObj(){
   const nw=root.querySelector("[data-dw-now]");if(nw)nw.textContent=dw.now!=null&&dwKindOf(d)!=="other"?`${i18n("Детектор видит в кадре")}: ${dw.now}`:"";
   // Раз в секунду живого времени: графики «до и после», лента, итог плана после очереди
   const sec=Math.floor(dw.T);if(sec!==dw.shown){dw.shown=sec;
-    const sj=JSON.stringify(dwSaved(d));if(sj!==dw.sj){const first=!dw.sj;dw.sj=sj;if(!first){dwRefresh();return}}
+    const sj=JSON.stringify(dwSaved(d));if(sj!==dw.sj){const first=!dw.sj;dw.sj=sj;if(!first){dwRefresh();renderTree();return}}
     const cm=root.querySelector("[data-dw-cmp]");if(cm){const C=dwCmpData(d);cm.innerHTML=dwCmpHtml(d,C);
       const cs=root.querySelector("[data-dw-cstrip]");if(cs&&+cs.dataset.dwCstrip!==C.strip.length){cs.dataset.dwCstrip=C.strip.length;cs.innerHTML=dwCmpStripHtml(d,C)}}
     const st=root.querySelector("[data-dw-strip]");if(st){const n=dwFiresIn(dwSaved(d),dwKindOf(d),dw.T-DW_T,dw.T).length;if(+st.dataset.dwStrip!==n)dwPv("live")}}
@@ -15088,14 +15234,63 @@ function dwDir(id,v){dwC(detNodeOf(id)).dir=v;gear()}
 function dwAreaDel(id,aid){const c=dwC(detNodeOf(id));c.areas=c.areas.filter(a=>a.id!==aid);gear()}
 function dwSubOf(id,sid){return dwC(detNodeOf(id)).subs.find(s=>s.id===sid)}
 function dwSubOn(id,sid){const s=dwSubOf(id,sid);if(s)s.on=!s.on;gear()}
-function dwSubSet(id,sid,key,v){const s=dwSubOf(id,sid);v=+v;if(s&&Number.isFinite(v)&&v>0){s[key]=v;dwSoon()}}
+function dwSubSet(id,sid,key,v){
+  const s=dwSubOf(id,sid);v=+v;if(!s||!Number.isFinite(v)||v<0)return;
+  if(key.includes(".")){const[a,i]=key.split(".");s[a][+i]=v}else s[key]=v;
+  dwSoon();
+}
 function dwSubDir(id,sid,v){const s=dwSubOf(id,sid);if(s)s.dir=v;gear()}
+function dwSubMode(id,sid,v){const s=dwSubOf(id,sid);if(s)s.mode=v;gear()}
+function dwSubGrp(id,sid){const s=dwSubOf(id,sid);if(s)s.grp=!s.grp;dw.subAdv=true;gear()}
+function dwSubName(id,sid,v){const s=dwSubOf(id,sid);if(!s)return;s.name=v;const b=dwRoot()?.querySelector(`[data-dw-sub="${CSS.escape(sid)}"] .dw-sub-t b`);if(b)b.textContent=v;dwSoon()}
 function dwSubClass(id,sid,cl){const s=dwSubOf(id,sid);if(!s)return;const i=s.classes.indexOf(cl);if(i<0)s.classes.push(cl);else s.classes.splice(i,1);gear()}
+function dwSubSel(sid){dw.subSel=dw.subSel===sid?null:sid;dw.subAdv=false;gear();renderTree()}
+function dwSubNewOpen(){dw.subNew=!dw.subNew;gear();if(dw.subNew)setTimeout(()=>dwRoot()?.querySelector(".dw-new-q")?.focus(),0)}
 function dwSubAdd(id,kind){
-  const c=dwC(detNodeOf(id)),n=c.subs.length+1,sid="s"+Date.now()%1e7;
-  c.subs.push(kind==="dwell"?{id:sid,kind,name:`${i18n("Время в зоне")} ${n}`,on:true,area:{pts:[[.55,.6],[.7,.6],[.7,.75],[.55,.75]]},dwell:15,classes:["person"]}
-    :{id:sid,kind,name:`${i18n("Линия")} ${n}`,on:true,line:[[.6,.6],[.6,.95]],dir:"both",classes:["person","car","bike"]});
-  gear();
+  const c=dwC(detNodeOf(id)),n=c.subs.filter(s=>s.kind===kind).length+1,sid="s"+Date.now()%1e7;
+  c.subs.push(dwSubNew(kind,`${i18n(DW_SUBN[kind])}${n>1?" "+n:""}`,sid));
+  dw.subSel=sid;dw.subNew=false;dw.subAdv=false;gear();renderTree();
+}
+function dwSubFilter(v){
+  const r=dwRoot()?.querySelector("[data-dw-new]");if(!r)return;
+  const q=String(v||"").trim(),cs=[...r.querySelectorAll(".dw-new-c")];let n=0;
+  cs.forEach(el=>{const on=matchesText(q,el.textContent);el.hidden=!on;if(on)n++;el.classList.remove("act");el.querySelector("b").innerHTML=hlText(el.dataset.nm,q)});
+  cs.find(el=>!el.hidden)?.classList.add("act");
+  r.querySelector("[data-dw-new-x]").textContent=n?`${i18n("Показано")} ${n} ${i18n("из")} ${cs.length}`:i18n("Ничего не найдено");
+}
+function dwSubKey(id,e){
+  const r=dwRoot()?.querySelector("[data-dw-new]");if(!r)return;
+  const vis=[...r.querySelectorAll(".dw-new-c:not([hidden])")],i=vis.findIndex(el=>el.classList.contains("act"));
+  if(e.key==="ArrowDown"||e.key==="ArrowUp"){e.preventDefault();if(!vis.length)return;const j=Math.max(0,Math.min(vis.length-1,i+(e.key==="ArrowDown"?1:-1)));vis.forEach(el=>el.classList.remove("act"));vis[j].classList.add("act");vis[j].scrollIntoView({block:"nearest"})}
+  else if(e.key==="Enter"){e.preventDefault();const el=vis[i]||vis[0];if(el)dwSubAdd(id,el.dataset.kind)}
+  else if(e.key==="Escape"){e.preventDefault();dwSubNewOpen()}
+}
+function dwSubDel(id,sid){
+  const d=detNodeOf(id),c=dwC(d),s=c.subs.find(x=>x.id===sid);if(!s)return;
+  const saved=dwSaved(d).subs.some(x=>x.id===sid);
+  askConfirm(`${i18n("Удалить поддетектор")} «${s.name}»?`,`<ul class="bk-del">
+      <li>${i18n(s.kind==="line"?"Пропадут линия и настройки поддетектора.":s.kind==="a2a"?"Пропадут две области и настройки поддетектора.":"Пропадут область и настройки поддетектора.")}</li>
+      <li>${i18n(saved?"Детектор перестанет создавать события этого поддетектора после «Применить».":"Поддетектор ещё не применён: детектор о нём не знает.")}</li>
+      <li>${i18n("Останутся")}: ${i18n("детектор")} «${escHtml(locName(d))}», ${i18n("другие поддетекторы, события в архиве")}.</li></ul>`,"","Удалить",()=>{
+    const i=c.subs.indexOf(s);if(i<0)return;c.subs.splice(i,1);if(dw.subSel===sid)dw.subSel=null;gear();
+    toastAction("dwsub",`${i18n("Консоль убрала поддетектор из черновика")}: «${s.name}»`,i18n("Отменить"),()=>{c.subs.splice(Math.min(i,c.subs.length),0,s);dw.subSel=sid;gear()},10000);
+  },{html:true,rawTitle:true,typeCount:1});
+}
+// Из дерева и со вкладки камеры: открыть детектор, раскрыть поддетектор; переход по ссылке моргает карточкой поддетектора
+function dwSubPick(did,sid,link){
+  const d=detNodeOf(did);if(!d)return;
+  dw.id=did+dwKindOf(d);dw.sel=null;dw.tool=null;dw.subNew=false;dw.subAdv=false;dw.subSel=sid;dw.subFlash=!!link;
+  if(link)detFromCam(did);else if(sel===did){gear();renderTree()}else pick(did);
+}
+function dwSubCreate(did){
+  const d=detNodeOf(did);if(!d)return;
+  dw.id=did+dwKindOf(d);dw.sel=null;dw.tool=null;dw.subSel=null;dw.subNew=true;
+  if(sel===did){gear();renderTree()}else pick(did);
+}
+function dwLand(){
+  const r=dwRoot();if(!r)return;
+  if(dw.subNew){const q=r.querySelector(".dw-new-q");if(q&&document.activeElement!==q){q.scrollIntoView({block:"nearest"});q.focus()}}
+  if(dw.subFlash&&dw.subSel){dw.subFlash=false;const el=r.querySelector(`[data-dw-sub="${CSS.escape(dw.subSel)}"]`);if(el){el.scrollIntoView({block:"nearest"});el.classList.remove("acc-flash");void el.offsetWidth;el.classList.add("acc-flash")}}
 }
 function dwRevert(id){const d=detNodeOf(id);dw.cfg[dwKey(d)]=dwClone(dwSaved(d));gear();toast("Изменения сброшены")}
 // Рисование и правка на кадре: инструмент — протяжкой; без инструмента — точки и фигуры тянутся мышью
@@ -15103,7 +15298,8 @@ function dwXY(st,e){const r=st.getBoundingClientRect();return[+Math.min(1,Math.m
 function dwDown(st,e){
   const d=dwD();if(!d||e.button)return;
   const c=dwC(d),p0=dwXY(st,e),h=e.target.dataset?.h,b=e.target.dataset?.b;
-  let move=null,done=null;
+  let move=null,done=null,reSel=false;
+  const subPick=(kd,id)=>{if(/^sub/.test(kd)&&dw.subSel!==id){dw.subSel=id;dw.subNew=false;reSel=true}};
   if(dw.tool){
     e.preventDefault();
     const tool=dw.tool;
@@ -15120,19 +15316,22 @@ function dwDown(st,e){
     if(kd==="area"){const a=c.areas.find(x=>x.id===id);if(a){dw.sel=id;move=q=>{a.pts[+i]=q}}}
     else if(kd==="line")move=q=>{c.line[+id]=q};
     else if(kd==="sub"){const s=c.subs.find(x=>x.id===id);if(s)move=q=>{s.area.pts[+i]=q}}
+    else if(kd==="sub2"){const s=c.subs.find(x=>x.id===id);if(s)move=q=>{s.area2.pts[+i]=q}}
     else if(kd==="subl"){const s=c.subs.find(x=>x.id===id);if(s)move=q=>{s.line[+i]=q}}
-    else if(kd==="min"||kd==="max"){const at=c[kd+"At"];move=q=>{c[kd]=[+Math.max(.01,Math.abs(q[0]-at[0])*2).toFixed(4),+Math.max(.01,at[1]-q[1]).toFixed(4)]}}
+    subPick(kd,id);
+    if(kd==="min"||kd==="max"){const at=c[kd+"At"];move=q=>{c[kd]=[+Math.max(.01,Math.abs(q[0]-at[0])*2).toFixed(4),+Math.max(.01,at[1]-q[1]).toFixed(4)]}}
   }else if(b){
     e.preventDefault();
     const[kd,id]=b.split(":");
-    const pts=kd==="area"?c.areas.find(x=>x.id===id)?.pts:kd==="sub"?c.subs.find(x=>x.id===id)?.area.pts:kd==="line"?c.line:kd==="subl"?c.subs.find(x=>x.id===id)?.line:kd==="min"||kd==="max"?[c[kd+"At"]]:null;
+    subPick(kd,id);
+    const pts=kd==="area"?c.areas.find(x=>x.id===id)?.pts:kd==="sub"?c.subs.find(x=>x.id===id)?.area.pts:kd==="sub2"?c.subs.find(x=>x.id===id)?.area2?.pts:kd==="line"?c.line:kd==="subl"?c.subs.find(x=>x.id===id)?.line:kd==="min"||kd==="max"?[c[kd+"At"]]:null;
     if(kd==="area")dw.sel=id;
     if(pts){const orig=pts.map(p=>p.slice());move=q=>{const dx=q[0]-p0[0],dy=q[1]-p0[1];orig.forEach((p,i)=>{pts[i][0]=+Math.min(1,Math.max(0,p[0]+dx)).toFixed(4);pts[i][1]=+Math.min(1,Math.max(0,p[1]+dy)).toFixed(4)})}}
   }
-  if(!move)return;
+  if(!move){if(reSel){gear();renderTree()}return}
   dw.drag=true;
   const mm=ev=>{move(dwXY(st,ev));dwPaintGeo();dwSoon()};
-  const up=()=>{window.removeEventListener("mousemove",mm);window.removeEventListener("mouseup",up);dw.drag=false;done?.();if(dw.tool){dw.tool=null;gear()}else dwRefresh()};
+  const up=()=>{window.removeEventListener("mousemove",mm);window.removeEventListener("mouseup",up);dw.drag=false;done?.();if(dw.tool){dw.tool=null;gear()}else if(reSel){gear();renderTree()}else dwRefresh()};
   window.addEventListener("mousemove",mm);window.addEventListener("mouseup",up);
 }
 // ── Срез «Детекторы»: главный объект — детектор ──────────────────────────────
