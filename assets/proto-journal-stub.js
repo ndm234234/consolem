@@ -1,7 +1,7 @@
 // ЗАГЛУШКА прототипов 47–51 (ui-draft «Журнал»): 200 000 событий создаёт браузер,
-// отбор, счётчики и гистограмма — тоже в браузере. В контракте 0.7.0 этого нет
+// отбор, счётчики и экспорт CSV — тоже в браузере. В контракте 0.7.0 этого нет
 // (запрос api/requests/2026-11-10-181412Z-mockup-journal-search-request.md):
-// поиск по тексту, пользователь, вид события, счётчики по полям, гистограмма,
+// поиск по тексту, пользователь, вид события, счётчики по полям, экспорт CSV,
 // «было → стало». После утверждения вида — правка контракта, отбор на сервере.
 // Внешний мир — через ctx в PJ.init: объекты, пользователи и переходы консоли.
 (function(){
@@ -189,51 +189,6 @@ function match(h,groups){
   for(const g of groups){let ok=true;for(const t of g)if(!h.includes(t)){ok=false;break}if(ok)return true}
   return false;
 }
-// Гистограмма: те же условия, кроме времени; три слоя — тревоги и ошибки, аудит, остальное
-PJ.hist=function(q,from,to,nb){
-  const lo=PJ.rowAt(to),hi=PJ.rowAt(from),step=(to-from)/nb,a=new Int32Array(nb*3);
-  const groups=PJ.parseText(q.text),cats=q.cats,kinds=q.kinds,objs=q.objs,users=q.users,dbg=CI.debug,hideDbg=!q.showDebug&&!(cats&&cats.has(dbg));
-  for(let i=lo;i<hi;i++){
-    const k=S.K[i],ci=KINDS[k].ci;
-    if(cats?!cats.has(ci):hideDbg&&ci===dbg)continue;
-    if(kinds&&!kinds.has(k))continue;if(objs&&!objs.has(S.O[i]))continue;if(users&&!users.has(S.U[i]))continue;
-    if(q.nkinds&&q.nkinds.has(k))continue;if(q.nobjs&&q.nobjs.has(S.O[i]))continue;if(q.nusers&&q.nusers.has(S.U[i]))continue;
-    if(groups&&!match(S.HAY[i],groups))continue;
-    const b=Math.min(nb-1,Math.floor((S.T[i]-from)/step));if(b<0)continue;
-    a[b*3+(ci<=1?0:ci===2?1:2)]++;
-  }
-  let max=1;for(let b=0;b<nb;b++)max=Math.max(max,a[b*3]+a[b*3+1]+a[b*3+2]);
-  return{a,nb,from,to,step,max};
-};
-PJ.histSvg=function(h,o={}){
-  const H=o.height||48,W=h.nb*10,sx=10,bars=[];
-  for(let b=0;b<h.nb;b++){
-    const v=[h.a[b*3],h.a[b*3+1],h.a[b*3+2]];let y=H;
-    [[2,"pj-h-info"],[1,"pj-h-audit"],[0,"pj-h-alarm"]].forEach(([j,cl])=>{if(!v[j])return;const hh=Math.max(1,v[j]/h.max*(H-2));y-=hh;bars.push(`<rect x="${b*sx+1}" y="${y.toFixed(1)}" width="${sx-2}" height="${hh.toFixed(1)}" class="${cl}"/>`)});
-    bars.push(`<rect x="${b*sx}" y="0" width="${sx}" height="${H}" class="pj-h-hit" data-b="${b}"><title>${esc(PJ.fmtSpan(h.from+b*h.step,h.from+(b+1)*h.step))}: ${PJ.num(v[0]+v[1]+v[2])}</title></rect>`);
-  }
-  return`<svg class="pj-hist" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="height:${H}px">${bars.join("")}</svg>`;
-};
-// Протяжка: done(from,to) по границам столбиков; щелчок — один столбик
-PJ.brush=function(box,h,done){
-  const svg=box.querySelector("svg");if(!svg)return;
-  let sel=box.querySelector(".pj-brush");if(!sel){sel=document.createElement("div");sel.className="pj-brush";box.appendChild(sel)}
-  const at=x=>{const r=svg.getBoundingClientRect();return Math.max(0,Math.min(.9999,(x-r.left)/r.width))};
-  const bar=f=>Math.floor(f*h.nb);
-  box.onpointerdown=e=>{
-    if(e.button!==0)return;const b0=bar(at(e.clientX)),x0=e.clientX;let moved=false;
-    try{box.setPointerCapture(e.pointerId)}catch(_){}
-    const span=b=>{const a=Math.min(b0,b),c=Math.max(b0,b);sel.style.cssText=`display:block;left:${a/h.nb*100}%;width:${(c-a+1)/h.nb*100}%`;return[a,c]};
-    box.onpointermove=ev=>{if(Math.abs(ev.clientX-x0)>4){moved=true;span(bar(at(ev.clientX)))}};
-    box.onpointerup=ev=>{box.onpointermove=box.onpointerup=null;sel.style.display="none";
-      const[a,c]=moved?span(bar(at(ev.clientX))):[b0,b0];done(h.from+a*h.step,h.from+(c+1)*h.step)};
-  };
-};
-PJ.histAxis=function(h,n=6){
-  const out=[];for(let j=0;j<=n;j++){const t=h.from+(h.to-h.from)*j/n;out.push(`<span style="left:${(j/n*100).toFixed(2)}%">${esc(PJ.fmtTick(t,h.to-h.from))}</span>`)}
-  return`<div class="pj-axis">${out.join("")}</div>`;
-};
-
 // ── Время ──
 const MON=["янв","фев","мар","апр","мая","июн","июл","авг","сен","окт","ноя","дек"];
 const MONF=["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];
@@ -243,7 +198,6 @@ function dayDiff(t){const a=new Date(S.now),b=new Date(t);a.setHours(0,0,0,0);b.
 PJ.fmtDay=x=>{const d=new Date(x),dd=dayDiff(x);return dd===0?t("сегодня"):dd===1?t("вчера"):`${d.getDate()} ${t(MON[d.getMonth()])}`};
 PJ.fmt=t=>{const d=new Date(t);return`${PJ.fmtDay(t)} ${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`};
 PJ.fmtFull=x=>{const d=new Date(x);return`${t(WD[d.getDay()])}, ${d.getDate()} ${t(MONF[d.getMonth()])} ${d.getFullYear()}, ${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`};
-PJ.fmtTick=(x,span)=>{const d=new Date(x);return span>3*DAY?`${d.getDate()} ${t(MON[d.getMonth()])}`:span>20*HOUR?`${PJ.fmtDay(x)} ${p2(d.getHours())}:00`:`${p2(d.getHours())}:${p2(d.getMinutes())}`};
 PJ.fmtSpan=(a,b)=>{const da=new Date(a),db=new Date(b);const same=dayDiff(a)===dayDiff(b-1);
   return same?`${PJ.fmtDay(a)} ${p2(da.getHours())}:${p2(da.getMinutes())}–${p2(db.getHours())}:${p2(db.getMinutes())}`:`${PJ.fmtDay(a)} ${p2(da.getHours())}:${p2(da.getMinutes())} – ${PJ.fmtDay(b)} ${p2(db.getHours())}:${p2(db.getMinutes())}`};
 // Быстрые периоды: от «сейчас» назад
@@ -334,8 +288,7 @@ PJ.detailHtml=function(i,o={}){
   const nearHtml=near.length?`<div class="pj-near"><div class="pj-near-h"><span>${esc(t("Рядом"))}</span>${nm}</div>${near.map(j=>{const x=PJ.row(j);return`<button type="button" class="pj-nr${j===i?" on":""}" data-pj-act="pick" data-v="${j}"><span class="pj-t">${esc(PJ.fmt(x.t))}</span><i class="pj-dot pj-c-${x.cat.id}"></i><span title="${esc(PJ.kindName(x.kind)+(x.obj?" · "+x.obj.name:""))}">${esc(PJ.kindName(x.kind))}${byTime&&x.obj?`<span class="pj-mu"> · ${esc(x.obj.name)}</span>`:""}</span></button>`}).join("")}</div>`:"";
   const acts=[
     k.video&&r.obj&&ctx.openVideo?`<button type="button" class="btn s pri" data-pj-act="video" data-v="${r.obj.i}">${esc(t("Открыть видео на {t}").replace("{t}",PJ.fmt(r.t).replace(/:\d\d$/,"")))}</button>`:"",
-    `<button type="button" class="btn s" data-pj-act="similar" data-v="${i}" title="${esc(t(r.obj?"Тот же вид события и тот же объект":"Тот же вид события"))}">${esc(t("Найти похожие"))}</button>`,
-    `<button type="button" class="btn s" data-pj-act="copy" data-v="${i}">${esc(t("Копировать ссылку"))}</button>`
+    `<button type="button" class="btn s" data-pj-act="similar" data-v="${i}" title="${esc(t(r.obj?"Тот же вид события и тот же объект":"Тот же вид события"))}">${esc(t("Найти похожие"))}</button>`
   ].join("");
   return`<div class="pj-det">
     <div class="pj-det-hd"><span class="pj-tag pj-c-${r.cat.id}">${esc(PJ.catName(r.cat))}</span><b>${esc(PJ.kindName(k))}</b></div>
@@ -352,7 +305,7 @@ function nearRows(r,k,byTime){
   for(let j=r.i-1;j>=0&&after.length<k&&j>r.i-40000;j--)if(same(j)&&KINDS[S.K[j]].cat!=="debug")after.push(j);
   return[...after.reverse(),r.i,...before];
 }
-// Действия панели: obj, user, video, similar, copy, pick
+// Действия панели: obj, user, video, similar, pick
 PJ.bindActs=function(el,fn){
   if(!el||el._pjActs)return;el._pjActs=true;
   el.addEventListener("click",e=>{const b=e.target.closest("[data-pj-act]");if(!b||!el.contains(b))return;fn(b.dataset.pjAct,+b.dataset.v,b.dataset.f,b)});
@@ -416,13 +369,6 @@ function injectCss(){
 .pj-sum{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;font:var(--one-type-body-sm);letter-spacing:var(--one-type-body-sm-tracking);color:var(--one-fg-muted);min-height:24px}
 .pj-sum b{color:var(--one-fg);font-weight:600}
 .pj-sum .lk{white-space:nowrap}.pj-sum .lk svg{width:16px;height:16px;vertical-align:-4px;display:inline}
-.pj-histbox{position:relative;padding-bottom:16px;cursor:crosshair;user-select:none;touch-action:none}
-.pj-brush{display:none;position:absolute;top:0;bottom:16px;background:var(--one-accent-soft);border-left:1px solid var(--one-accent);border-right:1px solid var(--one-accent);pointer-events:none}
-.pj-hist{width:100%;display:block}
-.pj-h-alarm{fill:var(--one-danger-icon)}.pj-h-audit{fill:var(--one-palette-purple)}.pj-h-info{fill:color-mix(in srgb,var(--one-fg-muted) 55%,transparent)}
-.pj-h-hit{fill:transparent;cursor:pointer}.pj-h-hit:hover{fill:var(--one-control-hover)}
-.pj-axis{position:absolute;left:0;right:0;bottom:0;height:16px;font:var(--one-type-caption);letter-spacing:var(--one-type-caption-tracking);color:var(--one-fg-muted)}
-.pj-axis span{position:absolute;transform:translateX(-50%);white-space:nowrap}.pj-axis span:first-child{transform:none}.pj-axis span:last-child{transform:translateX(-100%)}
 /* Карточка события — тело body-md, заголовок heading-sm (как .cp-h). */
 .pj-det{padding:12px 16px 16px;display:flex;flex-direction:column;gap:12px;font:var(--one-type-body-md);letter-spacing:var(--one-type-body-md-tracking)}
 .pj-det-hd{display:flex;gap:8px;align-items:center;font:var(--one-type-heading-sm);letter-spacing:var(--one-type-heading-sm-tracking)}
