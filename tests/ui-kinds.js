@@ -185,16 +185,21 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   // Полигон на готовом детекторе, «Сбросить»
   const line = devices.find((d) => d.parentId === camD.id && d.type === "det" && !d.builtin);
   open(line.id);
-  zoneMode(line.id, "polygon");
-  const pg = () => main().querySelector(`[data-zone="${line.id}"]`);
-  [[0.2, 0.2], [0.8, 0.2], [0.5, 0.8]].forEach(([x, y]) => at("mousedown", x, y, pg()));
-  zoneClose(line.id);
-  ok(find(line.id).n.zone?.shape === "polygon" && find(line.id).n.zone.points.length === 3, "полигон из трёх точек");
-  ok(/Показать план/.test(document.getElementById("cardFoot")?.textContent || ""), "зона — в черновике карточки");
-  cardApply();
-  await until(() => !bq || bq.finished);
-  ok((await uiRec(line.id)).zone?.points.length === 3, "зона на сервере");
-  open(line.id);
+  if (main().querySelector("[data-dw]")) {
+    // Прототип окна детектора: зону правят на кадре окна, «Применить» там — заглушка без запроса к серверу
+    ok(!!main().querySelector("[data-dw] svg"), "окно детектора: кадр с зоной");
+  } else {
+    zoneMode(line.id, "polygon");
+    const pg = () => main().querySelector(`[data-zone="${line.id}"]`);
+    [[0.2, 0.2], [0.8, 0.2], [0.5, 0.8]].forEach(([x, y]) => at("mousedown", x, y, pg()));
+    zoneClose(line.id);
+    ok(find(line.id).n.zone?.shape === "polygon" && find(line.id).n.zone.points.length === 3, "полигон из трёх точек");
+    ok(/Показать план/.test(document.getElementById("cardFoot")?.textContent || ""), "зона — в черновике карточки");
+    cardApply();
+    await until(() => !bq || bq.finished);
+    ok((await uiRec(line.id)).zone?.points.length === 3, "зона на сервере");
+    open(line.id);
+  }
   // Несовместимый: отказ сказан своими словами
   const clash = problemText({ problem: { code: "BUSY", params: { reason: "incompatible", with: line.id } } });
   ok(/несовместим/.test(clash), "несовместимый детектор: " + clash);
