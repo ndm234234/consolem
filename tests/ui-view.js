@@ -339,6 +339,8 @@ UiCheck(async ({ ok, until, sleep, confirmWith }) => {
   ok(await until(() => lv.tl.day && !lv.tl.busy && lv.pb), "сутки на шкале, запись идёт");
   ok(new Date(lv.tl.day).getDate() === +pickD.textContent, "выбраны те сутки");
   liveStop();
+  q("[data-tl-win='all']").click();
+  ok(await until(() => !lv.tl.day && !lv.tl.busy && lv.tl.spans.length > 20), "снова «Всё»");
 
   // Живое снимает архив, стоп снимает всё
   liveStart();
