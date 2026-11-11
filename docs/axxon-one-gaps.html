@@ -56,7 +56,7 @@ section.area{margin-top:26px}
 section.area>header{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;border-bottom:2px solid var(--ink);padding-bottom:6px}
 section.area>header small{font:13px var(--f-mono);color:var(--muted)}
 .scope-op>header{border-bottom-color:var(--muted)}
-.item{display:grid;grid-template-columns:88px minmax(0,1fr) 170px;gap:6px 16px;padding:12px 0;border-bottom:1px solid var(--line)}
+.item{display:grid;grid-template-columns:88px minmax(0,1fr) 200px;gap:6px 16px;padding:12px 0;border-bottom:1px solid var(--line)}
 .item .v{font:600 12px/1 var(--f-mono);letter-spacing:.04em;text-transform:uppercase;padding:5px 7px;border-radius:4px;justify-self:start;align-self:start}
 .v.high{background:var(--hi-soft);color:var(--hi)} .v.medium{background:var(--mid-soft);color:var(--mid)} .v.low{background:var(--lo-soft);color:var(--lo)}
 .item .t{font-weight:600}
@@ -65,6 +65,10 @@ section.area>header small{font:13px var(--f-mono);color:var(--muted)}
 .side{display:flex;flex-direction:column;gap:4px;align-items:flex-start;font-size:12px}
 .st{font:500 12px/1 var(--f-body);padding:4px 7px;border-radius:4px;border:1px solid currentColor}
 .st.absent{color:var(--hi)} .st.partial{color:var(--mid)} .st.stub{color:var(--stub)}
+.side .st{font-size:13px;line-height:1.2}
+a.st.proto{text-decoration:none;color:var(--ok);background:var(--ok-soft)} a.st.proto.partial{color:var(--mid);background:var(--mid-soft)}
+a.st.proto:hover{text-decoration:underline}
+.item .pn{margin-top:4px;padding-left:8px;border-left:3px solid var(--ok)} .item .pn.partial{border-color:var(--mid)}
 .tag{font:12px/1.2 var(--f-mono);color:var(--muted)}
 .tag.next{color:var(--stub)} .tag.util{color:var(--accent)} .tag.new{color:var(--ok)}
 .empty{padding:20px 0;color:var(--muted)}
@@ -88,6 +92,7 @@ footer{padding-block:28px 40px;color:var(--muted);font-size:13px}
   <h1>Пробелы конфигуратора против Axxon One</h1>
   <p class="lede">Список функций Axxon One и Axxon Next, которых нет в макете <code>index.html</code> или которые есть только частично. Каждый пункт проверен дважды: сборщик нашёл функцию в документации и искал её в макете, критик открыл источник и попробовал опровергнуть оба утверждения. Опровергнутые пункты вынесены в отдельный список внизу.</p>
   <div class="meta">Макет: index.html, коммит <span class="b-commit"></span> (проверено <span class="b-date"></span>) · Axxon One 3.0 (lexiro, ~1000 документов, release notes 3.0, 3.0.2, 3.1.0) · Axxon Next: код axxonnext.ui, axxonnext.detectorpack</div>
+  <p class="lede">Состояние у пункта: «index.html: нет / частично / заглушка» — что есть в основном макете. Если функцию уже сделали в прототипе, рядом стоит «прототип NN: есть» или «прототип NN: частично» со ссылкой на прототип, а под описанием сказано, что именно там сделано.</p>
   <div class="sum" id="sum"></div>
 
   <div class="find">
@@ -123,6 +128,11 @@ footer{padding-block:28px 40px;color:var(--muted);font-size:13px}
       <button class="chip" type="button" id="f-s-absent" data-v="absent" aria-pressed="false">нет</button>
       <button class="chip" type="button" id="f-s-partial" data-v="partial" aria-pressed="false">частично</button>
       <button class="chip" type="button" id="f-s-stub" data-v="stub" aria-pressed="false">заглушка</button>
+    </div>
+    <div class="grp" data-f="proto"><em>В прототипе</em>
+      <button class="chip" type="button" id="f-p-all" data-v="all" aria-pressed="true">все</button>
+      <button class="chip" type="button" id="f-p-yes" data-v="yes" aria-pressed="false">есть</button>
+      <button class="chip" type="button" id="f-p-no" data-v="no" aria-pressed="false">нет</button>
     </div>
     <input id="q" type="search" placeholder="Поиск: зона, кластер, 292016…" aria-label="Поиск по списку">
     <span id="shown"></span>
@@ -246,22 +256,22 @@ const G=[
 ["B22","mark","high","absent","cfg","","Изменить и удалить отметку","Правка времени, камер, категории и комментария; удаление одной или нескольких с записью в журнал.","596560","openapi: только создать и смотреть"],
 ["B23","mark","medium","absent","cfg","","Категории отметок","Список категорий в настройках: создать, переименовать, удалить; выбор категории при создании.","588703","—"],
 ["B25","mark","medium","partial","cfg","","Конфиденциальная отметка","Право «конфиденциальные отметки» в ролях есть, а флажка у отметки нет.","596560","право 23216; форма 16665"],
-["C1","det","high","partial","cfg","","Параметры серверного детектора по семействам","Группы «Основные», «Дополнительные», «Признаки объекта»: размер и скорость объекта, задержка конца тревоги, положение камеры, порог, окна сканирования, кадров в секунду, сжатие кадра, две чувствительности. Сейчас — одна строка params и одно число.","292197, 292176, 572151, 292150","вид det; detFieldsHtml 14448-14461; прототип 55 (index_55_okno-detektora.html, заглушка без контракта): размер объекта рамками мин. и макс. на кадре, скорость объекта"],
-["C2","det","high","partial","cfg","","Несколько зон и правка точек","Одна или несколько зон обнаружения; перенос, добавление и удаление точек после рисования.","292197, 544214, 292146","zone — один объект; zoneSave 14395-14405; прототип 55 (заглушка без контракта): несколько зон на кадре; нарисовать зону протяжкой мышью, перенести точку мышью"],
-["C3","det","high","absent","cfg","","Зоны исключения","Области кадра без обнаружения и без метаданных, общие для поддетекторов.","292146","ZONE_SHAPES 14392; прототип 55 (заглушка без контракта): кнопка «Исключение» рисует зону исключения на кадре"],
-["C4","det","high","partial","cfg","","Поддетекторы под трекером","Пересечение линии, праздношатание, остановка, вход и выход, несколько объектов, переход из зоны в зону, маскирование треков. Удаление родителя удаляет детей.","574567, 572151","det: parents = camera; прототип 55 (заглушка в памяти страницы): раздел «Поддетекторы» в карточке, 10 типов, строки в дереве, «+» и меню, удаление с вводом числа"],
-["CX1","det","high","absent","cfg","c","Направление пересечения линии","Одно или оба направления, перенос концов линии, смещения области трека.","544214","zone line — две точки; прототип 55 (заглушка без контракта): направление пересечения у поддетектора, тянуть концы линии мышью, смещение по X и Y"],
+["C1","det","high","partial","cfg","","Параметры серверного детектора по семействам","Группы «Основные», «Дополнительные», «Признаки объекта»: размер и скорость объекта, задержка конца тревоги, положение камеры, порог, окна сканирования, кадров в секунду, сжатие кадра, две чувствительности. Сейчас — одна строка params и одно число.","292197, 292176, 572151, 292150","вид det; detFieldsHtml 14448-14461"],
+["C2","det","high","partial","cfg","","Несколько зон и правка точек","Одна или несколько зон обнаружения; перенос, добавление и удаление точек после рисования.","292197, 544214, 292146","zone — один объект; zoneSave 14395-14405"],
+["C3","det","high","absent","cfg","","Зоны исключения","Области кадра без обнаружения и без метаданных, общие для поддетекторов.","292146","ZONE_SHAPES 14392"],
+["C4","det","high","partial","cfg","","Поддетекторы под трекером","Пересечение линии, праздношатание, остановка, вход и выход, несколько объектов, переход из зоны в зону, маскирование треков. Удаление родителя удаляет детей.","574567, 572151","det: parents = camera"],
+["CX1","det","high","absent","cfg","c","Направление пересечения линии","Одно или оба направления, перенос концов линии, смещения области трека.","544214","zone line — две точки"],
 ["C5","det","high","partial","cfg","","Каталог семейств детекторов","Нейротрекер и нейросчётчик, лица, позы, СИЗ, драка, дым и огонь, звук, очередь, уровень воды, штрихкод, тепловая карта, изменения сцены. Правила уже реагируют на tamper, fire, smoke, face.list, plate.list, но создать такой детектор нельзя.","301540","detectorKind — 7 значений; события камеры demo.json:3758-3840"],
 ["C17","det","high","partial","cfg","","Списки лиц и номеров","Выбор конкретного списка в событии правила, «Проверять по спискам» у детектора, ссылки на списки и синхронизация с доменом. Событие «совпадение со списком» да/нет есть.","574567, 596564","face.list, plate.list: presence"],
-["C7","det","medium","absent","cfg","","Калибровка перспективы","Нивелирные рейки с высотой и мин./макс. размер объекта рамками на кадре.","292176","прототип 55 (заглушка без контракта): мин. и макс. размер объекта рамками на кадре; нивелирных реек нет"],
+["C7","det","medium","absent","cfg","","Калибровка перспективы","Нивелирные рейки с высотой и мин./макс. размер объекта рамками на кадре.","292176","—"],
 ["C9","det","medium","partial","cfg","","Декодер и процессор детектора","Выбор декодера и процессора нейросети: CPU, GPU N, Intel, NPU. Макет только показывает GPU сервера.","292197, 292176, 292145","detServerNoteHtml 14475-14481"],
 ["C11","det","medium","absent","cfg","","Запись треков и маски","Переключатели детектора: записывать маску и треки в архив (нужно для поиска в архиве), показывать маску и время жизни трека.","292197, 596556","есть только «Хранить метаданные» домена, 27041"],
 ["C18","det","medium","partial","cfg","","Детекторы лиц и номеров","Живость, атрибуты, фильтр повторов, страны и другие поля. У вида lpr полей нет; лица — только встроенный шаблон.","596565, 282855","—"],
-["C25","det","medium","partial","cfg","","Детектор маскирования","Privacy masking, Track masking, маскирование по людям на камере. Стиль маски, экспорт со скрытием и право уже есть.","301540, 574567","27059, 16451, 23215; прототип 55 (заглушка без контракта): поддетектор «Маскирование треков»"],
+["C25","det","medium","partial","cfg","","Детектор маскирования","Privacy masking, Track masking, маскирование по людям на камере. Стиль маски, экспорт со скрытием и право уже есть.","301540, 574567","27059, 16451, 23215"],
 ["CX2","det","medium","absent","cfg","c","Свой файл нейросети","Выбор файла модели у нейротрекера, нейросчётчика, детектора поз и нейрофильтра трекера.","292173, 292176, 292262, 292353","—"],
 ["C15","det","low","partial","cfg","c","Сброс детектора к умолчаниям","Всё, только визуальные элементы или только конфигурация; у одного детектора и группой.","572151","есть только «Сбросить» зоны, 14443"],
 ["C16","det","low","partial","cfg","","Перенести настройки детектора на такие же","Все настройки (params, поток, метки, виды тревог) на детекторы того же типа других камер. Групповая правка типа и чувствительности есть.","572151","33389, 35898; det в CP_NO 35676"],
-["C22","det","low","partial","cfg","","Лента событий детектора","Проверка работы детектора по его событиям. Лента есть только у камеры.","292154","15715-15769; прототип 55 (заглушка, сработки создаёт браузер): вкладка «Лента сработок» в карточке детектора"],
+["C22","det","low","partial","cfg","","Лента событий детектора","Проверка работы детектора по его событиям. Лента есть только у камеры.","292154","15715-15769"],
 ["C28","det","low","absent","cfg","","Мета-детектор","До трёх текстовых запросов на английском и сохранение описаний кадров.","292352","—"],
 ["CX3","det","low","absent","cfg","c","Стоп-кадр при рисовании зоны","Заморозить кадр и скрыть зону или линию при настройке.","292197, 544214","detZoneCardHtml 14434-14446"],
 ["C29","det","low","absent","cfg","","Несовместимые детекторы","Предупреждение о семействах, которые нельзя сочетать (лица TV и VA). Конфликты встроенных детекторов есть.","592299","detectorOptions.conflicts"],
@@ -339,6 +349,19 @@ const G=[
 // DONE: пункты G, которые макет закрыл после исследования. [id, title, как закрыто, коммит, дата]
 const DONE=[
 ];
+// PROTO: пункты G, которые сделаны в прототипе, но ещё не в index.html.
+// id → [[номер, файл прототипа в корне репозитория, "full" (сделано целиком) | "partial" (частично), что сделано в прототипе]]
+const PROTO={
+ "C1":[["55","index_55_okno-detektora.html","partial","У каждого вида детектора свои поля: чувствительность, уверенность нейросети, задержка, число объектов, время, мин. и макс. размер объекта, скорость объекта. Групп «Основные» и «Дополнительные», окон сканирования и частоты кадров нет. Поля живут в памяти страницы, без контракта."]],
+ "C2":[["55","index_55_okno-detektora.html","full","У детектора несколько зон. Точки зоны двигают на кадре. Без контракта."]],
+ "C3":[["55","index_55_okno-detektora.html","full","Зоны исключения на кадре. Кадр показывает, какие объекты детектор пропустил из-за них. Без контракта."]],
+ "C4":[["55","index_55_okno-detektora.html","full","Поддетекторы у движения и трекеров: 10 видов (линия, вход, выход, пребывание, остановка, движение, множество объектов, переход из области в область, оставленный предмет, маскирование треков). Их создают, выключают и удаляют (с вводом числа) в карточке и в дереве. Без контракта: поддетекторы живут в настройках детектора в памяти страницы."]],
+ "CX1":[["55","index_55_okno-detektora.html","full","Направление пересечения линии: одно или оба, у детектора и у поддетектора «Пересечение линии». Концы линии тянут мышью на кадре. Смещение области трека по X и Y. Без контракта."]],
+ "C5":[["55","index_55_okno-detektora.html","partial","Добавлены виды «Трекер объектов» и «Нейросетевой трекер». Остальных семейств (лица, позы, СИЗ, звук и другие) нет."]],
+ "C7":[["55","index_55_okno-detektora.html","partial","Мин. и макс. размер объекта задают рамками с ручками на кадре и полями. Калибровки перспективы нет."]],
+ "C22":[["55","index_55_okno-detektora.html","full","Вкладки «Лента сработок» и «Сработки до и после новых настроек» в карточке детектора. Сработки создаёт браузер."]],
+ "C25":[["55","index_55_okno-detektora.html","partial","Поддетектор «Маскирование треков»: детектор не ведёт объекты в области. Privacy masking и маскирования по людям нет."]]
+};
 const REFUTED=[
 "Тревоги камеры как условие правила (alarm.raised … alarm.missed) — сервер объявляет их, правила их показывают.",
 "Охрана как условие: arm.on, arm.private, arm.off.",
@@ -356,20 +379,21 @@ const REFUTED=[
 "Восстановление пароля root: в AO такой функции нет. Токен Telegram в AO идёт в адресе веб-запроса."
 ];
 const VAL={high:"высокая",medium:"средняя",low:"низкая"}, ST={absent:"нет",partial:"частично",stub:"заглушка"};
-const F={scope:"cfg",value:"all",status:"all",q:""};
+const F={scope:"cfg",value:"all",status:"all",proto:"all",q:""};
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 function summary(){
   const cfg=G.filter(g=>g[4]==="cfg"), op=G.filter(g=>g[4]==="op");
   const t=[[cfg.length,"пробелов в конфигураторе",""],[cfg.filter(g=>g[2]==="high").length,"из них высокой ценности","hi"],
    [cfg.filter(g=>g[3]==="absent").length,"нет совсем",""],[cfg.filter(g=>g[3]!=="absent").length,"есть частично или заглушкой",""],
-   [op.length,"вне конфигуратора (оператор)","op"],[REFUTED.length,"групп опровергнутых пунктов","op"]].concat(DONE.length?[[DONE.length,"закрыто после исследования","op"]]:[]);
+   [op.length,"вне конфигуратора (оператор)","op"],[REFUTED.length,"групп опровергнутых пунктов","op"]].concat(cfg.filter(g=>PROTO[g[0]]).length?[[cfg.filter(g=>PROTO[g[0]]).length,"сделано в прототипах (целиком или частично)",""]]:[]).concat(DONE.length?[[DONE.length,"закрыто после исследования","op"]]:[]);
   document.getElementById("sum").innerHTML=t.map(([n,l,c])=>`<div class="tile ${c}"><b>${n}</b><span>${l}</span></div>`).join("");
 }
 function match(g){
   if(F.scope!=="all"&&g[4]!==F.scope)return false;
   if(F.value!=="all"&&g[2]!==F.value)return false;
   if(F.status!=="all"&&g[3]!==F.status)return false;
-  if(F.q){const s=(g.join(" ")+" "+AREAS[g[1]]).toLowerCase();if(!F.q.split(/\s+/).every(w=>s.includes(w)))return false}
+  if(F.proto!=="all"&&!!PROTO[g[0]]!==(F.proto==="yes"))return false;
+  if(F.q){const s=(g.join(" ")+" "+AREAS[g[1]]+" "+(PROTO[g[0]]||[]).map(p=>"прототип "+p[0]+" "+p[3]).join(" ")).toLowerCase();if(!F.q.split(/\s+/).every(w=>s.includes(w)))return false}
   return true;
 }
 const ORD={high:0,medium:1,low:2};
@@ -380,9 +404,9 @@ function paint(){
     if(!it.length)continue;
     const op=it[0][4]==="op";
     out.push(`<section class="area${op?" scope-op":""}"><header><h2>${esc(AREAS[a])}</h2><small>${it.length}</small></header>`+
-      it.map(g=>{const fl=g[5];
+      it.map(g=>{const fl=g[5],pr=PROTO[g[0]]||[];
         const tags=[fl.includes("n")?'<span class="tag next">только Axxon Next</span>':"",fl.includes("u")?'<span class="tag util">в AO — утилита</span>':"",fl.includes("c")?'<span class="tag new">нашёл критик</span>':""].join("");
-        return `<article class="item"><span class="v ${g[2]}">${VAL[g[2]]}</span><div style="min-width:0"><div class="t">${esc(g[6])}</div><div class="m">${esc(g[7])}</div><div class="ev">AO: ${esc(g[8])} · макет: ${esc(g[9])} · ${esc(g[0])}</div></div><div class="side"><span class="st ${g[3]}">${ST[g[3]]}</span>${tags}</div></article>`}).join("")+`</section>`);
+        return `<article class="item"><span class="v ${g[2]}">${VAL[g[2]]}</span><div style="min-width:0"><div class="t">${esc(g[6])}</div><div class="m">${esc(g[7])}</div>${pr.map(p=>`<div class="m pn ${p[2]}">В прототипе ${esc(p[0])}: ${esc(p[3])}</div>`).join("")}<div class="ev">AO: ${esc(g[8])} · макет: ${esc(g[9])} · ${esc(g[0])}</div></div><div class="side"><span class="st ${g[3]}">index.html: ${ST[g[3]]}</span>${pr.map(p=>`<a class="st proto ${p[2]}" href="../${esc(p[1])}" title="${esc(p[1])}">прототип ${esc(p[0])}: ${p[2]==="full"?"есть":"частично"}</a>`).join("")}${tags}</div></article>`}).join("")+`</section>`);
   }
   document.getElementById("list").innerHTML=out.join("")||'<p class="empty">Ничего не найдено. Сбросьте фильтры или измените поиск.</p>';
   document.getElementById("shown").textContent=`Показано ${rows.length} из ${G.length}`;
