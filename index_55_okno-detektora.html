@@ -14952,15 +14952,24 @@ function dwRwCss(){
   return dw.rw?`--dw-rw:clamp(320px,${(dw.rw*100).toFixed(1)}%,calc(100% - 400px))`:"";
 }
 function dwRwNow(g){const grid=g.closest(".dw-grid"),r=g.nextElementSibling;return r.getBoundingClientRect().width/Math.max(1,grid.getBoundingClientRect().width)}
-// Столбец настроек — во всю видимую высоту карточки и не выше: конец столбца не уходит под полосу плана,
-// и до него не нужно прокручивать левый столбец
+// Столбец настроек прилипает к верху карточки и всегда доходит до низа видимой части (до полосы плана, если она
+// есть): верх — у сетки или у края, когда карточку прокрутили; низ — у края видимой части, но не ниже левого
+// столбца, чтобы низы обоих столбцов совпадали. Высоту пересчитывает прокрутка карточки, размер окна, полоса плана
+// и рост левого столбца
 function dwFit(){
-  const sc=document.querySelector("#main .sc"),dg=sc&&sc.querySelector(".dw-grid");if(!dg)return;
-  // Высота — от верха сетки до низа видимой части: столбец целиком виден и без прокрутки карточки
-  const top=dg.getBoundingClientRect().top-sc.getBoundingClientRect().top+sc.scrollTop,h=sc.clientHeight-parseFloat(getComputedStyle(sc).paddingBottom)-top;
-  if(h>200){dw.rh=Math.floor(h);dg.style.setProperty("--dw-rh",`${dw.rh}px`)}
+  const sc=document.querySelector("#main .sc"),dg=sc&&sc.querySelector(".dw-grid"),R=dg&&dg.querySelector(".dw-right"),L=dg&&dg.querySelector(".dw-left");
+  if(!R||!L)return;
+  if(getComputedStyle(R).position!=="sticky"){dg.style.removeProperty("--dw-rh");return}
+  // Прилипший столбец стоит у края с отступом карточки (padding-top у .sc)
+  const s=sc.getBoundingClientRect(),cs=getComputedStyle(sc),vb=s.top+sc.clientHeight-parseFloat(cs.paddingBottom);
+  const top=Math.max(s.top+parseFloat(cs.paddingTop),dg.getBoundingClientRect().top),bot=Math.min(vb,L.getBoundingClientRect().bottom);
+  const h=Math.max(240,Math.floor(bot-top));
+  if(h!==dw.rh||dg.style.getPropertyValue("--dw-rh")!==`${h}px`){dw.rh=h;dg.style.setProperty("--dw-rh",`${h}px`)}
+  if(!L._dwRo&&window.ResizeObserver){L._dwRo=new ResizeObserver(()=>dwFitSoon());L._dwRo.observe(L)}
 }
-addEventListener("resize",()=>dwFit());
+function dwFitSoon(){if(dw.fitRaf)return;dw.fitRaf=requestAnimationFrame(()=>{dw.fitRaf=0;dwFit()})}
+addEventListener("resize",()=>dwFitSoon());
+document.addEventListener("scroll",e=>{if(e.target instanceof Element&&e.target.matches("#main .sc"))dwFitSoon()},true);
 function dwRwAria(g){
   g=g||document.querySelector("#main .dw-grip");if(!g||!g.isConnected||!g.offsetParent)return;
   const r=g.nextElementSibling.getBoundingClientRect().width;
