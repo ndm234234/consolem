@@ -91,7 +91,7 @@
   const OBSERVED = {
     devices: ["fault", "faultText", "licenseExceeded", "recordState", "recordReason", "replicaLagSec", "armed", "disabledByRuleId", "disabledByRuleAt", "archiveJobs",
       "direct", "recordingTarget", "detectorKinds", "derived"],
-    servers: ["telemetry", "gpu", "disks", "class", "fingerprint"],
+    servers: ["telemetry", "gpu", "disks", "class", "fingerprint", "webCertificate", "webReservedPorts"],
     domains: ["stateSummary"],
     volumes: ["usedPercent", "shrinkPendingBytes", "heldBy", "incidentsLost", "incidentsAtRisk"],
     archives: [],
@@ -533,6 +533,8 @@
       kindSpec: (kind) => kindSpec(kind),
       serverWideChanged: (a) => serverWideChanged(a),
       dropStreamGrants: (fn) => dropStreamGrants(fn),
+      // Секрет объекта, которого нет в его свойствах (закрытый ключ веб-сервера): хранится с паролями, в ответах его нет; null — снять
+      secret: (uid, name, value) => (value == null ? secrets.delete(secretKey(uid, name)) : secrets.set(secretKey(uid, name), value)),
       // Устройства (DEVICE, vms.camera/1…): то, что старые пути делают с записью устройства
       applyPatch: (rec, patch) => applyPatch(rec, patch),
       withChildren: (id) => withChildren(id),
@@ -544,6 +546,7 @@
       evKind: (kind, x) => evKind(kind, x),
       // Шаг операции: всё, что план меняет у этого объекта (правки этого и следующих шагов, слитые), — камера сверяет запись целиком
       get plan() { return planNow; },
+      get planSteps() { return planSteps; },
       // Идёт запрос пути ядра или шаг по uid: событие — с видом объекта (решение 5)
       get core() { return coreMode; },
       // Событие объекта изнутри сервера (репликация): запись журнала и запуск правил, что его слушают
@@ -570,6 +573,8 @@
       return { remove: [...remove], detach: [...detach].filter((x) => !remove.has(x)) };
     }
     let planNow = null;
+    // Шаг операции: правки свойств этого и следующих шагов по тому же uid, по порядку (хук сливает их сам, вглубь)
+    let planSteps = null;
     const hookOf = (kind, name) => hooksOf(kind).find((h) => h[name]) || null;
     let heldNow = null;
     // Пароли — отдельно от записей: в ответах их нет, только hasPassword
@@ -1551,6 +1556,12 @@
       if (c.runAsRoleId && !db.access.roles.some((x) => x.id === c.runAsRoleId)) return problem(422, "VALIDATION_FAILED", `Роли ${c.runAsRoleId} нет`, { field: "runAsRoleId" });
       const typed = stepTypeProblem(c);
       if (typed) return typed;
+      // Команда с секретом в params (ActionDescriptor.direct, webcert.set) — не шаг правила, и выключенного тоже: правило и его
+      // история уходят в ответы GET /rules
+      const isDirect = (a) => a.type === "unitAction" && kinds.list().some((k) => (k.actions || []).some((x) => x.id === a.action && x.direct));
+      let direct = null;
+      const walkDirect = (l) => (l || []).some((a) => (isDirect(a) && (direct = a)) || walkDirect(a.yes) || walkDirect(a.no));
+      if (walkDirect(c.steps)) return problem(422, "NOT_SUPPORTED", `Команду ${direct.action} дают только прямым вызовом POST /units/{uid}/actions/${direct.action}`, { field: "steps", params: { reason: "direct" } });
       const door = doorRelayIssue(c);
       if (door) return door;
       const port = portIssue(c);
@@ -3669,12 +3680,14 @@
       // План объекта: правки этого и следующих шагов по тому же uid, слитые (камера сверяет запись целиком)
       const later = item.req.patch ? op.items.slice(op.items.indexOf(item)).filter((x) => x.req.uid === item.req.uid && x.req.patch && x.req.patch.properties) : [];
       planNow = later.length > 1 ? { properties: Object.assign({}, ...later.map((x) => x.req.patch.properties)) } : null;
+      planSteps = later.length > 1 ? later.map((x) => x.req.patch.properties) : null;
       try {
         return runUnitStep(op, item);
       } finally {
         heldNow = null;
         coreMode = false;
         planNow = null;
+        planSteps = null;
       }
     }
     function runUnitStep(op, item) {
@@ -3743,6 +3756,8 @@
           const stray = strayCommandProblem(u, r.action);
           return stray ? fail(stray.body.code, Object.assign({ field: "/action" }, stray.body.params || {})) : fail("NOT_FOUND", { field: "/action" });
         }
+        // Команда с секретом в params (ActionDescriptor.direct, webcert.set) — только прямым вызовом: шаги операции сервер хранит и отдаёт
+        if (desc.direct) return fail("NOT_SUPPORTED", { field: "/action", reason: "direct" });
         // Долгая команда с поведением уже запущена (POST /units/{uid}/actions/…): шаг — её срок по часам сервера
         if (r.until !== undefined) {
           item.before = {};
@@ -3824,6 +3839,9 @@
       if (r.params !== undefined && r.action === undefined && r.move === undefined) return problem(422, "VALIDATION_FAILED", "params — только у action и move", { field: `${at}/params` });
       // Объекта шага нет — как состав папки базы (/folders/{id}/devices): 422 на всю операцию, указатель — uid шага
       if (!store.get(r.uid)) return problem(422, "VALIDATION_FAILED", `Объекта ${r.uid} нет: операция не запущена, ничего не изменено`, { field: `${at}/uid`, params: { keyword: "x-ref", targetId: r.uid } });
+      // Команда с секретом в params (ActionDescriptor.direct) — не шаг: операцию сервер хранит и отдаёт в GET /operations
+      const cmd = r.action !== undefined ? unitCommand(store.get(r.uid).kind, r.action) : null;
+      if (cmd && cmd.direct) return problem(422, "NOT_SUPPORTED", `Команду ${r.action} дают только прямым вызовом POST /units/{uid}/actions/${r.action}`, { field: `${at}/action`, params: { reason: "direct" } });
       return null;
     }
     // Версия цели нужна шагам, которые меняют сам объект: patch, delete, folders, move. Команде и созданию дочернего — нет

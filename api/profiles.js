@@ -2011,10 +2011,111 @@
     },
   };
 
+  /* ===== vms.webserver/1 — веб-сервер и RTSP-сервер сервера ===== */
+
+  // Умолчания свойства webServer: поля нет — значение отсюда, как в Axxon One 3.0 «Свойства веб-сервера»
+  const WEB_DEFAULT = { enabled: true, httpPort: 80, httpsPort: 443, urlPrefix: "/", cors: false, recompress: false, rtspPort: 554, rtspHttpPort: 8554 };
+  const WEB_PORTS = ["httpPort", "httpsPort", "rtspPort", "rtspHttpPort"];
+  // Порты видео для браузера: 9001 и по одному на ядро. У встроенного сервера — 8 ядер у каждого сервера
+  const WEB_CORES = 8;
+  const webOf = (p) => Object.assign({}, WEB_DEFAULT, (p && p.webServer) || {});
+  const webReserved = () => ({ from: 9001, to: 9001 + WEB_CORES });
+  // Ключ лежит в секретах сервера (как пароли): в объекте и в ответах его нет
+  const WEB_KEY = "webPrivateKey";
+  function webPortsProblem(w, ctx) {
+    const res = webReserved(), seen = new Map();
+    for (const k of WEB_PORTS) {
+      const p = w[k], at = `/properties/webServer/${k}`;
+      if (p >= res.from && p <= res.to) return ctx.problem(422, "PORT_TAKEN", `Порты ${res.from}–${res.to} веб-сервер занимает под видео`, { field: at, params: { port: p, other: "webReservedPorts" } });
+      if (seen.has(p)) return ctx.problem(422, "PORT_TAKEN", `Порт ${p} уже занимает ${seen.get(p)}`, { field: at, params: { port: p, other: seen.get(p) } });
+      seen.set(p, k);
+    }
+    return null;
+  }
+  // PEM → блоки: BEGIN … END с типом; текст вне блоков — заголовок, который выводит openssl x509 -text
+  const pemBlocks = (s) => [...String(s).matchAll(/-----BEGIN ([A-Z0-9 ]+)-----([\s\S]*?)-----END \1-----/g)].map((m) => ({ type: m[1], body: m[2].replace(/\s+/g, "") }));
+  // Сведения о сертификате. Встроенный сервер X.509 не разбирает: берёт строки заголовка openssl x509 -text (Subject, Issuer,
+  // Not Before, Not After, DNS:) перед первым блоком; заголовка нет — самоподписанный «server.local» на год от загрузки
+  function webCertInfo(pem, now) {
+    const head = String(pem).split("-----BEGIN")[0];
+    const cn = (re) => { const m = head.match(re); if (!m) return null; const c = m[1].match(/CN\s*=\s*([^,/\n]+)/); return (c ? c[1] : m[1]).trim(); };
+    const when = (re) => { const m = head.match(re); const t = m ? Date.parse(m[1].replace(/\s+/g, " ").trim()) : NaN; return Number.isFinite(t) ? t : null; };
+    const subject = cn(/Subject:\s*([^\n]+)/i) || cn(/subject=\s*([^\n]+)/i) || "server.local";
+    const issuer = cn(/Issuer:\s*([^\n]+)/i) || cn(/issuer=\s*([^\n]+)/i) || subject;
+    const from = when(/Not Before\s*:\s*([^\n]+)/i), to = when(/Not After\s*:\s*([^\n]+)/i);
+    const names = [...head.matchAll(/DNS:([^,\s]+)/g)].map((m) => m[1]);
+    const certs = pemBlocks(pem).filter((b) => b.type === "CERTIFICATE").length;
+    return {
+      subject, issuer,
+      notBefore: new Date(from == null ? now : from).toISOString(),
+      notAfter: new Date(to == null ? now + 365 * 86400000 : to).toISOString(),
+      names: names.length ? names : [subject],
+      wildcard: [subject, ...names].some((x) => x.startsWith("*.")),
+      chain: issuer === subject ? "self" : certs > 1 ? "full" : "partial",
+      keyMatches: true,
+    };
+  }
+  // Проверка пары: формат PEM, ключ без пароля, срок, ключ к сертификату. Встроенный сервер пару по-настоящему не сверяет:
+  // ключ стенда со словом mismatch вне блока — «не подходит»
+  function webCertProblem(params, ctx) {
+    const bad = (code, msg, field) => ctx.problem(422, code, msg, { field });
+    const certs = pemBlocks(params.certificate).filter((b) => b.type === "CERTIFICATE");
+    if (!certs.length) return bad("CERTIFICATE_INVALID", "В файле сертификата нет блока PEM CERTIFICATE", "certificate");
+    // openssl ecparam -genkey пишет блок EC PARAMETERS перед ключом — это не второй ключ
+    const keys = pemBlocks(params.privateKey).filter((b) => b.type !== "EC PARAMETERS");
+    if (keys.some((b) => b.type === "ENCRYPTED PRIVATE KEY") || /Proc-Type:\s*4,ENCRYPTED/.test(params.privateKey)) return bad("CERTIFICATE_INVALID", "У ключа есть пароль", "privateKey");
+    if (keys.length !== 1 || !/^(RSA |EC )?PRIVATE KEY$/.test(keys[0].type)) return bad("CERTIFICATE_INVALID", "В файле ключа нет одного блока PEM PRIVATE KEY", "privateKey");
+    const info = webCertInfo(params.certificate, ctx.now());
+    if (Date.parse(info.notAfter) < ctx.now() || Date.parse(info.notBefore) > ctx.now()) return bad("CERTIFICATE_EXPIRED", "Сертификат сейчас не действует", "certificate");
+    if (/mismatch/i.test(String(params.privateKey).replace(/-----BEGIN[\s\S]*?-----END [A-Z ]+-----/g, ""))) return bad("KEY_MISMATCH", "Ключ не подходит к сертификату", "privateKey");
+    return null;
+  }
+  const webserver = {
+    // Поля webServer, которых нет, — умолчания; порты видео — из числа ядер
+    view(out) {
+      out.properties = Object.assign({}, out.properties, { webServer: webOf(out.properties) });
+      const obs = Object.assign({}, (out.status || {}).observed);
+      if (!("webCertificate" in obs)) obs.webCertificate = null;
+      obs.webReservedPorts = webReserved();
+      out.status = Object.assign({}, out.status, { observed: obs });
+      return out;
+    },
+    // Порты сверяются с итогом: в шаге операции — с правками следующих шагов по этому серверу (обмен портами HTTP и HTTPS
+    // двумя шагами проходит), иначе — с объектом после этой правки
+    beforeSet(u, patch, whole, ctx) {
+      if (!patch.properties || !("webServer" in patch.properties)) return null;
+      const merge = (a, b) => (b === null ? null : Object.entries(b || {}).reduce((o, [k, x]) => (x === null ? delete o[k] : (o[k] = x), o), Object.assign({}, a || {})));
+      const next = (ctx.planSteps || []).slice(1).filter((p) => "webServer" in p).reduce((w, p) => merge(w, p.webServer), whole.webServer);
+      return webPortsProblem(webOf({ webServer: next }), ctx);
+    },
+    actions: {
+      // Сертификат и ключ HTTPS: check — только проверка и сведения. Ключ — в секреты сервера; в журнал и ответы он не идёт
+      "webcert.set"(u, params, ctx) {
+        const bad = webCertProblem(params, ctx);
+        if (bad) return bad;
+        const info = Object.assign(webCertInfo(params.certificate, ctx.now()), params.certificateName ? { fileName: params.certificateName } : {});
+        if (params.check) return { result: info };
+        info.uploadedAt = ctx.iso(ctx.now());
+        observedOf(u).webCertificate = info;
+        ctx.secret(u.uid, WEB_KEY, params.privateKey);
+        ctx.send("entity.changed", { kind: u.kind, entityId: u.uid, version: u.version, payload: { status: true } });
+        return { result: clone(info) };
+      },
+      // Без сертификата веб-сервер отвечает только по HTTP
+      "webcert.remove"(u, params, ctx) {
+        observedOf(u).webCertificate = null;
+        ctx.secret(u.uid, WEB_KEY, null);
+        ctx.send("entity.changed", { kind: u.kind, entityId: u.uid, version: u.version, payload: { status: true } });
+        return { result: {} };
+      },
+    },
+  };
+
   const HOOKS = {
     "vms.domain/1": domain, "vms.server/1": server, "vms.folder/1": folder, "vms.archive/1": archive, "vms.volume/1": volume,
     "vms.camera/1": camera, "vms.stream/1": stream, "vms.detector/1": detector, "vms.acs/1": acs,
     "vms.live/1": live, "vms.ptz/1": ptz, "vms.talk/1": talk, "vms.timeline/1": timeline, "vms.pos/1": pos, "vms.edge/1": edge,
+    "vms.webserver/1": webserver,
   };
 
   // DEVICE — хуки всех видов таблицы devices: сервер зовёт их первыми, затем хуки профилей вида

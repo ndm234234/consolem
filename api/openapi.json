@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Конфигуратор — API",
-    "version": "0.10.0",
+    "version": "0.11.0",
     "description": "Контракт конфигуратора: всё, что интерфейс читает и меняет. Источник истины: встроенный сервер прототипа (api/server.js) и бэкенд отвечают по нему. Договорённости — api/README.md: версии записей (ETag / If-Match, 428, 412), ошибки application/problem+json с машинным code, групповые операции с частичным успехом и idempotencyKey, поток событий SSE. Система может поддерживать не весь контракт: что она умеет — GET /reference → capabilities; остальные операции отвечают 404 NO_ROUTE, неподдержанные виды устройств и настройки — 422 NOT_SUPPORTED. Операции с тегом test-support есть только на тестовом стенде. Форма работает с одним адресом входа, другой — только если этот недоступен. Список операций, откат и память idempotencyKey у каждого адреса свои: после 5xx и смены адреса запись сперва перечитывается. Версия одной записи на разных адресах может отличаться: 412 и перечитывание. У изменений чужого кластера at — время, когда их увидели.",
     "license": {
       "name": "Внутренний документ",
@@ -10855,7 +10855,11 @@
           "LIMIT_EXCEEDED",
           "EXPORT_EXPIRED",
           "SUPERVISOR_REJECTED",
-          "SUPERVISOR_REQUIRED"
+          "SUPERVISOR_REQUIRED",
+          "PORT_TAKEN",
+          "CERTIFICATE_INVALID",
+          "CERTIFICATE_EXPIRED",
+          "KEY_MISMATCH"
         ],
         "description": "Машинный код ошибки: интерфейс показывает свой текст по коду",
         "x-enum-descriptions": {
@@ -10904,7 +10908,11 @@
           "EXPORT_EXPIRED": "Файл выгрузки удалён по сроку (410)",
           "SUPERVISOR_REJECTED": "Супервизор указан, но не подходит (403), field: /supervisor: неверный пароль, нет прав на камеру, сам автор или не из роли супервизоров",
           "SUPERVISOR_REQUIRED": "Нужен супервизор, а его нет в теле (403), field: /supervisor",
-          "SCHEDULE_OVERLAP": "Расписание режима пересекается с расписанием другого режима (409): params {modeId, from, to} — режим и первое пересечение за 14 дней"
+          "SCHEDULE_OVERLAP": "Расписание режима пересекается с расписанием другого режима (409): params {modeId, from, to} — режим и первое пересечение за 14 дней",
+          "PORT_TAKEN": "Порт уже занят другим портом этого сервера или портами видео веб-сервера (422), field — указатель на порт, params.other — поле, которое его занимает, или webReservedPorts",
+          "CERTIFICATE_INVALID": "Файл сертификата или ключа не в формате PEM, ключ с паролем или PFX (422), field: /params/certificate или /params/privateKey",
+          "CERTIFICATE_EXPIRED": "Срок сертификата кончился или ещё не начался (422), field: /params/certificate",
+          "KEY_MISMATCH": "Закрытый ключ не подходит к сертификату (422), field: /params/privateKey"
         }
       },
       "ObjectsDeleteRequest": {
@@ -17562,6 +17570,11 @@
           "ruleRight": {
             "$ref": "#/components/schemas/Right",
             "description": "Право на это действие в правиле (RuleAction unitAction) — отдельно от права на команду объекта (right). Нет поля — в правиле судится right. Пример: у реле команда правом не судится, а в правиле нужен уровень класса реле"
+          },
+          "direct": {
+            "type": "boolean",
+            "default": false,
+            "description": "true — команду дают только прямым вызовом POST /units/{uid}/actions/{id}: в шаг операции (POST /operations) и в шаг правила она не входит, такой шаг — 422 NOT_SUPPORTED. Так у команд, чьи params несут секрет (закрытый ключ webcert.set): шаги операции сервер хранит и отдаёт в GET /operations. Нет поля — false, как до 0.11.0"
           }
         }
       },
@@ -17986,6 +17999,21 @@
               "profileG": {
                 "type": "boolean",
                 "description": "Встроенное хранилище: устройство отдаёт записи по ONVIF Profile G. Нет значения — true. false: сервер ничего не заберёт, state waiting, replication.failed с reason profile"
+              },
+              "webCertificate": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/WebCertificate"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Сервер (vms.webserver/1): сертификат HTTPS; null — сертификата нет"
+              },
+              "webReservedPorts": {
+                "$ref": "#/components/schemas/WebReservedPorts",
+                "description": "Сервер (vms.webserver/1): порты видео для браузера"
               }
             },
             "additionalProperties": true,
@@ -19005,6 +19033,151 @@
           },
           "level": {
             "$ref": "#/components/schemas/JournalLevel"
+          }
+        }
+      },
+      "WebServerSettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Свойство webServer сервера (профиль vms.webserver/1): веб-сервер (браузер, мобильные клиенты, HTTP API) и RTSP-сервер. JSON Merge Patch по полям; поля нет — умолчание. Правка перезапускает веб-сервер или RTSP-сервер: клиенты теряют связь на время перезапуска. Порты — разные, вне webReservedPorts, иначе 422 PORT_TAKEN с field — указатель на порт и params.other — имя поля, которое уже занимает порт. HTTPS работает, только если у сервера есть сертификат (status.observed.webCertificate): без него веб-сервер отвечает только по HTTP",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "default": true,
+            "description": "Веб-сервер включён. false — браузер, мобильные клиенты и HTTP API не подключаются; RTSP-сервер работает"
+          },
+          "httpPort": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535,
+            "default": 80,
+            "description": "Порт HTTP"
+          },
+          "httpsPort": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535,
+            "default": 443,
+            "description": "Порт HTTPS: работает, когда у сервера есть сертификат"
+          },
+          "urlPrefix": {
+            "type": "string",
+            "pattern": "^/\\S*$",
+            "default": "/",
+            "description": "Префикс адреса: http(s)://адрес:порт<urlPrefix>. Начинается с «/», без пробелов. Не длиннее 200 символов (maxLength в схеме вида)"
+          },
+          "cors": {
+            "type": "boolean",
+            "default": false,
+            "description": "Разрешить запросы с других сайтов (CORS): GET и POST и предварительные запросы OPTIONS"
+          },
+          "recompress": {
+            "type": "boolean",
+            "default": false,
+            "description": "Перекодировать видео, которое браузер не показывает (H.265), в формат для браузера. Нагружает процессор сервера"
+          },
+          "rtspPort": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535,
+            "default": 554,
+            "description": "Порт RTSP. Клиент RTSP входит под именем и паролем пользователя и получает видео камер, которые пользователь может смотреть по своим правам"
+          },
+          "rtspHttpPort": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535,
+            "default": 8554,
+            "description": "Порт RTSP через HTTP (туннель RTSP over HTTP)"
+          }
+        }
+      },
+      "WebCertificate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "subject",
+          "issuer",
+          "notBefore",
+          "notAfter",
+          "names",
+          "wildcard",
+          "chain",
+          "keyMatches"
+        ],
+        "description": "status.observed.webCertificate сервера (vms.webserver/1), только чтение: сертификат HTTPS, который сервер хранит. Закрытого ключа здесь нет и нигде в ответах нет. null или нет поля — сертификата нет, веб-сервер работает только по HTTP. Тот же объект — итог команды webcert.set",
+        "properties": {
+          "subject": {
+            "type": "string",
+            "description": "Кому выдан: CN сертификата, например *.vms.example.ru"
+          },
+          "issuer": {
+            "type": "string",
+            "description": "Кем выдан: CN издателя; у самоподписанного совпадает с subject"
+          },
+          "notBefore": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Действует с"
+          },
+          "notAfter": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Действует до"
+          },
+          "names": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Имена из subjectAltName (DNS)"
+          },
+          "wildcard": {
+            "type": "boolean",
+            "description": "Сертификат на все поддомены: subject или одно из names начинается с «*.»"
+          },
+          "chain": {
+            "type": "string",
+            "enum": [
+              "full",
+              "partial",
+              "self"
+            ],
+            "description": "full — в файле сертификат и промежуточные до корня; partial — нет промежуточного сертификата, часть браузеров не доверит серверу; self — самоподписанный, браузеры предупредят"
+          },
+          "keyMatches": {
+            "type": "boolean",
+            "description": "Сервер проверил, что закрытый ключ подходит к сертификату. Сохранённый сертификат — всегда true"
+          },
+          "fileName": {
+            "type": "string",
+            "description": "Имя файла сертификата, которое прислал клиент (params.certificateName): для показа"
+          },
+          "uploadedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Когда сервер принял сертификат"
+          }
+        }
+      },
+      "WebReservedPorts": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "from",
+          "to"
+        ],
+        "description": "status.observed.webReservedPorts сервера (vms.webserver/1), только чтение: порты, которые веб-сервер занимает под видео для браузера — from (9001) и по одному на ядро процессора. Их открывают в сетевом экране; порты webServer в них не попадают",
+        "properties": {
+          "from": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "to": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
           }
         }
       }

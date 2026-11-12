@@ -65,7 +65,8 @@
     "archive.incidents"
    ],
    "implements": [
-    "vms.server/1"
+    "vms.server/1",
+    "vms.webserver/1"
    ],
    "capabilities": [
     "create",
@@ -175,6 +176,100 @@
       "type": "boolean",
       "description": "false — сервер найден в сети домена, но ещё не добавлен («Нераспределённые»)",
       "readOnly": true
+     },
+     "webServer": {
+      "x-label": {
+       "key": "field.webServer",
+       "text": "Веб-сервер",
+       "lang": "ru"
+      },
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Веб-сервер и RTSP-сервер (vms.webserver/1). Поля нет — умолчание",
+      "properties": {
+       "enabled": {
+        "x-label": {
+         "key": "field.webServer.enabled",
+         "text": "Веб-сервер включён",
+         "lang": "ru"
+        },
+        "type": "boolean",
+        "default": true
+       },
+       "httpPort": {
+        "x-label": {
+         "key": "field.webServer.httpPort",
+         "text": "Порт HTTP",
+         "lang": "ru"
+        },
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 65535,
+        "default": 80
+       },
+       "httpsPort": {
+        "x-label": {
+         "key": "field.webServer.httpsPort",
+         "text": "Порт HTTPS",
+         "lang": "ru"
+        },
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 65535,
+        "default": 443
+       },
+       "urlPrefix": {
+        "x-label": {
+         "key": "field.webServer.urlPrefix",
+         "text": "Префикс адреса",
+         "lang": "ru"
+        },
+        "type": "string",
+        "pattern": "^/\\S*$",
+        "maxLength": 200,
+        "default": "/"
+       },
+       "cors": {
+        "x-label": {
+         "key": "field.webServer.cors",
+         "text": "Запросы с других сайтов (CORS)",
+         "lang": "ru"
+        },
+        "type": "boolean",
+        "default": false
+       },
+       "recompress": {
+        "x-label": {
+         "key": "field.webServer.recompress",
+         "text": "Перекодирование видео",
+         "lang": "ru"
+        },
+        "type": "boolean",
+        "default": false
+       },
+       "rtspPort": {
+        "x-label": {
+         "key": "field.webServer.rtspPort",
+         "text": "Порт RTSP",
+         "lang": "ru"
+        },
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 65535,
+        "default": 554
+       },
+       "rtspHttpPort": {
+        "x-label": {
+         "key": "field.webServer.rtspHttpPort",
+         "text": "Порт RTSP через HTTP",
+         "lang": "ru"
+        },
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 65535,
+        "default": 8554
+       }
+      }
      }
     }
    },
@@ -368,6 +463,147 @@
       "required": [
        "service"
       ]
+     },
+     "right": {
+      "level": "admin"
+     }
+    },
+    {
+     "id": "webcert.set",
+     "label": {
+      "key": "action.server.webcert.set",
+      "text": "Загрузить сертификат HTTPS",
+      "lang": "ru"
+     },
+     "execution": "instant",
+     "scope": [
+      "unit"
+     ],
+     "direct": true,
+     "params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "certificate",
+       "privateKey"
+      ],
+      "properties": {
+       "certificate": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 65536,
+        "x-label": {
+         "key": "field.server.webcert.certificate",
+         "text": "Файл сертификата",
+         "lang": "ru"
+        },
+        "description": "Сертификат и промежуточные сертификаты, PEM"
+       },
+       "privateKey": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 16384,
+        "writeOnly": true,
+        "x-label": {
+         "key": "field.server.webcert.privateKey",
+         "text": "Файл ключа",
+         "lang": "ru"
+        },
+        "description": "Закрытый ключ, PEM без пароля. Сервер хранит его у себя и не отдаёт"
+       },
+       "certificateName": {
+        "type": "string",
+        "maxLength": 255,
+        "description": "Имя файла сертификата: для показа"
+       },
+       "check": {
+        "type": "boolean",
+        "default": false,
+        "description": "true — только проверить пару и вернуть сведения, ничего не сохранять"
+       }
+      }
+     },
+     "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "subject",
+       "issuer",
+       "notBefore",
+       "notAfter",
+       "names",
+       "wildcard",
+       "chain",
+       "keyMatches"
+      ],
+      "properties": {
+       "subject": {
+        "type": "string"
+       },
+       "issuer": {
+        "type": "string"
+       },
+       "notBefore": {
+        "type": "string",
+        "format": "date-time"
+       },
+       "notAfter": {
+        "type": "string",
+        "format": "date-time"
+       },
+       "names": {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       },
+       "wildcard": {
+        "type": "boolean"
+       },
+       "chain": {
+        "type": "string",
+        "enum": [
+         "full",
+         "partial",
+         "self"
+        ]
+       },
+       "keyMatches": {
+        "type": "boolean"
+       },
+       "fileName": {
+        "type": "string"
+       },
+       "uploadedAt": {
+        "type": "string",
+        "format": "date-time"
+       }
+      }
+     },
+     "right": {
+      "level": "admin"
+     }
+    },
+    {
+     "id": "webcert.remove",
+     "label": {
+      "key": "action.server.webcert.remove",
+      "text": "Убрать сертификат HTTPS",
+      "lang": "ru"
+     },
+     "execution": "instant",
+     "scope": [
+      "unit"
+     ],
+     "params": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+     },
+     "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
      },
      "right": {
       "level": "admin"
@@ -9142,6 +9378,21 @@
     "mediaOk",
     "profileG"
    ]
+  },
+  {
+   "id": "vms.webserver/1",
+   "label": {
+    "key": "profile.vms.webserver/1",
+    "text": "Веб-сервер и RTSP-сервер",
+    "lang": "ru"
+   },
+   "properties": [
+    "webServer"
+   ],
+   "status": [
+    "webCertificate",
+    "webReservedPorts"
+   ]
   }
  ],
  "units": [
@@ -9304,7 +9555,26 @@
        "system": false
       }
      ],
-     "class": "server"
+     "class": "server",
+     "webCertificate": {
+      "subject": "*.vms.example.ru",
+      "issuer": "GlobalSign RSA OV SSL CA 2018",
+      "notBefore": "2026-03-01T00:00:00Z",
+      "notAfter": "2027-03-01T00:00:00Z",
+      "names": [
+       "*.vms.example.ru",
+       "vms.example.ru"
+      ],
+      "wildcard": true,
+      "chain": "full",
+      "keyMatches": true,
+      "fileName": "fullchain.pem",
+      "uploadedAt": "2026-03-02T09:15:00Z"
+     },
+     "webReservedPorts": {
+      "from": 9001,
+      "to": 9009
+     }
     }
    }
   },

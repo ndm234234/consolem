@@ -591,6 +591,22 @@ td.fl-nm>.fl-nm-ic{display:inline-flex;vertical-align:middle;margin-right:8px}
    а тянуться должно имя — оно и так просит flex:1 у себя. */
 .it .unalloc-chk+span{flex:none;min-width:0}
 .nm-inp.dup{border-color:var(--one-danger);background:var(--one-danger-bg)}
+/* Вкладка «Веб-сервер» сервера (vms.webserver/1) */
+.web-tab .card{margin-bottom:12px}
+.web-row{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start}
+.web-f{flex:0 1 180px;min-width:140px}.web-f-wide{flex:1 1 300px}
+.web-f input{width:100%}.web-f input[aria-invalid="true"]{border-color:var(--one-danger)}
+.web-cb{display:flex;gap:10px;align-items:flex-start;margin:0;padding:8px 0;font-size:13px;color:var(--fg,inherit);cursor:pointer}
+.web-cb input{margin:2px 0 0;flex:none;accent-color:var(--bl);width:16px;height:16px}.web-cb small{display:block;color:var(--mu);max-width:72ch;margin-top:2px;font-size:12px}
+.web-cb:has(input:disabled){cursor:default}
+.web-dim{opacity:.55}
+.web-addr{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:4px 0 8px;min-height:28px}.web-addr-l{color:var(--mu);font-size:12px}
+.web-hint{margin:6px 0 0;max-width:80ch}.web-rtsp-ex{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px;min-width:0}.web-rtsp-ex .cp{max-width:100%}.web-rtsp-n{margin:0;font-size:12px}.web-rtsp-ex .cp-val{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.web-file{display:flex;align-items:center;gap:10px;min-height:32px;min-width:0}.web-file-n{display:inline-flex;align-items:center;gap:6px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.web-file-n svg{width:14px;height:14px;flex:none}
+.web-file-b{display:inline-flex;flex:none;margin:0;color:inherit;font-size:inherit;cursor:pointer;white-space:nowrap}
+.web-cert{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-top:12px;padding:10px;background:var(--p2);border:1px solid var(--ln);border-radius:8px;font-size:13px}
+.web-cert span:first-child{display:block;color:var(--mu);font-size:12px}.web-cert .sub{margin:0;font-size:12px}
+.web-cert+.nt{margin-top:10px}
 .fld-err{font-size:11px;color:var(--one-danger);min-height:13px;margin-top:3px}
 .g input.bad,.g select.bad{border-color:var(--one-danger)}
 .g .sf-bad,.g textarea.bad{border-color:var(--one-danger)}.sf-multi{display:flex;flex-wrap:wrap;gap:4px 12px;padding:4px 0}.sf-multi.sf-bad{outline:1px solid var(--one-danger)}
@@ -4039,6 +4055,10 @@ function srvNode(r){
   Object.entries(SRV_FLD).forEach(([k,l])=>{if(k in r)(s._f||(s._f={}))[l]=r[k]});
   if(r.gpu)SERVER_GPU[r.id]={model:r.gpu.model,mem:bytesText(r.gpu.memoryBytes),load:r.gpu.load};else delete SERVER_GPU[r.id];
   SERVER_DISKS[r.id]=r.disks.map(d=>({disk:d.disk,size:bytesText(d.sizeBytes),sys:d.system}));
+  // Веб-сервер (vms.webserver/1): настройки, сертификат HTTPS (без ключа) и порты видео
+  if(r.webServer)s.web={...r.webServer};
+  if(r.webCertificate)s.webCert={...r.webCertificate};
+  if(r.webReservedPorts)s.webRes={...r.webReservedPorts};
   return s;
 }
 // Состав папки в кэше неполный: только то, что уже читали
@@ -5421,6 +5441,10 @@ function problemText(e,n){
     FINGERPRINT_MISMATCH:i18n("отпечаток не совпал"),
     NAME_TAKEN:n?.type==="domain"?i18n("Домен с таким именем уже есть"):i18n("Имя уже занято"),
     ADDRESS_TAKEN:i18n("Сервер с таким адресом уже есть"),
+    PORT_TAKEN:i18n("Этот порт уже занимает другой порт сервера"),
+    CERTIFICATE_INVALID:i18n("Файл не в формате PEM, или у ключа есть пароль"),
+    CERTIFICATE_EXPIRED:i18n("Сертификат сейчас не действует"),
+    KEY_MISMATCH:i18n("Ключ не подходит к сертификату"),
     LAST_DOMAIN:i18n("Последний домен удалить нельзя"),
     DOMAIN_NOT_EMPTY:i18n("Указать, куда перенести содержимое домена"),
     INVALID_IP:i18n("Неверный адрес"),
@@ -6966,7 +6990,7 @@ function cancelEdits(){editClear();setD(false);paint();toast("Отменено")
 // внизу — «Сбросить · Показать план». План перечисляет «было → станет», дальше
 // та же очередь и отчёт: сервер без связи не примет правку, и это будет видно.
 let cardBase=null,cardDraft=null,cardFootRaf=0;
-const CARD_SKIP=new Set(["devices","online","cpu","ram","net","disk","bytes","shrink","replicaLagSec","recordState","recordReason","writableFields"]);
+const CARD_SKIP=new Set(["devices","online","cpu","ram","net","disk","bytes","shrink","replicaLagSec","recordState","recordReason","writableFields","web","webCert","webRes"]);
 function cardClone(n){try{return JSON.parse(JSON.stringify(n))}catch(e){return{}}}
 function cardEnsureBase(n){
   if(cardDraft&&cardDraft.id!==n.id){
@@ -7057,6 +7081,7 @@ function cardDiff(){
   Object.entries(edits).forEach(([k,v])=>{const[id,f]=splitEditKey(k);if(id!==n.id)return;out.push({node:n,edit:k,prop:f,from:n[f],to:v,label:i18n(CARD_PROP[f]||f),fromT:cardFmt(f,n[f]),toT:cardFmt(f,v)})});
   posMergeProto(out,n);
   camPlanRows(n,out);
+  webPlanRows(n,out);
   camRecRulePlanRows(n,out);
   return out;
 }
@@ -7102,6 +7127,7 @@ function cardPlan(){
   const d=cardDiff();if(!d.length){toast("Нечего применять");return}
   if(bq&&!bq.finished){toast("Групповая операция ещё не закончена. Подождать её конца");return}
   if(busyRefuse(cardDraft.id))return;
+  {const wb=webPlanBlock(find(cardDraft.id)?.n);if(wb){toast(wb);return}}
   // Объект по схеме вида: сервер сначала проверяет правку, план открывается без ошибок
   const n=find(cardDraft.id).n;
   if(isSchemaNode(n)&&can("validateUnits")){schemaValidate(n,d).then(ok=>{if(ok&&cardDraft&&cardDraft.id===n.id)cardPlanOpen()});return}
@@ -7114,10 +7140,11 @@ function cardPlanOpen(){
   openBulkModal(`${i18n("План")}: «${escHtml(locName(n))}», ${d.length} ${i18n(plural(d.length,"изменение|изменения|изменений"))}`,
     `<table class="bk-table"><thead><tr><th>#</th><th>${i18n("Параметр")}</th><th>${i18n("Было")}</th><th>${i18n("Станет")}</th></tr></thead><tbody>${rows}</tbody></table>
      ${off?`<div class="nt bk-warn">${lu("triangle-alert")} ${i18n("сервер")} «${escHtml(locName(s))}» ${i18n("без связи. Консоль не применит изменения, в отчёте у них будет статус «не применено»")}</div>`:""}
-     <p class="sub" style="margin:10px 0 0">${i18n(d.some(r=>!r.stub&&!camCallOf(r))?"Как изменение выборки: консоль отправляет изменения на сервер одной операцией. Итог будет в отчёте. После применения можно нажать «Отменить».":"Итог будет в отчёте. «Отменить» после применения нет: на сервере нет операции, которую можно отменить.")}</p>
+     <p class="sub" style="margin:10px 0 0">${i18n(d.some(r=>!r.stub&&!camCallOf(r)&&!webCallOf(r))?"Как изменение выборки: консоль отправляет изменения на сервер одной операцией. Итог будет в отчёте. После применения можно нажать «Отменить».":"Итог будет в отчёте. «Отменить» после применения нет: на сервере нет операции, которую можно отменить.")}</p>
      ${n.type==="camera"&&d.some(r=>["arch","rec","archx","recDets","recordScheduleId"].includes(r.key))?camRecGaps(n).map(g=>`<div class="nt bk-warn" data-plan-rec-gap="${g.k}">${lu("triangle-alert")} ${escHtml(g.text)}</div>`).join(""):""}
      ${d.some(r=>r.recRule)?`<p class="sub" data-plan-rule>${i18n("Правило записи по движению консоль создаст после операции, если все изменения применятся. «Отменить» после применения правило не удалит.")}</p>`:""}
      ${d.some(camCallOf)?`<p class="sub" data-plan-rt>${i18n("«Сервер записи» и потоки консоль запишет отдельными запросами до операции. «Отменить» после применения их не вернёт.")}</p>`:""}
+     ${webPlanNote(n,d)}
      ${d.some(r=>r.stub==="act")?`<p class="sub" data-plan-act>${i18n("Первая строка только называет действие. Консоль отправит на сервер строки ниже.")}</p>`:""}
      ${d.some(r=>r.stub==="mode")?`<p class="sub" data-plan-stub-mode>${i18n("Заглушка: признака «Отправлять настройки устройству» в контракте пока нет. «Применить» оставит его только в странице.")}</p>`:""}
      ${d.some(r=>r.stub&&r.stub!=="act"&&r.stub!=="mode")?`<p class="sub" data-plan-stub>${i18n("Заглушка: консоль пока не отправляет на сервер параметры драйвера, кодек и битрейт потоков и туры. «Применить» оставит их как есть.")}</p>`:""}`,
@@ -7132,7 +7159,7 @@ function cardApply(ok){
   if(busyRefuse(cardDraft.id))return;
   const n=find(cardDraft.id).n;
   // Не шаги операции: заглушки (остаются как есть) и отдельные запросы — «Сервер записи» и потоки (camCallRun)
-  const isLoc=r=>!!r.stub||camCallOf(r),api=d.filter(r=>!isLoc(r)),loc=d.filter(isLoc);
+  const isLoc=r=>!!r.stub||camCallOf(r)||webCallOf(r),api=d.filter(r=>!isLoc(r)),loc=d.filter(isLoc);
   const items=cardApiItems(n,api);
   // Меньший объём тома или карты камеры стирает старое: без второго слова сервер откажет
   const less=(items||[]).filter(x=>x.set?.sizeBytes!=null&&(volById(x.targetId)||find(x.targetId)?.n)?.bytes>x.set.sizeBytes);
@@ -7146,7 +7173,7 @@ function cardApply(ok){
     const label=r=>r.add||r.streamAdd||r.streamDel?r.label:`${r.label}: ${r.toT}`;
     // Заглушки и отдельные запросы — шаги с o.call: очередь выполняет их до операции (apiQueue). Заглушка — сразу «выполнено»
     const mk=r=>({...mkOp(r.node||n,label(r),r.folders?"folder":"param"),state:"wait",msg:"",done:false,tempId:r.add?.id,
-      call:r.stub?()=>Promise.resolve():isLoc(r)?()=>camCallRun(n,r):undefined});
+      call:r.stub?()=>Promise.resolve():webCallOf(r)?()=>webCallRun(n,r):isLoc(r)?()=>camCallRun(n,r):undefined});
     const apiOps=api.map(mk),locOps=loc.map(mk),step={label:`«${locName(n)}»: ${all.length} ${plural(all.length,"изменение|изменения|изменений")}`,ops:[...locOps,...apiOps]};
     const streams=loc.some(r=>r.streamSet||r.streamAdd||r.streamDel),targets=[...new Set(items.map(opTarget))];
     // Правка основного потока меняет версию камеры: после потоков камера перечитывается, версии для операции — свежие
@@ -11843,7 +11870,7 @@ function tabsForHand(n){
   if(n.type==="domain")return[["flds","Папки"],["gen","Общие"],["cams","Устройства"],["srvs","Серверы"],["lic","Лицензии"],["topo","Топология"]];
   if(n.type==="unalloc")return[];
   if(n.type==="server"&&isUnallocated(n.id))return[["gen","Общие"],["topo","Топология"]];
-  if(n.type==="server")return[["gen","Общие"],["cams","Устройства"],["svc","Службы"],["disk","Хранилище"]].concat(can("feature:serverNetwork")?[["net","Сеть"]]:[],[["topo","Топология"]]);
+  if(n.type==="server")return[["gen","Общие"],["cams","Устройства"],["svc","Службы"],["disk","Хранилище"]].concat(can("feature:serverNetwork")?[["net","Сеть"]]:[],webHas(n)?[["web","Веб-сервер"]]:[],[["topo","Топология"]]);
   // Хранилище открывают ради камер, что в него пишут: «Устройства» — первая
   // вкладка и открывается по умолчанию, параметры и тома — во второй.
   // Вид, на который камеры не привязываются (карта сервера, инциденты), — только параметры и тома.
@@ -13626,7 +13653,7 @@ function camPlanCommit(id){
   const st=drvStore.get(id);if(st)st.base={};
   // После применённого сброса камера сообщает то, что консоль в неё записала (заглушка camDevReported)
   const n=find(id)?.n;if(n&&camPlanBase.get(id)?.act==="reset")camDevRep.set(id,{cv:cardClone({v:cvCfgOf(n).streams}).v,drv:{}});
-  camPlanBase.delete(id);
+  camPlanBase.delete(id);webPlanForget(id);
 }
 // «Сбросить» и уход с черновиком: заглушки — к значениям до плана, открытые блоки камеры закрываются
 function camPlanRestore(id){
@@ -13635,7 +13662,7 @@ function camPlanRestore(id){
   if(n&&b?.cv){const cur=cvCfgOf(n).streams;Object.keys(b.cv).forEach(sid=>{cur[sid]=b.cv[sid]})}
   if(n&&b?.tours){const t=cvToursOf(n);if(t.run&&!b.tours.tours.some(x=>x.id===t.run.tid))cvTourHalt(t);Object.assign(t,b.tours)}
   if(n&&b&&"mode"in b)cvCfgOf(n).mode=b.mode;
-  camPlanBase.delete(id);cvSnap.delete(id);csPlaceSnap.delete(id);
+  camPlanBase.delete(id);cvSnap.delete(id);csPlaceSnap.delete(id);webPlanForget(id);
   csBlkSnap.forEach((v,k)=>{if(k.startsWith(id+":"))csBlkSnap.delete(k)});
   [...csEdit].forEach(k=>{if(k.startsWith(id+":"))csEdit.delete(k)});
 }
@@ -18591,6 +18618,239 @@ function unitRun(id,op){
   unitAction(id,op).then(()=>toast(`${unitOpLabel(op)}: ${i18n("выполнено")}`)).catch(e=>toast(problemText(e,n)));
 }
 function unitAddBtn(){return WIZ.acfa?`<button class="btn s btn-icon" aria-label="${i18n("Добавить единицу")}" title="${i18n("Добавить единицу")}" ${onEv("click",["openW","unit"])}>${lu("plus")}</button>`:""}
+// ── Веб-сервер и RTSP-сервер сервера (профиль vms.webserver/1, контракт 0.11.0) ──
+// Свойство webServer правится черновиком карточки: строка плана на поле, шаг операции — PATCH properties.webServer.
+// Сертификат и ключ HTTPS — файлы из браузера. Консоль читает их в память страницы, сервер проверяет пару (webcert.set с
+// check: true) и отдаёт сведения. «Применить» отправляет файлы отдельным запросом webcert.set до операции; webcert.remove
+// убирает сертификат. Ключ консоль держит только до «Применить» или «Сбросить» и больше не показывает: сервер его не отдаёт.
+// Образец полей — Axxon One 3.0 «Свойства веб-сервера».
+const WEB_PROFILE="vms.webserver/1";
+const WEB_DEF={on:true,http:80,https:443,prefix:"/",cors:false,recode:false,rtsp:554,rtspHttp:8554};
+const WEB_API={on:"enabled",http:"httpPort",https:"httpsPort",prefix:"urlPrefix",cors:"cors",recode:"recompress",rtsp:"rtspPort",rtspHttp:"rtspHttpPort"};
+const WEB_PORTS=[["http","Порт HTTP"],["https","Порт HTTPS"],["rtsp","Порт RTSP"],["rtspHttp","Порт RTSP через HTTP"]];
+const WEB_LBL={on:"Веб-сервер",http:"Порт HTTP",https:"Порт HTTPS",prefix:"Префикс адреса",cors:"Запросы с других сайтов (CORS)",recode:"Перекодирование видео",rtsp:"Порт RTSP",rtspHttp:"Порт RTSP через HTTP"};
+const WEB_FILE_MAX=65536;
+// uid сервера → {vals, base: значения до плана или null, last: поле последней правки, cert и key: {name, text} — выбранные
+// файлы, drop: убрать сертификат сервера, check: {info} или {err} — итог проверки пары, checking: номер идущей проверки}
+const webStore=new Map();
+function webHas(n){return n?.type==="server"&&!isUnallocated(n.id)&&(KINDS.get(nodeKind(n))?.implements||[]).includes(WEB_PROFILE)}
+function webFromNode(n){const w=n.web||{},v={};Object.entries(WEB_API).forEach(([k,a])=>{v[k]=a in w?w[a]:WEB_DEF[k]});return v}
+// Без правок значения идут от сервера: ответ и событие потока меняют их сразу
+function webOf(n){
+  let st=webStore.get(n.id);
+  if(!st){st={vals:webFromNode(n),base:null,cert:null,key:null,drop:false,check:null,checking:0};webStore.set(n.id,st)}
+  else if(!st.base)st.vals=webFromNode(n);
+  return st;
+}
+function webSet(id,k,v){
+  const n=find(id)?.n;if(!n)return;
+  const st=webOf(n);
+  if(!st.base)st.base={...st.vals};
+  st.vals[k]=v;st.last=k;
+  setD(true);
+}
+// Поле ввода: значение — без перерисовки, чтобы не терять курсор; адрес, ошибки и подвал — на месте
+function webInput(id,k,el,shown){
+  const v=WEB_PORTS.some(([p])=>p===k)||k==="prefix"?el.value.trim():el.value;
+  webSet(id,k,v);webRefresh(id,shown?null:k);
+}
+function webCommit(id,k,el){webInput(id,k,el,true)}
+function webToggle(id,k){const n=find(id)?.n;if(!n)return;webSet(id,k,!webOf(n).vals[k]);paint()}
+// Файл сертификата или ключа: текст — в память страницы. Выбраны оба — сервер проверяет пару
+function webFile(id,k,files){
+  const f=files&&files[0],n=find(id)?.n;if(!f||!n)return;
+  if(f.size>WEB_FILE_MAX){toast(i18n("Файл больше 64 КБ. Это не файл PEM"));return}
+  const rd=new FileReader();
+  rd.onload=()=>{
+    const st=webOf(n);st[k]={name:f.name,text:String(rd.result||"")};st.drop=false;st.check=null;
+    setD(true);webCheck(id);paint();
+  };
+  rd.onerror=()=>toast(i18n("Консоль не прочитала файл"));
+  rd.readAsText(f);
+}
+function webCheck(id){
+  const n=find(id)?.n;if(!n)return;
+  const st=webOf(n);if(!st.cert||!st.key)return;
+  const seq=++webCheckSeq;st.checking=seq;
+  unitAction(id,"webcert.set",{certificate:st.cert.text,privateKey:st.key.text,certificateName:st.cert.name,check:true})
+    .then(info=>{if(st.checking===seq)st.check={info}})
+    .catch(e=>{if(st.checking===seq)st.check={err:e?.problem||{code:e?.code||e}}})
+    .finally(()=>{if(st.checking!==seq)return;st.checking=0;if(sel===id&&tab==="web")paint();else cardFootRefresh()});
+}
+let webCheckSeq=0;
+// «Убрать сертификат»: выбранные файлы забываются; сертификат сервера уйдёт после «Применить»
+function webClearCert(id){
+  const n=find(id)?.n;if(!n)return;
+  const st=webOf(n);st.cert=null;st.key=null;st.check=null;st.checking=0;st.drop=!!n.webCert;
+  setD(true);paint();
+}
+// HTTPS после «Применить»: новая пара файлов или сертификат сервера, который не убирают
+function webHttpsOn(n,st=webOf(n)){return st.cert||st.key?!!(st.cert&&st.key):!st.drop&&!!n.webCert}
+// Сведения для показа: новой пары — итог проверки сервером, иначе — сертификат сервера
+function webCertNow(n,st=webOf(n)){return st.cert||st.key?st.check?.info||null:st.drop?null:n.webCert||null}
+const WEB_CERT_ERR={
+  CERTIFICATE_INVALID:{cert:"Файл не в формате PEM. Выбрать файл .pem, .crt или .cer с сертификатом",key:"Ключ не в формате PEM, или у ключа есть пароль. Выбрать ключ без пароля в формате PEM"},
+  CERTIFICATE_EXPIRED:{cert:"Срок сертификата кончился или ещё не начался. Выбрать действующий сертификат"},
+  KEY_MISMATCH:{key:"Ключ не подходит к сертификату. Выбрать ключ этого сертификата"},
+};
+// Ошибки полей: порт вне 1–65535, два одинаковых порта, порт из диапазона видео, нет пары к файлу, отказ проверки сервером
+function webErrors(n){
+  const st=webOf(n),v=st.vals,err={},by=new Map(),res=n.webRes;
+  WEB_PORTS.forEach(([k,l])=>{
+    const s=String(v[k]??"").trim(),p=Number(s);
+    if(!/^\d+$/.test(s)||p<1||p>65535){err[k]=i18n("Ввести число от 1 до 65535");return}
+    if(res&&p>=res.from&&p<=res.to){err[k]=`${i18n("Порты")} ${res.from}–${res.to} ${i18n("веб-сервер занимает под видео. Выбрать другой порт")}`;return}
+    (by.get(p)||by.set(p,[]).get(p)).push([k,l]);
+  });
+  // Два одинаковых порта: ошибка — у поля, которое пользователь менял последним, иначе у второго поля
+  by.forEach(g=>{if(g.length<2)return;
+    const bad=g.some(([k])=>k===st.last)?g.filter(([k])=>k===st.last):g.slice(1);
+    bad.forEach(([k])=>{const other=g.find(([x])=>x!==k);err[k]=`${i18n("Этот порт уже занимает поле")} «${i18n(other[1])}»`})});
+  if(!String(v.prefix||"").startsWith("/"))err.prefix=i18n("Префикс начинается с «/», например /vms");
+  else if(/\s/.test(v.prefix))err.prefix=i18n("Убрать пробелы из префикса");
+  if(st.cert&&!st.key)err.key=i18n("Указать файл ключа. Без ключа HTTPS не работает");
+  if(st.key&&!st.cert)err.cert=i18n("Указать файл сертификата. Без сертификата HTTPS не работает");
+  const ce=st.check?.err;
+  if(ce){
+    const f=ce.field==="/params/privateKey"?"key":"cert",t=WEB_CERT_ERR[ce.code]?.[f];
+    err[f]=t?i18n(t):ce.code==="DEVICE_OFFLINE"?i18n("Сервер без связи. Консоль не проверила файлы"):`${i18n("Сервер не проверил файлы")}: ${problemText({problem:ce},n)}`;
+  }
+  return err;
+}
+function webPrefix(v){const p=String(v.prefix||"/").trim()||"/";return p.endsWith("/")?p:p+"/"}
+function webUrls(n,v,https){
+  if(!v.on)return[];
+  const host=n.ip||"localhost",port=(p,d)=>Number(p)===d?"":`:${p}`,out=[`http://${host}${port(v.http,80)}${webPrefix(v)}`];
+  if(https)out.unshift(`https://${host}${port(v.https,443)}${webPrefix(v)}`);
+  return out;
+}
+function webStatusText(n){
+  const st=webOf(n);
+  return !st.vals.on?i18n("выключен"):webHttpsOn(n,st)?"HTTPS":"HTTP";
+}
+// Плитка на вкладке «Общие»: состояние веб-сервера, щелчок открывает вкладку «Веб-сервер»
+function webTileHtml(n){
+  if(!webHas(n))return"";
+  return`<button type="button" class="mc" data-web-tile ${onEv("click",["goTab","web"])}><span>${i18n("Веб-сервер")}</span><b>${escHtml(webStatusText(n))}</b></button>`;
+}
+function webPortFld(n,k,l,err,dis){
+  const v=webOf(n).vals;
+  return`<div class="web-f"><label for="web-${k}">${i18n(l)}</label><input id="web-${k}" type="text" inputmode="numeric" maxlength="5" value="${escHtml(v[k])}" ${dis} aria-invalid="${!!err[k]}" ${onEv("input",["webInput",`${n.id}`,`${k}`,onEv.el])} ${onEv("change",["webCommit",`${n.id}`,`${k}`,onEv.el])}><div class="fld-err" data-web-err="${k}">${escHtml(err[k]||"")}</div></div>`;
+}
+// Флажок, а не переключатель: значение вступает в силу только после «Применить» в плане
+function webSwHtml(n,k,title,hint,dis=""){
+  const on=!!webOf(n).vals[k];
+  return`<label class="web-cb"><input type="checkbox" data-web-cb="${k}" ${on?"checked":""} ${dis} ${onEv("change",["webToggle",`${n.id}`,`${k}`])}><span>${i18n(title)}<small>${i18n(hint)}</small></span></label>`;
+}
+function webAddrHtml(n){
+  const st=webOf(n),u=webUrls(n,st.vals,webHttpsOn(n,st));
+  if(!u.length)return`<span class="sub">${i18n("Веб-сервер выключен. Браузер и мобильные клиенты не подключатся к серверу.")}</span>`;
+  return`<span class="web-addr-l">${i18n("Адрес")}:</span> ${u.map(x=>copyChipHtml(x,"Адрес")).join(" ")}`;
+}
+function webDay(iso){const d=new Date(iso);return isNaN(d)?"—":`${String(d.getDate()).padStart(2,"0")}.${String(d.getMonth()+1).padStart(2,"0")}.${d.getFullYear()}`}
+function webCertHtml(n,err,dis){
+  const st=webOf(n),info=webCertNow(n,st),srvCert=!st.drop&&!st.cert&&!st.key&&!!n.webCert;
+  const ro=can("runUnitAction")?dis:"disabled";
+  const shown=k=>st[k]?`<span class="web-file-n">${lu("file-text")} ${escHtml(st[k].name)}</span>`
+    :srvCert?`<span class="web-file-n">${lu(k==="key"?"lock":"file-text")} ${escHtml(k==="key"?i18n("сервер хранит ключ"):n.webCert.fileName||i18n("сертификат на сервере"))}</span>`
+    :`<span class="sub">${i18n("Файл не выбран")}</span>`;
+  const pick=(k,l)=>`<div class="web-f web-f-wide"><label>${i18n(l)}</label><div class="web-file" data-web-file="${k}">${shown(k)}
+      <label class="btn s web-file-b">${i18n(st[k]||srvCert?"Другой файл":"Выбрать файл")}<input type="file" hidden accept=".pem,.crt,.cer,.key" ${ro} ${onEv("change",["webFile",`${n.id}`,`${k}`,onEv.files])}></label></div><div class="fld-err" data-web-err="${k}">${escHtml(err[k]||"")}</div></div>`;
+  const hint=`${i18n("Консоль отправит файлы на сервер")} «${escHtml(locName(n))}» ${i18n("после «Применить». Сервер проверит, что ключ подходит к сертификату, и сохранит ключ у себя. Консоль ключ больше не покажет. Формат PEM: .pem, .crt, .key. Файлы PFX не подходят. Ключ — без пароля.")}`;
+  const days=info?Math.ceil((Date.parse(info.notAfter)-Date.now())/86400000):0;
+  const sum=info?`<div class="web-cert" data-web-cert>
+      <div><span>${i18n("Кому выдан")}</span><b>${escHtml(info.subject)}</b>${info.wildcard?` <span class="bd">${i18n("wildcard: все поддомены")}</span>`:""}</div>
+      <div><span>${i18n("Кем выдан")}</span><b>${escHtml(info.issuer)}</b></div>
+      <div><span>${i18n("Действует")}</span><b>${webDay(info.notBefore)} – ${webDay(info.notAfter)}</b> <span class="sub" data-web-days>${uiLang==="ru"?`ещё ${days} ${plural(days,"день|дня|дней")}`:`${days} ${days===1?"day":"days"} left`}</span></div>
+      <div><span>${i18n("Проверка")}</span><b>${i18n(info.keyMatches?"ключ подходит к сертификату":"ключ не подходит к сертификату")}</b></div>
+      <div><span>${i18n("Цепочка")}</span><b>${i18n(info.chain==="full"?"полная":info.chain==="self"?"нет: сертификат самоподписанный":"без промежуточного сертификата")}</b></div>
+    </div>${info.chain==="partial"?`<div class="nt bk-warn">${lu("triangle-alert")} ${i18n("В файле нет промежуточного сертификата. Часть браузеров не доверит серверу. Указать файл с полной цепочкой (обычно fullchain.pem).")}</div>`:""}
+    ${info.chain==="self"?`<div class="nt bk-warn">${lu("triangle-alert")} ${i18n("Браузеры покажут предупреждение «Подключение не защищено». Для доступа из интернета указать сертификат центра сертификации.")}</div>`:""}`
+    :st.checking?`<p class="sub" data-web-checking>${i18n("Сервер проверяет файлы…")}</p>`:"";
+  const none=!st.cert&&!st.key&&!srvCert?`<div class="nt">${i18n(st.drop?"Консоль уберёт сертификат после «Применить». Веб-сервер будет работать только по HTTP.":"Сертификата нет, поэтому веб-сервер работает только по HTTP. Чтобы включить HTTPS, указать файл сертификата и файл ключа.")}</div>`:"";
+  return card("Сертификат HTTPS",`${none}<div class="web-row">${pick("cert","Файл сертификата")}${pick("key","Файл ключа")}</div>
+    <p class="sub web-hint">${hint} ${i18n("Подходят сертификаты TLS 1.2 и 1.3, в том числе wildcard (*.example.ru) — один сертификат на все поддомены.")}</p>${sum}`,
+    st.cert||st.key||srvCert?`<span class="tfoot-gap"></span><button type="button" class="btn s" data-web-clear ${ro} ${onEv("click",["webClearCert",`${n.id}`])}>${i18n("Убрать сертификат")}</button>`:"");
+}
+function webSrvHtml(n){
+  const st=webOf(n),v=st.vals,err=webErrors(n),dis=v.on?"":"disabled",res=n.webRes;
+  const main=card("Веб-сервер",`
+    ${webSwHtml(n,"on","Веб-сервер включён","Через веб-сервер к серверу подключаются браузер, мобильные клиенты и внешние программы по HTTP API.")}
+    <div class="web-body ${v.on?"":"web-dim"}">
+      <div class="web-row">${webPortFld(n,"http","Порт HTTP",err,dis)}${webPortFld(n,"https","Порт HTTPS",err,dis)}
+        <div class="web-f"><label for="web-prefix">${i18n("Префикс адреса")}</label><input id="web-prefix" type="text" spellcheck="false" maxlength="200" value="${escHtml(v.prefix)}" ${dis} aria-invalid="${!!err.prefix}" ${onEv("input",["webInput",`${n.id}`,"prefix",onEv.el])} ${onEv("change",["webCommit",`${n.id}`,"prefix",onEv.el])}><div class="fld-err" data-web-err="prefix">${escHtml(err.prefix||"")}</div></div></div>
+      <div class="web-addr" data-web-addr>${webAddrHtml(n)}</div>
+      ${res?`<p class="sub web-hint">${i18n("Для видео в браузере веб-сервер также занимает порты")} ${res.from}–${res.to} (${i18n("9001 и по одному на ядро процессора")}). ${i18n("Открыть эти порты в сетевом экране сервера.")}</p>`:""}
+    </div>`,`<span class="tfoot-gap"></span><span class="bd ${v.on?"":"off"}" data-web-badge>${escHtml(webStatusText(n))}</span>`);
+  const video=card("Видео и запросы из браузера",`
+    ${webSwHtml(n,"recode","Перекодировать видео для браузера","Веб-сервер переводит видео, которое браузер не показывает (например, H.265), в формат для браузера. Это нагружает процессор сервера. Выключено: браузер получает видео как есть.",dis)}
+    ${webSwHtml(n,"cors","Разрешить запросы с других сайтов (CORS)","Веб-приложения с других адресов смогут обращаться к веб-серверу из браузера. Включить, если ваше веб-приложение работает на другом адресе.",dis)}`);
+  const rp=Number(v.rtsp);
+  const rtsp=card("RTSP-сервер",`<div class="web-row">${webPortFld(n,"rtsp","Порт RTSP",err,"")}${webPortFld(n,"rtspHttp","Порт RTSP через HTTP",err,"")}</div>
+    <p class="sub web-hint">${i18n("Плееры и другие системы забирают видео с сервера по RTSP. Они входят под именем и паролем пользователя консоли и получают видео только тех камер, которые этот пользователь может смотреть по своим правам.")}</p>
+    <div class="web-rtsp-ex"><span class="web-addr-l">${i18n("Адрес потока камеры")}:</span> ${copyChipHtml(`rtsp://${i18n("имя")}:${i18n("пароль")}@${n.ip||"localhost"}${rp===554?"":":"+v.rtsp}/hosts/${i18n("ИМЯ-СЕРВЕРА")}/DeviceIpint.N/SourceEndpoint.video:0:0`,"Адрес")} <span class="sub web-rtsp-n">${i18n("N — номер камеры, имя сервера — заглавными буквами")}</span></div>
+    <p class="sub web-hint">${i18n("Имя пользователя для RTSP начинается с латинской буквы и содержит только латинские буквы, цифры и символы / - _ . : +")}</p>`);
+  return`<div class="web-tab">${main}${webCertHtml(n,err,dis)}${video}${rtsp}</div>`;
+}
+// После ввода: адрес и ошибки — без перерисовки карточки
+// typing — поле, в котором пользователь ещё вводит: его новую ошибку консоль покажет после ухода из поля, исправленную — сразу
+function webRefresh(id,typing){
+  const n=find(id)?.n;if(!n)return;
+  const err=webErrors(n);
+  document.querySelectorAll("[data-web-err]").forEach(el=>{
+    const k=el.dataset.webErr;if(k===typing&&err[k]&&!el.textContent)return;el.textContent=err[k]||"";
+    el.parentElement?.querySelector("input:not([type=file])")?.setAttribute("aria-invalid",String(!!err[k]));
+  });
+  const a=document.querySelector("[data-web-addr]");if(a)a.innerHTML=webAddrHtml(n);
+}
+function webValText(k,v){
+  if(k==="on")return i18n(v?"включён":"выключен");
+  if(k==="cors"||k==="recode")return i18n(v?"включено":"выключено");
+  return String(v??"")||"—";
+}
+function webApiVal(k,v){return WEB_PORTS.some(([p])=>p===k)?Number(v):k==="prefix"?String(v??"").trim():!!v}
+// Строки плана: одна на изменённое поле (шаг операции), сертификат — отдельная строка с запросом до операции
+function webPlanRows(n,out){
+  if(!webHas(n))return;
+  const st=webStore.get(n.id);if(!st)return;
+  if(st.base)Object.keys(WEB_DEF).forEach(k=>{
+    if(String(st.base[k])===String(st.vals[k]))return;
+    out.push({node:n,webKey:k,from:st.base[k],to:st.vals[k],label:`${i18n(k.startsWith("rtsp")?"RTSP-сервер":"Веб-сервер")}: ${i18n(WEB_LBL[k])}`,fromT:webValText(k,st.base[k]),toT:webValText(k,st.vals[k])});
+  });
+  const lb=`${i18n("Веб-сервер")}: ${i18n("Сертификат HTTPS")}`,was=n.webCert?n.webCert.subject:"—";
+  if(st.cert&&st.key)out.push({node:n,webCert:"set",pem:{certificate:st.cert.text,privateKey:st.key.text,certificateName:st.cert.name},label:lb,fromT:was,
+    toT:st.check?.info?`${st.check.info.subject} (${st.cert.name})`:st.cert.name});
+  else if(st.drop&&n.webCert)out.push({node:n,webCert:"remove",label:lb,fromT:was,toT:i18n("нет, только HTTP")});
+}
+function webPlanBlock(n){
+  if(!webHas(n))return"";
+  const st=webStore.get(n.id);if(!st)return"";
+  if(Object.keys(webErrors(n)).length)return"Исправить ошибки на вкладке «Веб-сервер»";
+  if(st.checking)return"Подождать: сервер проверяет файлы сертификата";
+  return"";
+}
+// Шаг операции: поле webServer — JSON Merge Patch, остальные поля сервер не трогает
+function webItem(n,r){return{uid:n.id,patch:{properties:{webServer:{[WEB_API[r.webKey]]:webApiVal(r.webKey,r.to)}}}}}
+function webCallOf(r){return!!r.webCert}
+function webCallRun(n,r){
+  const go=r.webCert==="set"?unitAction(n.id,"webcert.set",r.pem):unitAction(n.id,"webcert.remove",{});
+  // Сервер принял ключ — строка плана его забывает: отчёт очереди и тост «Отменить» держат строку дольше «Применить».
+  // При отказе ключ остаётся для «Повторить неудачные» до закрытия отчёта
+  return go.then(()=>{r.pem=null;return API.get(`/units/${n.id}`)}).then(u=>hwApplyUnit(u));
+}
+// «Применить» и «Сбросить»: черновик веб-сервера и выбранные файлы забываются, значения снова идут от сервера
+function webPlanForget(id){webStore.delete(id)}
+// Предупреждение в плане: что перезапустится и где искать веб-сервер после применения
+function webPlanNote(n,d){
+  const rows=d.filter(r=>r.webKey||r.webCert);if(!rows.length)return"";
+  const st=webOf(n),was=webUrls(n,st.base||st.vals,!!n.webCert),now=webUrls(n,st.vals,webHttpsOn(n,st));
+  const web=rows.some(r=>r.webCert||!r.webKey.startsWith("rtsp")),rt=rows.some(r=>r.webKey&&r.webKey.startsWith("rtsp"));
+  const moved=JSON.stringify(was)!==JSON.stringify(now);
+  return`<div class="nt bk-warn" data-plan-web>${lu("triangle-alert")} ${i18n("Сервер")} «${escHtml(locName(n))}» ${i18n("перезапустит")} ${web&&rt?i18n("веб-сервер и RTSP-сервер"):web?i18n("веб-сервер"):i18n("RTSP-сервер")}. ${i18n("Клиенты потеряют связь с сервером на время перезапуска.")}
+    ${web&&moved?`<br>${now.length?`${i18n("Новый адрес")}: <b>${now.map(escHtml).join(" · ")}</b>. ${i18n("Если консоль открыта через этот веб-сервер, открыть её снова по новому адресу.")}`:i18n("После применения браузер и мобильные клиенты не подключатся к серверу. Если консоль открыта через этот веб-сервер, она потеряет связь с сервером.")}`:""}</div>
+    ${rows.some(r=>r.webCert)?`<p class="sub" data-plan-webcert>${i18n("Сертификат консоль отправит на сервер отдельным запросом до операции. «Отменить» после применения его не вернёт.")}</p>`:""}`;
+}
+
 // ── Метки серверов и тревожные виды ───────────────────────────────────────
 const EVENT_RU={motion:"Движение",linecross:"Пересечение линии",abandoned:"Оставленный предмет",disappeared:"Исчезновение предмета",crowd:"Скопление людей",lpr:"Номер",silent:"Обрыв потока камеры","io.input":"Вход",text:"Текст источника",unit:"Единица СКУД"};
 function chipsHtml(all,cur,fn,...args){
@@ -18865,6 +19125,7 @@ function formBase(n){
         unit:"камера|камеры|камер"
       });
     }
+    if(tab==="web"&&webHas(n))return webSrvHtml(n);
     if(tab==="net")return card("Сеть",`<div class="g">${fld("IP",n.ip)}${fld("Маска","255.255.255.0")}${fld("Шлюз","10.20.1.1")}${fld("DNS","8.8.8.8")}</div>`);
     if(tab==="svc")
       return childListCard(n,{
@@ -18888,6 +19149,7 @@ function formBase(n){
         <button type="button" class="mc" ${onEv("click",["goTab","svc"])}><span>${i18n("Службы сервера")}</span><b>${svc}</b></button>
         <button type="button" class="mc" ${onEv("click",["goTab","disk"])}><span>${i18n("Камер пишется")}</span><b>${recCams.length}</b></button>
         ${serverGpu(n)?`<button type="button" class="mc" ${onEv("click",["pick",`${gpuId(n.id)}`])}><span>${i18n("Видеоускоритель")}</span><b>${escHtml(serverGpu(n).model)}</b></button>`:`<div class="mc"><span>${i18n("Видеоускоритель")}</span><b>${i18n("нет")}</b></div>`}
+        ${webTileHtml(n)}
         <div class="mc"><span>${i18n("Ошибки")}</span><b>0</b></div>
       </div>
       <p class="sub" style="margin-top:10px">${i18n("Домен:")} <b>${locName(domainOf(n.id)||{name:"—"})}</b></p>
@@ -35406,6 +35668,7 @@ function cardApiItems(n,d){
     for(const r of d){
       if(r.node&&r.node!==n)return null;
       if(r.schemaProp){items.push(xp(r));continue}
+      if(r.webKey){items.push(webItem(n,r));continue}
       if(n.type==="archive"&&r.key==="vols"){const vs=volsToItems(r.from,r.to);if(!vs)return null;items.push(...vs);continue}
       const set=srvRowToApi(n,r);if(!set)return null;
       items.push({targetId:n.id,set});
