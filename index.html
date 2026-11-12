@@ -368,6 +368,11 @@ html[data-theme="light"] .status-pop .mi.on{background:var(--one-surface-muted);
 .tctx-newtab{color:var(--mu)}
 .tctx-newtab .ic-svg{width:14px;height:14px;display:block}
 .tctx-lbl{flex:1;min-width:0}
+/* Меню «Ещё»: причина, почему пункт меню недоступен, — второй строкой под подписью */
+.tctx-why{display:block;max-width:260px;margin-top:2px;font-size:11px;line-height:1.3;color:var(--mu);white-space:normal}
+.tctx button:disabled:has(.tctx-why){opacity:1;color:var(--mu)}
+.tctx button:disabled:has(.tctx-why) .tctx-ic{opacity:.45}
+.cam-act-tbl{margin:10px 0}
 .nm{flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .n-meta{flex:none;display:inline-flex;align-items:center;gap:4px;margin-left:auto;min-width:0;max-width:62%}
 .n-tags{flex:0 1 auto;display:inline-flex;flex-wrap:nowrap;align-items:center;justify-content:flex-end;gap:4px;min-width:0;overflow:hidden}
@@ -7113,7 +7118,9 @@ function cardPlanOpen(){
      ${n.type==="camera"&&d.some(r=>["arch","rec","archx","recDets","recordScheduleId"].includes(r.key))?camRecGaps(n).map(g=>`<div class="nt bk-warn" data-plan-rec-gap="${g.k}">${lu("triangle-alert")} ${escHtml(g.text)}</div>`).join(""):""}
      ${d.some(r=>r.recRule)?`<p class="sub" data-plan-rule>${i18n("Правило записи по движению консоль создаст после операции, если все изменения применятся. «Отменить» после применения правило не удалит.")}</p>`:""}
      ${d.some(camCallOf)?`<p class="sub" data-plan-rt>${i18n("«Сервер записи» и потоки консоль запишет отдельными запросами до операции. «Отменить» после применения их не вернёт.")}</p>`:""}
-     ${d.some(r=>r.stub)?`<p class="sub" data-plan-stub>${i18n("Заглушка: консоль пока не отправляет на сервер параметры драйвера, кодек и битрейт потоков и туры. «Применить» оставит их как есть.")}</p>`:""}`,
+     ${d.some(r=>r.stub==="act")?`<p class="sub" data-plan-act>${i18n("Первая строка только называет действие. Консоль отправит на сервер строки ниже.")}</p>`:""}
+     ${d.some(r=>r.stub==="mode")?`<p class="sub" data-plan-stub-mode>${i18n("Заглушка: признака «Отправлять настройки устройству» в контракте пока нет. «Применить» оставит его только в странице.")}</p>`:""}
+     ${d.some(r=>r.stub&&r.stub!=="act"&&r.stub!=="mode")?`<p class="sub" data-plan-stub>${i18n("Заглушка: консоль пока не отправляет на сервер параметры драйвера, кодек и битрейт потоков и туры. «Применить» оставит их как есть.")}</p>`:""}`,
     `<button type="button" class="btn" ${onEv("click",["closeBulkModal"])}>${i18n("Назад")}</button><button type="button" class="btn pri" ${onEv("click",["closeBulkModal"],["cardApply"])}>${i18n("Применить")} (${d.length})</button>`,"bbox-wide");
 }
 function cardApply(ok){
@@ -10940,6 +10947,12 @@ function openTreeCtx(n,xy){
       if(canRenameShort(n))edit.push(tctxItem(i18n("Изменить короткое имя"),act("ctxRename",id,"short")));
     }
     if(n.type==="camera")edit.push(tctxItem(i18n("Применить настройки к другим…"),act("openCopyDialog",id),`<span class="tctx-ic">${SEL_IC}</span>`));
+    // Сброс к умолчаниям модели и загрузка настроек с устройства (Axxon One: Reset). Недоступный пункт называет причину
+    if(n.type==="camera"&&!isSchemaNode(n)){
+      const rw=camResetWhy(n),lw=camLoadWhy(n);
+      edit.push(tctxItem(tctxWhy(i18n("Сбросить к умолчаниям…"),rw),act("camResetOpen",id),`<span class="tctx-ic">${lu("rotate-ccw",14)}</span>`,!!rw));
+      edit.push(tctxItem(tctxWhy(i18n("Загрузить настройки с устройства…"),lw),act("camLoadOpen",id),`<span class="tctx-ic">${lu("download",14)}</span>`,!!lw));
+    }
     if(rulePresetFor(n))edit.push(tctxItem(i18n(n.type==="relay"?"Создать правило с этим реле…":"Создать правило по событию…"),act("ruleFromDevice",id)));
     if(canFav(n))edit.push(tctxItem(isFav(id)?i18n("Убрать из избранного"):i18n("В избранное"),["toggleFav",id,sel===id&&selCtx?selCtx:null],tctxStarIcon()));
     if(n.type==="unalloc")edit.push(tctxItem(i18n("Обновить"),act("refreshUnalloc",n.domainId)));
@@ -13588,6 +13601,11 @@ function camPlanRows(n,out){
       out.push({node:n,stub:"drv",label:`${i18n(p["x-ui-group"]||"")}: ${propLabel(p,f)}`,fromT:drvValText(p,st.base[f]),toT:drvValText(p,st.vals[f])})});
   }
   const b=camPlanBase.get(n.id);
+  // Сброс и загрузка с устройства: строка-метка действия — первой в плане, «Отправлять настройки устройству» — своей строкой
+  if(b&&"mode"in b&&b.mode!==cvCfgOf(n).mode)out.unshift({node:n,stub:"mode",label:i18n("Отправлять настройки устройству"),
+    fromT:i18n(b.mode==="console"?"включено":"выключено"),toT:i18n(cvCfgOf(n).mode==="console"?"включено":"выключено")});
+  if(b?.act)out.unshift({node:n,stub:"act",label:i18n(b.act==="reset"?"Сбросить к умолчаниям модели":"Загрузить настройки с устройства"),fromT:"—",
+    toT:i18n(b.act==="reset"?"консоль запишет значения в камеру":"консоль возьмёт значения камеры")});
   if(b?.cv){
     const cur=cvCfgOf(n).streams,names=new Map(camStreams(n).map(x=>[x.id,x.name]));
     Object.entries(cur).forEach(([sid,o])=>{const w=b.cv[sid];if(!w||!names.has(sid))return;   // новый поток — строка «Добавить: поток»
@@ -13604,16 +13622,140 @@ function camPlanRows(n,out){
   }
 }
 // «Применить»: заглушки остаются как есть, база плана забывается
-function camPlanCommit(id){const st=drvStore.get(id);if(st)st.base={};camPlanBase.delete(id)}
+function camPlanCommit(id){
+  const st=drvStore.get(id);if(st)st.base={};
+  // После применённого сброса камера сообщает то, что консоль в неё записала (заглушка camDevReported)
+  const n=find(id)?.n;if(n&&camPlanBase.get(id)?.act==="reset")camDevRep.set(id,{cv:cardClone({v:cvCfgOf(n).streams}).v,drv:{}});
+  camPlanBase.delete(id);
+}
 // «Сбросить» и уход с черновиком: заглушки — к значениям до плана, открытые блоки камеры закрываются
 function camPlanRestore(id){
   const n=find(id)?.n,st=drvStore.get(id),b=camPlanBase.get(id);
   if(st){Object.entries(st.base).forEach(([f,v])=>{if(v===undefined)delete st.vals[f];else st.vals[f]=v});st.base={};st.snap={}}
   if(n&&b?.cv){const cur=cvCfgOf(n).streams;Object.keys(b.cv).forEach(sid=>{cur[sid]=b.cv[sid]})}
   if(n&&b?.tours){const t=cvToursOf(n);if(t.run&&!b.tours.tours.some(x=>x.id===t.run.tid))cvTourHalt(t);Object.assign(t,b.tours)}
+  if(n&&b&&"mode"in b)cvCfgOf(n).mode=b.mode;
   camPlanBase.delete(id);cvSnap.delete(id);csPlaceSnap.delete(id);
   csBlkSnap.forEach((v,k)=>{if(k.startsWith(id+":"))csBlkSnap.delete(k)});
   [...csEdit].forEach(k=>{if(k.startsWith(id+":"))csEdit.delete(k)});
+}
+// ── Камера: сброс к умолчаниям и загрузка настроек с устройства ──
+// Axxon One: кнопка Reset в карточке устройства → «Reset parameters to default values» или «Download configuration from device» → Apply.
+// Здесь — два пункта меню «Ещё» карточки камеры (то же меню открывает правая кнопка на строке дерева). Пункт спрашивает сервер
+// (команды камеры defaults и readConfig, контракт 0.10.0: обе только читают) и открывает окно «Параметр — Сейчас — Станет»;
+// «Добавить в план» меняет значения в черновике карточки, строки попадают в общий план, «Применить» отправляет их вместе
+// с другими правками камеры (разрешение и к/с — PATCH потока), «Сбросить» в подвале возвращает всё.
+// ЗАГЛУШКА: кодек, битрейт, опорный кадр и параметры драйвера в контракт пока не входят (запрос
+// api/requests/2026-11-09-182805Z-mockup-camera-driver-params-request.md): их умолчания и то, что о них сообщает камера, строит страница
+const CAM_DEF_CV=[{kbps:4096,gop:25},{kbps:512,gop:50}];
+const CAM_CV_KEYS=["codec","profile","brc","kbps","quality","gop"];
+const CAM_ACT_CMD={reset:"defaults",load:"readConfig"};
+function camModelText(n){return[camConnVal(n,"Производитель",n.vendor||""),camConnVal(n,"Модель",n.model||"")].filter(Boolean).join(" ")}
+// Команду камеры объявил вид и её можно дать (runUnitAction)
+function camCmdOn(n,id){return can("runUnitAction")&&(KINDS.get(nodeKind(n))?.actions||[]).some(a=>a.id===id&&!a.ruleOnly)}
+function camResetWhy(n){
+  if(camDriver(n)==="rtsp")return"У камеры RTSP настройки задают на самой камере";
+  if(!camCmdOn(n,"defaults"))return"Система не сообщает значения модели по умолчанию";
+  if(!camConnVal(n,"Модель",n.model||""))return"Модель камеры не задана: консоль не знает значений по умолчанию";
+  if(hasNoSignal(n)||n.enabled===false)return"Камера без связи";
+  return"";
+}
+function camLoadWhy(n){
+  if(camDriver(n)==="rtsp")return"У камеры RTSP настройки задают на самой камере";
+  if(!camCmdOn(n,"readConfig"))return"Система не умеет читать настройки с устройства";
+  if(hasNoSignal(n)||n.enabled===false)return"Камера без связи";
+  if(!drvSend(n))return"Консоль уже показывает настройки камеры: «Отправлять настройки устройству» выключено";
+  return"";
+}
+// Параметры драйвера, которые камера хранит у себя (x-dev) и которые можно изменить
+function camDevFields(n){const{props}=drvResolve(camDrvSchema(n),drvState(n).vals);return Object.entries(props).filter(([,p])=>p["x-dev"]&&!p.readOnly)}
+// Потоки из ответа сервера (result.streams) — по потокам карточки: по uid, у камеры без объектов потоков — по streamId
+function camSrvStreams(n,rows){
+  const out={};
+  camStreams(n).forEach(s=>{const r=(rows||[]).find(x=>s.uid?x.uid===s.uid:x.streamId===s.id);if(r)out[s.id]={res:r.res,fps:r.fps}});
+  return out;
+}
+function camResetTarget(n,srvRows){
+  const out={streams:camSrvStreams(n,srvRows),cv:{},drv:{}};
+  camStreams(n).forEach((s,i)=>{const d=CAM_DEF_CV[Math.min(i,1)];out.cv[s.id]={codec:"H.264",profile:i?"Main":"High",brc:"vbr",kbps:d.kbps,quality:"5",gop:d.gop}});
+  camDevFields(n).forEach(([f,p])=>{if("default"in p)out.drv[f]=p.default});
+  return out;
+}
+// ЗАГЛУШКА: что камера сообщает о кодеке, битрейте и драйвере. Страница один раз берёт значения консоли и меняет часть:
+// так выглядит камера, которую перенастроили в её веб-интерфейсе (режим и битрейт основного потока, один параметр драйвера)
+const camDevRep=new Map();
+function camDevReported(n,srvRows){
+  if(!camDevRep.has(n.id)){
+    const c=cvCfgOf(n),st=drvState(n),rep={cv:{},drv:{}};
+    camStreams(n).forEach((s,i)=>{const p=c.streams[s.id]||{};rep.cv[s.id]=i?{...p}:{...p,brc:"cbr",kbps:Math.max(256,Math.round((p.kbps||2048)*0.75/128)*128)}});
+    const e=camDevFields(n).find(([,p])=>Array.isArray(p.enum)&&p.enum.length>1);
+    if(e){const[f,p]=e;rep.drv[f]=p.enum.find(v=>v!==st.vals[f])}
+    camDevRep.set(n.id,rep);
+  }
+  return{streams:camSrvStreams(n,srvRows),...camDevRep.get(n.id)};
+}
+function camStreamPut(n,sid,k,v){const o=(n.streams||[]).find(x=>x.id===sid);if(o)o[k]=v;else n[k]=v}
+// Строки окна: что изменится; set() меняет значение в черновике карточки
+function camTargetRows(n,t){
+  const c=cvCfgOf(n),st=drvState(n),rows=[];
+  camStreams(n).forEach((s,i)=>{
+    const ts=t.streams[s.id],cur={res:cvStreamRes(n,s,i),fps:cvStreamFps(n,s,i)};
+    if(ts)["res","fps"].forEach(k=>{if(ts[k]!=null&&String(ts[k])!==String(cur[k]??""))
+      rows.push({label:`«${s.name}»: ${i18n(k==="res"?"разрешение":"к/с")}`,fromT:camStreamText(cur,[k]),toT:camStreamText(ts,[k]),set:()=>camStreamPut(n,s.id,k,ts[k])})});
+    const tc=t.cv[s.id],cc=c.streams[s.id]||{};
+    if(tc)CAM_CV_KEYS.forEach(k=>{if(tc[k]!==undefined&&JSON.stringify(tc[k])!==JSON.stringify(cc[k]))
+      rows.push({stub:true,label:`«${s.name}»: ${i18n(CV_KEY_RU[k])}`,fromT:cvValText(k,cc[k]),toT:cvValText(k,tc[k]),set:()=>{camPlanTouch(n,"cv");cvCfgOf(n).streams[s.id][k]=tc[k]}})});
+  });
+  const props=new Map(camDevFields(n));
+  Object.entries(t.drv).forEach(([f,v])=>{const p=props.get(f);if(!p||JSON.stringify(st.vals[f])===JSON.stringify(v))return;
+    rows.push({stub:true,label:`${i18n(p["x-ui-group"]||"")}: ${propLabel(p,f)}`,fromT:drvValText(p,st.vals[f]),toT:drvValText(p,v),
+      set:()=>{if(!Object.prototype.hasOwnProperty.call(st.base,f))st.base[f]=f in st.vals?cardClone({v:st.vals[f]}).v:undefined;st.vals[f]=v}})});
+  return rows;
+}
+// Пункт меню с причиной, почему он недоступен
+function tctxWhy(label,why){return why?`${label}<small class="tctx-why">${escHtml(i18n(why))}</small>`:label}
+function camResetOpen(id){camActOpen(id,"reset")}
+function camLoadOpen(id){camActOpen(id,"load")}
+// Ответ сервера, по которому открыто окно: «Добавить в план» берёт значения из него, а не спрашивает заново
+let camActLast=null;
+async function camActOpen(id,act){
+  const n=find(id)?.n;if(!n||n.type!=="camera")return;
+  const reset=act==="reset",why=reset?camResetWhy(n):camLoadWhy(n);if(why){toast(why);return}
+  if([...csEdit].some(k=>k.startsWith(id+":"))){toast("Закончить правку блоков карточки: нажать «Добавить в план» или «Отменить»");return}
+  let srv;
+  try{srv=(await API.post(`/units/${id}/actions/${CAM_ACT_CMD[act]}`,{idempotencyKey:opKey(),params:{}}))?.result?.streams||[]}
+  catch(e){toast(`${i18n(reset?"Сбросить к умолчаниям":"Загрузить настройки с устройства")}: ${problemText(e,n)}`);return}
+  // Пока сервер отвечал, могли открыть другой объект, начать правку блока или потерять связь: проверить заново
+  const n2=find(id)?.n;if(sel!==id||!n2)return;
+  const why2=reset?camResetWhy(n2):camLoadWhy(n2);if(why2){toast(why2);return}
+  if([...csEdit].some(k=>k.startsWith(id+":"))){toast("Закончить правку блоков карточки: нажать «Добавить в план» или «Отменить»");return}
+  camActLast={id,act,srv};
+  const rows=camTargetRows(n2,reset?camResetTarget(n2,srv):camDevReported(n2,srv)),modeOff=reset&&!drvSend(n2);
+  const all=modeOff?[{stub:true,label:i18n("Отправлять настройки устройству"),fromT:i18n("выключено"),toT:i18n("включено")},...rows]:rows;
+  const intro=reset?`<p>${i18n("Консоль заменит настройки камеры значениями по умолчанию для модели")} «${escHtml(camModelText(n2))}». ${i18n("Затем консоль запишет эти значения в камеру.")}</p>`
+    :`<p>${i18n("Камера сообщила свои настройки. Консоль заменит ими свои значения. Камера не изменится.")}</p>`;
+  const tbl=all.length?`<table class="bk-table cam-act-tbl"><thead><tr><th>#</th><th>${i18n("Параметр")}</th><th>${i18n(reset?"Сейчас":"В консоли")}</th><th>${i18n(reset?"Станет":"На камере")}</th></tr></thead><tbody>${
+      all.map((r,i)=>`<tr${r.stub?" data-cam-act-stub-row":""}><td class="bk-num">${i+1}</td><td>${escHtml(r.label)}</td><td class="bk-note">${escHtml(r.fromT)}</td><td><b>${escHtml(r.toT)}</b></td></tr>`).join("")}</tbody></table>`
+    :`<div class="nt" data-cam-act-same>${lu("check",14)} ${i18n(reset?"Настройки камеры уже совпадают со значениями модели по умолчанию.":"Настройки в консоли и на камере совпадают.")}</div>`;
+  const notes=(modeOff?`<div class="nt" data-cam-act-mode>${lu("triangle-alert",14)} ${i18n("Консоль включит «Отправлять настройки устройству»: иначе консоль не запишет значения в камеру.")}</div>`:"")
+    +(reset&&all.length?`<div class="nt bk-warn">${lu("triangle-alert",14)} ${i18n("После сброса камера может перезапустить потоки. Тогда видео и запись прервутся на несколько секунд.")}</div>`:"")
+    +`<p class="sub" style="margin:10px 0 0">${i18n("Не изменятся: имя, адрес, учётные данные, архив, детекторы, папки и права.")}</p>`
+    +(all.length?`<p class="sub" style="margin:6px 0 0">${i18n(reset?"Консоль изменит камеру, только когда вы нажмёте «Применить» в плане карточки.":"Консоль заменит значения, только когда вы нажмёте «Применить» в плане карточки.")}</p>`:"")
+    +(all.some(r=>r.stub)?`<p class="sub" data-cam-act-stub style="margin:6px 0 0">${i18n("Заглушка: разрешение и к/с потоков сообщает сервер, а кодек, битрейт и параметры драйвера пока строит страница. Их нет в контракте.")}</p>`:"");
+  const title=`${i18n(reset?"Сбросить к умолчаниям":"Загрузить настройки с устройства")}: «${escHtml(locName(n2))}»`;
+  const foot=all.length?`<button type="button" class="btn" ${onEv("click",["closeBulkModal"])}>${i18n("Отменить")}</button><button type="button" class="btn pri" data-cam-act-ok ${onEv("click",["camActAdd",`${id}`,act])}>${i18n("Добавить в план")} (${all.length})</button>`
+    :`<button type="button" class="btn" ${onEv("click",["closeBulkModal"])}>${i18n("Закрыть")}</button>`;
+  openBulkModal(title,intro+tbl+notes,foot,"bbox-wide");
+}
+function camActAdd(id,act){
+  const n=find(id)?.n;closeBulkModal();if(!n||camActLast?.id!==id||camActLast.act!==act)return;
+  const reset=act==="reset",srv=camActLast.srv,rows=camTargetRows(n,reset?camResetTarget(n,srv):camDevReported(n,srv));
+  camActLast=null;
+  if(reset&&!drvSend(n)){const c=cvCfgOf(n),b=camPlanBase.get(n.id)||{};if(!("mode"in b))b.mode=c.mode;camPlanBase.set(n.id,b);c.mode="console"}
+  rows.forEach(r=>r.set());
+  const b=camPlanBase.get(n.id)||{};b.act=act;camPlanBase.set(n.id,b);
+  setD(true);mainSeen.html=null;gear();
+  toast(reset?"Консоль добавила сброс в план карточки. Чтобы записать значения в камеру, нажать «Показать план» внизу карточки":"Консоль добавила загрузку в план карточки. Чтобы заменить значения, нажать «Показать план» внизу карточки");
 }
 // Вкладки камеры, где открыта правка блока: точка у названия вкладки
 function csOpenTabs(n){
