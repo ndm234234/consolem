@@ -15391,12 +15391,12 @@ function dwPanelHtml(cam,d,k,c){
   const head=`<section class="dw-sec dw-head"><div class="dw-name"><input type="text" value="${escHtml(locName(d))}" aria-label="${i18n("Имя")}" readonly><div class="sw ${on?"on":""}" role="switch" aria-checked="${on}" aria-label="${i18n("Включён")}" ${onEv("click",["detEnable",`${id}`])}></div></div>
     <p class="sub">${escHtml(i18n(DW_KINDS.find(x=>x[0]===k)?.[1]||detKindText(d,cam)))} · ${i18n(d.builtin?"на камере":"на сервере")}${cam?` · ${escHtml(locName(cam))}`:""}</p>
     <div class="dw-state" data-dw-st>${dwStateHtml(d)}</div></section>`;
-  // Вкладки столбца: «Детектор», «Поддетекторы» (у видов с поддетекторами), «Правила автоматизации» (в «Оборудовании»)
+  // Вкладки столбца: «Детектор», «Поддетекторы» (у видов с поддетекторами), «Автоматизация» — правила с детектором (в «Оборудовании»)
   const hasR=app==="hw",hasS=DW_SUBP.has(k);
   let tab=dwPtab();if(tab==="sub"&&!hasS||tab==="rules"&&!hasR)tab="det";
   const tl=[["det","Детектор",""]];
   if(hasS)tl.push(["sub","Поддетекторы",`<span class="dw-sec-n">${c.subs.length}</span>`]);
-  if(hasR)tl.push(["rules","Правила автоматизации",`<span class="dw-sec-n">${ruleUsersOfId(d.id).length}</span>`]);
+  if(hasR)tl.push(["rules","Автоматизация",`<span class="dw-sec-n">${ruleUsersOfId(d.id).length}</span>`]);
   const tabs=tl.length>1?`<div class="tabs dw-ptabs" role="tablist">${tl.map(([v,l,x])=>`<button type="button" role="tab" class="tab${tab===v?" on":""}" aria-selected="${tab===v}" data-dw-ptab="${v}" ${onEv("click",["dwPtabSet",v])}>${i18n(l)}${x}</button>`).join("")}</div>`:"";
   if(tab==="rules")return head+tabs+`<section class="dw-sec dw-rules">${ruleUsesCardHtml(d)}</section>`;
   if(k==="other")return head+tabs+dwSec("Параметры",detFieldsHtml(cam,d,"Имя"));
