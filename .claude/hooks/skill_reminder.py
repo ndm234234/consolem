@@ -19,6 +19,11 @@ RULES = [
         "except": ["api/requests/*"],
         "why": "правка контракта, сервера, наборов или тестов API",
     },
+    {
+        "skill": "vms-requests",
+        "paths": ["api/requests/*"],
+        "why": "правка запроса, уведомления или ответа команды VMS",
+    },
 ]
 
 
