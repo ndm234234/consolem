@@ -3045,9 +3045,21 @@ body.dw-resizing,body.dw-resizing *{cursor:col-resize!important;user-select:none
 .dw-foot-in{animation:dwFootIn .2s ease-out}
 @keyframes dwFootIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @media(prefers-reduced-motion:reduce){.dw-foot-in{animation:none}}
-@media(max-width:1180px){.dw-grid{grid-template-columns:minmax(0,1fr)}.dw-grip{display:none}.dw-right{position:static;max-height:none}}
+/* Две половины: карточка детектора занимает видимую часть, у кадра с превью и у настроек своя прокрутка.
+   Полоса плана сокращает обе половины снизу. На узком экране — один столбец и общая прокрутка */
+@media(min-width:1181px){
+  .sc:has(> .dw){display:flex;flex-direction:column;overflow:hidden}
+  .sc:has(> .dw) > *{flex:none}
+  .sc > .dw{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+  .dw > .dw-grid{flex:1 1 auto;min-height:0;grid-template-rows:minmax(0,1fr);align-items:stretch}
+  .dw-left,.dw-right{min-height:0;overflow:auto;scrollbar-gutter:stable;overscroll-behavior:contain}
+}
+@media(max-width:1180px){.dw-grid{grid-template-columns:minmax(0,1fr)}.dw-grip{display:none}}
 .dw-left{background:var(--p);border:1px solid var(--ln);border-radius:10px;padding:12px;min-width:0}
-.dw-right{background:var(--p);border:1px solid var(--ln);border-radius:10px;min-width:0;position:sticky;top:0;max-height:var(--dw-rh,calc(100vh - 150px));overflow:auto;scrollbar-gutter:stable;overscroll-behavior:contain}
+.dw-right{background:var(--p);border:1px solid var(--ln);border-radius:10px;min-width:0}
+.dw-rules .card{border:0;border-radius:0;margin:0;background:none}
+.dw-rules .ch{padding:0 0 8px;border:0;font-size:13px;font-weight:600}
+.dw-rules .cb{padding:0}
 .dw-tools{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px}
 .dw-tools .btn,.dw-row .btn{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
 .dw .btn.on{border-color:var(--bl);background:var(--one-info-bg);color:var(--x-link)}
@@ -7285,7 +7297,6 @@ function cardFootHtml(){
 }
 function cardFootRefresh(){
   const el=document.getElementById("cardFoot");if(el)el.outerHTML=cardFootHtml();
-  if(typeof dwFit==="function")dwFit();
   decorateTreeSel();
 }
 function cardPlan(){
@@ -9415,7 +9426,7 @@ function goFav(i){
 // курсор в поле, и терять это из-за того, что обновилась соседняя строка,
 // он не должен. Положение ищем по устойчивым признакам (селектор прокручиваемого
 // блока и его номер), а не по узлам — узлы после перерисовки уже другие.
-const VIEW_SCROLLERS=[".sc",".dw-right",".tree",".fav-panel-list",".lan-wrap",".gtbl",".dev-results-scroll",".dev-wrap-scroll",".plan-rows",".srv-list",".pos-l"];
+const VIEW_SCROLLERS=[".sc",".dw-left",".dw-right",".tree",".fav-panel-list",".lan-wrap",".gtbl",".dev-results-scroll",".dev-wrap-scroll",".plan-rows",".srv-list",".pos-l"];
 function focusSelector(el){
   if(!el||!/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))return null;
   if(el.id)return"#"+el.id;
@@ -14923,10 +14934,10 @@ function dwClock(t){return new Date(DW_T0+t*1000).toLocaleTimeString("ru-RU",{ho
 function detWindowHtml(cam,d){
   const k=dwKindOf(d),c=dwC(d);
   if(dw.id!==d.id+k){dw.id=d.id+k;dw.sel=null;dw.tool=null;dw.subSel=null;dw.subNew=false}
-  setTimeout(dwStart,0);setTimeout(dwLand,0);setTimeout(dwRwAria,0);setTimeout(dwFit,0);
+  setTimeout(dwStart,0);setTimeout(dwLand,0);setTimeout(dwRwAria,0);
   return detBackHtml(cam)+`<div class="dw" data-dw="${escHtml(d.id)}">
     ${dwStubHtml(d,k)}
-    <div class="dw-grid" style="${dwRwCss()}${dw.rh?`;--dw-rh:${dw.rh}px`:""}">
+    <div class="dw-grid" style="${dwRwCss()}">
       <div class="dw-left">
         <div class="dw-tools">${dwToolsHtml(d,k)}<span class="dw-lay">${dwLayHtml(k)}</span></div>
         <div class="dw-stage${dw.tool?" draw":""}" ${onEv("mousedown",["dwDown",onEv.el,onEv.event])}>
@@ -14952,24 +14963,6 @@ function dwRwCss(){
   return dw.rw?`--dw-rw:clamp(320px,${(dw.rw*100).toFixed(1)}%,calc(100% - 400px))`:"";
 }
 function dwRwNow(g){const grid=g.closest(".dw-grid"),r=g.nextElementSibling;return r.getBoundingClientRect().width/Math.max(1,grid.getBoundingClientRect().width)}
-// Столбец настроек прилипает к верху карточки и всегда доходит до низа видимой части (до полосы плана, если она
-// есть): верх — у сетки или у края, когда карточку прокрутили; низ — у края видимой части, но не ниже левого
-// столбца, чтобы низы обоих столбцов совпадали. Высоту пересчитывает прокрутка карточки, размер окна, полоса плана
-// и рост левого столбца
-function dwFit(){
-  const sc=document.querySelector("#main .sc"),dg=sc&&sc.querySelector(".dw-grid"),R=dg&&dg.querySelector(".dw-right"),L=dg&&dg.querySelector(".dw-left");
-  if(!R||!L)return;
-  if(getComputedStyle(R).position!=="sticky"){dg.style.removeProperty("--dw-rh");return}
-  // Прилипший столбец стоит у края с отступом карточки (padding-top у .sc)
-  const s=sc.getBoundingClientRect(),cs=getComputedStyle(sc),vb=s.top+sc.clientHeight-parseFloat(cs.paddingBottom);
-  const top=Math.max(s.top+parseFloat(cs.paddingTop),dg.getBoundingClientRect().top),bot=Math.min(vb,L.getBoundingClientRect().bottom);
-  const h=Math.max(240,Math.floor(bot-top));
-  if(h!==dw.rh||dg.style.getPropertyValue("--dw-rh")!==`${h}px`){dw.rh=h;dg.style.setProperty("--dw-rh",`${h}px`)}
-  if(!L._dwRo&&window.ResizeObserver){L._dwRo=new ResizeObserver(()=>dwFitSoon());L._dwRo.observe(L)}
-}
-function dwFitSoon(){if(dw.fitRaf)return;dw.fitRaf=requestAnimationFrame(()=>{dw.fitRaf=0;dwFit()})}
-addEventListener("resize",()=>dwFitSoon());
-document.addEventListener("scroll",e=>{if(e.target instanceof Element&&e.target.matches("#main .sc"))dwFitSoon()},true);
 function dwRwAria(g){
   g=g||document.querySelector("#main .dw-grip");if(!g||!g.isConnected||!g.offsetParent)return;
   const r=g.nextElementSibling.getBoundingClientRect().width;
@@ -14977,7 +14970,7 @@ function dwRwAria(g){
 }
 function dwRwSet(g,frac,save){
   dw.rw=frac==null?null:Math.min(.8,Math.max(.15,frac));
-  // Меняем только ширину: высота столбца (--dw-rh) остаётся прежней
+  // Меняем только ширину: остальной inline-стиль сетки не трогаем
   const st=g.closest(".dw-grid").style,v=dwRwCss();
   if(v)st.setProperty("--dw-rw",v.slice(v.indexOf(":")+1));else st.removeProperty("--dw-rw");
   dwRwAria(g);
@@ -15397,7 +15390,8 @@ function dwPanelHtml(cam,d,k,c){
   const head=`<section class="dw-sec dw-head"><div class="dw-name"><input type="text" value="${escHtml(locName(d))}" aria-label="${i18n("Имя")}" readonly><div class="sw ${on?"on":""}" role="switch" aria-checked="${on}" aria-label="${i18n("Включён")}" ${onEv("click",["detEnable",`${id}`])}></div></div>
     <p class="sub">${escHtml(i18n(DW_KINDS.find(x=>x[0]===k)?.[1]||detKindText(d,cam)))} · ${i18n(d.builtin?"на камере":"на сервере")}${cam?` · ${escHtml(locName(cam))}`:""}</p>
     <div class="dw-state" data-dw-st>${dwStateHtml(d)}</div></section>`;
-  if(k==="other")return head+dwSec("Параметры",detFieldsHtml(cam,d,"Имя"));
+  const rules=app==="hw"?`<section class="dw-sec dw-rules">${ruleUsesCardHtml(d)}</section>`:"";
+  if(k==="other")return head+dwSec("Параметры",detFieldsHtml(cam,d,"Имя"))+rules;
   const what=k==="linecross"||k==="neural"?dwSec("Классы объектов",dwChips(id,["person","car","bike"],c.classes,"dwClass")+dwHelp("Детектор сработает только на объекты выбранных классов.")):"";
   const when=[];
   if(k==="motion"||k==="tracker")when.push(dwRange(id,"sens","Чувствительность",1,100,1,"","Чем выше чувствительность, тем более слабое движение замечает детектор.","sens"));
@@ -15411,10 +15405,10 @@ function dwPanelHtml(cam,d,k,c){
   if(k==="abandoned")when.push(dwNum(id,"stay","Предмет лежит без движения дольше",5,1800,"с"));
   const adv=`<details class="dw-adv"><summary>${i18n("Дополнительно")}</summary><div class="dw-adv-b">${detFieldsHtml(cam,d,"Имя")}${cam?detServerNoteHtml(cam,d):""}</div></details>`;
   const where=dwSec("Зоны детектирования",dwAreasHtml(id,k,c))+(DW_SIZE.has(k)?dwSizeSec(id):""),wh=when.length?dwSec("Условия срабатывания",when.join("")):"";
-  if(!DW_SUBP.has(k))return head+what+where+wh+adv;
+  if(!DW_SUBP.has(k))return head+what+where+wh+adv+rules;
   // Вкладки: настройки детектора отдельно от поддетекторов, столбец короче
   const tab=dwPtab(),tabs=`<div class="tabs dw-ptabs" role="tablist">${[["det","Детектор",""],["sub","Поддетекторы",`<span class="dw-sec-n">${c.subs.length}</span>`]].map(([v,l,x])=>`<button type="button" role="tab" class="tab${tab===v?" on":""}" aria-selected="${tab===v}" data-dw-ptab="${v}" ${onEv("click",["dwPtabSet",v])}>${i18n(l)}${x}</button>`).join("")}</div>`;
-  return head+tabs+(tab==="det"?what+where+wh+adv:`<section class="dw-sec dw-subs-tab">${dwSubsHtml(id,k,c)}</section>`);
+  return head+tabs+(tab==="det"?what+where+wh+adv+rules:`<section class="dw-sec dw-subs-tab">${dwSubsHtml(id,k,c)}</section>`);
 }
 // ── Действия ──
 function dwRoot(){return document.querySelector("[data-dw]")}
@@ -22357,6 +22351,7 @@ function raApply(){
 // Карточка нужна там, где устройство бывает событием или действием, и только на первой вкладке («Подключение»).
 function ruleUsesFor(n){
   if(app!=="hw"||!["camera","sensor","relay","acfa_sensor","det"].includes(n.type)||lanTabOpen(n))return"";
+  if(n.type==="det")return"";// у детектора правила — разделом в столбце настроек (dwPanelHtml): карточка делится на две половины
   const tabs=tabsFor(n);
   if(tabs.length&&tab!==tabs[0][0])return"";
   return ruleUsesCardHtml(n);
