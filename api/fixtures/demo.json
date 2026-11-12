@@ -5603,6 +5603,9 @@
    "createParents": [
     "camera"
    ],
+   "children": [
+    "subdet"
+   ],
    "implements": [
     "vms.detector/1"
    ],
@@ -5630,9 +5633,86 @@
       },
       "description": "Что считать тревогой у камеры и детектора: варианты из reference.eventKinds. Это о классе события, а не о жизни тревоги"
      },
+     "analyticsKind": {
+      "x-label": {
+       "key": "field.analyticsKind",
+       "text": "Вид аналитики",
+       "lang": "ru"
+      },
+      "type": "string",
+      "enum": [
+       "tracker",
+       "neural"
+      ],
+      "x-enum-labels": {
+       "tracker": {
+        "key": "enum.analyticsKind.tracker",
+        "text": "Трекер объектов",
+        "lang": "ru"
+       },
+       "neural": {
+        "key": "enum.analyticsKind.neural",
+        "text": "Нейросетевой трекер",
+        "lang": "ru"
+       }
+      },
+      "description": "С 0.12.0. Вид детектора вне перечня detectorKind; действует только при detectorKind: other. Незнакомое значение клиент показывает как other"
+     },
      "builtin": {
       "type": "boolean",
       "description": "Детектор работает на камере. Заводит оператор, потока на сервер не требует"
+     },
+     "classes": {
+      "x-label": {
+       "key": "field.classes",
+       "text": "Классы объектов",
+       "lang": "ru"
+      },
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+       "type": "string",
+       "enum": [
+        "person",
+        "car",
+        "bike"
+       ]
+      },
+      "description": "С 0.12.0. Нет поля — все классы. Незнакомый код клиент пропускает"
+     },
+     "confidence": {
+      "x-label": {
+       "key": "field.confidence",
+       "text": "Достоверность",
+       "lang": "ru"
+      },
+      "type": "integer",
+      "minimum": 10,
+      "maximum": 99,
+      "x-ui-unit": "%",
+      "description": "С 0.12.0. Нет поля — умолчание детектора (встроенный сервер: 60)"
+     },
+     "crowdHoldSec": {
+      "x-label": {
+       "key": "field.crowdHoldSec",
+       "text": "Держать скопление",
+       "lang": "ru"
+      },
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 600,
+      "description": "С 0.12.0. crowd. Нет поля — умолчание (10)"
+     },
+     "crowdMin": {
+      "x-label": {
+       "key": "field.crowdMin",
+       "text": "Людей в скоплении",
+       "lang": "ru"
+      },
+      "type": "integer",
+      "minimum": 2,
+      "maximum": 50,
+      "description": "С 0.12.0. crowd. Нет поля — умолчание детектора (4)"
      },
      "detectorKind": {
       "x-label": {
@@ -5689,6 +5769,37 @@
        }
       }
      },
+     "direction": {
+      "x-label": {
+       "key": "field.direction",
+       "text": "Направление",
+       "lang": "ru"
+      },
+      "type": "string",
+      "enum": [
+       "ab",
+       "ba",
+       "both"
+      ],
+      "x-enum-labels": {
+       "ab": {
+        "key": "enum.direction.ab",
+        "text": "От A к B",
+        "lang": "ru"
+       },
+       "ba": {
+        "key": "enum.direction.ba",
+        "text": "От B к A",
+        "lang": "ru"
+       },
+       "both": {
+        "key": "enum.direction.both",
+        "text": "В обе стороны",
+        "lang": "ru"
+       }
+      },
+      "description": "С 0.12.0. Для zone.shape line. A — сторона, где (p1−p0)×(x−p0) < 0 (кадр, y вниз). Нет поля — both, как раньше"
+     },
      "enabled": {
       "x-label": {
        "key": "field.enabled",
@@ -5696,6 +5807,48 @@
        "lang": "ru"
       },
       "type": "boolean"
+     },
+     "extraZones": {
+      "x-label": {
+       "key": "field.extraZones",
+       "text": "Дополнительные зоны",
+       "lang": "ru"
+      },
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "type",
+        "points"
+       ],
+       "properties": {
+        "type": {
+         "type": "string",
+         "enum": [
+          "in",
+          "ex"
+         ]
+        },
+        "points": {
+         "type": "array",
+         "minItems": 3,
+         "maxItems": 64,
+         "items": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+           "type": "number",
+           "minimum": 0,
+           "maximum": 1
+          }
+         }
+        }
+       }
+      },
+      "description": "С 0.12.0. Зоны сверх zone: in — ещё зоны детектирования, ex — зоны исключения (многоугольники). Область детектирования — zone (rect или polygon) и все in, из неё вырезаны ex. Нет поля — только zone, как раньше"
      },
      "labels": {
       "x-label": {
@@ -5709,9 +5862,74 @@
       },
       "description": "Где работает: метки серверов из reference.serverLabels. Сервер без метки запись не возьмёт"
      },
+     "minDurationSec": {
+      "x-label": {
+       "key": "field.minDurationSec",
+       "text": "Минимальная длительность",
+       "lang": "ru"
+      },
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 30,
+      "description": "С 0.12.0. motion. Нет поля — 0"
+     },
+     "objectSize": {
+      "x-label": {
+       "key": "field.objectSize",
+       "text": "Размер объекта",
+       "lang": "ru"
+      },
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "min": {
+        "type": "array",
+        "minItems": 2,
+        "maxItems": 2,
+        "items": {
+         "type": "number",
+         "minimum": 0,
+         "maximum": 1
+        }
+       },
+       "max": {
+        "type": "array",
+        "minItems": 2,
+        "maxItems": 2,
+        "items": {
+         "type": "number",
+         "minimum": 0,
+         "maximum": 1
+        }
+       }
+      },
+      "description": "С 0.12.0. [ширина, высота] в долях кадра. Нет поля или части — без ограничения. Поддетекторы берут его у детектора"
+     },
      "params": {
       "type": "string",
       "description": "Настройки серверного детектора строкой"
+     },
+     "plateWidth": {
+      "x-label": {
+       "key": "field.plateWidth",
+       "text": "Ширина номера",
+       "lang": "ru"
+      },
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "min": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1
+       },
+       "max": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1
+       }
+      },
+      "description": "С 0.12.0. lpr: доли ширины кадра. Нет поля — без ограничения"
      },
      "sensitivity": {
       "x-label": {
@@ -5736,6 +5954,17 @@
        ]
       },
       "x-ui-widget": "ref"
+     },
+     "stillSec": {
+      "x-label": {
+       "key": "field.stillSec",
+       "text": "Неподвижность",
+       "lang": "ru"
+      },
+      "type": "integer",
+      "minimum": 5,
+      "maximum": 1800,
+      "description": "С 0.12.0. abandoned. Нет поля — умолчание (60)"
      },
      "stream": {
       "x-label": {
@@ -5787,6 +6016,375 @@
       ],
       "additionalProperties": false,
       "description": "Зона детектора, у встроенного и серверного. Нет поля — вся картинка"
+     }
+    }
+   }
+  },
+  {
+   "kind": "subdet",
+   "label": {
+    "key": "kind.subdet",
+    "text": "Поддетектор",
+    "lang": "ru"
+   },
+   "icon": "det",
+   "parents": [
+    "det"
+   ],
+   "createParents": [
+    "det"
+   ],
+   "implements": [
+    "vms.subdetector/1"
+   ],
+   "capabilities": [
+    "create",
+    "rename",
+    "enable",
+    "delete"
+   ],
+   "events": [
+    {
+     "id": "subdet.triggered",
+     "label": {
+      "key": "event.subdet.triggered",
+      "text": "Поддетектор сработал",
+      "lang": "ru"
+     },
+     "alarm": false,
+     "right": {
+      "class": "cam",
+      "level": "FULL"
+     }
+    }
+   ],
+   "schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "subdetectorKind",
+     "zone"
+    ],
+    "properties": {
+     "classes": {
+      "x-label": {
+       "key": "field.classes",
+       "text": "Классы объектов",
+       "lang": "ru"
+      },
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+       "type": "string",
+       "enum": [
+        "person",
+        "car",
+        "bike"
+       ]
+      },
+      "description": "Нет поля — все классы. Незнакомый код клиент пропускает"
+     },
+     "direction": {
+      "x-label": {
+       "key": "field.direction",
+       "text": "Направление",
+       "lang": "ru"
+      },
+      "type": "string",
+      "enum": [
+       "ab",
+       "ba",
+       "both"
+      ],
+      "x-enum-labels": {
+       "ab": {
+        "key": "enum.direction.ab",
+        "text": "От A к B",
+        "lang": "ru"
+       },
+       "ba": {
+        "key": "enum.direction.ba",
+        "text": "От B к A",
+        "lang": "ru"
+       },
+       "both": {
+        "key": "enum.direction.both",
+        "text": "В обе стороны",
+        "lang": "ru"
+       }
+      },
+      "description": "Для line. Нет поля — both"
+     },
+     "enabled": {
+      "x-label": {
+       "key": "field.enabled",
+       "text": "Включено",
+       "lang": "ru"
+      },
+      "type": "boolean",
+      "description": "Нет поля — включён"
+     },
+     "group": {
+      "x-label": {
+       "key": "field.group",
+       "text": "Группа",
+       "lang": "ru"
+      },
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "count"
+      ],
+      "properties": {
+       "count": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100
+       },
+       "waitSec": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 86400
+       }
+      },
+      "description": "Нет поля — без группы"
+     },
+     "minObjects": {
+      "x-label": {
+       "key": "field.minObjects",
+       "text": "Объектов не меньше",
+       "lang": "ru"
+      },
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "description": "multi"
+     },
+     "offset": {
+      "x-label": {
+       "key": "field.offset",
+       "text": "Смещение",
+       "lang": "ru"
+      },
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "x": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 40
+       },
+       "y": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 40
+       }
+      },
+      "description": "% рамки объекта"
+     },
+     "speed": {
+      "x-label": {
+       "key": "field.speed",
+       "text": "Скорость",
+       "lang": "ru"
+      },
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "min": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 500
+       },
+       "max": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 500
+       }
+      },
+      "description": "move. Единица — условная, 0–500. Нет поля — без ограничения"
+     },
+     "subdetectorKind": {
+      "x-label": {
+       "key": "field.subdetectorKind",
+       "text": "Вид поддетектора",
+       "lang": "ru"
+      },
+      "type": "string",
+      "enum": [
+       "line",
+       "enter",
+       "exit",
+       "dwell",
+       "stop",
+       "move",
+       "multi",
+       "a2a",
+       "abandoned",
+       "mask"
+      ],
+      "x-immutable": true,
+      "x-enum-labels": {
+       "line": {
+        "key": "enum.subdetectorKind.line",
+        "text": "Пересечение линии",
+        "lang": "ru"
+       },
+       "enter": {
+        "key": "enum.subdetectorKind.enter",
+        "text": "Вход в область",
+        "lang": "ru"
+       },
+       "exit": {
+        "key": "enum.subdetectorKind.exit",
+        "text": "Выход из области",
+        "lang": "ru"
+       },
+       "dwell": {
+        "key": "enum.subdetectorKind.dwell",
+        "text": "Пребывание в области",
+        "lang": "ru"
+       },
+       "stop": {
+        "key": "enum.subdetectorKind.stop",
+        "text": "Остановка в области",
+        "lang": "ru"
+       },
+       "move": {
+        "key": "enum.subdetectorKind.move",
+        "text": "Движение в области",
+        "lang": "ru"
+       },
+       "multi": {
+        "key": "enum.subdetectorKind.multi",
+        "text": "Множество объектов",
+        "lang": "ru"
+       },
+       "a2a": {
+        "key": "enum.subdetectorKind.a2a",
+        "text": "Переход из области в область",
+        "lang": "ru"
+       },
+       "abandoned": {
+        "key": "enum.subdetectorKind.abandoned",
+        "text": "Оставленный предмет",
+        "lang": "ru"
+       },
+       "mask": {
+        "key": "enum.subdetectorKind.mask",
+        "text": "Маскирование треков",
+        "lang": "ru"
+       }
+      },
+      "description": "Незнакомое значение клиент показывает кодом, только чтение"
+     },
+     "timeMode": {
+      "x-label": {
+       "key": "field.timeMode",
+       "text": "Условие по времени",
+       "lang": "ru"
+      },
+      "type": "string",
+      "enum": [
+       "gt",
+       "lt",
+       "eq"
+      ],
+      "x-enum-labels": {
+       "gt": {
+        "key": "enum.timeMode.gt",
+        "text": "дольше",
+        "lang": "ru"
+       },
+       "lt": {
+        "key": "enum.timeMode.lt",
+        "text": "меньше",
+        "lang": "ru"
+       },
+       "eq": {
+        "key": "enum.timeMode.eq",
+        "text": "ровно",
+        "lang": "ru"
+       }
+      },
+      "description": "dwell, stop, abandoned. Нет поля — gt"
+     },
+     "timeSec": {
+      "x-label": {
+       "key": "field.timeSec",
+       "text": "Время, с",
+       "lang": "ru"
+      },
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 172800
+     },
+     "zone": {
+      "x-label": {
+       "key": "field.zone",
+       "text": "Зона",
+       "lang": "ru"
+      },
+      "type": "object",
+      "properties": {
+       "shape": {
+        "type": "string",
+        "enum": [
+         "rect",
+         "polygon",
+         "line"
+        ],
+        "description": "rect, line — две точки, polygon — от трёх. Иначе 422 VALIDATION_FAILED, field: zone"
+       },
+       "points": {
+        "type": "array",
+        "description": "Точки [x, y], доли кадра от 0 до 1",
+        "items": {
+         "type": "array",
+         "items": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+         }
+        }
+       }
+      },
+      "required": [
+       "shape",
+       "points"
+      ],
+      "additionalProperties": false,
+      "description": "Зона детектора, у встроенного и серверного. Нет поля — вся картинка"
+     },
+     "zoneTo": {
+      "x-label": {
+       "key": "field.zoneTo",
+       "text": "Вторая зона",
+       "lang": "ru"
+      },
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "points"
+      ],
+      "properties": {
+       "points": {
+        "type": "array",
+        "minItems": 3,
+        "maxItems": 64,
+        "items": {
+         "type": "array",
+         "minItems": 2,
+         "maxItems": 2,
+         "items": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+         }
+        }
+       }
+      },
+      "description": "Только a2a: зона, куда переходит объект"
      }
     }
    }
@@ -9223,13 +9821,24 @@
    },
    "properties": [
     "alarmKinds",
+    "analyticsKind",
     "builtin",
+    "classes",
+    "confidence",
+    "crowdHoldSec",
+    "crowdMin",
     "detectorKind",
+    "direction",
     "enabled",
+    "extraZones",
     "labels",
+    "minDurationSec",
+    "objectSize",
     "params",
+    "plateWidth",
     "sensitivity",
     "serverId",
+    "stillSec",
     "stream",
     "template",
     "zone"
@@ -9392,6 +10001,28 @@
    "status": [
     "webCertificate",
     "webReservedPorts"
+   ]
+  },
+  {
+   "id": "vms.subdetector/1",
+   "label": {
+    "key": "profile.vms.subdetector/1",
+    "text": "Поддетектор",
+    "lang": "ru"
+   },
+   "properties": [
+    "classes",
+    "direction",
+    "enabled",
+    "group",
+    "minObjects",
+    "offset",
+    "speed",
+    "subdetectorKind",
+    "timeMode",
+    "timeSec",
+    "zone",
+    "zoneTo"
    ]
   }
  ],
@@ -13255,6 +13886,40 @@
     ],
     "alarmKinds": [
      "motion"
+    ],
+    "objectSize": {
+     "min": [
+      0.02,
+      0.04
+     ],
+     "max": [
+      0.5,
+      0.6
+     ]
+    },
+    "minDurationSec": 1,
+    "extraZones": [
+     {
+      "type": "ex",
+      "points": [
+       [
+        0.4,
+        0.4
+       ],
+       [
+        0.6,
+        0.4
+       ],
+       [
+        0.6,
+        0.6
+       ],
+       [
+        0.4,
+        0.6
+       ]
+      ]
+     }
     ]
    },
    "status": {
@@ -13363,7 +14028,25 @@
     "builtin": false,
     "detectorKind": "linecross",
     "sensitivity": 10,
-    "enabled": true
+    "enabled": true,
+    "zone": {
+     "shape": "line",
+     "points": [
+      [
+       0.47,
+       0.5
+      ],
+      [
+       0.53,
+       0.98
+      ]
+     ]
+    },
+    "direction": "ab",
+    "classes": [
+     "person",
+     "bike"
+    ]
    },
    "status": {
     "link": "online"
@@ -13415,7 +14098,9 @@
     "builtin": false,
     "detectorKind": "crowd",
     "sensitivity": 13,
-    "enabled": true
+    "enabled": true,
+    "crowdMin": 4,
+    "crowdHoldSec": 10
    },
    "status": {
     "link": "online"
@@ -27646,6 +28331,104 @@
     "test.unknown": {
      "site": "Офис на Тверской"
     }
+   }
+  },
+  {
+   "uid": "30000027-0001-4000-8000-000000000000",
+   "kind": "det",
+   "parentId": "30000041-0000-4000-8000-000000000000",
+   "domainId": "10000001-0000-4000-8000-000000000000",
+   "name": "Трекер объектов",
+   "version": "1",
+   "properties": {
+    "builtin": false,
+    "detectorKind": "other",
+    "analyticsKind": "tracker",
+    "sensitivity": 60,
+    "enabled": true,
+    "labels": [
+     "gpu"
+    ],
+    "objectSize": {
+     "min": [
+      0.03,
+      0.06
+     ],
+     "max": [
+      0.5,
+      0.6
+     ]
+    },
+    "zone": {
+     "shape": "polygon",
+     "points": [
+      [
+       0.1,
+       0.15
+      ],
+      [
+       0.9,
+       0.15
+      ],
+      [
+       0.9,
+       0.85
+      ],
+      [
+       0.1,
+       0.85
+      ]
+     ]
+    }
+   },
+   "status": {
+    "link": "online"
+   }
+  },
+  {
+   "uid": "30000027-0002-4000-8000-000000000000",
+   "kind": "det",
+   "parentId": "30000041-0000-4000-8000-000000000000",
+   "domainId": "10000001-0000-4000-8000-000000000000",
+   "name": "Нейросетевой трекер",
+   "version": "1",
+   "properties": {
+    "builtin": false,
+    "detectorKind": "other",
+    "analyticsKind": "neural",
+    "sensitivity": 50,
+    "enabled": true,
+    "labels": [
+     "gpu"
+    ],
+    "confidence": 60,
+    "classes": [
+     "person"
+    ],
+    "zone": {
+     "shape": "polygon",
+     "points": [
+      [
+       0,
+       0.45
+      ],
+      [
+       1,
+       0.45
+      ],
+      [
+       1,
+       1
+      ],
+      [
+       0,
+       1
+      ]
+     ]
+    }
+   },
+   "status": {
+    "link": "online"
    }
   }
  ],

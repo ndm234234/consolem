@@ -1238,6 +1238,24 @@
     }) || null;
   }
   const conflictParams = (x) => ({ reason: "incompatible", with: x.id });
+  // С 0.12.0: пара min/max — меньшее не выше большего. objectSize — [ширина, высота], plateWidth — число. {field, params} или null
+  const aboveMax = (lo, hi) => (Array.isArray(lo) ? Array.isArray(hi) && lo.some((v, i) => v > hi[i]) : typeof lo === "number" && typeof hi === "number" && lo > hi);
+  const rangeErr = (obj, name) => {
+    const r = obj && obj[name];
+    return r && aboveMax(r.min, r.max) ? { field: `/properties/${name}/min`, params: { reason: "minAboveMax" } } : null;
+  };
+  // Новые настройки детектора (objectSize, plateWidth, analyticsKind) по записи целиком: {field, params} или null. analyticsKind
+  // действует только при detectorKind: other; сервер не отказывает и не сбрасывает его, когда старый клиент меняет detectorKind
+  const settingsErr = (whole, set) => {
+    if (!whole) return null;
+    const bad = rangeErr(whole, "objectSize") || rangeErr(whole, "plateWidth");
+    if (bad) return bad;
+    return set.analyticsKind != null && whole.detectorKind !== "other" ? { field: "/properties/analyticsKind", params: { reason: "notOther" } } : null;
+  };
+  const settingsProblem = (whole, set, ctx) => {
+    const e = settingsErr(whole, set);
+    return e ? ctx.problem(422, "VALIDATION_FAILED", e.field.endsWith("/min") ? "Наименьшее значение выше наибольшего" : "Вид аналитики задают только при detectorKind: other", e) : null;
+  };
   const detProblem = (rec, patch, ctx) => (rec.type === "det" ? zoneProblem(patch.zone, ctx) || sensProblem(rec, patch.sensitivity, null, ctx) : null);
   // Включение несовместимого: в запросе — 409, в групповой операции — fail шага
   function clashProblem(rec, patch, ctx) {
@@ -1248,6 +1266,8 @@
   function detCreateProblem(spec, cam, ctx) {
     if (spec.type !== "det") return null;
     if (zoneProblem(spec.zone, ctx)) return { code: "VALIDATION_FAILED", field: "zone" };
+    const ne = settingsErr(spec, spec);
+    if (ne) return Object.assign({ code: "VALIDATION_FAILED" }, ne);
     if (!spec.builtin || !cam) return null;
     if (!cam.detectorOptions) return { code: "NOT_SUPPORTED", field: "builtin" };
     if (!detOption(spec, cam, ctx)) return { code: "VALIDATION_FAILED", field: "template" };
@@ -1262,14 +1282,48 @@
     beforeCreate(u, parent, ctx) {
       const s = specOf(u);
       const bad = detCreateProblem(s, parent && !parent.fresh ? recOf(parent, ctx) : null, ctx);
-      if (bad) return ctx.problem(bad.code === "BUSY" ? 409 : 422, bad.code, "Детектор этой камеры так не заводится", { field: bad.field });
+      if (bad) return ctx.problem(bad.code === "BUSY" ? 409 : 422, bad.code, "Детектор этой камеры так не заводится", bad.params ? { field: bad.field, params: bad.params } : { field: bad.field });
       // Серверный детектор без меток считает на сервере с GPU
       if (!s.builtin && !("labels" in props(u))) props(u).labels = ["gpu"];
       return null;
     },
     beforeSet(u, patch, whole, ctx) {
       const rec = recOf(u, ctx), set = flat(patch);
-      return detProblem(rec, set, ctx) || clashProblem(rec, set, ctx);
+      return detProblem(rec, set, ctx) || settingsProblem(whole, set, ctx) || clashProblem(rec, set, ctx);
+    },
+    // Поддетекторы (с 0.12.0) уходят с детектором — как строки незнакомых видов под камерой; тоже без отката, как удаление детектора
+    dependents: (u, ctx) => ({ remove: cameraRows(u, ctx), detach: [] }),
+  };
+
+  /* ===== vms.subdetector/1 (с 0.12.0) — поддетектор: дочерний объект вида subdet под детектором-трекером или детектором движения ===== */
+
+  // Что принимает поддетекторы: движение, трекер объектов, нейросетевой трекер. null — не принимает
+  const subHost = (p) => (p.detectorKind === "motion" ? "motion" : p.detectorKind === "other" && (p.analyticsKind === "tracker" || p.analyticsKind === "neural") ? p.analyticsKind : null);
+  // Свойства поддетектора целиком (p) под родителя вида host. Блокировки родителя не берёт: над ним может идти операция плана
+  // с тем же детектором (ctx.lockedProblem без ctx.held отказал бы своей же операции — запрос про шаги потоков)
+  function subProblem(p, host, ctx) {
+    const bad = (code, field, extra) => ctx.problem(422, code, extra.message, { field, params: extra.params });
+    if (p.subdetectorKind === "abandoned" && host !== "tracker") return bad("NOT_SUPPORTED", "/properties/subdetectorKind", { message: "Оставленный предмет есть только у трекера объектов" });
+    const shape = (p.zone || {}).shape, wantLine = p.subdetectorKind === "line";
+    if (wantLine ? shape !== "line" : shape === "line") return bad("VALIDATION_FAILED", "/properties/zone", { message: wantLine ? "Для линии нужна зона line" : "Нужна зона rect или polygon", params: { reason: "shape" } });
+    const z = zoneProblem(p.zone, ctx);
+    if (z) return z;
+    if ((p.subdetectorKind === "a2a") !== (p.zoneTo != null)) return bad("VALIDATION_FAILED", "/properties/zoneTo", { message: "Вторая зона нужна только для перехода из области в область", params: { reason: p.zoneTo != null ? "unexpected" : "required" } });
+    if (["stop", "abandoned"].includes(p.subdetectorKind) && !(p.timeSec >= 1)) return bad("VALIDATION_FAILED", "/properties/timeSec", { message: "Время — не меньше 1 секунды", params: { reason: "required" } });
+    if (p.speed && aboveMax(p.speed.min, p.speed.max)) return bad("VALIDATION_FAILED", "/properties/speed/min", { message: "Наименьшая скорость выше наибольшей", params: { reason: "minAboveMax" } });
+    return null;
+  }
+  const subdetector = {
+    subHost, subProblem,
+    beforeCreate(u, parent, ctx) {
+      const host = parent ? subHost(parent.fresh ? parent.properties || {} : props(parent)) : null;
+      if (!host) return ctx.problem(422, "NOT_SUPPORTED", "Этот детектор поддетекторов не принимает", { field: "/parentId", params: { reason: "noSubdetectors" } });
+      return subProblem(props(u), host, ctx);
+    },
+    beforeSet(u, patch, whole, ctx) {
+      if (!whole) return null;
+      const parent = u.parentId ? ctx.units.get(u.parentId) : null;
+      return subProblem(whole, parent ? subHost(props(parent)) : null, ctx);
     },
   };
 
@@ -2113,7 +2167,7 @@
 
   const HOOKS = {
     "vms.domain/1": domain, "vms.server/1": server, "vms.folder/1": folder, "vms.archive/1": archive, "vms.volume/1": volume,
-    "vms.camera/1": camera, "vms.stream/1": stream, "vms.detector/1": detector, "vms.acs/1": acs,
+    "vms.camera/1": camera, "vms.stream/1": stream, "vms.detector/1": detector, "vms.subdetector/1": subdetector, "vms.acs/1": acs,
     "vms.live/1": live, "vms.ptz/1": ptz, "vms.talk/1": talk, "vms.timeline/1": timeline, "vms.pos/1": pos, "vms.edge/1": edge,
     "vms.webserver/1": webserver,
   };

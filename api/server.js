@@ -2598,6 +2598,7 @@
     const ofKind = (kind, domainId) => store.byKind(kind).filter((u) => u.domainId === domainId);
     const archivesOf = (pred) => kinds.list().filter((k) => tableOf(k.kind) === "archives").flatMap((k) => store.byKind(k.kind)).filter(pred);
     const isDetector = (u) => kinds.profileOf(u.kind, "vms.detector/1");
+    const isSubdetector = (u) => kinds.profileOf(u.kind, "vms.subdetector/1");
     // Сервер размещения объекта: status.observed.serverId или свойство вида с x-ref на сервер (имена — раз на описание)
     const toServer = (ref) => (ref.kinds || []).includes("server") || (ref.implements || []).includes("vms.server/1");
     const serverProps = new WeakMap();
@@ -2690,7 +2691,7 @@
       if (isArchive(u)) return store.byParent(u.uid).filter((v) => v.kind === "volume").map((v) => [name(1, v), unitNode(v, parentId, false)]);
       if (u.kind === "volume") return [];
       const kids = treeChildrenOf(u);
-      return (layout === "detectors" ? kids.filter(isDetector) : kids).map((x) => [name(1, x), lazy(x, parentId)]);
+      return (layout === "detectors" ? kids.filter((x) => isDetector(x) || isSubdetector(x)) : kids).map((x) => [name(1, x), lazy(x, parentId)]);
     }
     function treeChildren(q) {
       if (!LAYOUTS.includes(q.layout)) return problem(422, "VALIDATION_FAILED", "Нет такой раскладки", { field: "layout" });
@@ -3344,7 +3345,7 @@
       const bad = hooksProblem(spec.kind, "beforeCreate", [draft, par]);
       if (bad) return [hookErr(bad, at, undefined, spec.kind)];
       if (par && par.fresh && par.rows) par.rows.push(draft);
-      const fresh = { fresh: true, kind: spec.kind, domainId, parentId: par && !par.fresh ? par.uid : null, rows: [] };
+      const fresh = { fresh: true, kind: spec.kind, domainId, parentId: par && !par.fresh ? par.uid : null, rows: [], properties: spec.properties || {} };
       for (const [i, c] of (spec.children || []).entries()) {
         const e = unitCreateErrs(c, fresh, `${at}/children/${i}`);
         if (e.length) return e;

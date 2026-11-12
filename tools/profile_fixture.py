@@ -62,6 +62,10 @@ KIND_MISSING = {"domain": ["create", "delete"], "volume": ["create", "delete"]}
 KIND_ONLY_WITH_PARENT = ["volume"]
 # Виды плагинов и тестовые виды: в профиле «один домен» их нет — система объявляет только свои (тесты с needs "kind:…" пропускаются)
 PLUGIN_KINDS = ["security_controller/CONTROLLER", "security_controller/SENSOR", "test.unknown", "test.perunit", "w2c.example/rows", "domain.shared"]
+# Контракт 0.12.0: поддетекторы (вид subdet) и новые настройки детектора. Система объявляет, что поддерживает, схемой вида:
+# в профиле «один домен» вида subdet нет, у det нет и этих свойств, а трекеры (analyticsKind) не заводятся — как у w2c без них
+PLUGIN_KINDS += ["subdet"]
+DROP_PROPS = {"det": ["analyticsKind", "extraZones", "direction", "objectSize", "classes", "confidence", "minDurationSec", "plateWidth", "crowdMin", "crowdHoldSec", "stillSec"]}
 # Виды, чьи события и действия правил система профиля объявляет, хотя объектов этих видов у неё нет (вход датчика io.input,
 # текст источника, событие и команда единицы СКУД, выход реле) — редактор правил их предлагает. Каталог правил — из описаний
 # видов, поэтому описания остаются, но завести такой объект нельзя: без create и createParents, без x-ui-category (в мастере их нет)
@@ -114,8 +118,10 @@ def build(demo):
     # Устройства идут родитель первым: дочернее остаётся, только если остался родитель
     devices, kept = [], set()
     for d in fx["devices"]:
-        if d["domainId"] != did or d["type"] not in DEVICE_TYPES or (d["parentId"] and d["parentId"] not in kept):
+        if d["domainId"] != did or d["type"] not in DEVICE_TYPES or (d["parentId"] and d["parentId"] not in kept) or d.get("analyticsKind"):
             continue
+        for name in DROP_PROPS.get(d["type"], []):
+            d.pop(name, None)
         kept.add(d["id"])
         devices.append(d)
     for d in devices:
@@ -304,6 +310,13 @@ def build(demo):
     # Какие виды есть у системы — описания видов (GET /kinds): виды устройств и хранилищ профиля, их права и действия
     kinds_access(fx["kinds"], acc["levels"])
     fx["kinds"] = profile_kinds(fx["kinds"])
+    # Профили: без свойств и без профиля, которых у системы нет (см. DROP_PROPS, PLUGIN_KINDS)
+    if "profiles" in fx:
+        have = {i for k in fx["kinds"] for i in k.get("implements", [])}
+        fx["profiles"] = [p for p in fx["profiles"] if p["id"] in have or p["id"] != "vms.subdetector/1"]
+        for p in fx["profiles"]:
+            if p["id"] == "vms.detector/1":
+                p["properties"] = [n for n in p["properties"] if n not in DROP_PROPS["det"]]
 
     caps = ref["capabilities"]
     caps["operations"] = [o for o in caps["operations"] if o not in MISSING]
@@ -364,6 +377,8 @@ def profile_kinds(kinds):
             k["capabilities"] = [c for c in k.get("capabilities", []) if c != "create"]
             k["createParents"] = []
             k.pop("x-ui-category", None)
+        for name in DROP_PROPS.get(k["kind"], []):
+            ((k.get("schema") or {}).get("properties") or {}).pop(name, None)
         clean(k.get("schema"))
         out.append(k)
     return out

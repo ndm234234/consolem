@@ -444,6 +444,275 @@
     assert.eq((await env.ok("PATCH", U(a.uid), { properties: { zone: null } }, v(z))).properties.zone, undefined, "сброшена");
   }, { needs: ["createUnits", "patchUnit", "kind:det"] });
 
+  /* ===== Настройки детектора и поддетекторы (контракт 0.12.0) ===== */
+
+  const camU = { uid: cam.id };
+  const NEW_DET = ["analyticsKind", "extraZones", "direction", "objectSize", "classes", "confidence", "minDurationSec", "plateWidth", "crowdMin", "crowdHoldSec", "stillSec"];
+  const TRI = [[0.2, 0.2], [0.5, 0.2], [0.5, 0.5]];
+  const tracker = (c, name, over) => det(c, name || "Трекер", Object.assign({ detectorKind: "other", analyticsKind: "tracker", sensitivity: 60 }, over));
+  const sub = (parent, kind, over, name) => ({ kind: "subdet", name: name || `Поддетектор ${kind}`, parentId: parent.uid,
+    properties: Object.assign({ subdetectorKind: kind, zone: { shape: kind === "line" ? "line" : "polygon", points: kind === "line" ? [[0.1, 0.1], [0.9, 0.9]] : TRI } }, over) });
+  const addSub = async (env, parent, kind, over, name) => (await made(env, sub(parent, kind, over, name)))[0];
+  const kidsOf = (env, uid) => env.list(`/units?parentId=${uid}&kind=subdet`);
+
+  test("Детектор без полей 0.12.0 — как раньше: новых ключей нет, чувствительность и зона правятся", async () => {
+    const env = await makeEnv();
+    const d = await addDet(env, camU, "Старый клиент", { detectorKind: "motion", sensitivity: 10 });
+    assert.eq(NEW_DET.filter((n) => n in d.properties), [], "новых свойств в ответе нет");
+    const s = await env.ok("PATCH", U(d.uid), { properties: { sensitivity: 20 } }, v(d));
+    const z = await env.ok("PATCH", U(d.uid), { properties: { zone: { shape: "rect", points: [[0.1, 0.1], [0.6, 0.6]] } } }, v(s));
+    assert.eq([z.properties.sensitivity, z.properties.zone.shape, NEW_DET.filter((n) => n in z.properties)], [20, "rect", []], "правка как раньше");
+    const again = await get(env, d.uid);
+    assert.eq(NEW_DET.filter((n) => n in again.properties), [], "и после правки");
+  }, { needs: ["createUnits", "patchUnit", "kind:det"] });
+
+  test("objectSize, plateWidth: min выше max — 422 /properties/<имя>/min, reason minAboveMax; верные сохраняются; null снимает", async () => {
+    const env = await makeEnv();
+    const d = await addDet(env, camU, "Размеры", { detectorKind: "lpr", sensitivity: 10 });
+    const bad = await props(env, d, { objectSize: { min: [0.5, 0.1], max: [0.2, 0.9] } });
+    field(bad, "VALIDATION_FAILED", P("objectSize/min"), "ширина min выше max");
+    assert.eq(bad.body.params.reason, "minAboveMax", "причина");
+    field(await props(env, d, { objectSize: { min: [0.1, 0.5], max: [0.9, 0.2] } }), "VALIDATION_FAILED", P("objectSize/min"), "высота min выше max");
+    const pw = await props(env, d, { plateWidth: { min: 0.3, max: 0.1 } });
+    field(pw, "VALIDATION_FAILED", P("plateWidth/min"), "номер: min выше max");
+    assert.eq(pw.body.params.reason, "minAboveMax", "причина у номера");
+    const ok = await env.ok("PATCH", U(d.uid), { properties: { objectSize: { min: [0.05, 0.1], max: [0.5, 0.6] }, plateWidth: { min: 0.1, max: 0.3 } } }, v(d));
+    assert.eq([ok.properties.objectSize, ok.properties.plateWidth], [{ min: [0.05, 0.1], max: [0.5, 0.6] }, { min: 0.1, max: 0.3 }], "верные сохранены");
+    // Merge Patch: судится запись целиком, а не кусок
+    field(await props(env, ok, { objectSize: { max: [0.01, 0.6] } }), "VALIDATION_FAILED", P("objectSize/min"), "max ниже сохранённого min");
+    const half = await env.ok("PATCH", U(d.uid), { properties: { objectSize: { min: null } } }, v(ok));
+    assert.eq(half.properties.objectSize, { max: [0.5, 0.6] }, "часть снята: без ограничения снизу");
+    const gone = await env.ok("PATCH", U(d.uid), { properties: { objectSize: null, plateWidth: null } }, v(half));
+    assert.eq(["objectSize" in gone.properties, "plateWidth" in gone.properties], [false, false], "null снимает");
+    assert.eq(await failedOf(env, det(camU, "Новый", { detectorKind: "motion", objectSize: { min: [0.9, 0.9], max: [0.1, 0.1] } })), [["VALIDATION_FAILED", P("objectSize/min")]], "и при создании");
+  }, { needs: ["createUnits", "patchUnit", "kind:det", "kind:subdet"] });
+
+  test("extraZones: in и ex сохраняются, zone не меняется; две точки — 422 /properties/extraZones/0/points; null снимает", async () => {
+    const env = await makeEnv();
+    const zone = { shape: "polygon", points: [[0.1, 0.1], [0.9, 0.1], [0.9, 0.9], [0.1, 0.9]] };
+    const d = await addDet(env, camU, "Зоны", { detectorKind: "motion", sensitivity: 10, zone });
+    const extra = [{ type: "in", points: TRI }, { type: "ex", points: [[0.4, 0.4], [0.6, 0.4], [0.6, 0.6], [0.4, 0.6]] }];
+    const ok = await env.ok("PATCH", U(d.uid), { properties: { extraZones: extra } }, v(d));
+    assert.eq([ok.properties.extraZones, ok.properties.zone], [extra, zone], "добавочные сохранены, zone прежняя");
+    const short = await props(env, ok, { extraZones: [{ type: "ex", points: [[0.1, 0.1], [0.2, 0.2]] }] });
+    field(short, "VALIDATION_FAILED", P("extraZones/0/points"), "две точки");
+    assert.eq(short.body.params.keyword, "minItems", "слово схемы");
+    field(await props(env, ok, { extraZones: [{ type: "in", points: TRI }, { type: "x", points: TRI }] }), "VALIDATION_FAILED", P("extraZones/1/type"), "тип зоны");
+    field(await props(env, ok, { extraZones: [{ type: "in", points: [[0, 0], [1.5, 0], [1, 1]] }] }), "VALIDATION_FAILED", P("extraZones/0/points/1/0"), "точка за кадром");
+    const same = await get(env, d.uid);
+    assert.eq(same.properties.extraZones, extra, "отказ ничего не менял");
+    const gone = await env.ok("PATCH", U(d.uid), { properties: { extraZones: null, zone: null } }, v(same));
+    assert.eq(["extraZones" in gone.properties, "zone" in gone.properties], [false, false], "обе сняты: вся картинка");
+  }, { needs: ["createUnits", "patchUnit", "kind:det", "kind:subdet"] });
+
+  test("direction, classes, confidence, minDurationSec, crowdMin, crowdHoldSec, stillSec: вне допустимого — 422 со словом схемы; верные сохраняются", async () => {
+    const env = await makeEnv();
+    const d = await addDet(env, camU, "Настройки", { detectorKind: "motion", sensitivity: 10 });
+    const bad = [
+      [{ direction: "up" }, "direction", "enum"], [{ classes: ["tank"] }, "classes/0", "enum"],
+      [{ confidence: 9 }, "confidence", "minimum"], [{ confidence: 100 }, "confidence", "maximum"],
+      [{ minDurationSec: 31 }, "minDurationSec", "maximum"], [{ minDurationSec: -1 }, "minDurationSec", "minimum"],
+      [{ crowdMin: 1 }, "crowdMin", "minimum"], [{ crowdMin: 51 }, "crowdMin", "maximum"],
+      [{ crowdHoldSec: 0 }, "crowdHoldSec", "minimum"], [{ crowdHoldSec: 601 }, "crowdHoldSec", "maximum"],
+      [{ stillSec: 4 }, "stillSec", "minimum"], [{ stillSec: 1801 }, "stillSec", "maximum"],
+    ];
+    for (const [p, name, keyword] of bad) {
+      const res = await props(env, d, p);
+      field(res, "VALIDATION_FAILED", P(name), JSON.stringify(p));
+      assert.eq(res.body.params.keyword, keyword, `${JSON.stringify(p)}: слово схемы`);
+    }
+    const good = { direction: "ba", classes: ["person", "car", "bike"], confidence: 99, minDurationSec: 30, crowdMin: 50, crowdHoldSec: 600, stillSec: 5 };
+    const ok = await env.ok("PATCH", U(d.uid), { properties: good }, v(d));
+    assert.eq(Object.keys(good).map((n) => ok.properties[n]), Object.values(good), "верные сохранены");
+  }, { needs: ["createUnits", "patchUnit", "kind:det", "kind:subdet"] });
+
+  test("analyticsKind: только при detectorKind other — иначе 422; detectorKind: motion у трекера проходит, поле остаётся без действия", async () => {
+    const env = await makeEnv();
+    assert.eq(await failedOf(env, tracker(camU, "Не other", { detectorKind: "linecross" })), [["VALIDATION_FAILED", P("analyticsKind")]], "при создании: field");
+    const t = await addDet(env, camU, "Трекер", { detectorKind: "other", analyticsKind: "tracker", sensitivity: 60 });
+    assert.eq([t.properties.detectorKind, t.properties.analyticsKind], ["other", "tracker"], "трекер создан");
+    const m = await env.ok("PATCH", U(t.uid), { properties: { detectorKind: "motion" } }, v(t));
+    assert.eq([m.properties.detectorKind, m.properties.analyticsKind], ["motion", "tracker"], "старый клиент сменил вид: поле не тронуто");
+    field(await props(env, m, { analyticsKind: "neural" }), "VALIDATION_FAILED", P("analyticsKind"), "задать при motion — отказ");
+    const back = await env.ok("PATCH", U(t.uid), { properties: { detectorKind: "other", analyticsKind: "neural" } }, v(m));
+    assert.eq(back.properties.analyticsKind, "neural", "вид и поле вместе");
+    const off = await env.ok("PATCH", U(t.uid), { properties: { detectorKind: "motion", analyticsKind: null } }, v(back));
+    assert.eq(["analyticsKind" in off.properties, off.properties.detectorKind], [false, "motion"], "новый клиент снимает поле вместе с видом");
+    field(await props(env, off, { analyticsKind: "robot" }), "VALIDATION_FAILED", P("analyticsKind"), "незнакомый код — отказ схемы");
+  }, { needs: ["createUnits", "patchUnit", "kind:det", "kind:subdet"] });
+
+  test("Поддетектор: под трекером и движением — создан, entity.created kind subdet; под другим видом — 422 NOT_SUPPORTED /parentId; abandoned только под трекером", async () => {
+    const env = await makeEnv();
+    const t = await addDet(env, camU, "Трекер", { detectorKind: "other", analyticsKind: "tracker" });
+    const n = await addDet(env, camU, "Нейро", { detectorKind: "other", analyticsKind: "neural" });
+    const mo = await addDet(env, camU, "Движение", { detectorKind: "motion" });
+    const lc = await addDet(env, camU, "Линия", { detectorKind: "linecross" });
+    const seen = [];
+    const stop = ApiTest.subscribeForTest((m) => m.type === "entity.created" && seen.push([m.kind, m.entityId]), [cam.id, t.uid]);
+    await ApiTest.settle();
+    const s = await addSub(env, t, "dwell", { timeSec: 20 }, "Долго");
+    await ApiTest.settle();
+    stop();
+    assert.eq([s.kind, s.parentId, s.domainId, s.name, s.properties.subdetectorKind], ["subdet", t.uid, d1.id, "Долго", "dwell"], "поддетектор под трекером");
+    assert.ok(seen.some(([k, id]) => k === "subdet" && id === s.uid), "entity.created с видом subdet");
+    assert.eq((await kidsOf(env, t.uid)).map((x) => x.uid), [s.uid], "виден по parentId");
+    await addSub(env, n, "enter");
+    await addSub(env, mo, "exit");
+    for (const host of [lc, await addDet(env, camU, "Обычный", { detectorKind: "other" })]) {
+      const res = await create(env, sub(host, "enter"));
+      assert.eq(res.failed.map((x) => [x.code, x.field, x.params.reason]), [["NOT_SUPPORTED", "/parentId", "noSubdetectors"]], `под ${host.properties.detectorKind}`);
+    }
+    assert.eq(await failedOf(env, sub(n, "abandoned", { timeSec: 30 })), [["NOT_SUPPORTED", P("subdetectorKind")]], "abandoned под нейросетевым");
+    assert.eq(await failedOf(env, sub(mo, "abandoned", { timeSec: 30 })), [["NOT_SUPPORTED", P("subdetectorKind")]], "abandoned под движением");
+    await addSub(env, t, "abandoned", { timeSec: 30 });
+    // Родитель из той же строки POST /units судится по его свойствам
+    const rows = await create(env, Object.assign(det(camU, "Новый трекер", { detectorKind: "other", analyticsKind: "tracker" }), { children: [{ kind: "subdet", name: "Сразу", properties: sub(t, "stop", { timeSec: 5 }).properties }] }));
+    assert.eq(rows.failed.map((x) => [x.code, x.field]), [], "дочерняя строка под новым трекером");
+    const bad = await create(env, Object.assign(det(camU, "Новая линия", { detectorKind: "linecross" }), { children: [{ kind: "subdet", properties: sub(t, "enter").properties }] }));
+    assert.eq(bad.failed.map((x) => [x.code, x.field]), [["NOT_SUPPORTED", "/children/0/parentId"]], "и под новой линией — отказ");
+  }, { needs: ["createUnits", "kind:det", "kind:subdet"] });
+
+  test("Поддетектор: геометрия по виду (line — line, a2a — rect/polygon и zoneTo, остальные — rect/polygon); speed min выше max — 422; objectSize — additionalProperties; subdetectorKind не меняется", async () => {
+    const env = await makeEnv();
+    const t = await addDet(env, camU, "Трекер", { detectorKind: "other", analyticsKind: "tracker" });
+    const line = { shape: "line", points: [[0.1, 0.1], [0.9, 0.9]] };
+    assert.eq(await failedOf(env, sub(t, "line", { zone: { shape: "polygon", points: TRI } })), [["VALIDATION_FAILED", P("zone")]], "линия: нужна line");
+    assert.eq(await failedOf(env, sub(t, "enter", { zone: line })), [["VALIDATION_FAILED", P("zone")]], "область: line нельзя");
+    const shape = await create(env, sub(t, "enter", { zone: line }));
+    assert.eq(shape.failed[0].params.reason, "shape", "reason shape");
+    assert.eq(await failedOf(env, sub(t, "enter", { zone: { shape: "rect", points: [[0.1, 0.1], [0.2, 0.2], [0.3, 0.3]] } })), [["VALIDATION_FAILED", P("zone")]], "rect — две точки");
+    assert.eq(await failedOf(env, sub(t, "a2a")), [["VALIDATION_FAILED", P("zoneTo")]], "a2a без zoneTo");
+    assert.eq(await failedOf(env, sub(t, "enter", { zoneTo: { points: TRI } })), [["VALIDATION_FAILED", P("zoneTo")]], "zoneTo не у a2a");
+    assert.eq(await failedOf(env, sub(t, "stop")), [["VALIDATION_FAILED", P("timeSec")]], "stop без времени");
+    assert.eq(await failedOf(env, sub(t, "abandoned", { timeSec: 0 })), [["VALIDATION_FAILED", P("timeSec")]], "abandoned: 0 с");
+    assert.eq(await failedOf(env, sub(t, "move", { speed: { min: 300, max: 100 } })), [["VALIDATION_FAILED", P("speed/min")]], "speed min выше max");
+    const a2a = await addSub(env, t, "a2a", { zoneTo: { points: [[0.6, 0.6], [0.9, 0.6], [0.9, 0.9]] } });
+    const ln = await addSub(env, t, "line", { direction: "ab" });
+    const mv = await addSub(env, t, "move", { speed: { min: 10, max: 100 }, offset: { x: 5, y: 5 }, group: { count: 3, waitSec: 5 }, classes: ["car"], minObjects: 2 });
+    assert.eq([a2a.properties.zoneTo.points.length, ln.properties.direction, mv.properties.speed], [3, "ab", { min: 10, max: 100 }], "верные сохранены");
+    field(await props(env, mv, { speed: { min: 200 } }), "VALIDATION_FAILED", P("speed/min"), "правка: min выше сохранённого max");
+    field(await props(env, ln, { zone: { shape: "polygon", points: TRI } }), "VALIDATION_FAILED", P("zone"), "правка: линия стала областью");
+    field(await props(env, a2a, { zoneTo: null }), "VALIDATION_FAILED", P("zoneTo"), "правка: a2a без zoneTo");
+    const sz = await props(env, mv, { objectSize: { min: [0.1, 0.1] } });
+    assert.status(sz, 422, "VALIDATION_FAILED", "objectSize у поддетектора");
+    assert.eq([sz.body.field, sz.body.params.keyword], [P("objectSize"), "additionalProperties"], "размер берётся у детектора");
+    const kind = await props(env, mv, { subdetectorKind: "stop" });
+    assert.status(kind, 422, "VALIDATION_FAILED", "subdetectorKind не меняется");
+    const ren = await env.ok("PATCH", U(mv.uid), { name: "Новое имя", properties: { enabled: false, timeMode: "lt", timeSec: 7 } }, v(mv));
+    assert.eq([ren.name, ren.properties.enabled, ren.properties.timeMode, ren.properties.timeSec], ["Новое имя", false, "lt", 7], "имя, enabled и время правятся");
+  }, { needs: ["createUnits", "patchUnit", "kind:det", "kind:subdet"] });
+
+  test("Поддетектор: правка без If-Match — 428, чужая версия — 412 с current", async () => {
+    const env = await makeEnv();
+    const t = await addDet(env, camU, "Трекер", { detectorKind: "other", analyticsKind: "tracker" });
+    const s = await addSub(env, t, "enter");
+    assert.status(await env.call("PATCH", U(s.uid), { properties: { enabled: false } }), 428, "PRECONDITION_REQUIRED");
+    const old = await env.ok("PATCH", U(s.uid), { properties: { enabled: false } }, v(s));
+    const res = await env.call("PATCH", U(s.uid), { properties: { enabled: true } }, v(s));
+    assert.status(res, 412, "VERSION_MISMATCH", "версия устарела");
+    assert.eq([res.body.current.uid, res.body.current.version], [s.uid, old.version], "current — свежий поддетектор");
+    assert.status(await env.call("DELETE", U(s.uid)), 428, "PRECONDITION_REQUIRED", "и удаление");
+    assert.status(await env.call("DELETE", U(s.uid), undefined, v(old)), 204, null, "удалён");
+  }, { needs: ["createUnits", "patchUnit", "deleteUnit", "kind:det", "kind:subdet"] });
+
+  test("Удаление детектора удаляет поддетекторы: entity.deleted от детей, и DELETE, и шагом операции; поддетектор шагом — «Отменить» возвращает его", async () => {
+    const env = await makeEnv();
+    const t = await addDet(env, camU, "Трекер", { detectorKind: "other", analyticsKind: "tracker" });
+    const a = await addSub(env, t, "enter"), b = await addSub(env, t, "line");
+    // Один поддетектор: шаг delete и откат
+    const one = await env.runOperation({ idempotencyKey: key(), items: [{ uid: a.uid, delete: true }], expectedVersions: { [a.uid]: a.version } });
+    assert.eq([one.ok, (await kidsOf(env, t.uid)).map((x) => x.uid)], [1, [b.uid]], "шаг delete снял поддетектор");
+    const back = await env.ok("POST", `/operations/${one.id}/revert`);
+    assert.eq((await env.finished(back.id)).ok, 1, "откат выполнен");
+    assert.eq((await kidsOf(env, t.uid)).map((x) => x.name).sort(), [a.name, b.name].sort(), "поддетектор вернулся");
+    // Детектор целиком: дети уходят с ним
+    const seen = [];
+    const stop = ApiTest.subscribeForTest((m) => m.type === "entity.deleted" && seen.push([m.kind, m.entityId]), [cam.id, t.uid]);
+    await ApiTest.settle();
+    const fresh = await get(env, t.uid);
+    assert.status(await env.call("DELETE", U(t.uid), undefined, v(fresh)), 204);
+    await ApiTest.settle();
+    stop();
+    for (const x of [t, a, b]) assert.status(await env.call("GET", U(x.uid)), 404, "NOT_FOUND", `${x.name} удалён`);
+    assert.ok([a, b].every((x) => seen.some(([k, id]) => k === "subdet" && id === x.uid)), "entity.deleted от каждого поддетектора, вид subdet");
+    // То же шагом операции
+    const t2 = await addDet(env, camU, "Трекер 2", { detectorKind: "other", analyticsKind: "tracker" });
+    const c = await addSub(env, t2, "exit");
+    const op = await env.runOperation({ idempotencyKey: key(), items: [{ uid: t2.uid, delete: true }], expectedVersions: { [t2.uid]: t2.version } });
+    assert.eq(op.ok, 1, "шаг delete детектора выполнен");
+    assert.status(await env.call("GET", U(c.uid)), 404, "NOT_FOUND", "поддетектор ушёл с детектором");
+  }, { needs: ["createUnits", "deleteUnit", "createOperation", "revertOperation", "kind:det", "kind:subdet"] });
+
+  test("План одной операцией: patch детектора, createUnit, patch и delete поддетектора — все шаги ok, в любом порядке; откат возвращает всё", async () => {
+    const env = await makeEnv();
+    const t = await addDet(env, camU, "Трекер", { detectorKind: "other", analyticsKind: "tracker", sensitivity: 60 });
+    const keep = await addSub(env, t, "enter", {}, "Остаётся");
+    const drop = await addSub(env, t, "exit", {}, "Уйдёт");
+    const steps = [
+      { uid: t.uid, patch: { properties: { sensitivity: 70, objectSize: { min: [0.02, 0.04], max: [0.5, 0.6] } } } },
+      { uid: t.uid, createUnit: { kind: "subdet", name: "Новый", properties: sub(t, "dwell", { timeSec: 15 }).properties } },
+      { uid: keep.uid, patch: { name: "Переименован", properties: { enabled: false } } },
+      { uid: drop.uid, delete: true },
+    ];
+    // Порядок шагов не должен мешать: шаг по детектору ждёт операцию, а шаги потомков проверяются «кроме своей операции»
+    for (const order of [[0, 1, 2, 3], [3, 2, 1, 0], [1, 3, 0, 2]]) {
+      const env2 = await makeEnv();
+      const t2 = await addDet(env2, camU, "Трекер", { detectorKind: "other", analyticsKind: "tracker", sensitivity: 60 });
+      const k2 = await addSub(env2, t2, "enter", {}, "Остаётся");
+      const d2 = await addSub(env2, t2, "exit", {}, "Уйдёт");
+      const map = { [t.uid]: t2.uid, [keep.uid]: k2.uid, [drop.uid]: d2.uid };
+      const items = order.map((i) => {
+        const s = JSON.parse(JSON.stringify(steps[i]));
+        s.uid = map[s.uid];
+        if (s.createUnit) s.createUnit.parentId = undefined;
+        return s;
+      });
+      const run = await env2.runOperation({ idempotencyKey: key(), items, expectedVersions: { [t2.uid]: t2.version, [k2.uid]: k2.version, [d2.uid]: d2.version } });
+      assert.eq(run.items.map((x) => x.state || x.status || (x.ok ? "ok" : "fail")), items.map(() => "ok"), `порядок ${order}: шаги`);
+      const kids = await kidsOf(env2, t2.uid);
+      assert.eq(kids.map((x) => x.name).sort(), ["Новый", "Переименован"], `порядок ${order}: состав поддетекторов`);
+      assert.eq((await get(env2, t2.uid)).properties.objectSize.max, [0.5, 0.6], `порядок ${order}: правка детектора`);
+      const back = await env2.ok("POST", `/operations/${run.id}/revert`);
+      assert.eq((await env2.finished(back.id)).ok, items.length, `порядок ${order}: откат всех шагов`);
+      assert.eq((await kidsOf(env2, t2.uid)).map((x) => x.name).sort(), ["Остаётся", "Уйдёт"], `порядок ${order}: после отката как было`);
+    }
+  }, { needs: ["createUnits", "patchUnit", "deleteUnit", "kind:det", "kind:subdet"] });
+
+  test("/tree/children: у трекера hasChildren, дети в раскладках detectors и servers — вид subdet", async () => {
+    const env = await makeEnv();
+    const t = await addDet(env, camU, "Трекер", { detectorKind: "other", analyticsKind: "tracker" });
+    const a = await addSub(env, t, "enter", {}, "Вход"), b = await addSub(env, t, "line", {}, "Линия");
+    const plain = await addDet(env, camU, "Без детей", { detectorKind: "motion" });
+    for (const layout of ["detectors", "servers"]) {
+      const under = (await env.pages(`/tree/children?layout=${layout}&parentId=${cam.id}&limit=1000`)).find((x) => x.id === t.uid);
+      assert.eq(under && under.hasChildren, true, `${layout}: у трекера есть дети`);
+      const kids = await env.pages(`/tree/children?layout=${layout}&parentId=${t.uid}&limit=1000`);
+      assert.eq(kids.map((x) => [x.kind, x.id]).sort(), [["subdet", a.uid], ["subdet", b.uid]].sort(), `${layout}: дети — поддетекторы`);
+      assert.eq(kids.every((x) => x.implements.includes("vms.subdetector/1") && x.hasChildren === false), true, `${layout}: профиль, листья`);
+      const flat = (await env.pages(`/tree/children?layout=${layout}&parentId=${cam.id}&limit=1000`)).find((x) => x.id === plain.uid);
+      assert.eq(flat && flat.hasChildren, false, `${layout}: у детектора без детей их нет`);
+    }
+  }, { needs: ["createUnits", "kind:det", "kind:subdet", "getTreeChildren"] });
+
+  test("Правило по subdet.triggered (kinds: [subdet]) проходит проверку; событие не тревога и не в «Что считать тревогой»", async () => {
+    const env = await makeEnv();
+    const k = await env.ok("GET", "/kinds/subdet");
+    const ev = k.events.find((e) => e.id === "subdet.triggered");
+    assert.eq([ev && ev.alarm, k.implements], [false, ["vms.subdetector/1"]], "событие объявлено, не тревога");
+    const t = await addDet(env, camU, "Трекер", { detectorKind: "other", analyticsKind: "tracker" });
+    const s = await addSub(env, t, "dwell", { timeSec: 20 });
+    const rule = { name: "Долго у входа — запись", enabled: false, logOnly: false, logOnlySince: null, start: "event", runMode: "always", operatorMenu: false, ratePerMinute: 6, windowSec: 0,
+      runAt: null, repeat: "skip", triggers: [{ source: "unit", kinds: ["subdet"], event: "subdet.triggered", target: { include: [{ uid: s.uid }], exclude: [], gone: [], fromEvent: false }, match: {} }], conditions: [],
+      steps: [{ type: "unitAction", action: "record", target: { include: [{ uid: cam.id }], exclude: [], gone: [], fromEvent: false }, params: { duration: "min", minutes: 5 } }],
+      owner: "admin", purpose: "", serverId: null, runAsRoleId: null, allowChain: true };
+    const res = await env.call("POST", "/rules", rule);
+    assert.status(res, 201, null, "правило сохранено");
+    assert.eq(res.body.triggers[0].kinds, ["subdet"], "триггер по виду subdet");
+    const settings = await env.ok("GET", "/settings");
+    const bad = await env.call("PATCH", "/settings", { values: { "alarms.domain": ["subdet.triggered"] } }, { "If-Match": `"${settings.version}"` });
+    assert.status(bad, 422, "VALIDATION_FAILED", "subdet.triggered — не тревога");
+  }, { needs: ["createUnits", "kind:det", "kind:subdet", "patchSettings"] });
+
   /* ===== PTZ ===== */
 
   const ptzCam = async (env) => (await env.pages("/units?kind=camera&limit=1000")).find((u) => u.properties.ptz && u.status.link === "online" && (u.properties.presetMax == null || u.properties.presetMax >= 9));
