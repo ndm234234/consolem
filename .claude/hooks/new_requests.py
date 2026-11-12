@@ -156,7 +156,7 @@ def main():
                       f"Запросы, ждут ответа (имени «{me}» нет в таблице «Кому» api/requests/README.md)") + f"{note}:\n" + "\n".join(other))
     context = "\n\n".join(parts) + (
         "\nСообщи пользователю в начале ответа одной-двумя строками: сначала запросы для него. Сам не выполняй: "
-        "работу по запросу начинай только по его просьбе, порядок — в CLAUDE.md, раздел «Запросы команд VMS»."
+        "работу по запросу начинай только по его просьбе, порядок — скилл vms-requests (.claude/skills/vms-requests/SKILL.md)."
     )
     msg = f"Запросы для вас: {len(mine)}" + (f", остальных ждут ответа: {len(other)}" if other else "") if mine else f"Запросы ждут ответа: {len(other)}"
     print(json.dumps({
