@@ -2371,6 +2371,10 @@ html[data-theme="light"] .busy-chip{background:var(--one-control-hover);color:va
 .wz-plan.plan-right{flex:1;width:auto;max-height:none;border:0;background:none;border-radius:0}
 .wz-docks{position:fixed;right:16px;bottom:16px;z-index:40;display:flex;flex-direction:column;align-items:flex-end;gap:8px}
 .wz-docks .dc-dock{position:static}
+/* Строка дока после закрытия окна: два всплеска обводки и фона. Фон дока свой (--p2), поэтому отдельные кадры, а не accFlash */
+@keyframes wzDockFlash{0%,100%{box-shadow:0 6px 20px rgba(0,0,0,.35),0 0 0 0 transparent;background-color:var(--p2)}12%,44%{box-shadow:0 6px 20px rgba(0,0,0,.35),0 0 0 3px var(--bl);background-color:color-mix(in srgb, var(--one-accent) 30%, var(--p2))}28%,60%{box-shadow:0 6px 20px rgba(0,0,0,.35),0 0 0 2px color-mix(in srgb, var(--bl) 50%, transparent);background-color:color-mix(in srgb, var(--one-accent) 10%, var(--p2))}}
+.dc-dock.wz-dock-flash{animation:wzDockFlash 2.4s ease-out}
+@media (prefers-reduced-motion:reduce){.dc-dock.wz-dock-flash{animation:none}}
 .wz-docks:empty{display:none}
 body:has(.mask.wz-mask.open) .wz-docks,body:has(#bmodal.open) .wz-docks{display:none}
 .dc-sum{align-self:center;font-size:12px;color:var(--mu);margin-right:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -16232,7 +16236,7 @@ async function dcLoad(){
 // ── Единый мастер ─────────────────────────────────────────────────────
 // Все процессы создания устроены как «Добавить детекторы»: окно по центру, шаги кнопками, размер окна идёт за шагом,
 // в подвале «Отмена», итог, «Назад» и кнопка, которая называет результат. Клик мимо и Escape окно не закрывают.
-// Закрыть и свернуть — одно и то же: незавершённое остаётся в доке внизу справа, удаляет его только «Отмена».
+// Окно закрывает одна кнопка «×»: незавершённое остаётся в доке внизу справа, удаляет его только «Отмена».
 function wzBarHtml(steps,cur,reach,on,saved){
   const bar=steps.map((x,i)=>`${i?`<span class="dc-st-sep"></span>`:""}<button type="button" class="dc-st ${i===cur?"on":""}" ${reach(i)?"":"disabled"} aria-current="${i===cur?"step":"false"}" ${onEv("click",[...on,`${i}`])}><span class="cp-step">${i<cur?lu("check",11):i+1}</span>${i18n(x.t)}</button>`).join("");
   return`<div class="dc-steps">${bar}${saved?`<span class="dc-saved">${i18n("Черновик сохраняется сам")}</span>`:""}</div>`;
@@ -16241,10 +16245,17 @@ function wzFootHtml(o){
   const n=o.next;
   return`<button type="button" class="btn" ${onEv("click",o.cancel)}>${i18n("Отмена")}</button>${o.extra||""}<span class="tfoot-gap"></span><span class="dc-sum">${o.sum||""}</span>${o.back?`<button type="button" class="btn" ${onEv("click",o.back)}>${i18n("Назад")}</button>`:""}${n?`<button type="button" class="btn pri" ${n.id?`id="${n.id}"`:""} ${n.off?"disabled":""} ${onEv("click",n.on)}>${n.label}</button>`:""}`;
 }
-// Кнопки в заголовке. У мастера с черновиком две, и делают они одно и то же: так же, как в образце
+// Кнопка в заголовке — одна. «Свернуть» рядом с ней делала то же самое, и пользователь выбирал между одинаковыми кнопками.
+// У мастера с черновиком подсказка говорит, что черновик останется, а строка дока моргает после закрытия (wzDockFlash)
 function wzToolsHtml(id,cls,domId){
-  const min=!!WZD[id],t=i18n(min?"Закрыть: черновик сохранится":"Закрыть");
-  return`<span class="${cls||"wz-tools"}"${domId?` id="${domId}"`:""}>${min?`<button type="button" class="dc-x" aria-label="${i18n("Свернуть")}" title="${i18n("Свернуть: черновик сохранится")}" ${onEv("click",["wzClose",id])}>${lu("minus")}</button>`:""}<button type="button" class="dc-x" aria-label="${i18n("Закрыть")}" title="${t}" ${onEv("click",["wzClose",id])}>${lu("x")}</button></span>`;
+  const t=i18n(WZD[id]?"Закрыть: черновик сохранится":"Закрыть");
+  return`<span class="${cls||"wz-tools"}"${domId?` id="${domId}"`:""}><button type="button" class="dc-x" aria-label="${i18n("Закрыть")}" title="${t}" ${onEv("click",["wzClose",id])}>${lu("x")}</button></span>`;
+}
+// Строка дока показывает, куда ушёл черновик: два всплеска, как у acc-flash
+function wzDockFlash(el){
+  if(!el)return;
+  el.classList.remove("wz-dock-flash");void el.offsetWidth;el.classList.add("wz-dock-flash");
+  el.addEventListener("animationend",()=>el.classList.remove("wz-dock-flash"),{once:true});
 }
 // Окно идёт за содержимым: возвращаем прежний размер, меряем новый и даём CSS дойти до него.
 // stick — высота остаётся заданной (содержимое растягивается по окну); grow — окно не сжимается внутри одного шага
@@ -16320,8 +16331,10 @@ function wzClose(id){
   if(!d){if(id)accDrawerClose(id);else closeWizard();return}
   const s=d.get();
   // s пустое — окно открыто не на создание (переименование группы): чужой черновик не трогаем
-  if(s&&d.work(s)){if(!d.peek)wzMem[id]=s;wzSave(id)}else if(s)wzDrop(id);
-  d.hide();wzDock();
+  const kept=!!s&&d.work(s);
+  if(kept){if(!d.peek)wzMem[id]=s;wzSave(id)}else if(s)wzDrop(id);
+  // Моргает только черновик этого окна: переименование группы чужой черновик в доке не подсвечивает
+  d.hide();wzDock();if(kept)wzDockFlash(document.getElementById("wzDock-"+id));
 }
 function wzResume(id){
   const d=WZD[id],s=wzPeek(id);if(!s)return;
@@ -16448,12 +16461,12 @@ function dcSummary(d){
   return`${i18n("Видов")}: ${n(d.items)}${d.lock?"":` · ${i18n("камер")}: ${n(d.cams)}`}`;
 }
 function dcDrop(){dc=null;zoneDraw=null;try{localStorage.removeItem(DC_KEY)}catch(e){}dcDock()}
-// Свернуть и закрыть — одно и то же: черновик остаётся. Удаляет его только «Отмена»
+// «×» закрывает окно, черновик остаётся в доке. Удаляет его только «Отмена»
 function dcMin(){
   if(!dc)return;
   dc.min=true;zoneDraw=null;dcSave();
   if(!dcHasWork(dc))dc=null;
-  closeBulkModal();liveSync();dcDock();paint();
+  closeBulkModal();liveSync();dcDock();paint();wzDockFlash(document.getElementById("dcDock"));
 }
 function dcResume(){
   if(busyIds().size){toast("Групповая операция ещё не закончена. Подождать её конца");return}
@@ -16860,7 +16873,7 @@ function renderDetCreate(){
   const sum=!dc.items.size?i18n("Выбрать, что создать"):!total?`${i18n("Выбрано видов")}: ${dc.items.size}. ${i18n("Выбрать камеры")}`:`${total} ${i18n(plural(total,"детектор|детектора|детекторов"))} ${i18n("на")} ${camsHit} ${i18n(plural(camsHit,"камере|камерах|камерах"))}${skipN?` · ${i18n("пропустим")} ${skipN}`:""}`;
   const go=last?`<button type="button" class="btn pri" ${total?"":"disabled"} ${onEv("click",["dcRun"])}>${total?`${i18n("Создать")} ${total} ${i18n(plural(total,"детектор|детектора|детекторов"))}${withRule?` ${dc.rule.mode==="new"?(gs.length>1?`${i18n("и")} ${gs.length} ${i18n(plural(gs.length,"правило|правила|правил"))}`:i18n("и правило")):i18n("и добавить к правилу")}`:""}`:i18n("Создать")}</button>`
     :`<button type="button" class="btn pri" ${okStep(st)?"":"disabled"} ${onEv("click",["dcStepGo",`${dc.step+1}`])}>${i18n("Далее")}</button>`;
-  openBulkModal(`${lock?`${i18n("Добавить детекторы на камеру")} «${escHtml(locName(lock))}»`:i18n("Добавить детекторы")}<span class="dc-tools"><button type="button" class="dc-x" aria-label="${i18n("Свернуть")}" title="${i18n("Свернуть: черновик сохранится")}" ${onEv("click",["dcMin"])}>${lu("minus")}</button><button type="button" class="dc-x" aria-label="${i18n("Закрыть")}" title="${i18n("Закрыть: черновик сохранится")}" ${onEv("click",["dcMin"])}>${lu("x")}</button></span>`,
+  openBulkModal(`${lock?`${i18n("Добавить детекторы на камеру")} «${escHtml(locName(lock))}»`:i18n("Добавить детекторы")}<span class="dc-tools"><button type="button" class="dc-x" aria-label="${i18n("Закрыть")}" title="${i18n("Закрыть: черновик сохранится")}" ${onEv("click",["dcMin"])}>${lu("x")}</button></span>`,
     `<div class="dc-step">${bar}<div class="dc-body${fitKey===dcFitAt?"":" dc-fade"}">${SEC[st.k]()}</div></div>`,
     `<button type="button" class="btn" ${onEv("click",["dcCancel"])}>${i18n("Отмена")}</button><span class="tfoot-gap"></span><span class="dc-sum">${sum}</span>${dc.step?`<button type="button" class="btn" ${onEv("click",["dcStepGo",`${dc.step-1}`])}>${i18n("Назад")}</button>`:""}${go}`,`bbox-wide bbox-copy dc-box dc-w-${fitKey}`);
   dcFit(fitWas,fitKey);
@@ -27476,7 +27489,7 @@ function accUgPaint(){
   const g=accUgd.gid?accUG(accUgd.gid):null;
   accDrawer("accUg",g?"Переименовать группу":"Новая группа пользователей");
   wzSize(document.querySelector("#accUg .wz-win"),"s");
-  const tools=document.querySelectorAll("#accUg .wz-tools .dc-x");if(tools.length>1){tools[0].style.display=g?"none":"";tools[1].title=i18n(g?"Закрыть":"Закрыть: черновик сохранится")}
+  const x=document.querySelector("#accUg .wz-tools .dc-x");if(x)x.title=i18n(g?"Закрыть":"Закрыть: черновик сохранится");
   document.getElementById("accUgBd").innerHTML=`<div class="acc-wz-f"><label>${i18n("Название")}</label><input type="text" value="${escHtml(accUgd.name)}" autocomplete="off" ${onEv("input",["accUgdName",onEv.value])}><div class="fld-err" id="accUgE"></div></div>
     <div class="acc-wz-f"><label>${i18n("Описание")}</label><input type="text" value="${escHtml(accUgd.comment)}" ${onEv("input",["accUgdComment",onEv.value])}></div>
     <p class="acc-hint">${g?i18n("Состав и роли группы не изменятся"):`${accUgd.members.length?`${i18n("Консоль добавит в группу выбранных пользователей:")} ${accUgd.members.length}. `:""}${i18n("Роли группе назначают после создания. Без ролей участники ничего не получают")}`}</p>`;

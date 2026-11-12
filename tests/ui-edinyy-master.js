@@ -206,13 +206,20 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   // Переименование черновик новой группы не трогает
   const ug0 = accGroupsAll().find((g) => !g.src);
   accUgOpen();
+  // В заголовке мастера одна кнопка: «Свернуть» рядом с ней делала то же самое
+  const ugNew = document.querySelectorAll("#accUg .wz-tools .dc-x");
+  ok(ugNew.length === 1 && ugNew[0].getAttribute("aria-label") === "Закрыть" && (ugNew[0].title || ugNew[0].dataset.tip) === "Закрыть: черновик сохранится", "группа: в заголовке одна кнопка «Закрыть», подсказка говорит о черновике");
   accUgdName("Вторая");
   wzClose("accUg");
+  const ugRow = document.getElementById("wzDock-accUg");
+  ok(!!ugRow && (matchMedia("(prefers-reduced-motion: reduce)").matches || ugRow.classList.contains("wz-dock-flash")), "группа: после закрытия строка черновика в доке моргает");
   accUgOpen(ug0.id);
   ok(accUgd.gid === ug0.id && accUgd.name === ug0.n, "группа: переименование открывает свою группу");
   const ugTools = document.querySelectorAll("#accUg .wz-tools .dc-x");
-  ok(getComputedStyle(ugTools[0]).display === "none" && ugTools[1].title === "Закрыть", "группа: у переименования только крестик, без слов о черновике");
+  ok(ugTools.length === 1 && (ugTools[0].title || ugTools[0].dataset.tip) === "Закрыть", "группа: у переименования только крестик, без слов о черновике");
+  document.getElementById("wzDock-accUg")?.classList.remove("wz-dock-flash");
   wzClose("accUg");
+  ok(!document.getElementById("wzDock-accUg")?.classList.contains("wz-dock-flash"), "группа: закрытие переименования не подсвечивает черновик новой группы");
   ok(!!draft("accUg"), "группа: после переименования черновик новой группы цел");
   accUgOpen();
   accUgApply();

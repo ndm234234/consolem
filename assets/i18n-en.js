@@ -1429,7 +1429,7 @@ window.I18N_EN={
 "Правило готово. Осталось проверить план и создать детекторы.":"The rule is ready. What is left is to check the plan and create the detectors.",
 "Черновик и создание":"Draft and creation",
 "Незаконченная работа не теряется, даже если вас отвлекли. План показывает всё, что произойдёт, до создания.":"Unfinished work is not lost, even if you are interrupted. The plan shows everything that will happen before you create.",
-"Окно можно свернуть или закрыть, даже случайно. Выбранное, зоны и правило не пропадут.":"You can minimize or close the window, even by accident. The selection, zones and rule are kept.",
+"Окно можно закрыть, даже случайно. Выбранное, зоны и правило не пропадут.":"You can close the window, even by accident. The selection, zones and rule are kept.",
 "Черновик виден внизу справа в любом разделе. Можно пойти в другой раздел и вернуться.":"The draft is visible at the bottom right in any section. You can go to another section and come back.",
 "«Продолжить» возвращает на тот же шаг. Черновик удаляет только «Отмена» с подтверждением.":"“Continue” returns you to the same step. Only “Cancel” with confirmation deletes the draft.",
 "Вернулись в «Оборудование», на шаг «Правило». Архив и зоны на месте.":"You are back in “Equipment”, at the “Rule” step. The archive and zones are in place.",
