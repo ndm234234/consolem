@@ -3042,6 +3042,9 @@ body.pj-hdlog .gojump{display:none}
 .dw-grip::before{content:"";position:absolute;left:5px;top:0;bottom:0;width:2px;border-radius:1px;background:var(--ln);transition:background .15s}
 .dw-grip:hover::before,.dw-grip:focus-visible::before,.dw-grip.on::before{background:var(--one-accent);left:4px;width:4px}
 body.dw-resizing,body.dw-resizing *{cursor:col-resize!important;user-select:none!important}
+.dw-foot-in{animation:dwFootIn .2s ease-out}
+@keyframes dwFootIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.dw-foot-in{animation:none}}
 @media(max-width:1180px){.dw-grid{grid-template-columns:minmax(0,1fr)}.dw-grip{display:none}.dw-right{position:static;max-height:none}}
 .dw-left{background:var(--p);border:1px solid var(--ln);border-radius:10px;padding:12px;min-width:0}
 .dw-right{background:var(--p);border:1px solid var(--ln);border-radius:10px;min-width:0;position:sticky;top:0;max-height:var(--dw-rh,calc(100vh - 150px));overflow:auto;scrollbar-gutter:stable;overscroll-behavior:contain}
@@ -14965,7 +14968,10 @@ function dwRwAria(g){
 }
 function dwRwSet(g,frac,save){
   dw.rw=frac==null?null:Math.min(.8,Math.max(.15,frac));
-  g.closest(".dw-grid").style.cssText=dwRwCss();dwRwAria(g);
+  // Меняем только ширину: высота столбца (--dw-rh) остаётся прежней
+  const st=g.closest(".dw-grid").style,v=dwRwCss();
+  if(v)st.setProperty("--dw-rw",v.slice(v.indexOf(":")+1));else st.removeProperty("--dw-rw");
+  dwRwAria(g);
   if(save)try{dw.rw==null?localStorage.removeItem(DW_RW_KEY):localStorage.setItem(DW_RW_KEY,String(dw.rw))}catch(e){}
 }
 function dwGripDown(g,e){
@@ -15345,11 +15351,11 @@ function dwFootHtml(){
   const n=find(sel)?.n;if(!n||n.type!=="det"||dwKindOf(n)==="other")return null;
   // Правки полей контракта («Включён», «Дополнительно») идут прежним черновиком карточки (cardDiff) — их строки тоже здесь
   const d=[...dwDiffRows(n),...dwCardRows(n)];
-  // Полоса стоит всегда, без изменений — с неактивными кнопками: первая правка не сдвигает карточку
-  if(!d.length)return`<div class="main-actions bk-foot card-foot" id="cardFoot"><span class="sub bk-foot-text">${i18n("Все изменения применены.")}</span><span class="tfoot-gap"></span>
-    <button type="button" class="btn s" disabled>${i18n("Сбросить")}</button><button type="button" class="btn s pri" disabled>${i18n("Показать план")}</button></div>`;
+  if(!d.length)return`<div id="cardFoot" hidden></div>`;
   const busy=bq&&!bq.finished;
-  return`<div class="main-actions bk-foot card-foot" id="cardFoot"><span class="sub bk-foot-text">${i18n("Не применено")}: <b>${d.length}</b> ${i18n(plural(d.length,"изменение|изменения|изменений"))} — ${escHtml(d.slice(0,2).map(r=>i18n(r.label)).join(", "))}${d.length>2?"…":""}</span><span class="tfoot-gap"></span>
+  // Полоса появляется только с первой правкой — плавно, а не рывком
+  const appear=document.getElementById("cardFoot")?.hidden?" dw-foot-in":"";
+  return`<div class="main-actions bk-foot card-foot${appear}" id="cardFoot"><span class="sub bk-foot-text">${i18n("Не применено")}: <b>${d.length}</b> ${i18n(plural(d.length,"изменение|изменения|изменений"))} — ${escHtml(d.slice(0,2).map(r=>i18n(r.label)).join(", "))}${d.length>2?"…":""}</span><span class="tfoot-gap"></span>
     <button type="button" class="btn s" ${onEv("click",["dwRevert",`${n.id}`])}>${i18n("Сбросить")}</button>
     <button type="button" class="btn s pri" ${busy?`disabled title="${i18n("Консоль выполняет групповую операцию. План можно применить после конца операции")}"`:""} ${onEv("click",["dwPlan",`${n.id}`])}>${i18n("Показать план")} (${d.length})</button></div>`;
 }
