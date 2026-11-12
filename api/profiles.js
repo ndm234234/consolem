@@ -1300,10 +1300,11 @@
   // Что принимает поддетекторы: движение, трекер объектов, нейросетевой трекер. null — не принимает
   const subHost = (p) => (p.detectorKind === "motion" ? "motion" : p.detectorKind === "other" && (p.analyticsKind === "tracker" || p.analyticsKind === "neural") ? p.analyticsKind : null);
   // Свойства поддетектора целиком (p) под родителя вида host. Блокировки родителя не берёт: над ним может идти операция плана
-  // с тем же детектором (ctx.lockedProblem без ctx.held отказал бы своей же операции — запрос про шаги потоков)
+  // с тем же детектором (ctx.lockedProblem без ctx.held отказал бы своей же операции — запрос про шаги потоков).
+  // host undefined — правило родителя не проверяется (правка, которая не трогает subdetectorKind)
   function subProblem(p, host, ctx) {
     const bad = (code, field, extra) => ctx.problem(422, code, extra.message, { field, params: extra.params });
-    if (p.subdetectorKind === "abandoned" && host !== "tracker") return bad("NOT_SUPPORTED", "/properties/subdetectorKind", { message: "Оставленный предмет есть только у трекера объектов" });
+    if (host !== undefined && p.subdetectorKind === "abandoned" && host !== "tracker") return bad("NOT_SUPPORTED", "/properties/subdetectorKind", { message: "Оставленный предмет есть только у трекера объектов" });
     const shape = (p.zone || {}).shape, wantLine = p.subdetectorKind === "line";
     if (wantLine ? shape !== "line" : shape === "line") return bad("VALIDATION_FAILED", "/properties/zone", { message: wantLine ? "Для линии нужна зона line" : "Нужна зона rect или polygon", params: { reason: "shape" } });
     const z = zoneProblem(p.zone, ctx);
@@ -1320,10 +1321,13 @@
       if (!host) return ctx.problem(422, "NOT_SUPPORTED", "Этот детектор поддетекторов не принимает", { field: "/parentId", params: { reason: "noSubdetectors" } });
       return subProblem(props(u), host, ctx);
     },
+    // Правило родителя («оставленный предмет» — только у трекера) — при создании и в правке, которая трогает subdetectorKind.
+    // Вид родителя сменили позже — поддетектор остаётся, и его можно править
     beforeSet(u, patch, whole, ctx) {
       if (!whole) return null;
-      const parent = u.parentId ? ctx.units.get(u.parentId) : null;
-      return subProblem(whole, parent ? subHost(props(parent)) : null, ctx);
+      const kindSet = !!(patch && patch.properties && "subdetectorKind" in patch.properties);
+      const parent = kindSet && u.parentId ? ctx.units.get(u.parentId) : null;
+      return subProblem(whole, kindSet ? (parent ? subHost(props(parent)) : null) : undefined, ctx);
     },
   };
 

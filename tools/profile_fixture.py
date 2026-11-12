@@ -366,6 +366,9 @@ def profile_kinds(kinds):
         for key in ("parents", "createParents", "children"):
             if key in k:
                 k[key] = [p for p in k[key] if p not in drop]
+        # Все дети вида сняты профилем: ключа нет, а не пустой список
+        if "children" in k and not k["children"]:
+            del k["children"]
         if k["kind"] in KIND_MISSING and "capabilities" in k:
             k["capabilities"] = [c for c in k["capabilities"] if c not in KIND_MISSING[k["kind"]]]
             # Не заводится — и заводить не под чем

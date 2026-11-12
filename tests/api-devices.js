@@ -466,6 +466,7 @@
     assert.eq(NEW_DET.filter((n) => n in again.properties), [], "и после правки");
   }, { needs: ["createUnits", "patchUnit", "kind:det"] });
 
+  // kind:subdet в needs — знак, что сервер знает 0.12.0: без него этих свойств det нет, и тест пропускается
   test("objectSize, plateWidth: min выше max — 422 /properties/<имя>/min, reason minAboveMax; верные сохраняются; null снимает", async () => {
     const env = await makeEnv();
     const d = await addDet(env, camU, "Размеры", { detectorKind: "lpr", sensitivity: 10 });
@@ -487,6 +488,7 @@
     assert.eq(await failedOf(env, det(camU, "Новый", { detectorKind: "motion", objectSize: { min: [0.9, 0.9], max: [0.1, 0.1] } })), [["VALIDATION_FAILED", P("objectSize/min")]], "и при создании");
   }, { needs: ["createUnits", "patchUnit", "kind:det", "kind:subdet"] });
 
+  // kind:subdet в needs — знак, что сервер знает 0.12.0: без него этих свойств det нет, и тест пропускается
   test("extraZones: in и ex сохраняются, zone не меняется; две точки — 422 /properties/extraZones/0/points; null снимает", async () => {
     const env = await makeEnv();
     const zone = { shape: "polygon", points: [[0.1, 0.1], [0.9, 0.1], [0.9, 0.9], [0.1, 0.9]] };
@@ -505,6 +507,7 @@
     assert.eq(["extraZones" in gone.properties, "zone" in gone.properties], [false, false], "обе сняты: вся картинка");
   }, { needs: ["createUnits", "patchUnit", "kind:det", "kind:subdet"] });
 
+  // kind:subdet в needs — знак, что сервер знает 0.12.0: без него этих свойств det нет, и тест пропускается
   test("direction, classes, confidence, minDurationSec, crowdMin, crowdHoldSec, stillSec: вне допустимого — 422 со словом схемы; верные сохраняются", async () => {
     const env = await makeEnv();
     const d = await addDet(env, camU, "Настройки", { detectorKind: "motion", sensitivity: 10 });
@@ -526,6 +529,7 @@
     assert.eq(Object.keys(good).map((n) => ok.properties[n]), Object.values(good), "верные сохранены");
   }, { needs: ["createUnits", "patchUnit", "kind:det", "kind:subdet"] });
 
+  // kind:subdet в needs — знак, что сервер знает 0.12.0: без него этих свойств det нет, и тест пропускается
   test("analyticsKind: только при detectorKind other — иначе 422; detectorKind: motion у трекера проходит, поле остаётся без действия", async () => {
     const env = await makeEnv();
     assert.eq(await failedOf(env, tracker(camU, "Не other", { detectorKind: "linecross" })), [["VALIDATION_FAILED", P("analyticsKind")]], "при создании: field");
@@ -571,6 +575,22 @@
     const bad = await create(env, Object.assign(det(camU, "Новая линия", { detectorKind: "linecross" }), { children: [{ kind: "subdet", properties: sub(t, "enter").properties }] }));
     assert.eq(bad.failed.map((x) => [x.code, x.field]), [["NOT_SUPPORTED", "/children/0/parentId"]], "и под новой линией — отказ");
   }, { needs: ["createUnits", "kind:det", "kind:subdet"] });
+
+  test("Поддетектор: вид родителя сменили после создания — поддетектор правится; правило родителя — только при создании и при subdetectorKind в правке", async () => {
+    const env = await makeEnv();
+    const t = await addDet(env, camU, "Трекер", { detectorKind: "other", analyticsKind: "tracker" });
+    const ab = await addSub(env, t, "abandoned", { timeSec: 30 }, "Сумка");
+    const en = await addSub(env, t, "enter", {}, "Вход");
+    // Старый клиент сменил вид: трекер стал движением, потом линией
+    const m = await env.ok("PATCH", U(t.uid), { properties: { detectorKind: "motion" } }, v(t));
+    const ab2 = await env.ok("PATCH", U(ab.uid), { properties: { timeSec: 45 } }, v(ab));
+    assert.eq(ab2.properties.timeSec, 45, "abandoned под движением: правка прошла");
+    await env.ok("PATCH", U(t.uid), { properties: { detectorKind: "linecross" } }, v(m));
+    const en2 = await env.ok("PATCH", U(en.uid), { name: "Вход 2", properties: { enabled: false } }, v(en));
+    assert.eq([en2.name, en2.properties.enabled], ["Вход 2", false], "под линией: имя и enabled правятся");
+    field(await props(env, ab2, { subdetectorKind: "abandoned" }), "NOT_SUPPORTED", P("subdetectorKind"), "subdetectorKind в правке — правило родителя");
+    field(await props(env, en2, { zone: { shape: "line", points: [[0.1, 0.1], [0.9, 0.9]] } }), "VALIDATION_FAILED", P("zone"), "правила формы — как раньше");
+  }, { needs: ["createUnits", "patchUnit", "kind:det", "kind:subdet"] });
 
   test("Поддетектор: геометрия по виду (line — line, a2a — rect/polygon и zoneTo, остальные — rect/polygon); speed min выше max — 422; objectSize — additionalProperties; subdetectorKind не меняется", async () => {
     const env = await makeEnv();
@@ -675,8 +695,11 @@
       const back = await env2.ok("POST", `/operations/${run.id}/revert`);
       assert.eq((await env2.finished(back.id)).ok, items.length, `порядок ${order}: откат всех шагов`);
       assert.eq((await kidsOf(env2, t2.uid)).map((x) => x.name).sort(), ["Остаётся", "Уйдёт"], `порядок ${order}: после отката как было`);
+      const det2 = (await get(env2, t2.uid)).properties, kept = await get(env2, k2.uid);
+      assert.eq([det2.sensitivity, "objectSize" in det2], [60, false], `порядок ${order}: откат вернул детектор`);
+      assert.eq([kept.name, kept.properties.enabled !== false], ["Остаётся", true], `порядок ${order}: откат вернул поддетектор`);
     }
-  }, { needs: ["createUnits", "patchUnit", "deleteUnit", "kind:det", "kind:subdet"] });
+  }, { needs: ["createUnits", "patchUnit", "deleteUnit", "createOperation", "revertOperation", "kind:det", "kind:subdet"] });
 
   test("/tree/children: у трекера hasChildren, дети в раскладках detectors и servers — вид subdet", async () => {
     const env = await makeEnv();
