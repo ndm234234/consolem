@@ -3053,6 +3053,217 @@ body.pj-hdlog .gojump{display:none}
 .vw-b .vw-relays td.ca-x{white-space:normal}
 @container (max-width:900px){.vw-b{grid-template-columns:minmax(0,1fr)}.vw-b .vw-panel{max-height:none;position:static}}
 @media (prefers-reduced-motion:reduce){.vw *{transition:none!important}}
+/* Окно детектора (прототип 55): слева кадр и превью сработок, справа настройки по типам */
+.dw{--dw-in:#4ea1ff;--dw-ex:#ff7a7a;--dw-ln:#fde047}
+.dw-stub{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 10px;margin:0 0 10px;border:1px dashed var(--one-warning-icon);border-radius:8px;background:var(--one-warning-bg);color:var(--one-warning-text);font-size:12px}
+/* Столбец настроек — доля ширины карточки (на широком экране шире), разделитель тянется мышью и стрелками */
+.dw-grid{display:grid;grid-template-columns:minmax(0,1fr) 12px var(--dw-rw,clamp(320px,44%,calc(100% - 400px)));column-gap:2px;row-gap:12px;align-items:start}
+.dw-grip{align-self:stretch;position:relative;cursor:col-resize;touch-action:none;border-radius:4px;outline:0;min-height:120px}
+.dw-grip::before{content:"";position:absolute;left:5px;top:0;bottom:0;width:2px;border-radius:1px;background:var(--ln);transition:background .15s}
+.dw-grip:hover::before,.dw-grip:focus-visible::before,.dw-grip.on::before{background:var(--one-accent);left:4px;width:4px}
+body.dw-resizing,body.dw-resizing *{cursor:col-resize!important;user-select:none!important}
+.dw-ro .dw-right,.dw-ro .dw-tools{opacity:.6;transition:opacity .2s}
+@media(prefers-reduced-motion:reduce){.dw-ro .dw-right,.dw-ro .dw-tools{transition:none}}
+.dw-foot-in{animation:dwFootIn .2s ease-out}
+@keyframes dwFootIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.dw-foot-in{animation:none}}
+/* Две половины: карточка детектора занимает видимую часть, у кадра с превью и у настроек своя прокрутка.
+   Полоса плана сокращает обе половины снизу. На узком экране — один столбец и общая прокрутка */
+@media(min-width:1181px){
+  .sc:has(> .dw){display:flex;flex-direction:column;overflow:hidden}
+  .sc:has(> .dw) > *{flex:none}
+  .sc:has(> .dw) > :not(.dw){align-self:flex-start}
+  .sc > .dw{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+  .dw > .dw-grid{flex:1 1 auto;min-height:0;grid-template-rows:minmax(0,1fr);align-items:stretch}
+  .dw-left,.dw-right{min-height:0;overflow:auto;scrollbar-gutter:stable;overscroll-behavior:contain}
+}
+@media(max-width:1180px){.dw-grid{grid-template-columns:minmax(0,1fr)}.dw-grip{display:none}}
+.dw-left{background:var(--p);border:1px solid var(--ln);border-radius:10px;padding:12px;min-width:0}
+.dw-right{background:var(--p);border:1px solid var(--ln);border-radius:10px;min-width:0}
+.dw-rules .card{border:0;border-radius:0;margin:0;background:none}
+.dw-rules .ch{display:none}
+.dw-rules .cb{padding:0}
+.dw-tools{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.dw-tools .btn,.dw-row .btn{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.dw .btn.on{border-color:var(--bl);background:var(--one-info-bg);color:var(--x-link)}
+.dw-tools-l{margin:0}
+.dw-lay{margin-left:auto;display:flex;gap:4px;flex-wrap:wrap}
+.dw-sw{display:inline-block;width:10px;height:10px;border-radius:3px;flex:none}
+.dw-stage{position:relative;aspect-ratio:16/9;width:100%;border-radius:8px;overflow:hidden;background:#080b10;user-select:none}
+.dw-stage.draw{cursor:crosshair}
+.dw-stage>svg{position:absolute;inset:0;width:100%;height:100%}
+.dw-hint{margin:6px 0 0;font-size:12px}
+.dw-ov [data-dw-obj]{pointer-events:none}
+.dw-a{fill:var(--dw-in);fill-opacity:.14;stroke:var(--dw-in);stroke-width:.6;cursor:move}
+.dw-a.ex{fill:url(#dwHatch);fill-opacity:1;stroke:var(--dw-ex)}
+.dw-a.sel{stroke-width:1.1}
+.dw-sa{fill:var(--c);fill-opacity:.12;stroke:var(--c);stroke-width:.6;stroke-dasharray:2 1;cursor:move}
+.dw-l{stroke-width:1.1;cursor:move}
+.dw-sz{fill:none;stroke:#fde047;stroke-width:.6;stroke-dasharray:1.5 1;cursor:move}
+.dw-hd{fill:#fff;stroke:var(--c,var(--bl));stroke-width:.7;cursor:grab}
+.dw-hd:hover{r:2.3}
+.dw-tx{font:600 3.2px Inter,sans-serif;fill:#fff;paint-order:stroke;stroke:rgba(0,0,0,.7);stroke-width:.7px;pointer-events:none}
+.dw-box{fill:none;stroke-width:.55}
+.dw-box.ok{stroke:#4ade80}
+.dw-box.no{stroke:#cbd5e1;stroke-dasharray:1 .8;opacity:.75}
+.dw-box.hot{stroke:#ff4d4d;stroke-width:1}
+.dw-trk{fill:none;stroke-width:.45;opacity:.7}
+.dw-trk.ok{stroke:#4ade80}.dw-trk.no{stroke:#cbd5e1;opacity:.4}.dw-trk.hot{stroke:#ff4d4d}
+.dw-lb{font:600 2.9px Inter,sans-serif;paint-order:stroke;stroke:rgba(0,0,0,.75);stroke-width:.7px}
+.dw-lb.ok{fill:#86efac}.dw-lb.no{fill:#e2e8f0}.dw-lb.hot{fill:#ff8a8a}
+.dw-play{display:flex;align-items:center;gap:8px;margin:6px 0 10px;flex-wrap:wrap}
+.dw-play .btn{display:inline-grid;place-items:center;padding:4px 8px}
+.dw-play .sub{margin:0}
+.dw-play b{font-variant-numeric:tabular-nums}
+.dw-seg{display:inline-flex;border:1px solid var(--ln);border-radius:7px;overflow:hidden;flex:none}
+.dw-seg button{border:0;background:var(--p2);padding:4px 10px;font-size:12px;white-space:nowrap}
+.dw-seg button+button{border-left:1px solid var(--ln)}
+.dw-seg button.on{background:var(--one-info-bg);color:var(--x-link);font-weight:600}
+.dw-prev{border-top:1px solid var(--ln);padding-top:10px}
+.dw-prev-h{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.dw-prev-h .sub{margin:0;font-size:12px}
+.dw-cnt{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.dw-n{font-size:24px;line-height:1;font-variant-numeric:tabular-nums}
+.dw-was{color:var(--mu);font-size:12px}
+.dw-dl{font-weight:600;font-size:13px;padding:1px 8px;border-radius:99px;background:var(--p2)}
+.dw-dl.dn{background:var(--one-success-bg);color:var(--one-success-text)}
+.dw-dl.up{background:var(--one-warning-bg);color:var(--one-warning-text)}
+.dw-tl{position:relative;height:40px;border:1px solid var(--ln);border-radius:6px;background:var(--p2);cursor:pointer;overflow:hidden}
+.dw-tl svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.dw-tl-lb{position:absolute;right:6px;font-size:10px;color:var(--mu);pointer-events:none}
+.dw-tl-lb.a{top:2px}.dw-tl-lb.b{bottom:2px}
+.dw-tl-x{display:flex;justify-content:space-between;font-size:11px;color:var(--mu);margin:2px 0 8px}
+.dw-strip{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;scrollbar-gutter:stable}
+.dw-th{flex:none;width:132px;padding:0;border:1px solid var(--ln);border-radius:6px;background:var(--p2);text-align:left;overflow:hidden}
+.dw-th svg{display:block;width:100%;aspect-ratio:16/9;background:#080b10}
+.dw-th span{display:block;padding:3px 6px 4px;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dw-th b{margin-right:6px;font-variant-numeric:tabular-nums}
+.dw-more{align-self:center;white-space:nowrap}
+.dw-nt{margin:8px 0 0}
+.dw-sec{padding:12px 14px;border-bottom:1px solid var(--ln)}
+.dw-sec h4{margin:0 0 8px;font-size:13px;display:flex;align-items:center;gap:6px;min-height:26px}
+.dw-sec h4 .dw-sec-b{margin-left:auto;font-weight:400}
+.dw-lay{align-items:center}
+.dw-head .sub{margin:6px 0 8px}
+.dw-name{display:flex;align-items:center;gap:10px}
+.dw-name input{flex:1;min-width:0;font-weight:600;font-size:15px;border:0;background:transparent;padding:0}
+.dw-state{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.dw-state .sub{margin:0}
+.dw-dirty{color:var(--one-warning-text);font-size:12px;font-weight:600;margin-right:auto}
+.dw-f{margin-bottom:12px}
+.dw-f:last-child{margin-bottom:0}
+.dw-f>label{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:12px;color:var(--mu);margin-bottom:4px}
+.dw-f>label b{color:var(--tx);font-variant-numeric:tabular-nums}
+.dw-f input[type=range]{width:100%;margin:2px 0}
+.dw-2r{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.dw-in{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--mu)}
+.dw-in>span{white-space:nowrap}
+.dw-in input{width:64px;height:28px;padding:0 6px;border:1px solid var(--ln);border-radius:6px;background:var(--p2)}
+.dw-num{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.dw-num>label{margin:0;color:var(--tx);font-size:13px}
+.dw-num .dw-help{flex-basis:100%}
+.dw-help{font-size:11.5px;margin:4px 0 0}
+.dw-hist{margin-top:4px}
+.dw-hist svg{display:block}
+.dw-hist-x{display:flex;justify-content:space-between;font-size:10.5px;color:var(--mu)}
+/* Строка размера в одну строку: не влезла — поля уходят на следующую строку целиком, «без ограничения» — под полями */
+.dw-sz-r{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:4px 8px;margin-bottom:4px;font-size:13px}
+.dw-sz-r>span:first-child{white-space:nowrap}
+.dw-sz-r>.dw-in{margin-left:auto}
+.dw-nolim{flex-basis:100%;text-align:right;font-size:12px;margin:0}
+.dw-chips{display:flex;gap:6px;flex-wrap:wrap}
+.dw-chip{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--ln);border-radius:99px;background:var(--p2);padding:3px 10px;font-size:12.5px;white-space:nowrap}
+.dw-chip small{color:var(--mu)}
+.dw-chip.on{border-color:var(--bl);background:var(--one-info-bg);color:var(--x-link)}
+.dw-ar{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px}
+.dw-ar .sub{margin:0;font-size:12px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dw-ar.sel .lk{font-weight:600}
+.dw-del{padding:3px 6px;display:inline-grid;place-items:center}
+.dw-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.dw-sub{border:1px solid var(--ln);border-left:3px solid var(--c);border-radius:8px;padding:8px 10px;margin-bottom:8px}
+.dw-sub.off{opacity:.65}
+.dw-sub-h{display:flex;align-items:center;gap:6px;margin-bottom:8px;font-size:13px}
+.dw-sub.off .dw-sub-h{margin-bottom:0}
+.dw-sub-h .sub{margin:0;font-size:11.5px}
+.dw-sub-n{margin-left:auto;font-size:12px;color:var(--mu);white-space:nowrap}
+.dw-sub.sel{background:var(--p2)}
+.dw-sub-t{display:flex;align-items:center;gap:6px;min-width:0;flex:1 1 auto;padding:0;border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.dw-sub-t .tw{flex:none;width:14px}
+.dw-sub-tt{display:flex;flex-direction:column;min-width:0;line-height:1.25}
+.dw-sub-tt b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dw-sub-tt .sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dw-sub-b{padding-top:4px}
+.dw-txt{width:100%;box-sizing:border-box}
+.dw-ptabs{padding:0 14px;border-bottom:1px solid var(--ln);gap:18px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+.dw-ptabs .tab{display:inline-flex;align-items:center;font-weight:600;white-space:nowrap;flex:none}
+.dw-back{margin:0 0 10px}
+.dw-sec-n{margin-left:6px;padding:0 7px;border-radius:9px;background:var(--p2);color:var(--mu);font-size:11.5px;font-weight:600;vertical-align:1px}
+.dw-swl{display:flex;align-items:center;gap:8px;cursor:pointer}
+.dw-sa.sel{fill-opacity:.24;stroke-width:1;stroke-dasharray:none}
+.dw-sa.dim{opacity:.45}
+.dw-sa.mask{fill:#0b0f14;fill-opacity:.6;stroke-dasharray:1 1}
+.dw-new{border:1px dashed var(--ln);border-radius:8px;padding:10px;margin-top:6px}
+.dw-new-h{display:flex;flex-direction:column;gap:2px;margin-bottom:8px}
+.dw-new-h .sub{margin:0;font-size:12px}
+.dw-new-q{width:100%;box-sizing:border-box;margin-bottom:8px}
+.dw-new-l{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px;max-height:330px;overflow:auto;scrollbar-gutter:stable}
+.dw-new-c{display:flex;flex-direction:column;gap:2px;text-align:left;padding:8px;border:1px solid var(--ln);border-radius:6px;background:none;color:inherit;font:inherit;cursor:pointer}
+.dw-new-c:hover,.dw-new-c.act{border-color:var(--bl);background:var(--one-info-bg)}
+.dw-new-c .sub{margin:0;font-size:11.5px}
+.dw-new-c[hidden]{display:none}
+.dw-new-x{margin:6px 0;font-size:12px}
+.dw-tsub{display:inline-flex;align-items:center;gap:2px;margin-left:6px;padding:0 5px;border-radius:8px;background:var(--one-info-bg);color:var(--x-link);font-size:11px;font-weight:600;flex:none}
+.dw-tdot{display:inline-block;width:8px;height:8px;border-radius:50%;flex:none;margin-right:6px}
+.dw-tsr{cursor:pointer}
+.dw-tplus{flex:none;display:inline-flex;align-items:center;justify-content:center;border:0;background:0;color:var(--one-fg-muted);padding:0;width:22px;height:22px;border-radius:4px;opacity:0;cursor:pointer;transition:color .12s,opacity .12s,background .12s}
+.n:hover .dw-tplus,.dw-tplus:focus-visible{opacity:1}
+.dw-tplus:hover{color:var(--one-fg);background:var(--one-control-hover)}
+.dw-tplus:focus-visible{outline:1px solid var(--bl);outline-offset:-3px}
+.tree.selmode .dw-tplus{visibility:hidden;pointer-events:none}
+@media (prefers-reduced-motion:reduce){.dw-tplus{transition:none}}
+.dw-tsr .nm{flex:0 1 auto}
+.dw-tty{margin-left:6px;color:var(--mu);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.dw-csub{display:flex;flex-direction:column;margin:-2px 0 4px 34px;border-left:2px solid var(--ln)}
+.dw-csub-r{display:flex;align-items:center;gap:6px;padding:4px 10px;border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer;border-radius:4px}
+.dw-csub-r:hover{background:var(--one-control-hover)}
+.dw-csub-r small{color:var(--mu)}
+.dw-adv{padding:10px 14px}
+.dw-adv summary{cursor:pointer;font-weight:600;font-size:13px}
+.dw-adv-b{margin-top:10px}
+.dw-vs{display:inline-flex;align-items:center;gap:6px;margin-left:auto}
+.dw-vs .dw-seg button{padding:2px 8px}
+.dw-tag{position:absolute;top:8px;left:8px;z-index:1;display:inline-flex;align-items:center;gap:6px;padding:2px 8px;border-radius:6px;background:rgba(0,0,0,.62);color:#fff;font-size:12px;font-weight:600;pointer-events:none}
+.dw-now{position:absolute;top:8px;right:8px;z-index:1;padding:2px 8px;border-radius:6px;background:rgba(0,0,0,.62);color:#fff;font-size:12px;pointer-events:none}
+.dw-now:empty{display:none}
+.dw-rec{display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef4444;flex:none}
+.dw-live{display:inline-flex;align-items:center;gap:6px;font-weight:600}
+.dw-kpi{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:2px 0 12px}
+.dw-k{display:flex;flex-direction:column;gap:2px;padding:8px 12px;border:1px solid var(--ln);border-left:4px solid var(--c);border-radius:8px;background:var(--p2);min-width:0}
+.dw-k.b0{--c:var(--mu)}.dw-k.b1{--c:var(--rd)}.dw-k.fc{--c:var(--rd);border-left-style:dashed}
+.dw-k.off{opacity:.6}
+.dw-k-l{font-size:12px;color:var(--mu);overflow-wrap:anywhere;text-wrap:balance}
+.dw-k-v{display:flex;align-items:center;gap:8px}
+.dw-k-v b{font-size:26px;line-height:1.1;font-variant-numeric:tabular-nums}
+.dw-k-s{font-size:12px;color:var(--mu)}
+.dw-rows{display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 10px;align-items:center}
+.dw-rl{display:flex;flex-direction:column;line-height:1.2;font-size:12px;border-left:4px solid var(--c);padding-left:8px}
+.dw-rl.b0{--c:var(--mu)}.dw-rl.b1{--c:var(--rd)}
+.dw-rl span{color:var(--mu);font-size:11px;font-variant-numeric:tabular-nums}
+.dw-rt{height:32px;border:1px solid var(--ln);border-radius:6px;background:var(--p2);cursor:pointer;overflow:hidden}
+.dw-rt.off{cursor:default;background:repeating-linear-gradient(90deg,var(--p2) 0 8px,transparent 8px 10px)}
+.dw-rt svg{display:block}
+.dw-rows .dw-tl-x{margin:0}
+.dw-lg{display:flex;align-items:center;gap:6px 14px;flex-wrap:wrap;margin:8px 0 10px;font-size:12px}
+.dw-lg span{display:inline-flex;align-items:center;gap:6px}
+.dw-lg i{display:inline-block;width:3px;height:12px;border-radius:1px;background:var(--c)}
+.dw-lg i.b0{--c:var(--mu)}.dw-lg i.b1{--c:var(--rd)}
+.dw-lg i.fc{width:14px;background:repeating-linear-gradient(45deg,rgba(255,77,77,.45) 0 2px,transparent 2px 5px)}
+.dw-lg .sub{margin:0 0 0 auto}
+@media(max-width:700px){.dw-kpi{grid-template-columns:1fr}}
+.dw-cs{margin-top:14px;padding-top:12px;border-top:1px solid var(--ln)}
+.dw-cs-h{display:flex;align-items:baseline;gap:10px;margin:0 0 8px;font-size:14px}
+.dw-cs-h .sub{margin:0;font-size:12px;font-weight:400}
+@media(prefers-reduced-motion:reduce){.dw-hd:hover{r:1.7}}
 </style>
 <!-- ONE PSIM: мост по ONE.PSIM.PrototypeKit, подключён после стилей прототипа -->
 <link rel="stylesheet" href="assets/one-psim/bridge.css">
@@ -3969,7 +4180,7 @@ function kindsApply(){
     seen.add(name);SEARCH_FIELDS.push([name,propLabel(p,name)]);FIELD_LABELS[name]=propLabel(p,name);
   }));
   // Чипы видов: виды без ручного экрана — к срезам «Оборудование» и «Камеры»
-  const chips=[...KINDS.values()].filter(k=>isSchemaKind(k.kind)&&CAPS.deviceTypes.has(k.kind)&&(k.parents||[]).length&&k.shape!=="document").map(k=>[k.kind,textOf(k.label)]);
+  const chips=[...KINDS.values()].filter(k=>isSchemaKind(k.kind)&&CAPS.deviceTypes.has(k.kind)&&(k.parents||[]).length&&k.shape!=="document"&&!(k.implements||[]).includes("vms.subdetector/1")).map(k=>[k.kind,textOf(k.label)]);
   ["all","cam"].forEach(s=>{TYPE_FILTERS[s]=TYPE_FILTERS_BASE[s].concat(chips)});
   ruleCatFromKinds();accClassesFromKinds();
   kindsRefApply();
@@ -5350,6 +5561,8 @@ function apiOnEvent(m){
   if(m.kind==="settings"&&m.version!==settingsVer){API.get("/settings").then(s=>{settingsApply(s);if(app==="sys")paint()}).catch(()=>{});return}
   if(AUTO_KINDS.has(m.kind)){autoEvent(m);return}
   if(!hwEventKind(m.kind))return;
+  // Поддетектор или детектор изменился: открытое окно подхватит это в ближайший кадр (dwPaintObj)
+  if(m.kind==="subdet"||m.kind==="det")dw.shown=-1;
   // Поток камеры: свой объект, в кэше — строкой камеры. Камеру называет объект потока; удалённый — уже не назовёт
   if(screenType(m.kind)==="stream"){
     if(m.type==="entity.deleted"){if(find(sel)?.n.streams)hwStreamsRead(sel);return}
@@ -7113,6 +7326,7 @@ function cardLeaveAsk(go){
     "",i18n("Сбросить и перейти"),()=>{cardRestore();go()},{html:true,cancelLabel:"Остаться"});
 }
 function cardFootHtml(){
+  if(typeof dwFootHtml==="function"){const x=dwFootHtml();if(x)return x}
   const d=cardDraft&&cardDraft.id===sel?cardDiff():[];
   if(!d.length)return`<div id="cardFoot" hidden></div>`;
   return`<div class="main-actions bk-foot card-foot" id="cardFoot"><span class="sub bk-foot-text">${i18n("Не применено")}: <b>${d.length}</b> ${i18n(plural(d.length,"изменение|изменения|изменений"))} — ${escHtml(d.slice(0,2).map(r=>r.label).join(", "))}${d.length>2?"…":""}</span><span class="tfoot-gap"></span>
@@ -7537,10 +7751,10 @@ function treeStatusSlot(n){
 // а IP и счётчики остаются ровной колонкой.
 // Прототип 39: причину «нет сигнала» строка показывает только значком в колонке статуса (statusMarkHtml).
 // Слово — в окне у значка (stTip), в подсказке строки (treeRowTip) и в карточке.
-function treeRowMeta(n,q,shownLen,expanded,ctx){
+function treeRowMeta(n,q,shownLen,expanded,ctx,tagsX=""){
   // Справа: теги (IP…) → число → статус — как на макете
   const st=treeStatusSlot(n);
-  return treeTail({tags:treeAttrTags(n,q),cnt:treeCntSlot(n,shownLen,expanded),status:st,acts:n.id,ctx});
+  return treeTail({tags:tagsX+treeAttrTags(n,q),cnt:treeCntSlot(n,shownLen,expanded),status:st,acts:n.id,ctx});
 }
 // В какой срез попадает объект. treeKind знает три рода — камеры, ACFA и
 // службы; срез «Все» берёт их все, остальные по одному, а срез «Серверы»
@@ -9102,7 +9316,7 @@ function favSelected(){
   paint();
 }
 function canFav(n){
-  return!!n&&!["unalloc","norec","nofolder","gpu","found","founddev","det"].includes(n.type);
+  return!!n&&!["unalloc","norec","nofolder","gpu","found","founddev"].includes(n.type);
 }
 // Контекстное меню мышью знают не все, а с сенсорного экрана правой кнопки нет
 // вовсе — поэтому у каждой строки есть и явная кнопка.
@@ -9254,7 +9468,7 @@ function goFav(i){
 // курсор в поле, и терять это из-за того, что обновилась соседняя строка,
 // он не должен. Положение ищем по устойчивым признакам (селектор прокручиваемого
 // блока и его номер), а не по узлам — узлы после перерисовки уже другие.
-const VIEW_SCROLLERS=[".sc",".tree",".fav-panel-list",".lan-wrap",".gtbl",".dev-results-scroll",".dev-wrap-scroll",".plan-rows",".srv-list",".pos-l"];
+const VIEW_SCROLLERS=[".sc",".dw-left",".dw-right",".tree",".fav-panel-list",".lan-wrap",".gtbl",".dev-results-scroll",".dev-wrap-scroll",".plan-rows",".srv-list",".pos-l"];
 function focusSelector(el){
   if(!el||!/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))return null;
   if(el.id)return"#"+el.id;
@@ -9993,7 +10207,8 @@ function asstFilterQuery(f){
 // Отбор идёт только по видам среза: иначе страницу занимают чужие объекты.
 // Камеры — без одних служб: срез решает по месту в дереве (замок под камерой — в «Камерах»), чужое отсеивает filtSeen
 function filtSliceKinds(){
-  const dev=[...KINDS.keys()].filter(k=>!INFRA_SCREENS.has(screenType(k)));
+  // Поддетектор — строка под детектором в дереве и раздел окна детектора: срез его отдельным объектом не считает
+  const dev=[...KINDS.keys()].filter(k=>!INFRA_SCREENS.has(screenType(k))&&!(KINDS.get(k).implements||[]).includes("vms.subdetector/1"));
   if(slice==="det"){
     if(!qval())return kindsOfScreen("det");
     // Камера, найденная по тексту, показывает свои детекторы: текст ищем и по камерам
@@ -10467,6 +10682,8 @@ function pick(id,opts){
   }
   const f=find(id);
   if(!f){if(typeof id==="string"&&!id.includes(":"))hwEnsure([id]).then(()=>{if(find(id))pick(id,opts)}).catch(()=>{});return}
+  // Поддетектор — не отдельная карточка: ссылка на него открывает окно его детектора на этом поддетекторе
+  if(nodeKind(f.n)==="subdet"&&f.p?.type==="det"){dwSubPick(f.p.id,id,hwFromLink());return}
   // Ушли с объекта с неприменёнными правками — спрашиваем, а не теряем молча.
   // Блоки драйвера и «Параметры потоков» с несохранённой правкой — тоже вопрос (их правка не в черновике карточки)
   // Вопрос и сброс идут вместе: выбор нескольких объектов (range, additive) камеру не закрывает — ни вопроса, ни сброса.
@@ -11008,8 +11225,11 @@ function rcSliceItems(n){
   const id=n.id;
   if(n.type==="det"){
     const cam=find(id)?.p;
+    // Создать поддетектор — первым пунктом после «Открыть»: в дереве нет постоянной строки «Создать…»
     return[rcGoItems(id),
-      rulePresetFor(n)?[tctxItem(i18n("Создать правило по событию…"),["rcRun","ruleFromDevice",id])]:[],
+      [...(dwHasSubs(n)?[tctxItem(i18n("Создать поддетектор…"),["rcRun","dwSubCreate",id],tctxPlusIcon())]:[]),
+       ...(rulePresetFor(n)?[tctxItem(i18n("Создать правило по событию…"),["rcRun","ruleFromDevice",id])]:[])],
+      canFav(n)?[tctxItem(isFav(id)?i18n("Убрать из избранного"):i18n("В избранное"),["toggleFav",id,sel===id&&selCtx?selCtx:null],tctxStarIcon())]:[],
       cam?[tctxDanger(`${i18n("Удалить")}…`,["rcRun","deleteDetector",cam.id,id])]:[]];
   }
   if(slice==="det"&&n.type==="camera")return[rcGoItems(id),[tctxItem(i18n("Добавить детекторы…"),["rcRun","detCreateOpen",id],tctxPlusIcon())]];
@@ -11049,14 +11269,16 @@ function nrow(n,l,ctx){
   if(det?!n.builtin:treeKind(n)!==tview)return"";
   if(q&&!vis(n,q))return"";
   if(!det&&!selfInView(n)&&!kids(n).some(hasTreeIn))return"";
-  const k=treeKids(n),hasKids=k.length>0||!!n._more,op=open.has(n.id)||(autoExpand()&&hasKids);
+  // Детектор раскрывается до поддетекторов — как в срезе «Детекторы» (gdetrow)
+  const dt=det?dwTreeDet(n,ctx):null,ek=dt?dt.ok:n.id;
+  const k=dt?[]:treeKids(n),hasKids=dt?dt.sp:k.length>0||!!n._more,op=dt?dt.op:open.has(n.id)||(autoExpand()&&hasKids);
   const shown=k.filter(d=>hasTreeIn(d)&&(!q||vis(d,q)));
   const st=nodeStatus(n);
   const childOff=canToggleEnabled(n)&&st.off;
-  let h=`<div class="n ${treeRowHi(n.id,ctx)} ${childOff?"off":""}${n.type==="ipsrv"?sliceParentClass(n.id):""}${treeRenameId===n.id?" renaming":""}" style="--l:${l}"${treeRowPick(n.id,ctx)}${treeCtxAttr(n.id)}${treeExpandMeta(n.id,"node",hasKids)}>
-    ${treeChevron(n.id,"node",hasKids,op)}
-    ${treeRowIcon(n)}<span class="nm">${treeNameCell(n,q)}</span>${treeRowMeta(n,q,shown.length,op,ctx)}</div>`;
-  if(op)h+=shown.map(x=>nrow(x,l+1,ctx)).join("")+treeMoreRow(n.id,l+1);
+  let h=`<div class="n ${treeRowHi(n.id,ctx)} ${childOff?"off":""}${n.type==="ipsrv"?sliceParentClass(n.id):""}${treeRenameId===n.id?" renaming":""}" style="--l:${l}"${treeRowPick(n.id,ctx)}${treeCtxAttr(n.id)}${treeExpandMeta(ek,"node",hasKids)}>
+    ${treeChevron(ek,"node",hasKids,op)}
+    ${treeRowIcon(n)}<span class="nm">${treeNameCell(n,q)}</span>${dt?dt.badge:""}${treeRowMeta(n,q,shown.length,op,ctx,dt?dt.plus:"")}</div>`;
+  if(op)h+=dt?dt.kids(l+1):shown.map(x=>nrow(x,l+1,ctx)).join("")+treeMoreRow(n.id,l+1);
   return h}
 function svcrow(n,l){
   const q=qval();
@@ -11430,8 +11652,33 @@ function gdetrow(d,l,ctx,parentHit=false){
   const q=qval();
   const hit=matchesStatus(d)&&(parentHit||matchesSearch(d,q));
   if(!hit)return"";
-  return `<div class="n ${rowOn(d.id,ctx)}" style="--l:${l}"${treeRowPick(d.id,ctx)}>
-    <span class="tw"></span>${ic("det")}<span class="nm" title="${escHtml(locName(d))} · ${escHtml(i18n(d.kind||DET_TYPES[0]))}">${hlText(locName(d),q)}</span>${treeTail({status:treeStatusSlot(d)})}</div>`;
+  // Поддетекторы — под детектором, с меткой числа. Создать поддетектор — «+» при наведении на строку, кнопка в карточке
+  // детектора (раздел «Поддетекторы») и пункт меню строки («⋮», правая кнопка, «Ещё» в карточке): постоянной строки
+  // «Создать…» в дереве нет
+  const{sp,ok,op,badge,plus,kids}=dwTreeDet(d,ctx);
+  let h=`<div class="n ${rowOn(d.id,ctx)}" style="--l:${l}"${treeRowPick(d.id,ctx)}${treeExpandMeta(ok,"node",sp)}>
+    ${treeChevron(ok,"node",sp,op)}${ic("det")}<span class="nm" title="${escHtml(locName(d))} · ${escHtml(i18n(d.kind||DET_TYPES[0]))}">${hlText(locName(d),q)}</span>${badge}${treeTail({tags:plus,status:treeStatusSlot(d),acts:d.id,ctx})}</div>`;
+  if(op)h+=kids(l+1);
+  return h;
+}
+// Строка детектора в любом дереве: метка числа поддетекторов, «+» и строки поддетекторов
+function dwTreeDet(d,ctx){
+  const has=dwHasSubs(d),subs=has?dwSubUnits(d):[],sp=subs.length>0||(has&&!!d._more),ok=(ctx?ctx+"|":"")+d.id,op=sp&&open.has(ok);
+  // Раскрыли детектор: записи поддетекторов, что пришли строкой дерева, дочитываются (имя и вид — в полной записи)
+  if(op&&(subs.some(s=>s._row)||!dwLoaded.has(d.id)))setTimeout(()=>dwSubsEnsure(d.id),0);
+  const badge=subs.length?`<span class="dw-tsub" title="${subs.length} ${i18n(plural(subs.length,"поддетектор|поддетектора|поддетекторов"))}">${lu("list-tree",12)}${subs.length}</span>`:"";
+  // «+» при наведении на строку, как в Notion и Confluence: быстрый путь мышью. С клавиатуры и с сенсорного экрана —
+  // кнопка в карточке и пункт меню «⋮»
+  const plus=dwHasSubs(d)?`<button type="button" class="dw-tplus" tabindex="-1" aria-label="${i18n("Создать поддетектор")}" title="${i18n("Создать поддетектор")}" ${onEv("click",onEv.stop,["dwSubCreate",d.id])}>${lu("plus",14)}</button>`:"";
+  return{sp,ok,op,badge,plus,kids:l=>subs.map((s,i)=>dwTreeSubRow(d,dwSubLite(s),i,l)).join("")};
+}
+// Строка поддетектора для дерева и списка камеры: имя, вид и «включён» — из узла
+function dwSubLite(n){return{id:n.id,name:n.name||"",kind:n.props?.subdetectorKind,on:n.props?.enabled!==false}}
+function dwTreeSubRow(d,s,i,l){
+  const on=sel===d.id&&dw.subSel===s.id,t=s.kind?i18n(DW_SUBN[s.kind]||s.kind):"",c=dw.cfg[d.id],sv=dw.saved[d.id];
+  // «удалить» — только у поддетектора, который применён (есть в сохранённых) и убран из черновика
+  const gone=!!c&&!!sv&&sv.subs.some(x=>x.id===s.id)&&!c.subs.some(x=>x.id===s.id);
+  return`<div class="n dw-tsr${on?" on":""}" style="--l:${l}" data-dwsub="${d.id}|${escHtml(s.id)}" ${onEv("click",["dwSubPick",d.id,s.id])}><span class="tw"></span><i class="dw-tdot" style="background:${DW_SUBC[i%DW_SUBC.length]}"></i><span class="nm" title="${escHtml(s.name)} · ${escHtml(t)}">${escHtml(s.name)}</span><span class="dw-tty">${escHtml(t)}</span>${gone?`<span class="bd off" title="${i18n("Консоль удалит поддетектор после «Применить»")}">${i18n("удалить")}</span>`:s.on?"":`<span class="bd off">${i18n("выкл")}</span>`}<span class="n-meta"><span class="n-fav" aria-hidden="true"></span><button type="button" class="n-menu" tabindex="-1" aria-label="${i18n("Действия")}" title="${i18n("Действия")}" aria-haspopup="menu" ${onEv("click",["dwSubMenu",onEv.event,d.id,s.id])}>${lu("ellipsis-vertical",16)}</button></span></div>`;
 }
 function gcamrow(cam,dets,l,ctx){
   if(treeHidQ(cam))return"";// камера под GPU сервера: строится не обходом дерева, метку смотрим здесь
@@ -14614,16 +14861,17 @@ function detZoneCardHtml(cam,d){
     `<span class="sub" style="font-weight:400">${escHtml(detKindText(d,cam))}</span>`);
 }
 // Параметры детектора: где работает, вид, чувствительность по диапазону шаблона, поток и настройки серверного
-function detFieldsHtml(cam,d,nameLb){
+// noSensFld — чувствительность показывает окно детектора своим ползунком: поля здесь нет
+function detFieldsHtml(cam,d,nameLb,noSensFld){
   const opt=detOption(cam,d),draft=!hwVer.has(d.id),opts=cam?.detectorOptions||[];
   const place=draft&&opts.length?`<div><label>${i18n("Размещение")}</label><select ${onEv("change",["detPlace",`${cam.id}`,`${d.id}`,onEv.value])}><option value="" ${d.template?"":"selected"}>${i18n("Серверный")}</option>${opts.map(o=>`<option value="${escHtml(o.template)}" ${o.template===d.template?"selected":""}>${escHtml(i18n("Встроенный"))}: ${escHtml(o.name)}</option>`).join("")}</select></div>`
     :fldRo("Размещение",i18n(d.builtin?"Встроенный":"Серверный"));
   const kind=d.builtin?fldRo("Тип",detKindText(d,cam)):sl("Тип",DET_TYPES,d.kind||DET_TYPES[0]);
   const noSens=!!opt&&opt.sensitivityMin==null;
-  const sens=noSens?"":fld(opt?`Чувствительность`:"Чувствительность",d.sens||"");
+  const sens=noSens||noSensFld?"":fld(opt?`Чувствительность`:"Чувствительность",d.sens||"");
   const streams=!d.builtin&&cam?sl("Поток",camStreams(cam).map(s=>s.id),d.stream||camStreams(cam)[0].id):"";
   return`<div class="g">${fld(nameLb,locName(d))}${place}${kind}${sens}${streams}</div>
-    ${opt&&!noSens?`<p class="sub">${i18n("Чувствительность")}: ${opt.sensitivityMin}–${opt.sensitivityMax}</p>`:""}
+    ${opt&&!noSens&&!noSensFld?`<p class="sub">${i18n("Чувствительность")}: ${opt.sensitivityMin}–${opt.sensitivityMax}</p>`:""}
     ${d.builtin?"":`<div style="margin-top:10px">${fld("Настройки детектора",d.params||"")}</div><label class="sub" style="display:block;margin-top:10px">${i18n("Метки серверов: где считать")}</label>${chipsHtml(refLabels,d.labels,"listToggle",`${d.id}`,"labels")}`}
     <label class="sub" style="display:block;margin-top:10px">${i18n("Что считать тревогой")}</label>${chipsHtml(refEvents,d.alarmKinds,"listToggle",`${d.id}`,"alarmKinds")}
     <div class="ln ln-sw"><div>${i18n("Включён")}</div><div class="sw ${d.enabled!==false?"on":""}" role="switch" aria-checked="${d.enabled!==false}" data-det-on="${escHtml(d.id)}" ${onEv("click",["detEnable",`${d.id}`])}></div></div>`;
@@ -14658,12 +14906,1117 @@ function camDetectorsHtml(n){
     key:"det:"+n.id,
     title:"Детекторы камеры",
     items:dets,
-    text:d=>[detTitle(d),i18n(d.kind||DET_TYPES[0])],
-    row:d=>`<div class="it" ${onEv("click",["detFromCam",d.id])}><span>${ic("det")}</span><span>${escHtml(detTitle(d))}<small>${escHtml(detKindText(d,n))} · ${i18n(d.builtin?"встроенный":"серверный")} · ${escHtml(detZoneText(d))}</small></span>${pendingDelHas(d.id)?`<span class="bd off">${i18n("удаляется")}</span>`:`${bdg(d)}<button type="button" class="btn s det-row-del" ${onEv("click",onEv.stop,["deleteDetector",`${n.id}`,`${d.id}`])}>${i18n("Удалить")}…</button>`}</div>`,
+    text:d=>[detTitle(d),i18n(d.kind||DET_TYPES[0]),...(dwHasSubs(d)?dwSubUnits(d).map(s=>s.name):[])],
+    row:d=>{const sb=dwHasSubs(d)?dwSubUnits(d).map(dwSubLite):[];return`<div class="it" ${onEv("click",["detFromCam",d.id])}><span>${ic("det")}</span><span>${escHtml(detTitle(d))}<small>${escHtml(detKindText(d,n))} · ${i18n(d.builtin?"встроенный":"серверный")} · ${escHtml(detZoneText(d))}${sb.length?` · ${sb.length} ${i18n(plural(sb.length,"поддетектор|поддетектора|поддетекторов"))}`:""}</small></span>${pendingDelHas(d.id)?`<span class="bd off">${i18n("удаляется")}</span>`:`${bdg(d)}<button type="button" class="btn s det-row-del" ${onEv("click",onEv.stop,["deleteDetector",`${n.id}`,`${d.id}`])}>${i18n("Удалить")}…</button>`}</div>`
+      +(sb.length?`<div class="dw-csub">${sb.map((s,i)=>`<button type="button" class="dw-csub-r" ${onEv("click",["dwSubPick",d.id,s.id,1])}><i class="dw-tdot" style="background:${DW_SUBC[i%DW_SUBC.length]}"></i><span>${escHtml(s.name)}</span><small>${escHtml(s.kind?i18n(DW_SUBN[s.kind]||s.kind):"")}${s.on?"":` · ${i18n("выкл")}`}</small></button>`).join("")}</div>`:"")},
     ph:"Имя или тип детектора…",
     unit:"детектор|детектора|детекторов",
     head:addBtn
   });
+}
+// ── Окно детектора: что настраиваю и что получу (из прототипа 55) ───────────────
+// Настройки и поддетекторы окно читает из объекта детектора и его дочерних объектов вида subdet (контракт 0.12.0) и
+// пишет одной операцией через план «Применить». ЗАГЛУШКА — только кадр: сцену (объекты за последний час) и превью
+// сработок, в том числе «Сработки до и после новых настроек», считает браузер, сервер их не отдаёт.
+// Карточка: слева кадр с зонами и объектами, под ним превью сработок за час; справа настройки по типам.
+// Кадр показывает рамки по черновику сразу. Вкладка «Сработки до и после новых настроек» сравнивает прежние настройки
+// с новыми только после «Применить»: верхний ряд — эталон до «Применить», нижний заполняется после.
+const DW_T=3600,DW_X=160,DW_Y=90,DW_T0=Date.now()-1800*1000;
+const DW_KINDS=[["motion","Движение"],["linecross","Пересечение линии"],["tracker","Трекер объектов"],["neural","Нейросетевой трекер"],["lpr","Номер"],["crowd","Скопление людей"],["abandoned","Оставленный предмет"]];
+const DW_CLS={person:"Человек",car:"Машина",bike:"Велосипед",bag:"Предмет",noise:"Помеха"};
+const DW_SUBC=["#c084fc","#f59e0b","#22d3ee","#f472b6"];
+// ── Поддетекторы, как в Axxon One: детектор находит объекты, поддетектор решает, когда сработать ──
+// Поддетектор — объект вида subdet под детектором (профиль vms.subdetector/1): свой uid, версия, события и удаление
+const DW_SUBP=new Set(["motion","tracker","neural"]);
+const DW_SUBK=[
+  ["line","Пересечение линии","Объект пересёк линию в выбранном направлении."],
+  ["enter","Вход в область","Объект вошёл в область."],
+  ["exit","Выход из области","Объект вышел из области."],
+  ["dwell","Пребывание в области","Объект находится в области дольше или меньше заданного времени."],
+  ["stop","Остановка в области","Объект остановился в области и стоит дольше заданного времени."],
+  ["move","Движение в области","Объект движется в области."],
+  ["multi","Множество объектов","В области одновременно находится не меньше заданного числа объектов."],
+  ["a2a","Переход из области в область","Объект перешёл из первой области во вторую."],
+  ["abandoned","Оставленный предмет","Предмет лежит в области без движения дольше заданного времени. Есть только у трекера объектов."],
+  ["mask","Маскирование треков","Детектор не ведёт объекты в области. Поддетектор не создаёт событий."]];
+const DW_SUBN=Object.fromEntries(DW_SUBK.map(([k,n])=>[k,n]));
+LU["list-tree"]='<path d="M21 12h-8"/><path d="M21 6H8"/><path d="M21 18h-8"/><path d="M3 6v4c0 1.1.9 2 2 2h3"/><path d="M3 10v6c0 1.1.9 2 2 2h3"/>';
+function dwSubKinds(k){return DW_SUBK.filter(([x])=>x!=="abandoned"||k==="tracker")}
+// Поддетекторы есть у видов из DW_SUBP, если сервер знает вид subdet и его можно создавать
+function dwSubsOk(){return KINDS.has("subdet")&&kindCan("subdet","create")}
+function dwHasSubs(d){return DW_SUBP.has(dwKindOf(d))&&dwSubsOk()}
+// Поддетекторы в кэше — дочерние узлы детектора вида subdet (узел по схеме вида: свойства в props)
+function dwSubUnits(d){return(d.devices||[]).filter(x=>nodeKind(x)==="subdet")}
+function dwSubNew(kind,name,id){
+  const r=(x0,y0,x1,y1)=>[[x0,y0],[x1,y0],[x1,y1],[x0,y1]];
+  return{id,kind,name,on:true,classes:["person","car","bike"],
+    area:{pts:kind==="mask"?r(.02,.3,.18,.62):kind==="stop"||kind==="abandoned"?r(.72,.66,.97,.88):kind==="multi"?r(.05,.6,.95,.98):r(.55,.6,.75,.8)},area2:kind==="a2a"?{pts:r(.78,.6,.96,.8)}:null,
+    line:kind==="line"?[[.6,.6],[.6,.95]]:null,dir:"both",
+    time:kind==="dwell"?30:kind==="stop"||kind==="abandoned"?10:0,mode:"gt",count:3,
+    spd:[0,500],grp:false,gn:2,gh:2,off:[15,10]};
+}
+function dwMasked(c,[x,y]){return c.subs.some(s=>s.on&&s.kind==="mask"&&dwIn(s.area.pts,x,y))}
+const DW_PIX=new Set(["motion","tracker","abandoned"]);
+const DW_SIZE=new Set(["motion","linecross","tracker","neural","abandoned"]);
+// T — время живого видео (секунды сцены, растёт без конца),
+// ap — когда применили настройки и какие были до этого
+// Сцена: улица у входа в здание. Люди идут по тротуару, часть заходит в дверь или ждёт у неё; машины едут
+// и паркуются; листва и тени дают помехи. Путь объекта — точки [время, x, y] нижней середины рамки в долях кадра
+let dwSceneCache=null;
+function dwScene(){
+  if(dwSceneCache)return dwSceneCache;
+  const r=dwRng(53),tr=[];let id=0;
+  const add=o=>{o.id="o"+(++id);o.t0=o.p[0][0];o.t1=o.p[o.p.length-1][0];tr.push(o)};
+  const PL="АВЕКМНОРСТУХ",plate=()=>`${PL[r()*12|0]} ${100+(r()*899|0)} ${PL[r()*12|0]}${PL[r()*12|0]} ${[77,99,177,197,750][r()*5|0]}`;
+  for(let i=0;i<46;i++){
+    const t0=r()*(DW_T-80),dir=r()<.5,y=.66+r()*.06,sp=18+r()*10,door=r()<.3,h=.11+r()*.05;
+    const x0=dir?-.04:1.04,x1=dir?1.04:-.04,p=[[t0,x0,y]];
+    if(door){const tD=t0+Math.abs(.3-x0)*sp;p.push([tD,.3,y],[tD+3,.31,.61]);p.push([tD+4+(r()<.4?15+r()*45:0),.32,.6])}
+    else p.push([t0+sp,x1,y+(r()-.5)*.04]);
+    add({cls:"person",p,w:h*.38,h,conf:.42+r()*.56,str:.45+r()*.5});
+  }
+  [700,2300,3150].forEach((tg,gi)=>{
+    const n=4+gi+(r()*2|0);
+    for(let k=0;k<n;k++){const x=.2+r()*.18,y=.62+r()*.08,h=.12+r()*.04,t0=tg+r()*15,st=40+r()*25;
+      add({cls:"person",p:[[t0,x-.12,y],[t0+6,x,y],[t0+st,x+.01,y],[t0+st+10,x+.16,y+.02]],w:h*.38,h,conf:.6+r()*.38,str:.5+r()*.4})}
+  });
+  for(let i=0;i<30;i++){
+    const t0=r()*(DW_T-60),dir=r()<.5,y=dir?.9:.83,sp=7+r()*5,h=.1+r()*.04,w=h*1.7,park=r()<.18;
+    const x0=dir?-.14:1.14,x1=dir?1.14:-.14,st=120+r()*300;
+    const p=park?[[t0,x0,y],[t0+sp*.6,.84,.76],[t0+sp*.6+st,.84,.76],[t0+sp*.6+st+8,1.14,.83]]:[[t0,x0,y],[t0+sp,x1,y]];
+    add({cls:"car",p,w,h,conf:.55+r()*.44,str:.7+r()*.3,plate:plate(),pw:.018+r()*.04,hue:r()*360|0});
+  }
+  for(let i=0;i<8;i++){const t0=r()*(DW_T-30),dir=r()<.5,y=.78;add({cls:"bike",p:[[t0,dir?-.05:1.05,y],[t0+10+r()*6,dir?1.05:-.05,y]],w:.06,h:.09,conf:.4+r()*.5,str:.55+r()*.35})}
+  for(let i=0;i<70;i++){const t0=r()*(DW_T-8),x=.05+r()*.1,y=.32+r()*.22,h=.04+r()*.08;add({cls:"noise",src:"leaf",p:[[t0,x,y],[t0+3+r()*5,x+(r()-.5)*.02,y]],w:h*.9,h,conf:.1+r()*.3,str:.12+r()*.42})}
+  for(let i=0;i<12;i++){const t0=r()*(DW_T-20),x=.3+r()*.55,y=.72+r()*.2,h=.1+r()*.1;add({cls:"noise",src:"shadow",p:[[t0,x,y],[t0+8+r()*8,x+.05,y]],w:h*2,h,conf:.1,str:.25+r()*.25})}
+  add({cls:"bag",p:[[1820,.62,.7],[2420,.62,.7]],w:.025,h:.035,conf:.7,str:.3});
+  tr.sort((a,b)=>a.t0-b.t0);
+  dwSceneCache=tr;return tr;
+}
+function dwAt(o,t){
+  const p=o.p;if(t<o.t0||t>o.t1)return null;
+  for(let i=1;i<p.length;i++)if(t<=p[i][0]){const a=p[i-1],b=p[i],k=b[0]===a[0]?0:(t-a[0])/(b[0]-a[0]);return[a[1]+(b[1]-a[1])*k,a[2]+(b[2]-a[2])*k]}
+  return null;
+}
+function dwIn(pts,x,y){let r=false;for(let i=0,j=pts.length-1;i<pts.length;j=i++){const[xi,yi]=pts[i],[xj,yj]=pts[j];if((yi>y)!==(yj>y)&&x<(xj-xi)*(y-yi)/(yj-yi)+xi)r=!r}return r}
+function dwSide(l,x,y){const[[ax,ay],[bx,by]]=l;return Math.sign((bx-ax)*(y-ay)-(by-ay)*(x-ax))}
+// Пересёк ли путь p→q отрезок l: +1 — со стороны A на сторону B, −1 — обратно, 0 — не пересёк
+function dwCross(l,p,q){
+  const s1=dwSide(l,p[0],p[1]),s2=dwSide(l,q[0],q[1]);if(!s1||!s2||s1===s2)return 0;
+  const m=[p,q];if(dwSide(m,l[0][0],l[0][1])===dwSide(m,l[1][0],l[1][1]))return 0;
+  return s1<0?1:-1;
+}
+// ── Настройки: черновик и сохранённые — из объекта детектора и его поддетекторов ──
+// Окно хранит модель настроек (areas, min, max, subs…). Сохранённая модель строится из объекта; черновик — её копия, которую
+// правит пользователь. Объект изменился (событие, «Применить») — сохранённая модель строится заново (dwSync), а правки
+// пользователя в черновике остаются.
+const DW_CODES=new Set(DW_KINDS.map(([k])=>k));
+const DW_ALL=["person","car","bike"];
+// Вид окна: трекер и нейросетевой трекер — detectorKind other с analyticsKind; незнакомый analyticsKind — как other
+function dwKindOf(d){
+  const code=DET_KIND_CODE[d.kind];
+  if(code==="other"&&(d.analyticsKind==="tracker"||d.analyticsKind==="neural"))return d.analyticsKind;
+  return DW_CODES.has(code)?code:"other";
+}
+// Свойство есть в схеме вида det: раздела окна без него нет
+const dwHas=p=>kindHasProp("det",p);
+const dwCls=a=>Array.isArray(a)?DW_ALL.filter(x=>a.includes(x)):DW_ALL.slice();
+const dwCopy=pts=>pts.map(q=>[q[0],q[1]]);
+function dwPolyOf(z){if(!z||!z.points?.length)return null;if(z.shape==="rect"){const[[x0,y0],[x1,y1]]=z.points;return[[x0,y0],[x1,y0],[x1,y1],[x0,y1]]}return dwCopy(z.points)}
+// Имя зоны на кадре и в списке: язык — на момент показа
+function dwAreaName(a){return`${i18n(a.type==="ex"?"Исключение":"Зона")} ${a.n}`}
+// Чувствительность, которую окно показывает, когда у объекта её нет: 50, у встроенного — в границах шаблона камеры
+function dwSensDef(d){const o=detOption(find(d.id)?.p,d);return Math.min(o?.sensitivityMax??100,Math.max(o?.sensitivityMin??1,50))}
+// Объект детектора → модель окна. Нет поля — прежнее поведение: без ограничения размера, все классы, умолчания сервера
+function dwFromUnit(d){
+  const z=d.zone,line=z?.shape==="line"&&z.points?.length>1,lc=dwKindOf(d)==="linecross",poly=z&&!line&&!lc?dwPolyOf(z):null,areas=[];
+  if(poly)areas.push({id:"z0",type:"in",n:1,pts:poly});
+  (d.extraZones||[]).forEach((x,i)=>{
+    const n=areas.filter(a=>a.type===x.type).length+1;
+    areas.push({id:"z"+(i+1),type:x.type,n,pts:dwCopy(x.points)});
+  });
+  const os=d.objectSize||{},pw=d.plateWidth||{},has=d.sens!=null&&d.sens!==""&&Number.isFinite(+d.sens),sd=dwSensDef(d);
+  // Зона, которую окно этого вида не показывает (у линии — область, у остальных — линия), остаётся как есть (zother)
+  return{areas,zraw:z?.shape==="rect"?JSON.parse(JSON.stringify(z)):null,zother:z&&(lc?!line:line)?JSON.parse(JSON.stringify(z)):null,line:line?dwCopy(z.points):null,dir:d.direction||"both",
+    min:(os.min||[0,0]).slice(),max:(os.max||[1,1]).slice(),minAt:[.1,.97],maxAt:[.5,.97],
+    sens:has?+d.sens:sd,sensNo:!has,sensDef:sd,delay:d.minDurationSec??0,classes:dwCls(d.classes),conf:d.confidence??60,
+    count:d.crowdMin??4,hold:d.crowdHoldSec??10,stay:d.stillSec??60,pw:[pw.min??0,pw.max??1],
+    subs:dwSubUnits(d).filter(s=>DW_SUBN[s.props?.subdetectorKind]).map(dwSubFromUnit)};
+}
+// Поддетектор: объект → модель. Нет поля — без группы, направление в обе стороны, скорость 0–500, смещение 15 × 10 %
+function dwSubFromUnit(n){
+  const p=n.props||{},kind=p.subdetectorKind,z=p.zone,ln=kind==="line",def=dwSubNew(kind,n.name,n.id);
+  return{id:n.id,kind,name:n.name||"",on:p.enabled!==false,classes:dwCls(p.classes),
+    area:{pts:!ln&&z?dwPolyOf(z)||def.area.pts:def.area.pts},area2:kind==="a2a"?{pts:p.zoneTo?.points?dwCopy(p.zoneTo.points):def.area2.pts}:null,
+    line:ln?(z?.shape==="line"&&z.points?.length>1?dwCopy(z.points):def.line):null,dir:p.direction||"both",
+    time:p.timeSec??0,mode:p.timeMode||"gt",count:p.minObjects??3,
+    spd:[p.speed?.min??0,p.speed?.max??500],grp:!!p.group,gn:p.group?.count??2,gh:p.group?.waitSec??2,off:[p.offset?.x??15,p.offset?.y??10]};
+}
+// Модель → свойства объекта. Лишнего нет: свойство, которое у вида не нужно или равно умолчанию, не уходит
+function dwDetProps(c,k){
+  const o={};
+  if(k==="other")return o;
+  const ins=c.areas.filter(a=>a.type==="in"),first=k==="linecross"?null:ins[0],rest=c.areas.filter(a=>a!==first);
+  // Прямоугольник, который не трогали, остаётся прямоугольником
+  const zone=k==="linecross"?(c.line?{shape:"line",points:dwCopy(c.line)}:c.zother?JSON.parse(JSON.stringify(c.zother)):null)
+    :first?(c.zraw&&JSON.stringify(dwPolyOf(c.zraw))===JSON.stringify(first.pts)?JSON.parse(JSON.stringify(c.zraw)):{shape:"polygon",points:dwCopy(first.pts)}):c.zother?JSON.parse(JSON.stringify(c.zother)):null;
+  o.zone=zone;
+  if(dwHas("extraZones"))o.extraZones=rest.length?rest.map(a=>({type:a.type,points:dwCopy(a.pts)})):null;
+  if(k==="linecross"&&dwHas("direction"))o.direction=c.dir;
+  if(DW_SIZE.has(k)&&dwHas("objectSize")){
+    const s={};if(c.min[0]||c.min[1])s.min=c.min.slice();if(c.max[0]!==1||c.max[1]!==1)s.max=c.max.slice();
+    o.objectSize=Object.keys(s).length?s:null;
+  }
+  // Чувствительности у объекта нет: она уходит, только когда пользователь сдвинул ползунок с показанного умолчания
+  if((k==="motion"||k==="tracker")&&!(c.sensNo&&c.sens===c.sensDef))o.sensitivity=Math.round(c.sens);
+  if(k==="motion"&&dwHas("minDurationSec"))o.minDurationSec=c.delay;
+  if((k==="linecross"||k==="neural")&&dwHas("classes"))o.classes=c.classes.slice();
+  if((k==="neural"||k==="lpr")&&dwHas("confidence"))o.confidence=c.conf;
+  if(k==="lpr"&&dwHas("plateWidth")){const s={};if(c.pw[0]>0)s.min=c.pw[0];if(c.pw[1]<1)s.max=c.pw[1];o.plateWidth=Object.keys(s).length?s:null}
+  if(k==="crowd"){if(dwHas("crowdMin"))o.crowdMin=c.count;if(dwHas("crowdHoldSec"))o.crowdHoldSec=c.hold}
+  if(k==="abandoned"&&dwHas("stillSec"))o.stillSec=c.stay;
+  return o;
+}
+function dwSubProps(s,k){
+  const o={enabled:s.on};
+  o.zone=s.kind==="line"?{shape:"line",points:dwCopy(s.line)}:{shape:"polygon",points:dwCopy(s.area.pts)};
+  if(s.kind==="a2a")o.zoneTo={points:dwCopy(s.area2.pts)};
+  if(s.kind==="line")o.direction=s.dir;
+  if(s.kind==="dwell"||s.kind==="a2a")o.timeMode=s.mode;
+  if(["dwell","a2a","stop","abandoned"].includes(s.kind))o.timeSec=s.time;
+  if(s.kind==="multi")o.minObjects=s.count;
+  if(k!=="motion"&&s.kind!=="mask"&&s.kind!=="abandoned")o.classes=s.classes.slice();
+  if(s.kind!=="mask"){
+    if(s.spd[0]!==0||s.spd[1]!==500)o.speed={min:s.spd[0],max:s.spd[1]};
+    if(s.off[0]!==15||s.off[1]!==10)o.offset={x:s.off[0],y:s.off[1]};
+    if(s.grp)o.group={count:s.gn,waitSec:s.gh};
+  }
+  return o;
+}
+// Что изменилось: свойство из новой модели, которое отличается от сохранённой, или null — убрать. Merge Patch
+// Вложенный объект (objectSize, plateWidth, speed…) сливается по ключам: убранный ключ уходит как null, массив заменяется целиком
+function dwPropsPatch(now,was){
+  const out={},ne=(a,b)=>JSON.stringify(a)!==JSON.stringify(b),obj=x=>x!==null&&typeof x==="object"&&!Array.isArray(x);
+  new Set([...Object.keys(now),...Object.keys(was)]).forEach(f=>{
+    if(!ne(now[f],was[f]))return;
+    out[f]=!(f in now)||now[f]===undefined?null:obj(now[f])&&obj(was[f])?dwPropsPatch(now[f],was[f]):now[f];
+  });
+  return out;
+}
+const dw={cfg:{},saved:{},sig:{},sent:{},T:1800,tsp:1,per:15,ap:{},now:null,shown:-1,sj:"",
+  lay:{obj:true,trk:true,why:true,size:false},sel:null,tool:null,drag:false,raf:0,last:0,id:null,memo:new Map(),soon:0};
+const dwClone=x=>JSON.parse(JSON.stringify(x));
+function dwRng(seed){let s=seed>>>0;return()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296}}
+// Подпись состояния объекта: меняется, когда пришла новая версия детектора или поддетектора, или записи дочитаны
+function dwSig(d){return[hwVer.get(d.id),dwKindOf(d),d._row?1:0,dwSubUnits(d).map(s=>s.id+":"+hwVer.get(s.id)+(s._row?"r":"")).join(",")].join("|")}
+// Что сервер знает о записи, а пользователь не правит: всегда из свежей модели. Что только у окна (рамки размеров) — из черновика
+const DW_SRV=new Set(["zraw","zother","sensNo","sensDef"]),DW_UI=new Set(["minAt","maxAt"]);
+// Черновик c поверх свежей модели, как hwFresh у карточки: поле, которое пользователь изменил (c ≠ base), остаётся из
+// черновика, остальное берёт свежее значение. Поддетекторы — по id: новый на сервере добавляется; ушедший с сервера уходит,
+// если пользователь его не трогал; удалённый пользователем остаётся удалённым; созданный в черновике остаётся.
+// Черновик меняется на месте: на него ссылаются открытая правка на кадре и поля панели
+function dwRebase(c,base,fresh){
+  const ne=(a,b)=>JSON.stringify(a)!==JSON.stringify(b),cp=v=>v===undefined?undefined:dwClone(v);
+  Object.keys(fresh).forEach(k=>{if(k!=="subs"&&!DW_UI.has(k)&&(DW_SRV.has(k)||!ne(c[k],base[k])))c[k]=cp(fresh[k])});
+  const B=new Map(base.subs.map(x=>[x.id,x])),F=new Map(fresh.subs.map(x=>[x.id,x])),out=[];
+  c.subs.forEach(x=>{
+    const b=B.get(x.id),f=F.get(x.id);
+    if(!b){out.push(x);return}
+    const touched=ne(x,b);
+    // Поле, которое пользователь изменил, — из черновика, остальные — с сервера
+    if(f){if(!touched){out.push(dwClone(f));return}const y=dwClone(f);Object.keys(x).forEach(key=>{if(ne(x[key],b[key]))y[key]=cp(x[key])});out.push(y)}
+    else if(touched)out.push(x);
+  });
+  fresh.subs.forEach(f=>{if(!B.has(f.id)&&!out.some(x=>x.id===f.id))out.push(dwClone(f))});
+  c.subs=out;
+}
+function dwSync(d){
+  const id=d.id,sig=dwSig(d),sent=dw.sent[id],old=dw.cfg[id];
+  // Операция плана кончилась. Все шаги прошли — черновик берёт то, что на сервере (поддетектор, который создаёт шаг, кэш
+  // может получить позже: тогда он придёт как новый). Не все — черновик с «Применить» возвращается поверх того, что теперь
+  // на сервере: что операция успела записать, совпадает с сервером, а что не записала, снова в плане
+  if(sent&&sent.q.finished&&old){
+    delete dw.sent[id];
+    const q=sent.q,bad=q.fail>0||q.steps.some(s=>s.ops.some(o=>o.state==="cancel")),fresh=dwFromUnit(d),prev=dw.saved[id];
+    fresh.minAt=old.minAt;fresh.maxAt=old.maxAt;
+    dw.sig[id]=sig;dw.saved[id]=fresh;
+    if(!bad){dwRebase(old,dwClone(old),fresh);return}
+    const ops=q.apiOps||[],draft=dwClone(sent.draft),ne=(a,b)=>JSON.stringify(a)!==JSON.stringify(b);
+    // Шаг создал поддетектор: он придёт с uid сервера, его черновик под временным id больше не нужен
+    draft.subs=draft.subs.filter(x=>!sent.made.some(([i,sid])=>sid===x.id&&ops[i]?.state==="ok"));
+    // Черновик с «Применить» возвращается в поля, которые с тех пор не правили (в них сейчас то, что отдавал сервер)
+    Object.keys(draft).forEach(k=>{if(!DW_UI.has(k)&&(!prev||!ne(old[k],prev[k])))old[k]=draft[k]});
+    dwRebase(old,sent.base,fresh);
+    return;
+  }
+  if(old&&dw.sig[id]===sig)return;
+  const fresh=dwFromUnit(d),was=dw.saved[id];
+  if(old){fresh.minAt=old.minAt;fresh.maxAt=old.maxAt}
+  dw.sig[id]=sig;dw.saved[id]=fresh;
+  if(!old||!was){dw.cfg[id]=dwClone(fresh);return}
+  // Идёт операция плана: окно только для чтения, черновик берёт то, что отдал сервер (создаваемый поддетектор
+  // получит uid сервера). Иначе правки
+  // пользователя остаются поверх новой сохранённой модели, а чужие изменения других полей приходят в черновик
+  dwRebase(old,dw.sent[id]?dwClone(old):was,fresh);
+}
+// Поддетекторы детектора читаются полными записями: в строке дерева — только краткие свойства. Одно чтение на детектор;
+// дочитывание — и когда в кэше появились новые краткие записи
+const dwLoaded=new Set(),dwBusy=new Set();
+async function dwSubsEnsure(id){
+  const d=detNodeOf(id);if(!d||!dwHasSubs(d)||dwBusy.has(id))return;
+  if(dwLoaded.has(id)&&!dwSubUnits(d).some(s=>s._row))return;
+  dwBusy.add(id);
+  try{
+    const list=await unitsAll({parentId:id,kind:"subdet"});
+    list.forEach(u=>{const f=find(u.uid);if(f){hwApplySchema(u);delete f.n._row}else hwAddUnits([u])});
+    if(!dwSubUnits(d).length)d._more=false;
+  }catch(e){}
+  dwLoaded.add(id);dwBusy.delete(id);
+  treeMatchCache.clear();searchMatchCache.clear();renderTreeSoon();
+  if(sel===id&&app==="hw")gear();
+}
+function dwC(d){dwSync(d);return dw.cfg[d.id]}
+function dwSaved(d){dwSync(d);return dw.saved[d.id]}
+function dwChanged(d){return dwDiffRows(d).length>0}
+// ── Почему объект не считается: первая причина по порядку проверок ──
+// Проверки детектора по порядку: на них строятся причина на рамке (вариант A) и воронка отсева (вариант B)
+function dwChecks(c,k){
+  const L=[],ins=c.areas.filter(a=>a.type==="in"),exs=c.areas.filter(a=>a.type==="ex");
+  if(ins.length)L.push({key:"zone",out:"вне зоны",pass:"В зоне",fail:()=>"вне зоны",f:(o,[x,y])=>ins.some(a=>dwIn(a.pts,x,y))});
+  if(exs.length)L.push({key:"ex",out:"в зоне исключения",pass:"Не в исключении",fail:()=>"в зоне исключения",f:(o,[x,y])=>!exs.some(a=>dwIn(a.pts,x,y))});
+  if(k==="lpr")L.push({key:"size",out:"номер не той ширины",pass:"Номер нужной ширины",fail:o=>o.pw<c.pw[0]?"номер мельче минимума":"номер крупнее максимума",f:o=>o.pw>=c.pw[0]&&o.pw<=c.pw[1]});
+  else if(DW_SIZE.has(k))L.push({key:"size",out:"не того размера",pass:"Нужного размера",fail:o=>o.w<c.min[0]||o.h<c.min[1]?"меньше мин. размера":"больше макс. размера",f:o=>!(o.w<c.min[0]||o.h<c.min[1]||o.w>c.max[0]||o.h>c.max[1])});
+  if(k==="motion"||k==="tracker")L.push({key:"sens",out:"слабое движение",pass:"Движение сильнее порога",fail:()=>"слабое движение",f:o=>o.str>=1-c.sens/100});
+  if(k==="linecross"||k==="neural")L.push({key:"cls",out:"класс не выбран",pass:"Нужный класс",fail:()=>"класс не выбран",f:o=>c.classes.includes(o.cls)});
+  if(k==="crowd")L.push({key:"cls",out:"не человек",pass:"Человек",fail:()=>"не человек",f:o=>o.cls==="person"});
+  if(k==="neural"||k==="lpr")L.push({key:"conf",out:"нейросеть не уверена",pass:"Нейросеть уверена",fail:o=>`уверенность ${Math.round(o.conf*100)}% < ${c.conf}%`,f:o=>o.conf*100>=c.conf});
+  return L;
+}
+function dwHidden(k,o){return(!DW_PIX.has(k)&&o.cls==="noise")||(k==="lpr"&&o.cls!=="car")}
+function dwFail(c,k,o,pos){if(dwHidden(k,o))return{key:"hide",text:"hide"};for(const ch of dwChecks(c,k))if(!ch.f(o,pos))return{key:ch.key,text:ch.fail(o)};return null}
+function dwWhy(c,k,o,pos){return dwFail(c,k,o,pos)?.text||""}
+function dwDirOk(dir,s){return dir&&(s==="both"||(s==="ab")===(dir>0))}
+function dwObjFires(c,k,o){
+  const out=[];let run=0,prev=null,fired=false,still=0;const ss={};
+  for(let t=Math.ceil(o.t0);t<=o.t1;t++){
+    const pos=dwAt(o,t);if(!pos)continue;
+    const why=dwWhy(c,k,o,pos);
+    if(k==="motion"){run=why?0:run+1;if(!fired&&run>=Math.max(1,c.delay)){fired=true;out.push({t})}}
+    else if(k==="neural"||k==="lpr"){if(!why&&!fired){fired=true;out.push({t})}}
+    else if(k==="linecross"){if(prev&&!why&&c.line&&dwDirOk(dwCross(c.line,prev,pos),c.dir))out.push({t})}
+    else if(k==="abandoned"){const mv=prev?Math.hypot(pos[0]-prev[0],pos[1]-prev[1]):1;still=!why&&mv<.002?still+1:0;if(!fired&&still>=c.stay){fired=true;out.push({t})}}
+    if(DW_SUBP.has(k)&&!why&&c.subs.length)dwSubStep(c,k,o,t,pos,prev,ss,out);
+    prev=pos;
+  }
+  return out;
+}
+// Шаг поддетекторов за одну секунду: у каждого поддетектора своё состояние по объекту
+function dwSubStep(c,k,o,t,pos,prev,ss,out){
+  if(dwMasked(c,pos))return;
+  const[x,y]=pos,v=prev?Math.hypot(x-prev[0],y-prev[1])*100:0;
+  c.subs.forEach(s=>{
+    if(!s.on||s.kind==="mask"||s.kind==="multi")return;
+    if(s.kind==="abandoned"?o.cls==="person":k!=="motion"&&!s.classes.includes(o.cls))return;
+    if(prev&&(v<s.spd[0]||v>s.spd[1]))return;
+    const st=ss[s.id]||(ss[s.id]={in:null,run:0,done:false,a1:null,in2:false});
+    const fire=()=>out.push({t,sub:s.id});
+    if(s.kind==="line"){if(prev&&dwDirOk(dwCross(s.line,prev,pos),s.dir))fire();return}
+    const inA=dwIn(s.area.pts,x,y);
+    if(s.kind==="a2a"){
+      const in2=dwIn(s.area2.pts,x,y);if(inA)st.a1=t;
+      if(in2&&!st.in2&&!inA&&st.a1!=null){const dt=t-st.a1;if(!s.time||(s.mode==="lt"?dt<s.time:dt>s.time))fire();st.a1=null}
+      st.in2=in2;return;
+    }
+    if(s.kind==="enter"&&inA&&st.in===false)fire();
+    if(s.kind==="exit"&&!inA&&st.in===true)fire();
+    if(s.kind==="move"){if(inA&&v>.05&&!st.done){st.done=true;fire()}if(!inA)st.done=false}
+    if(s.kind==="stop"||s.kind==="abandoned"){st.run=inA&&prev&&v<.2?st.run+1:0;if(st.run>=Math.max(1,s.time)&&!st.done){st.done=true;fire()}if(!st.run)st.done=false}
+    if(s.kind==="dwell"){
+      if(inA){st.run++;if(s.mode==="gt"&&st.run===Math.max(1,s.time))fire()}
+      else if(st.in){if(s.mode==="lt"&&st.run<s.time)fire();if(s.mode==="eq"&&Math.abs(st.run-s.time)<=1)fire();st.run=0}
+    }
+    st.in=inA;
+  });
+}
+// Сработки за час: память на 6 последних наборов настроек, чтобы ползунок не пересчитывал одно и то же
+function dwEval(c,k){
+  const key=k+JSON.stringify(c);if(dw.memo.has(key))return dw.memo.get(key);
+  const sc=dwScene(),fires=[],byObj=new Map();
+  if(k==="crowd"){
+    let run=0,armed=true;
+    for(let t=0;t<DW_T;t++){
+      let n=0;for(const o of sc){if(o.t0>t)break;if(o.cls!=="person"||t>o.t1)continue;const pos=dwAt(o,t);if(pos&&!dwWhy(c,k,o,pos))n++}
+      if(n>=c.count){run++;if(armed&&run>=c.hold){armed=false;fires.push({t,n})}}else{run=0;armed=true}
+    }
+  }else if(k!=="other")sc.forEach(o=>dwObjFires(c,k,o).forEach(f=>{f.o=o;fires.push(f);if(!byObj.has(o.id))byObj.set(o.id,[]);byObj.get(o.id).push(f)}));
+  // «Множество объектов» считает объекты всей сцены, а не один объект
+  if(DW_SUBP.has(k))c.subs.filter(s=>s.on&&s.kind==="multi").forEach(s=>{
+    let armed=true;
+    for(let t=0;t<DW_T;t++){
+      let n=0;for(const o of sc){if(o.t0>t)break;if(t>o.t1||(k!=="motion"&&!s.classes.includes(o.cls)))continue;const pos=dwAt(o,t);if(pos&&dwIn(s.area.pts,pos[0],pos[1])&&!dwMasked(c,pos)&&!dwWhy(c,k,o,pos))n++}
+      if(n>=s.count){if(armed){armed=false;fires.push({t,n,sub:s.id})}}else armed=true;
+    }
+  });
+  fires.sort((a,b)=>a.t-b.t);
+  const r={fires,byObj};
+  dw.memo.set(key,r);if(dw.memo.size>6)dw.memo.delete(dw.memo.keys().next().value);
+  return r;
+}
+function dwClock(t){return new Date(DW_T0+t*1000).toLocaleTimeString("ru-RU",{hour12:false})}
+// ── Карточка ──
+function detWindowHtml(cam,d){
+  const k=dwKindOf(d),c=dwC(d);
+  if(dw.id!==d.id+k){dw.id=d.id+k;dw.sel=null;dw.tool=null;dw.subSel=null;dw.subNew=false}
+  setTimeout(dwStart,0);setTimeout(dwLand,0);setTimeout(dwRwAria,0);setTimeout(()=>dwSubsEnsure(d.id),0);
+  // Пока идёт операция плана, окно только для чтения: черновик не меняется и не расходится с тем, что ушло на сервер
+  const ro=dw.sent[d.id]?" inert":"";
+  return detBackHtml(cam)+`<div class="dw${ro?" dw-ro":""}" data-dw="${escHtml(d.id)}">
+    ${dwStubHtml(d,k)}
+    <div class="dw-grid" style="${dwRwCss()}">
+      <div class="dw-left">
+        <div class="dw-tools"${ro}>${dwToolsHtml(d,k)}<span class="dw-lay">${dwLayHtml(k)}</span></div>
+        <div class="dw-stage${dw.tool?" draw":""}"${ro} ${onEv("mousedown",["dwDown",onEv.el,onEv.event])}>
+          ${dwSceneSvg()}
+          <span class="dw-tag" data-dw-tag>${dwTagHtml()}</span><span class="dw-now" data-dw-now></span>
+          <svg class="dw-ov" viewBox="0 0 ${DW_X} ${DW_Y}" preserveAspectRatio="none">
+            <defs><pattern id="dwHatch" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="1.2" height="3" fill="rgba(255,120,120,.55)"/></pattern></defs>
+            <g data-dw-obj></g><g data-dw-geo>${dwGeoSvg(d)}</g></svg>
+        </div>
+        <p class="sub dw-hint">${i18n(dwHintText(k))}</p>
+        <div class="dw-play" data-dw-bar>${dwBarHtml()}</div>
+        <div class="dw-prev" data-dw-prev>${dwPrevHtml(d)}</div>
+      </div>
+      <div class="dw-grip" role="separator" aria-orientation="vertical" aria-controls="dwRight" tabindex="0" aria-valuemin="15" aria-valuemax="80" aria-label="${i18n("Ширина настроек")}" title="${i18n("Ширина настроек: тянуть край мышью или нажать стрелки. Двойной щелчок возвращает ширину по умолчанию.")}" ${onEv("pointerdown",["dwGripDown",onEv.el,onEv.event])} ${onEv("keydown",["dwGripKey",onEv.el,onEv.event])} ${onEv("dblclick",["dwGripReset",onEv.el])}></div>
+      <div class="dw-right" id="dwRight"${ro}>${dwPanelHtml(cam,d,k,c)}</div>
+    </div>
+  </div>`;
+}
+// Ширина столбца настроек: доля ширины карточки; своя у каждого зрителя (localStorage), по умолчанию 44 %
+const DW_RW_KEY="consolem-dw-rw";
+function dwRwCss(){
+  if(dw.rw===undefined){dw.rw=null;try{const v=parseFloat(localStorage.getItem(DW_RW_KEY));if(v>=.15&&v<=.8)dw.rw=v}catch(e){}}
+  return dw.rw?`--dw-rw:clamp(320px,${(dw.rw*100).toFixed(1)}%,calc(100% - 400px))`:"";
+}
+function dwRwNow(g){const grid=g.closest(".dw-grid"),r=g.nextElementSibling;return r.getBoundingClientRect().width/Math.max(1,grid.getBoundingClientRect().width)}
+addEventListener("resize",()=>dwRwAria());
+function dwRwAria(g){
+  g=g||document.querySelector("#main .dw-grip");if(!g||!g.isConnected||!g.offsetParent)return;
+  const r=g.nextElementSibling.getBoundingClientRect().width;
+  g.setAttribute("aria-valuenow",String(Math.round(dwRwNow(g)*100)));g.setAttribute("aria-valuetext",`${Math.round(r)} px`);
+}
+function dwRwSet(g,frac,save){
+  dw.rw=frac==null?null:Math.min(.8,Math.max(.15,frac));
+  // Меняем только ширину: остальной inline-стиль сетки не трогаем
+  const st=g.closest(".dw-grid").style,v=dwRwCss();
+  if(v)st.setProperty("--dw-rw",v.slice(v.indexOf(":")+1));else st.removeProperty("--dw-rw");
+  dwRwAria(g);
+  if(save)try{dw.rw==null?localStorage.removeItem(DW_RW_KEY):localStorage.setItem(DW_RW_KEY,String(dw.rw))}catch(e){}
+}
+function dwGripDown(g,e){
+  if(e.button!==0)return;e.preventDefault();g.focus();
+  try{g.setPointerCapture(e.pointerId)}catch(x){}
+  g.classList.add("on");document.body.classList.add("dw-resizing");
+  // Смещение от точки захвата до левого края столбца: столбец не прыгает в начале перетаскивания
+  const off=g.nextElementSibling.getBoundingClientRect().left-e.clientX;let moved=false;
+  const mv=ev=>{if(!g.isConnected)return up();moved=true;const r=g.closest(".dw-grid").getBoundingClientRect();dwRwSet(g,(r.right-ev.clientX-off)/r.width,false)};
+  const up=()=>{
+    g.classList.remove("on");document.body.classList.remove("dw-resizing");
+    ["pointermove","pointerup","pointercancel","lostpointercapture"].forEach((t,i)=>g.removeEventListener(t,i?up:mv));
+    if(moved&&g.isConnected&&dw.rw!=null)dwRwSet(g,dwRwNow(g),true);
+  };
+  g.addEventListener("pointermove",mv);["pointerup","pointercancel","lostpointercapture"].forEach(t=>g.addEventListener(t,up));
+}
+function dwGripKey(g,e){
+  const f={ArrowLeft:dwRwNow(g)+.02,ArrowRight:dwRwNow(g)-.02,Home:.15,End:.8}[e.key];if(f===undefined)return;
+  e.preventDefault();e.stopPropagation();
+  dwRwSet(g,f,true);
+}
+function dwGripReset(g){dwRwSet(g,null,true)}
+function dwStubHtml(d,k){
+  return`<div class="dw-stub"><b>${i18n("Заглушка превью.")}</b>
+    <span>${i18n("Видео, объекты и сработки создаёт браузер. Сервер их не отдаёт.")}</span>
+    <span class="dw-vs">${i18n("Время превью")} <span class="dw-seg">${[1,10,60].map(v=>`<button type="button" class="${dw.tsp===v?"on":""}" ${onEv("click",["dwTsp",v])}>×${v}</button>`).join("")}</span></span></div>`;
+}
+function dwToolsHtml(d,k){
+  if(k==="other")return"";
+  const b=(t,l,ic)=>`<button type="button" class="btn s${dw.tool===t?" on":""}" ${onEv("click",["dwTool",t])}>${ic}${i18n(l)}</button>`;
+  const sw=c=>`<i class="dw-sw" style="background:${c}"></i>`;
+  const out=[];
+  if(k!=="linecross")out.push(b("in","Зона",sw("var(--dw-in)")));
+  if(dwHas("extraZones"))out.push(b("ex","Исключение",sw("var(--dw-ex)")));
+  if(k==="linecross")out.push(b("line","Линия",sw("var(--dw-ln)")));
+  return`<span class="sub dw-tools-l">${i18n("Нарисовать")}:</span>`+out.join("");
+}
+function dwLayHtml(k){
+  if(k==="other")return"";
+  const b=(key,l,t)=>`<button type="button" class="btn s${dw.lay[key]?" on":""}" aria-pressed="${dw.lay[key]}" title="${i18n(t)}" ${onEv("click",["dwLay",key])}>${i18n(l)}</button>`;
+  return`<span class="sub dw-tools-l">${i18n("Показать")}:</span>`+b("obj","Трекинг","Показать рамки объектов, которые нашёл детектор.")+b("trk","Треки","Показать траектории объектов за последние секунды.");
+}
+function dwHintText(k){
+  if(dw.tool==="in")return"Протянуть мышью по кадру. Детектор будет искать объекты внутри зоны.";
+  if(dw.tool==="ex")return"Протянуть мышью по кадру. Детектор не будет замечать объекты в этой зоне.";
+  if(dw.tool==="line")return"Протянуть мышью от точки A к точке B.";
+  if(k==="other")return"Для этого вида превью нет.";
+  return"Перетащить точку или сдвинуть порог. Кадр сразу покажет рамками, какие объекты детектор находит с новыми настройками.";
+}
+// Кадр-заглушка: здание с дверью, дерево слева, тротуар, дорога и парковка справа
+function dwSceneSvg(){return`<svg class="dw-scene" viewBox="0 0 ${DW_X} ${DW_Y}" preserveAspectRatio="none" aria-hidden="true">${dwSceneInner()}</svg>`}
+function dwSceneInner(){
+  return`
+    <rect width="160" height="52" fill="#2b3647"/><rect x="0" y="0" width="160" height="14" fill="#3a475c"/>
+    <rect x="30" y="12" width="70" height="42" fill="#4a586d"/><rect x="44" y="40" width="8" height="15" fill="#20262f"/>
+    ${[36,58,70,82,92].map(x=>`<rect x="${x}" y="20" width="6" height="7" fill="#8ea3bc" opacity=".55"/><rect x="${x}" y="31" width="6" height="6" fill="#8ea3bc" opacity=".4"/>`).join("")}
+    <rect x="108" y="22" width="40" height="32" fill="#53627a"/>
+    <rect y="52" width="160" height="16" fill="#5a6370"/><rect y="68" width="160" height="22" fill="#363c45"/>
+    <path d="M0 79 H160" stroke="#c8ced6" stroke-width=".6" stroke-dasharray="6 5"/>
+    <rect x="124" y="64" width="36" height="12" fill="#3f4651"/>${[128,136,144,152].map(x=>`<path d="M${x} 64 v12" stroke="#c8ced6" stroke-width=".4"/>`).join("")}
+    <rect x="95" y="59" width="12" height="2" fill="#7a5b3c"/><rect x="96" y="61" width="1" height="3" fill="#7a5b3c"/><rect x="105" y="61" width="1" height="3" fill="#7a5b3c"/>
+    <rect x="13" y="38" width="3" height="18" fill="#5b4632"/><ellipse cx="14.5" cy="34" rx="12" ry="11" fill="#3f6b45"/><ellipse cx="9" cy="40" rx="7" ry="6" fill="#4c7d52"/><ellipse cx="20" cy="29" rx="7" ry="6" fill="#4c7d52"/>`;
+}
+const dwP=([x,y])=>`${(x*DW_X).toFixed(1)},${(y*DW_Y).toFixed(1)}`;
+function dwLineSvg(l,dir,id,col,name){
+  const[a,b]=l.map(([x,y])=>[x*DW_X,y*DW_Y]),dx=b[0]-a[0],dy=b[1]-a[1],L=Math.hypot(dx,dy)||1,nx=-dy/L,ny=dx/L;
+  const m=[(a[0]+b[0])/2,(a[1]+b[1])/2],s=7,p0=[m[0]-nx*s,m[1]-ny*s],p1=[m[0]+nx*s,m[1]+ny*s];
+  const head=(p,q)=>{const ux=(q[0]-p[0])/s/2,uy=(q[1]-p[1])/s/2;return`<path d="M${q[0]-ux*3-uy*2} ${q[1]-uy*3+ux*2} L${q[0]} ${q[1]} L${q[0]-ux*3+uy*2} ${q[1]-uy*3-ux*2}" fill="none" stroke="${col}" stroke-width=".9"/>`};
+  const arr=dir==="ba"?head(p1,p0):dir==="both"?head(p0,p1)+head(p1,p0):head(p0,p1);
+  const lb=(p,t)=>`<text class="dw-tx" x="${(p[0]+(p===p0?-nx:nx)*3).toFixed(1)}" y="${(p[1]+(p===p0?-ny:ny)*3+1).toFixed(1)}" text-anchor="middle">${t}</text>`;
+  return`<line class="dw-l" data-b="${id}" x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="${col}"/>
+    <line x1="${p0[0]}" y1="${p0[1]}" x2="${p1[0]}" y2="${p1[1]}" stroke="${col}" stroke-width=".9" stroke-dasharray="1.5 1"/>${arr}${lb(p0,"A")}${lb(p1,"B")}
+    ${name?`<text class="dw-tx" x="${(b[0]+1.5).toFixed(1)}" y="${(b[1]-1).toFixed(1)}">${escHtml(name)}</text>`:""}
+    ${dw.tool?"":[a,b].map((p,i)=>`<circle class="dw-hd" data-h="${id}:${i}" cx="${p[0]}" cy="${p[1]}" r="1.7" style="--c:${col}"/>`).join("")}`;
+}
+function dwGeoSvg(d){
+  const k=dwKindOf(d);if(k==="other")return"";
+  const c=dwC(d);let h="";
+  c.areas.forEach(a=>{
+    const ex=a.type==="ex";
+    h+=`<polygon class="dw-a${ex?" ex":""}${dw.sel===a.id?" sel":""}" data-b="area:${a.id}" points="${a.pts.map(dwP).join(" ")}"/>`;
+    const top=a.pts.reduce((m,p)=>p[1]<m[1]||(p[1]===m[1]&&p[0]<m[0])?p:m,a.pts[0]);
+    h+=`<text class="dw-tx" x="${(top[0]*DW_X+1.5).toFixed(1)}" y="${(top[1]*DW_Y+4).toFixed(1)}">${escHtml(dwAreaName(a))}</text>`;
+    if(!dw.tool)a.pts.forEach((p,i)=>h+=`<circle class="dw-hd" data-h="area:${a.id}:${i}" cx="${(p[0]*DW_X).toFixed(1)}" cy="${(p[1]*DW_Y).toFixed(1)}" r="1.7" style="--c:${ex?"var(--dw-ex)":"var(--dw-in)"}"/>`);
+  });
+  if(c.line)h+=dwLineSvg(c.line,c.dir,"line","var(--dw-ln)");
+  const subSel=c.subs.some(s=>s.id===dw.subSel)?dw.subSel:null;
+  if(DW_SUBP.has(k))c.subs.forEach((s,i)=>{
+    if(!s.on)return;
+    const col=DW_SUBC[i%DW_SUBC.length],on=subSel===s.id,hd=!dw.tool&&(on||!subSel);
+    const cls=`dw-sa${s.kind==="mask"?" mask":""}${on?" sel":subSel?" dim":""}`;
+    const poly=(pts,b,lb)=>{h+=`<polygon class="${cls}" data-b="${b}:${s.id}" points="${pts.map(dwP).join(" ")}" style="--c:${col}"/><text class="dw-tx" x="${(pts[0][0]*DW_X+1).toFixed(1)}" y="${(pts[0][1]*DW_Y-1.2).toFixed(1)}" style="fill:${col}">${escHtml(lb)}</text>`;
+      if(hd)pts.forEach((p,j)=>h+=`<circle class="dw-hd" data-h="${b}:${s.id}:${j}" cx="${(p[0]*DW_X).toFixed(1)}" cy="${(p[1]*DW_Y).toFixed(1)}" r="1.5" style="--c:${col}"/>`)};
+    if(s.kind==="line")h+=dwLineSvg(s.line,s.dir,`subl:${s.id}`,col,s.name);
+    else{poly(s.area.pts,"sub",s.kind==="a2a"?`1 · ${s.name}`:s.name);if(s.kind==="a2a")poly(s.area2.pts,"sub2","2")}
+  });
+  if(dw.lay.size&&DW_SIZE.has(k))["min","max"].forEach(m=>{
+    const[w,hh]=c[m],[x,y]=c[m+"At"],X=(x-w/2)*DW_X,Y=(y-hh)*DW_Y;
+    h+=`<rect class="dw-sz" data-b="${m}" x="${X.toFixed(1)}" y="${Y.toFixed(1)}" width="${(w*DW_X).toFixed(1)}" height="${(hh*DW_Y).toFixed(1)}"/>
+      <text class="dw-tx" x="${(X+1).toFixed(1)}" y="${(Y-1.2).toFixed(1)}">${i18n(m==="min"?"мин.":"макс.")}</text>
+      <circle class="dw-hd" data-h="${m}" cx="${(X+w*DW_X).toFixed(1)}" cy="${Y.toFixed(1)}" r="1.7" style="--c:#fde047"/>`;
+  });
+  return h;
+}
+function dwSilSvg(o,pos){
+  const x=pos[0]*DW_X,y=pos[1]*DW_Y,w=o.w*DW_X,h=o.h*DW_Y;
+  if(o.cls==="person")return`<rect x="${(x-w*.32).toFixed(1)}" y="${(y-h*.78).toFixed(1)}" width="${(w*.64).toFixed(1)}" height="${(h*.78).toFixed(1)}" rx="1" fill="#b9a68a"/><circle cx="${x.toFixed(1)}" cy="${(y-h*.87).toFixed(1)}" r="${(h*.11).toFixed(2)}" fill="#e2c9a6"/>`;
+  if(o.cls==="car")return`<rect x="${(x-w/2).toFixed(1)}" y="${(y-h*.7).toFixed(1)}" width="${w.toFixed(1)}" height="${(h*.55).toFixed(1)}" rx="1.5" fill="hsl(${o.hue} 35% 52%)"/><rect x="${(x-w*.3).toFixed(1)}" y="${(y-h).toFixed(1)}" width="${(w*.6).toFixed(1)}" height="${(h*.35).toFixed(1)}" rx="1.5" fill="hsl(${o.hue} 30% 42%)"/><circle cx="${(x-w*.3).toFixed(1)}" cy="${(y-h*.13).toFixed(1)}" r="${(h*.13).toFixed(2)}" fill="#111"/><circle cx="${(x+w*.3).toFixed(1)}" cy="${(y-h*.13).toFixed(1)}" r="${(h*.13).toFixed(2)}" fill="#111"/>`;
+  if(o.cls==="bike")return`<circle cx="${(x-w*.3).toFixed(1)}" cy="${(y-h*.2).toFixed(1)}" r="${(h*.2).toFixed(2)}" fill="none" stroke="#ddd" stroke-width=".5"/><circle cx="${(x+w*.3).toFixed(1)}" cy="${(y-h*.2).toFixed(1)}" r="${(h*.2).toFixed(2)}" fill="none" stroke="#ddd" stroke-width=".5"/><rect x="${(x-w*.12).toFixed(1)}" y="${(y-h).toFixed(1)}" width="${(w*.24).toFixed(1)}" height="${(h*.6).toFixed(1)}" fill="#9fb7c9"/>`;
+  if(o.cls==="bag")return`<rect x="${(x-w/2).toFixed(1)}" y="${(y-h).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" rx=".5" fill="#2f2419"/>`;
+  if(o.src==="leaf")return`<ellipse cx="${x.toFixed(1)}" cy="${(y-h/2).toFixed(1)}" rx="${(w*.6).toFixed(1)}" ry="${(h*.45).toFixed(1)}" fill="#5f9466" opacity=".55"/>`;
+  return`<ellipse cx="${x.toFixed(1)}" cy="${(y-h/3).toFixed(1)}" rx="${(w*.5).toFixed(1)}" ry="${(h*.25).toFixed(1)}" fill="#000" opacity=".22"/>`;
+}
+// Сколько секунд подряд объект уже выполняет условие: для подписи «в зоне 8 с из 20»
+function dwRun(o,t,test,max){let n=0;for(let s=Math.floor(t);s>=o.t0&&n<=max;s--){const p=dwAt(o,s);if(!p||!test(p,s))break;n++}return n}
+function dwObjSvg(d,t){
+  const k=dwKindOf(d);if(k==="other")return"";
+  const c=dwC(d),E=dwEval(c,k);let sil="",box="",inZone=0,nOk=0;
+  for(const o of dwScene()){
+    if(o.t0>t)break;if(t>o.t1)continue;
+    const pos=dwAt(o,t);if(!pos)continue;
+    sil+=dwSilSvg(o,pos);
+    const fl=dwFail(c,k,o,pos),why=fl?.text||"";
+    if(k==="crowd"&&!why)inZone++;
+    // Детектор отдаёт только найденные объекты: отсеянные объекты на кадре не видны
+    if(why)continue;
+    if(DW_SUBP.has(k)&&c.subs.length&&dwMasked(c,pos))continue;
+    nOk++;
+    if(!dw.lay.obj)continue;
+    const f=E.byObj.get(o.id)||[],hot=f.find(x=>t>=x.t&&t-x.t<3);
+    const st=hot?"hot":"ok";
+    const X=(pos[0]-o.w/2)*DW_X,Y=(pos[1]-o.h)*DW_Y,W=o.w*DW_X,H=o.h*DW_Y;
+    if(dw.lay.trk&&o.cls!=="noise"){const pts=[];for(let s=Math.max(o.t0,t-8);s<=t;s+=1){const p=dwAt(o,s);if(p)pts.push(dwP(p))}pts.push(dwP(pos));box+=`<polyline class="dw-trk ${st}" points="${pts.join(" ")}"/>`}
+    let lb="";
+    if(hot){const sub=hot.sub?c.subs.find(s=>s.id===hot.sub):null;lb=sub?`${i18n("Сработка")}: ${sub.name}`:i18n("Сработка")}
+    else if(k==="lpr")lb=o.plate;
+    else if(k==="neural")lb=`${i18n(DW_CLS[o.cls])} ${Math.round(o.conf*100)}%`;
+    else if(k==="abandoned"){const n=dwRun(o,t,(p,s)=>{const q=dwAt(o,s-1);return!dwWhy(c,k,o,p)&&q&&Math.hypot(p[0]-q[0],p[1]-q[1])<.002},c.stay);lb=`${i18n("лежит")} ${n} ${i18n("с из")} ${c.stay}`}
+    else if(k==="motion"&&c.delay>1&&!f.some(x=>x.t<=t)){const n=dwRun(o,t,p=>!dwWhy(c,k,o,p),c.delay);lb=`${n} ${i18n("с из")} ${c.delay}`}
+    if(!lb&&DW_SUBP.has(k)){const s=c.subs.find(s=>s.on&&(s.kind==="dwell"||s.kind==="stop")&&s.time&&(k==="motion"||s.classes.includes(o.cls))&&dwIn(s.area.pts,pos[0],pos[1]));
+      if(s){const n=dwRun(o,t,p=>dwIn(s.area.pts,p[0],p[1]),s.time);lb=`${s.name}: ${n} ${i18n("с из")} ${s.time}`}}
+    box+=`<rect class="dw-box ${st}" x="${X.toFixed(1)}" y="${Y.toFixed(1)}" width="${W.toFixed(1)}" height="${H.toFixed(1)}"/>`;
+    if(lb){const end=X+W/2>DW_X*.7;box+=`<text class="dw-lb ${st}" x="${Math.min(DW_X-1,Math.max(1,end?X+W:X)).toFixed(1)}" y="${Math.max(3,Y-1).toFixed(1)}" text-anchor="${end?"end":"start"}">${escHtml(lb)}</text>`}
+  }
+  if(k==="crowd"&&c.areas[0]){const a=c.areas[0].pts,x=Math.max(...a.map(p=>p[0]))*DW_X,y=Math.min(...a.map(p=>p[1]))*DW_Y;
+    box+=`<text class="dw-lb ${inZone>=c.count?"hot":"ok"}" x="${(x-1).toFixed(1)}" y="${(y+4).toFixed(1)}" text-anchor="end">${i18n("Людей в зоне")}: ${inZone} ${i18n("из")} ${c.count}</text>`}
+  dw.now=nOk;
+  return sil+box;
+}
+// ── Превью сработок ──
+function dwFireLabel(f,c,k){
+  const sub=f.sub?c.subs.find(s=>s.id===f.sub):null;
+  if(f.n)return sub?`${sub.name} · ${f.n} ${i18n("объектов в области")}`:`${f.n} ${i18n("человек в зоне")}`;
+  const o=f.o;
+  const what=o.cls==="noise"?`${i18n("Помеха")}: ${i18n(o.src==="leaf"?"листва":"тень")}`:k==="lpr"?o.plate:i18n(DW_CLS[o.cls]);
+  return sub?`${sub.name} · ${what}`:what;
+}
+function dwFireColor(f,c){if(!f.sub)return"var(--rd)";const i=c.subs.findIndex(s=>s.id===f.sub);return DW_SUBC[i%DW_SUBC.length]}
+// Кадр сработки: кусок сцены вокруг объекта в момент сработки, рамка объекта — красная
+function dwThumb(f,c,k){
+  const o=f.o;let cx=80,cy=60,bx="";
+  if(o){const p=dwAt(o,f.t)||[o.p[0][1],o.p[0][2]];cx=p[0]*DW_X;cy=(p[1]-o.h/2)*DW_Y;
+    bx=`<rect x="${((p[0]-o.w/2)*DW_X).toFixed(1)}" y="${((p[1]-o.h)*DW_Y).toFixed(1)}" width="${(o.w*DW_X).toFixed(1)}" height="${(o.h*DW_Y).toFixed(1)}" fill="none" stroke="${dwFireColor(f,c)}" stroke-width="1"/>`}
+  else{const a=(f.sub&&c.subs.find(s=>s.id===f.sub)?.area?.pts)||c.areas[0]?.pts;if(a)cx=a.reduce((s,p)=>s+p[0],0)/a.length*DW_X;if(a)cy=a.reduce((s,p)=>s+p[1],0)/a.length*DW_Y}
+  const W=o?Math.max(36,o.w*DW_X*3):64,H=W*9/16,x=Math.min(DW_X-W,Math.max(0,cx-W/2)),y=Math.min(DW_Y-H,Math.max(0,cy-H/2));
+  let sil="";for(const q of dwScene()){if(q.t0>f.t)break;if(f.t>q.t1)continue;const p=dwAt(q,f.t);if(p)sil+=dwSilSvg(q,p)}
+  return`<svg viewBox="${x.toFixed(1)} ${y.toFixed(1)} ${W.toFixed(1)} ${H.toFixed(1)}" preserveAspectRatio="xMidYMid slice" aria-hidden="true">${dwSceneInner()}${sil}${bx}</svg>`;
+}
+function dwStripHtml(fires,c,k,max){
+  return`<div class="dw-strip">${fires.slice(0,max).map(f=>`<div class="dw-th">${dwThumb(f,c,k)}<span><b>${dwClock(f.at)}</b>${escHtml(dwFireLabel(f,c,k))}</span></div>`).join("")}
+    ${fires.length>max?`<span class="sub dw-more">${i18n("и ещё")} ${fires.length-max}</span>`:""}</div>`;
+}
+// Сработки настроек c за отрезок [A,B) живого времени: сцена повторяется каждый час
+function dwFiresIn(c,k,A,B){
+  const E=dwEval(c,k),r=[];
+  for(let h=Math.floor(A/DW_T);h<=Math.floor((B-1e-6)/DW_T);h++)for(const f of E.fires){const at=h*DW_T+f.t;if(at>=A&&at<B)r.push({...f,at})}
+  return r.sort((a,b)=>a.at-b.at);
+}
+function dwPv(v){dw.pv=v;const p=dwRoot()?.querySelector("[data-dw-prev]"),d=dwD();if(p&&d)p.innerHTML=dwPrevHtml(d)}
+function dwPrevHtml(d){
+  const k=dwKindOf(d);
+  if(k==="other")return`<div class="dw-prev-h"><b>${i18n("Сработки")}</b></div><p class="sub">${i18n("Для этого вида превью пока нет.")}</p>`;
+  const pv=dw.pv||"cmp";
+  const tabs=`<span class="dw-seg dw-pv">${[["cmp","Сработки до и после новых настроек"],["live","Лента сработок"]].map(([v,l])=>`<button type="button" class="${pv===v?"on":""}" ${onEv("click",["dwPv",v])}>${i18n(l)}</button>`).join("")}</span>`;
+  if(pv==="live"){
+    const s=dwSaved(d),last=dwFiresIn(s,k,dw.T-DW_T,dw.T).reverse();
+    return`<div class="dw-prev-h">${tabs}<span class="sub">${i18n("Сработки детектора с применёнными настройками за последний час. Новые сработки появляются слева.")}</span></div>
+      <div data-dw-strip="${last.length}">${last.length?dwStripHtml(last,s,k,14):`<p class="sub">${i18n("За последний час детектор не сработал.")}</p>`}</div>
+      ${dwChanged(d)?`<div class="nt dw-nt">${i18n("Лента показывает применённые настройки. Детектор начнёт работать с новыми настройками после «Применить».")}</div>`:""}`;
+  }
+  const C=dwCmpData(d);
+  return`<div class="dw-prev-h">${tabs}<span class="dw-seg">${[5,10,15,30,60].map(v=>`<button type="button" class="${dw.per===v?"on":""}" ${onEv("click",["dwPer",v])}>${v} ${i18n("мин")}</button>`).join("")}</span></div>
+    <div data-dw-cmp>${dwCmpHtml(d,C)}</div>
+    <div data-dw-cstrip="${C.strip.length}">${dwCmpStripHtml(d,C)}</div>`;
+}
+// «Сработки до и после новых настроек». Верхний ряд — сработки прежних настроек за период до «Применить»: эталон, он не
+// меняется. Нижний ряд заполняется сработками новых настроек с момента «Применить». Одна пара терминов во всей вкладке:
+// «прежние» (до «Применить» — «текущие») и «новые» настройки. Прогноз: число сработок / прошедшее время × период
+function dwCmpData(d){
+  const k=dwKindOf(d),ap=dw.ap[d.id],s=dwSaved(d),P=dw.per*60,T=dw.T;
+  const A0=(ap?ap.T:T)-P,before=dwFiresIn(ap?ap.prev:s,k,A0,A0+P);
+  let after=[],el=0,fc=null;
+  if(ap){el=Math.min(P,T-ap.T);after=dwFiresIn(s,k,ap.T,ap.T+el);
+    if(el>=P)fc=after.length;else if(el>=30)fc=Math.round(after.length/el*P)}
+  return{k,ap,s,P,A0,A1:ap?ap.T:null,before,after,el,fc,strip:(ap?after:before).slice().reverse()};
+}
+function dwCmpHtml(d,C){
+  C=C||dwCmpData(d);const{ap,P,A0,A1,before,after,el,fc}=C,nb=before.length,per=dw.per;
+  const x=(at,A)=>((at-A)/P*100).toFixed(2);
+  const ticks=(fs,A,col)=>fs.map(f=>`<line x1="${x(f.at,A)}%" x2="${x(f.at,A)}%" y1="4" y2="28" stroke="${col}" stroke-width="2"/>`).join("");
+  const sp=A=>`${dwClock(A).slice(0,5)}–${dwClock(A+P).slice(0,5)}`;
+  const sw=n=>i18n(plural(n,"сработка|сработки|сработок"));
+  const dl=fc==null?null:fc-nb;
+  // Плитки: цвет полосы слева — тот же, что у ряда на шкале
+  const tile=(cls,l,n,s,x="")=>`<div class="dw-k ${cls}"><span class="dw-k-l">${l}</span><span class="dw-k-v"><b>${n}</b>${x}</span><span class="dw-k-s">${s}</span></div>`;
+  const kpi=`<div class="dw-kpi">
+    ${tile("b0",i18n(ap?"Прежние настройки":"Текущие настройки"),nb,`${sw(nb)} ${i18n("за")} ${per} ${i18n("мин")}`)}
+    ${ap?tile("b1",i18n("Новые настройки"),after.length,`${sw(after.length)} ${i18n("за")} ${dwDur(el)}`):tile("b1 off",i18n("Новые настройки"),"—",i18n("Применить настройки через план"))}
+    ${!ap?tile("fc off",`${i18n("Прогноз на")} ${per} ${i18n("мин")}`,"—",i18n("Появится после «Применить»"))
+      :fc==null?tile("fc off",`${i18n("Прогноз на")} ${per} ${i18n("мин")}`,"…",`${i18n("Появится через")} ${Math.ceil(30-el)} ${i18n("с")}`)
+      :tile("fc",`${i18n(el<P?"Прогноз на":"Итог за")} ${per} ${i18n("мин")}`,(el<P?"≈":"")+fc,i18n(dl<0?"меньше, чем с прежними настройками":dl>0?"больше, чем с прежними настройками":"столько же, сколько с прежними настройками"),
+        `<span class="dw-dl ${dl<0?"dn":dl>0?"up":""}">${dl>0?"+":dl<0?"−":"±"}${Math.abs(dl)}</span>`)}
+  </div>`;
+  const nowX=ap&&el<P?+(el/P*100).toFixed(2):null;
+  const fcBand=nowX!=null?`<rect x="${nowX}%" width="${(100-nowX).toFixed(2)}%" y="0" height="32" fill="url(#dwFc)"/><line x1="${nowX}%" x2="${nowX}%" y1="0" y2="32" stroke="var(--tx)" stroke-width="2"/>`:"";
+  const row=(cls,l,range,A,body,empty)=>`<div class="dw-rl ${cls}"><b>${l}</b><span>${range}</span></div>
+    <div class="dw-rt${empty?" off":""}"><svg width="100%" height="32" preserveAspectRatio="none">
+      <defs><pattern id="dwFc" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2" height="6" fill="var(--rd)" opacity=".28"/></pattern></defs>${body}</svg></div>`;
+  return kpi+`<div class="dw-rows">
+    ${row("b0",i18n(ap?"Прежние":"Текущие"),sp(A0),A0,ticks(before,A0,"var(--mu)"))}
+    ${row("b1",i18n("Новые"),ap?sp(A1):"—",ap?A1:null,ap?ticks(after,A1,"var(--rd)")+fcBand:"",!ap)}
+    <span></span><div class="dw-tl-x">${[0,.25,.5,.75,1].map(p=>`<span>${p?`+${Math.round(p*per)} ${i18n("мин")}`:"0"}</span>`).join("")}</div>
+  </div>
+  <div class="dw-lg"><span><i class="b0"></i>${i18n(ap?"сработка с прежними настройками":"сработка с текущими настройками")}</span><span><i class="b1"></i>${i18n("сработка с новыми настройками")}</span>${nowX!=null?`<span><i class="fc"></i>${i18n("прогноз до конца периода")}</span>`:""}${ap?"":`<span class="sub">${i18n("Нажать «Применить», чтобы сравнить сработки текущих и новых настроек.")}</span>`}</div>`;
+}
+function dwCmpStripHtml(d,C){
+  const{k,ap,s,strip}=C;
+  const h=`<h4 class="dw-cs-h">${ap?i18n("Сработки с новыми настройками"):`${i18n("Сработки за последние")} ${dw.per} ${i18n("мин")}`}<span class="sub">${i18n("новые слева")}</span></h4>`;
+  return`<section class="dw-cs">${h}${strip.length?dwStripHtml(strip,s,k,20):`<p class="sub">${i18n(ap?"С новыми настройками детектор ещё не сработал.":"За этот период детектор не сработал.")}</p>`}</section>`;
+}
+function dwDur(sec){sec=Math.floor(sec);return sec<60?`${sec} ${i18n("с")}`:`${Math.floor(sec/60)} ${i18n("мин")}${sec%60?` ${sec%60} ${i18n("с")}`:""}`}
+// ── Панель настроек ──
+function dwSec(title,body,x="",attr=""){return`<section class="dw-sec"${attr}><h4>${i18n(title)}${x}</h4>${body}</section>`}
+function dwHelp(t){return`<p class="sub dw-help">${i18n(t)}</p>`}
+// Нет ограничения: размер объекта от 0 × 0 % и до 100 × 100 % кадра, ширина номера от 0 до 100 %
+const dwNoMin=c=>c.min[0]===0&&c.min[1]===0,dwNoMax=c=>c.max[0]===1&&c.max[1]===1;
+function dwPwText(c){return c.pw[0]===0&&c.pw[1]===1?i18n("без ограничения"):`${(c.pw[0]*100).toFixed(1)}–${(c.pw[1]*100).toFixed(1)}%`}
+function dwRange(id,key,l,min,max,step,unit,help){
+  const c=dwC(detNodeOf(id)),v=key.includes(".")?c[key.split(".")[0]][+key.split(".")[1]]:c[key];
+  const shown=unit==="%f"?Math.round(v*100):v;
+  return`<div class="dw-f"><label>${i18n(l)} <b data-dw-out="${key}">${shown}${unit==="%f"?"%":unit?" "+i18n(unit):""}</b></label>
+    <input type="range" min="${min}" max="${max}" step="${step}" value="${unit==="%f"?Math.round(v*1000)/10:v}" ${onEv("input",["dwSet",id,key,onEv.value,onEv.el])}>
+    ${help?dwHelp(help):""}</div>`;
+}
+function dwNum(id,key,l,min,max,unit,help){
+  const c=dwC(detNodeOf(id));
+  return`<div class="dw-f dw-num"><label>${i18n(l)}</label><span class="dw-in"><input type="number" min="${min}" max="${max}" value="${c[key]}" ${onEv("input",["dwSet",id,key,onEv.value,onEv.el])}><span>${i18n(unit)}</span></span>${help?dwHelp(help):""}</div>`;
+}
+function dwChips(id,list,cur,fn,sid=""){
+  return`<div class="dw-chips">${list.map(cl=>`<button type="button" class="dw-chip${cur.includes(cl)?" on":""}" aria-pressed="${cur.includes(cl)}" ${onEv("click",sid?[fn,id,sid,cl]:[fn,id,cl])}>${cur.includes(cl)?lu("check",12):""}${i18n(DW_CLS[cl])}</button>`).join("")}</div>`;
+}
+function dwSizeHtml(id){
+  const c=dwC(detNodeOf(id)),p=v=>Math.round(v*1000)/10;
+  const row=(m,l)=>`<div class="dw-sz-r"><span>${i18n(l)}</span><span class="dw-in"><input type="number" min="0" max="100" step="0.5" value="${p(c[m][0])}" data-dw-size="${m}.0" ${onEv("input",["dwSet",id,m+".0",onEv.value,onEv.el])}><span>×</span><input type="number" min="0" max="100" step="0.5" value="${p(c[m][1])}" data-dw-size="${m}.1" ${onEv("input",["dwSet",id,m+".1",onEv.value,onEv.el])}><span>% ${i18n("кадра")}</span></span><span class="sub dw-nolim" data-dw-nolim="${m}"${(m==="min"?dwNoMin(c):dwNoMax(c))?"":" hidden"}>${i18n("без ограничения")}</span></div>`;
+  return`<div class="dw-f">${row("min","Не меньше")}${row("max","Не больше")}
+    ${dwHelp(dw.lay.size?"Кадр показывает рамки размеров. Чтобы изменить размер, тянуть угол рамки мышью.":"Детектор не замечает объекты меньше и больше этих размеров. Консоль считает ширину и высоту в процентах кадра.")}</div>`;
+}
+function dwSizeSec(id){
+  return dwSec("Размер объекта",dwSizeHtml(id),` <button type="button" class="btn s dw-sec-b${dw.lay.size?" on":""}" aria-pressed="${dw.lay.size}" ${onEv("click",["dwLay","size"])}>${i18n(dw.lay.size?"Скрыть на кадре":"Показать на кадре")}</button>`,` data-dw-size-sec`);
+}
+function dwAreasHtml(id,k,c){
+  const rows=c.areas.map(a=>`<div class="dw-ar${dw.sel===a.id?" sel":""}"><i class="dw-sw" style="background:var(--dw-${a.type})"></i>
+      <button type="button" class="lk" ${onEv("click",["dwSelect",a.id])}>${escHtml(dwAreaName(a))}</button><span class="sub">${i18n(a.type==="ex"?"детектор не смотрит":"детектор смотрит")} · ${a.pts.length} ${i18n("точки")}</span>
+      <button type="button" class="btn s dw-del" aria-label="${i18n("Удалить")}" ${onEv("click",["dwAreaDel",id,a.id])}>${lu("trash",14)}</button></div>`).join("");
+  const line=c.line?`<div class="dw-ar"><i class="dw-sw" style="background:var(--dw-ln)"></i><span>${i18n("Линия")} A–B</span><span class="sub">${i18n("детектор ждёт пересечения")}</span></div>`:"";
+  const empty=!c.areas.some(a=>a.type==="in")&&k!=="linecross"?`<p class="sub">${i18n("Зоны нет: детектор смотрит на весь кадр.")}</p>`:"";
+  return rows+line+empty+`<div class="dw-row">${k!=="linecross"?`<button type="button" class="btn s" ${onEv("click",["dwTool","in"])}>${lu("plus",14)}${i18n("Зона")}</button>`:""}${dwHas("extraZones")?`<button type="button" class="btn s" ${onEv("click",["dwTool","ex"])}>${lu("plus",14)}${i18n("Исключение")}</button>`:""}${k==="linecross"?`<button type="button" class="btn s" ${onEv("click",["dwTool","line"])}>${i18n("Нарисовать линию заново")}</button>`:""}</div>`;
+}
+function dwDirHtml(id,cur,fn,sid=""){
+  const o=[["ab","A → B"],["ba","B → A"],["both","В обе стороны"]];
+  return`<span class="dw-seg">${o.map(([v,l])=>`<button type="button" class="${cur===v?"on":""}" ${onEv("click",sid?[fn,id,sid,v]:[fn,id,v])}>${i18n(l)}</button>`).join("")}</span>`;
+}
+// Вкладка карточки: «Поддетекторы», если поддетектор выбран или создаётся; иначе — что выбрал пользователь
+function dwPtab(){return dw.subSel||dw.subNew?"sub":(dw.ptab||"det")}
+function dwPtabSet(v){
+  if(v!=="sub"||dwPtab()==="sub"){dw.subSel=null;dw.subNew=false}
+  dw.ptab=v;gear();renderTree();
+  const r=document.getElementById("dwRight");if(r)r.scrollTop=0;
+}
+// «Изменить размер у детектора»: вкладка «Детектор», прокрутка к разделу «Размер объекта» и вспышка на нём
+function dwSizeGo(){
+  dwPtabSet("det");
+  accFlash(()=>{const el=document.querySelector("#dwRight [data-dw-size-sec]");if(el){const r=el.closest(".dw-right");r.scrollTop=el.offsetTop-r.offsetTop-8}return el?[el]:[]},true);
+}
+function dwSubsHtml(id,k,c){
+  const E=dwEval(c,k);
+  // Выбранный поддетектор занимает вкладку вместо списка, «Все поддетекторы» возвращает список
+  const one=c.subs.some(s=>s.id===dw.subSel);
+  const back=one?`<div class="dw-row dw-back"><button type="button" class="btn s" ${onEv("click",["dwSubSel",dw.subSel])}>${lu("chevron-left",14)}${i18n("Все поддетекторы")}</button></div>`:"";
+  const rows=back+c.subs.map((s,i)=>{
+    if(one&&s.id!==dw.subSel)return"";
+    const col=DW_SUBC[i%DW_SUBC.length],n=E.fires.filter(f=>f.sub===s.id).length,op=dw.subSel===s.id;
+    return`<div class="dw-sub${s.on?"":" off"}${op?" sel":""}" style="--c:${col}" data-dw-sub="${escHtml(s.id)}">
+      <div class="dw-sub-h"><button type="button" class="dw-sub-t" aria-expanded="${op}" ${onEv("click",["dwSubSel",s.id])}><span class="tw">${op?TW_OPEN:TW_SHUT}</span><i class="dw-sw" style="background:${col}"></i><span class="dw-sub-tt"><b>${escHtml(s.name)}</b><span class="sub">${i18n(DW_SUBN[s.kind])}</span></span></button>
+        <span class="dw-sub-n">${s.kind==="mask"?i18n("без событий"):`${n} ${i18n("сраб.")}`}</span>
+        <div class="sw ${s.on?"on":""}" role="switch" aria-checked="${s.on}" aria-label="${i18n("Включён")}" ${onEv("click",["dwSubOn",id,s.id])}></div></div>
+      ${op?`<div class="dw-sub-b">${dwSubBodyHtml(id,k,s)}</div>`:""}</div>`}).join("");
+  const empty=c.subs.length?"":`<p class="sub">${i18n(k==="tracker"?"У трекера нет поддетекторов. Трекер сам не создаёт событий: чтобы получать события, создать поддетектор.":"Поддетекторов нет. Поддетектор добавляет к событиям детектора событие по своему условию: линия, область, время.")}</p>`;
+  if(one)return rows;
+  const add=dw.subNew?dwSubNewHtml(id,k):`<div class="dw-row"><button type="button" class="btn s" ${onEv("click",["dwSubNewOpen"])}>${lu("plus",14)}${i18n("Создать поддетектор")}</button></div>`;
+  return rows+empty+add+dwHelp("Детектор находит объекты, а поддетектор решает, когда сработать. Зоны детектирования и размер объекта детектора действуют на все его поддетекторы.");
+}
+function dwSubBodyHtml(id,k,s){
+  const num=(key,l,min,max,unit,help)=>`<div class="dw-f dw-num"><label>${i18n(l)}</label><span class="dw-in"><input type="number" min="${min}" max="${max}" value="${s[key]}" ${onEv("input",["dwSubSet",id,s.id,key,onEv.value,onEv.el])}>${unit?`<span>${i18n(unit)}</span>`:""}</span>${help?dwHelp(help):""}</div>`;
+  const seg=o=>`<span class="dw-seg">${o.map(([v,l])=>`<button type="button" class="${s.mode===v?"on":""}" ${onEv("click",["dwSubMode",id,s.id,v])}>${i18n(l)}</button>`).join("")}</span>`;
+  const f=[`<div class="dw-f"><label>${i18n("Имя")}</label><input type="text" class="dw-txt" value="${escHtml(s.name)}" aria-label="${i18n("Имя поддетектора")}" ${onEv("input",["dwSubName",id,s.id,onEv.value])}></div>`];
+  if(s.kind==="line")f.push(`<div class="dw-f"><label>${i18n("Направление")}</label>${dwDirHtml(id,s.dir,"dwSubDir",s.id)}${dwHelp("Линия поддетектора показана на кадре. Чтобы изменить линию, тянуть её концы мышью.")}</div>`);
+  else f.push(dwHelp(s.kind==="a2a"?"Области 1 и 2 показаны на кадре. Чтобы изменить область, тянуть её или её точки мышью.":"Область поддетектора показана на кадре. Чтобы изменить область, тянуть её или её точки мышью."));
+  if(s.kind==="dwell")f.push(`<div class="dw-f"><label>${i18n("Сработать, если объект в области")}</label>${seg([["gt","дольше"],["lt","меньше"],["eq","ровно"]])}</div>`,
+    num("time","Время",0,172800,"с",s.mode==="gt"?"Поддетектор сработает, когда объект пробудет в области это время.":"Поддетектор сработает, когда объект выйдет из области."));
+  if(s.kind==="stop")f.push(num("time","Сработать, если объект стоит дольше",1,172800,"с"));
+  if(s.kind==="abandoned")f.push(num("time","Сработать, если предмет лежит дольше",1,172800,"с"));
+  if(s.kind==="a2a")f.push(`<div class="dw-f"><label>${i18n("Время перехода из области 1 в область 2")}</label>${seg([["gt","дольше"],["lt","меньше"]])}</div>`,num("time","Время",0,172800,"с","Если время 0, поддетектор не проверяет время перехода."));
+  if(s.kind==="multi")f.push(num("count","Объектов в области не меньше",1,100,"","Поддетектор сработает, когда в области одновременно находится столько объектов."));
+  if(k!=="motion"&&s.kind!=="mask"&&s.kind!=="abandoned")f.push(`<div class="dw-f"><label>${i18n("Классы объектов")}</label>${dwChips(id,["person","car","bike"],s.classes,"dwSubClass",s.id)}</div>`);
+  if(s.kind!=="mask"&&DW_SIZE.has(k)){
+    const c=dwC(detNodeOf(id)),p=a=>`${Math.round(a[0]*1000)/10} × ${Math.round(a[1]*1000)/10} %`;
+    f.push(`<div class="dw-f"><label>${i18n("Размер объекта")} <span class="sub">${i18n("как у детектора")}</span></label>
+      <div class="dw-sz-r"><span>${i18n("Не меньше")}</span><b>${p(c.min)}</b></div><div class="dw-sz-r"><span>${i18n("Не больше")}</span><b>${p(c.max)}</b></div>
+      ${dwHelp("Поддетектор получает только объекты, которые нашёл детектор. Поэтому размер объекта у поддетектора всегда такой же, как у детектора.")}
+      <div class="dw-row"><button type="button" class="btn s" ${onEv("click",["dwSizeGo"])}>${i18n("Изменить размер у детектора")}</button></div></div>`);
+  }
+  if(s.kind!=="mask"){
+    const inp=(key,i,min,max,l)=>`<input type="number" min="${min}" max="${max}" value="${s[key][i]}" aria-label="${i18n(l)}" ${onEv("input",["dwSubSet",id,s.id,`${key}.${i}`,onEv.value,onEv.el])}>`;
+    f.push(`<details class="dw-adv"${dw.subAdv?" open":""}><summary>${i18n("Дополнительно")}</summary><div class="dw-adv-b">
+      <div class="dw-f dw-num"><label>${i18n("Скорость объекта")}</label><span class="dw-in"><span>${i18n("от")}</span>${inp("spd",0,0,500,"Скорость не меньше")}<span>${i18n("до")}</span>${inp("spd",1,0,500,"Скорость не больше")}</span>${dwHelp("Поддетектор пропускает объекты медленнее и быстрее этих значений. Значения — от 0 до 500.")}</div>
+      <div class="dw-f dw-num"><label>${i18n("Смещение по X и Y")}</label><span class="dw-in">${inp("off",0,1,40,"Смещение по X")}<span>×</span>${inp("off",1,1,40,"Смещение по Y")}<span>% ${i18n("рамки")}</span></span>${dwHelp("Консоль считает смещение в процентах рамки объекта. Значение может быть от 1 до 40.")}</div>
+      <div class="dw-f"><label class="dw-swl"><span class="sw ${s.grp?"on":""}" role="switch" aria-checked="${s.grp}" ${onEv("click",["dwSubGrp",id,s.id])}></span>${i18n("Сработать на группу объектов")}</label>
+        ${s.grp?num("gn","Объектов в группе не меньше",1,100,"")+num("gh","Ждать следующие объекты группы",0,86400,"с","Поддетектор ждёт это время после первого объекта группы. Если за это время пришло нужное число объектов, поддетектор сработает."):""}</div>
+      <p class="sub" data-plan-stub>${i18n("Заглушка: превью не учитывает смещение и группу объектов.")}</p></div></details>`);
+  }
+  f.push(`<div class="dw-row"><button type="button" class="btn s" ${onEv("click",["dwSubDel",id,s.id])}>${lu("trash",14)}${i18n("Удалить поддетектор")}…</button></div>`);
+  return f.join("");
+}
+// Выбор типа: 10 типов — список с поиском, как у шаблонов правил
+function dwSubNewHtml(id,k){
+  const L=dwSubKinds(k);
+  return`<div class="dw-new" data-dw-new>
+    <div class="dw-new-h"><b>${i18n("Создать поддетектор")}</b><span class="sub">${i18n("Выбрать тип. Консоль добавит поддетектор в черновик. Детектор начнёт работать с ним после «Применить».")}</span></div>
+    <input type="search" class="dw-new-q" placeholder="${i18n("Найти тип поддетектора…")}" aria-label="${i18n("Найти тип поддетектора")}" ${onEv("input",["dwSubFilter",onEv.value])} ${onEv("keydown",["dwSubKey",id,onEv.event])}>
+    <div class="dw-new-l">${L.map(([v,n,t],i)=>`<button type="button" class="dw-new-c${i?"":" act"}" data-kind="${v}" data-nm="${escHtml(i18n(n))}" ${onEv("click",["dwSubAdd",id,v])}><b>${escHtml(i18n(n))}</b><span class="sub">${i18n(t)}</span></button>`).join("")}</div>
+    <p class="sub dw-new-x" data-dw-new-x>${i18n("Показано")} ${L.length} ${i18n("из")} ${L.length}</p>
+    <div class="dw-row"><button type="button" class="btn s" ${onEv("click",["dwSubNewOpen"])}>${i18n("Отменить")}</button></div></div>`;
+}
+function dwStateHtml(d){
+  const n=dwDiffRows(d).length;
+  if(!n)return`<span class="sub">${i18n("Детектор работает с этими настройками")}</span>`;
+  return`<span class="dw-dirty">${i18n("Не применено")}: ${n} ${i18n(plural(n,"изменение|изменения|изменений"))}</span>`;
+}
+// ── План и «Применить»: как у карточки объекта (cardFootHtml → cardPlanOpen → очередь) ──
+const DW_DIR_RU={ab:"A → B",ba:"B → A",both:"В обе стороны"};
+function dwDiffRows(d){
+  const c=dwC(d),s=dwSaved(d),out=[];
+  const ne=(a,b)=>JSON.stringify(a)!==JSON.stringify(b),pc=v=>(v*100).toFixed(1).replace(/\.0$/,"");
+  const row=(keys,label,fromT,toT)=>out.push({keys,label,fromT:String(fromT),toT:String(toT)});
+  const zn=a=>`${a.filter(x=>x.type==="in").length} ${i18n("зон")}, ${a.filter(x=>x.type==="ex").length} ${i18n("исключ.")}`;
+  if(ne(c.areas,s.areas)){const a=zn(s.areas),b=zn(c.areas);row(["areas"],"Зоны",a,a===b?i18n("другие точки на кадре"):b)}
+  if(ne(c.line,s.line))row(["line"],"Линия A → B",s.line?i18n("есть"):"—",c.line?i18n("другие точки на кадре"):"—");
+  if(c.dir!==s.dir)row(["dir"],"Направление",i18n(DW_DIR_RU[s.dir]),i18n(DW_DIR_RU[c.dir]));
+  const sz=(a,none)=>a[0]===none&&a[1]===none?i18n("без ограничения"):`${pc(a[0])} × ${pc(a[1])} % ${i18n("кадра")}`;
+  if(ne(c.min,s.min))row(["min","minAt"],"Размер объекта не меньше",sz(s.min,0),sz(c.min,0));
+  if(ne(c.max,s.max))row(["max","maxAt"],"Размер объекта не больше",sz(s.max,1),sz(c.max,1));
+  if(c.sens!==s.sens)row(["sens"],"Чувствительность",s.sens,c.sens);
+  if(c.delay!==s.delay)row(["delay"],"Движение длится не меньше",`${s.delay} ${i18n("с")}`,`${c.delay} ${i18n("с")}`);
+  if(ne(c.classes,s.classes)){const t=a=>a.map(x=>i18n(DW_CLS[x])).join(", ")||"—";row(["classes"],"Классы объектов",t(s.classes),t(c.classes))}
+  if(c.conf!==s.conf)row(["conf"],"Уверенность нейросети не ниже",`${s.conf}%`,`${c.conf}%`);
+  if(ne(c.pw,s.pw))row(["pw"],"Ширина номера",dwPwText(s),dwPwText(c));
+  if(c.count!==s.count)row(["count"],"Людей в зоне не меньше",s.count,c.count);
+  if(c.hold!==s.hold)row(["hold"],"Группа стоит дольше",`${s.hold} ${i18n("с")}`,`${c.hold} ${i18n("с")}`);
+  if(c.stay!==s.stay)row(["stay"],"Предмет лежит дольше",`${s.stay} ${i18n("с")}`,`${c.stay} ${i18n("с")}`);
+  if(ne(c.subs,s.subs)){
+    const was=new Map(s.subs.map(x=>[x.id,x]));
+    c.subs.forEach(x=>{const o=was.get(x.id);if(!o)row(["subs"],`${i18n("Поддетектор")} «${x.name}»`,"—",i18n("консоль добавит"));
+      else if(ne(o,x))row(["subs"],`${i18n("Поддетектор")} «${x.name}»`,i18n(o.on?"вкл":"выкл"),o.on!==x.on?i18n(x.on?"вкл":"выкл"):i18n("другие настройки"))});
+    s.subs.forEach(o=>{if(!c.subs.some(x=>x.id===o.id))row(["subs"],`${i18n("Поддетектор")} «${o.name}»`,i18n(o.on?"вкл":"выкл"),i18n("консоль удалит"))});
+  }
+  return out;
+}
+// Нижняя полоса карточки: та же, что у карточки объекта — «Не применено: N · Сбросить · Показать план»
+function dwFootHtml(){
+  if(app!=="hw")return null;
+  const n=find(sel)?.n;if(!n||n.type!=="det"||dwKindOf(n)==="other")return null;
+  // Правки полей контракта («Включён», «Дополнительно») идут прежним черновиком карточки (cardDiff) — их строки тоже здесь
+  const d=[...dwDiffRows(n),...dwCardRows(n)];
+  if(dw.sent[n.id])return`<div class="main-actions bk-foot card-foot" id="cardFoot"><span class="sub bk-foot-text">${i18n("Консоль применяет изменения. Править настройки можно после конца операции.")}</span></div>`;
+  if(!d.length)return`<div id="cardFoot" hidden></div>`;
+  const busy=bq&&!bq.finished;
+  // Полоса появляется только с первой правкой — плавно, а не рывком
+  const appear=document.getElementById("cardFoot")?.hidden?" dw-foot-in":"";
+  return`<div class="main-actions bk-foot card-foot${appear}" id="cardFoot"><span class="sub bk-foot-text">${i18n("Не применено")}: <b>${d.length}</b> ${i18n(plural(d.length,"изменение|изменения|изменений"))} — ${escHtml(d.slice(0,2).map(r=>i18n(r.label)).join(", "))}${d.length>2?"…":""}</span><span class="tfoot-gap"></span>
+    <button type="button" class="btn s" ${onEv("click",["dwRevert",`${n.id}`])}>${i18n("Сбросить")}</button>
+    <button type="button" class="btn s pri" ${busy?`disabled title="${i18n("Консоль выполняет групповую операцию. План можно применить после конца операции")}"`:""} ${onEv("click",["dwPlan",`${n.id}`])}>${i18n("Показать план")} (${d.length})</button></div>`;
+}
+function dwCardRows(n){return cardDraft&&cardDraft.id===n.id?cardDiff():[]}
+function dwPlan(id){
+  const n=detNodeOf(id),d=[...dwDiffRows(n),...dwCardRows(n)];if(!d.length){toast("Нечего применять");return}
+  if(bq&&!bq.finished){toast("Групповая операция ещё не закончена. Подождать её конца");return}
+  const rows=d.map((r,i)=>`<tr><td class="bk-num">${i+1}</td><td>${escHtml(i18n(r.label))}</td><td class="bk-note">${escHtml(r.fromT)}</td><td><b>${escHtml(r.toT)}</b></td></tr>`).join("");
+  const k=dwKindOf(n),P=dw.per*60,nb=dwFiresIn(dwSaved(n),k,dw.T-P,dw.T).length;
+  openBulkModal(`${i18n("План")}: «${escHtml(locName(n))}», ${d.length} ${i18n(plural(d.length,"изменение|изменения|изменений"))}`,
+    `<table class="bk-table"><thead><tr><th>#</th><th>${i18n("Параметр")}</th><th>${i18n("Было")}</th><th>${i18n("Станет")}</th></tr></thead><tbody>${rows}</tbody></table>
+     <p class="sub" style="margin:10px 0 0">${i18n("Детектор начнёт работать с новыми настройками после «Применить». Вкладка «Сработки до и после новых настроек» под кадром покажет сработки прежних и новых настроек.")} ${i18n("За последние")} ${dw.per} ${i18n("мин")}: ${nb} ${i18n(plural(nb,"сработка|сработки|сработок"))}.</p>
+     <p class="sub">${i18n("Консоль отправит изменения детектора и его поддетекторов на сервер одной операцией. Итог будет в отчёте. Чтобы вернуть прежние настройки, нажать «Отменить» в уведомлении.")}</p>
+     <p class="sub" data-plan-stub>${i18n("Заглушка: превью сработок консоль считает в браузере, сервер его не отдаёт.")}</p>`,
+    `<button type="button" class="btn" ${onEv("click",["closeBulkModal"])}>${i18n("Назад")}</button><button type="button" class="btn pri" ${onEv("click",["closeBulkModal"],["dwApply",`${id}`])}>${i18n("Применить")} (${d.length})</button>`,"bbox-wide");
+}
+// «Применить»: ОДНА операция POST /operations. Шаги: patch детектора (настройки окна и поля карточки вместе), createUnit
+// для новых поддетекторов, patch изменённых, delete убранных. «Отменить» в уведомлении откатывает операцию целиком
+function dwSteps(n,cr){
+  const id=n.id,k=dwKindOf(n),c=dwC(n),s=dwSaved(n);
+  // Свойства детектора: что отличается от сохранённых. Зоны уходят вместе: zone — первая зона, extraZones — остальные
+  const np=dwDetProps(c,k),pp=dwPropsPatch(np,dwDetProps(s,k));
+  if("zone" in pp||"extraZones" in pp){pp.zone=np.zone;if("extraZones" in np)pp.extraZones=np.extraZones}
+  const items=[],names=[],made=[];
+  // Поля карточки (имя, «Включён», метки, вид…) идут тем же шагом patch
+  const ci=cr.length?cardApiItems(n,cr):[];
+  if(!ci)return null;
+  const base=opItems(ci);
+  let dp=base.find(x=>x.uid===id&&x.patch);
+  if(Object.keys(pp).length){
+    if(!dp){dp={uid:id,patch:{}};base.unshift(dp)}
+    dp.patch.properties=Object.assign(dp.patch.properties||{},pp);
+  }
+  // Вид сменили на встроенный: analyticsKind действует только при other
+  const dk=dp?.patch.properties?.detectorKind;
+  if(dk&&dk!=="other"&&n.analyticsKind)dp.patch.properties.analyticsKind=null;
+  base.forEach(x=>{items.push(x);names.push(x.uid===id&&x.patch?i18n("Настройки детектора"):x.folders?i18n("Папки"):i18n("Настройки детектора"))});
+  const was=new Map(s.subs.map(x=>[x.id,x]));
+  c.subs.forEach(x=>{
+    const o=was.get(x.id);
+    if(!o){made.push([items.length,x.id]);items.push({uid:id,createUnit:{kind:"subdet",name:x.name,properties:{subdetectorKind:x.kind,...dwSubProps(x,k)}}});names.push(`${i18n("Поддетектор")} «${x.name}»: ${i18n("создать")}`);return}
+    const patch={},xp=dwSubProps(x,k),sp=dwPropsPatch(xp,dwSubProps(o,k));
+    // Зона уходит целиком, с shape: слияние по точкам оставило бы на сервере прежнюю форму (rect с четырьмя точками)
+    ["zone","zoneTo"].forEach(f=>{if(f in sp)sp[f]=xp[f]??null});
+    if(Object.keys(sp).length)patch.properties=sp;
+    if(x.name!==o.name)patch.name=x.name;
+    if(Object.keys(patch).length){items.push({uid:x.id,patch});names.push(`${i18n("Поддетектор")} «${x.name}»: ${i18n("изменить")}`)}
+  });
+  s.subs.forEach(o=>{if(!c.subs.some(x=>x.id===o.id)){items.push({uid:o.id,delete:true});names.push(`${i18n("Поддетектор")} «${o.name}»: ${i18n("удалить")}`)}});
+  return{items,names,made};
+}
+function dwApply(id){
+  const n=detNodeOf(id),d=dwDiffRows(n),cr=dwCardRows(n);if(!d.length&&!cr.length)return;
+  if(bq&&!bq.finished){toast("Групповая операция ещё не закончена. Подождать её конца");return}
+  if(!d.length){cardApply();return}
+  if(busyRefuse(id))return;
+  // Детектора ещё нет на сервере (черновик «Новый детектор»): настройки окна уходят после его создания
+  if(!hwVer.has(id)){
+    if(!cr.length){toast("Детектора ещё нет на сервере. Сначала применить новый детектор");return}
+    toast("Консоль применит новый детектор. Потом нажать «Применить» ещё раз, чтобы отправить настройки окна.");cardApply();return}
+  const st=dwSteps(n,cr);
+  if(!st||!st.items.length){toast("Консоль не может отправить эти изменения одной операцией. Применить изменения карточки отдельно или нажать «Сбросить».");return}
+  const s=dwSaved(n),prev=dwClone(s),T0=dw.T,rows=[...d,...cr],own=rows.filter(r=>r.keys?.[0]!=="subs"),q0=bq;
+  // Черновик и сохранённое на момент «Применить»: если операция пройдёт не целиком, черновик вернётся (dwSync)
+  const draft=dwClone(dwC(n));
+  dw.pv="cmp";
+  if(cr.length){camPlanCommit(n.id);cardRestore()}
+  const label=r=>`${i18n(r.label)}: ${r.toT}`;
+  // Шаг очереди на шаг операции, по порядку: ход операции приходит по номеру шага
+  const ops=st.items.map((it,i)=>({...mkOp(n,it.uid===id&&it.patch&&own.length?`${st.names[i]}: ${own.slice(0,2).map(label).join("; ")}${own.length>2?"…":""}`:st.names[i],"param"),state:"wait",msg:"",done:false}));
+  // Новый поддетектор открыт под временным id: шаг create помнит его, и выбор переходит на uid сервера
+  (st.made||[]).forEach(([i,sid])=>{if(ops[i])ops[i].dwTemp=sid});
+  // «Отменить» удаления поддетектора из черновика после «Применить» уже не к месту: откат — «Отменить» операции
+  removeToastAction("dwsub");
+  const targets=[...new Set([id,...st.items.map(opTarget)])].filter(x=>hwVer.has(x));
+  apiQueue([{label:`«${locName(n)}»: ${rows.length} ${plural(rows.length,"изменение|изменения|изменений")}`,ops}],`«${locName(n)}»`,{undo:true,afterOk:()=>{dw.ap[id]={T:T0,prev}}},
+    ()=>API.post("/operations",{idempotencyKey:opKey(),items:st.items,expectedVersions:Object.fromEntries(targets.map(x=>[x,hwVer.get(x)]))}),ops);
+  if(bq&&bq!==q0)dw.sent[id]={q:bq,draft,base:prev,made:st.made};
+  gear();
+}
+function dwPanelHtml(cam,d,k,c){
+  const id=d.id,on=d.enabled!==false;
+  const head=`<section class="dw-sec dw-head"><div class="dw-name"><input type="text" value="${escHtml(locName(d))}" aria-label="${i18n("Имя")}" readonly><div class="sw ${on?"on":""}" role="switch" aria-checked="${on}" aria-label="${i18n("Включён")}" ${onEv("click",["detEnable",`${id}`])}></div></div>
+    <p class="sub">${escHtml(i18n(DW_KINDS.find(x=>x[0]===k)?.[1]||detKindText(d,cam)))} · ${i18n(d.builtin?"на камере":"на сервере")}${cam?` · ${escHtml(locName(cam))}`:""}</p>
+    <div class="dw-state" data-dw-st>${dwStateHtml(d)}</div></section>`;
+  // Вкладки столбца: «Детектор», «Поддетекторы» (у видов с поддетекторами), «Автоматизация» — правила с детектором (в «Оборудовании»)
+  const hasR=app==="hw",hasS=dwHasSubs(d);
+  let ptab=dwPtab();if(ptab==="sub"&&!hasS||ptab==="rules"&&!hasR)ptab="det";
+  if(ptab==="sub")dw.ptab="sub";// поддетектор открыли из дерева или «+»: «Все поддетекторы» вернёт к списку, а не на другую вкладку
+  const tl=[["det","Детектор",""]];
+  if(hasS)tl.push(["sub","Поддетекторы",`<span class="dw-sec-n">${c.subs.length}</span>`]);
+  if(hasR)tl.push(["rules","Автоматизация",`<span class="dw-sec-n">${ruleUsersOfId(d.id).length}</span>`]);
+  const tabs=tl.length>1?`<div class="tabs dw-ptabs" role="tablist">${tl.map(([v,l,x])=>`<button type="button" role="tab" class="tab${ptab===v?" on":""}" aria-selected="${ptab===v}" data-dw-ptab="${v}" ${onEv("click",["dwPtabSet",v])}>${i18n(l)}${x}</button>`).join("")}</div>`:"";
+  if(ptab==="rules")return head+tabs+`<section class="dw-sec dw-rules">${ruleUsesCardHtml(d)}</section>`;
+  if(k==="other")return head+tabs+dwSec("Параметры",detFieldsHtml(cam,d,"Имя"));
+  const what=(k==="linecross"||k==="neural")&&dwHas("classes")?dwSec("Классы объектов",dwChips(id,["person","car","bike"],c.classes,"dwClass")+dwHelp("Детектор сработает только на объекты выбранных классов.")):"";
+  const when=[];
+  // Встроенный детектор: границы ползунка — из шаблона камеры, а без чувствительности в шаблоне ползунка нет
+  const opt=detOption(cam,d);
+  // Чувствительности у объекта нет — ползунок показывает умолчание (dwSensDef), а поле в «Дополнительно» не нужно
+  const sensUi=(k==="motion"||k==="tracker")&&!(opt&&opt.sensitivityMin==null);
+  if(sensUi)when.push(dwRange(id,"sens","Чувствительность",opt?.sensitivityMin??1,opt?.sensitivityMax??100,1,"","Чем выше чувствительность, тем более слабое движение замечает детектор."));
+  if((k==="neural"||k==="lpr")&&dwHas("confidence"))when.push(dwRange(id,"conf","Уверенность нейросети не ниже",10,99,1,"%","Детектор сработает, только если нейросеть уверена в объекте не меньше этого значения.","conf"));
+  if(k==="lpr"&&dwHas("plateWidth"))when.push(`<div class="dw-f"><label>${i18n("Ширина номера")} <b data-dw-out="pw">${dwPwText(c)}</b></label>
+      <div class="dw-2r"><input type="range" min="0" max="100" step="0.5" value="${c.pw[0]*100}" ${onEv("input",["dwSet",id,"pw.0",onEv.value,onEv.el])}><input type="range" min="0" max="100" step="0.5" value="${c.pw[1]*100}" ${onEv("input",["dwSet",id,"pw.1",onEv.value,onEv.el])}></div>
+      ${dwHelp("Консоль показывает ширину номера в процентах от ширины кадра. Номера уже или шире детектор пропускает. Если ширина от 0 до 100 %, детектор не ограничивает номера по ширине.")}</div>`);
+  if(k==="linecross"&&dwHas("direction"))when.push(`<div class="dw-f"><label>${i18n("Направление")}</label>${dwDirHtml(id,c.dir,"dwDir")}${dwHelp("Детектор сработает, только когда объект пересечёт линию в этом направлении.")}</div>`);
+  if(k==="motion"&&dwHas("minDurationSec"))when.push(dwNum(id,"delay","Сработать, если движение длится не меньше",0,30,"с","Короткое движение, например блик или птица, детектор пропустит."));
+  if(k==="crowd"&&dwHas("crowdMin")&&dwHas("crowdHoldSec"))when.push(dwNum(id,"count","Людей в зоне не меньше",2,50,"чел."),dwNum(id,"hold","Дольше",1,600,"с","Детектор сработает, когда в зоне долго стоит группа людей. Следующая сработка — после того, как группа разойдётся."));
+  if(k==="abandoned"&&dwHas("stillSec"))when.push(dwNum(id,"stay","Предмет лежит без движения дольше",5,1800,"с"));
+  const adv=`<details class="dw-adv"><summary>${i18n("Дополнительно")}</summary><div class="dw-adv-b">${detFieldsHtml(cam,d,"Имя",sensUi)}${cam?detServerNoteHtml(cam,d):""}</div></details>`;
+  const where=dwSec("Зоны детектирования",dwAreasHtml(id,k,c))+(DW_SIZE.has(k)&&dwHas("objectSize")?dwSizeSec(id):""),wh=when.length?dwSec("Условия срабатывания",when.join("")):"";
+  if(!hasS)return head+tabs+what+where+wh+adv;
+  // Вкладки: настройки детектора отдельно от поддетекторов, столбец короче
+  return head+tabs+(ptab==="det"?what+where+wh+adv:`<section class="dw-sec dw-subs-tab">${dwSubsHtml(id,k,c)}</section>`);
+}
+// ── Действия ──
+function dwRoot(){return document.querySelector("[data-dw]")}
+function dwD(){const r=dwRoot();return r?detNodeOf(r.dataset.dw):null}
+function dwRefresh(){
+  const root=dwRoot(),d=dwD();if(!root||!d)return;
+  const c=dwC(d);
+  root.querySelectorAll("[data-dw-out]").forEach(el=>{const k=el.dataset.dwOut;el.textContent=k==="pw"?dwPwText(c):k==="conf"?c.conf+"%":String(c[k])});
+  root.querySelectorAll("[data-dw-nolim]").forEach(el=>{el.hidden=!(el.dataset.dwNolim==="min"?dwNoMin(c):dwNoMax(c))});
+  root.querySelectorAll("[data-dw-size]").forEach(el=>{if(el===document.activeElement)return;const[a,i]=el.dataset.dwSize.split(".");el.value=Math.round(c[a][+i]*1000)/10});
+  const p=root.querySelector("[data-dw-prev]");if(p)p.innerHTML=dwPrevHtml(d);
+  const s=root.querySelector("[data-dw-st]");if(s)s.innerHTML=dwStateHtml(d);
+  root.querySelectorAll("[data-dw-sub]").forEach(el=>{const sb=c.subs.find(x=>x.id===el.dataset.dwSub),nn=el.querySelector(".dw-sub-n");if(sb&&nn&&sb.kind!=="mask")nn.textContent=`${dwEval(c,dwKindOf(d)).fires.filter(f=>f.sub===sb.id).length} ${i18n("сраб.")}`});
+  dwPaintGeo();dwPaintObj();cardFootRefresh();
+  const b=root.querySelector("[data-dw-bar]");if(b)b.innerHTML=dwBarHtml();
+}
+function dwSoon(){if(dw.soon)return;dw.soon=setTimeout(()=>{dw.soon=0;dwRefresh()},30)}
+function dwPaintGeo(){const g=dwRoot()?.querySelector("[data-dw-geo]"),d=dwD();if(g&&d)g.innerHTML=dwGeoSvg(d)}
+function dwPaintObj(){
+  const root=dwRoot(),d=dwD();if(!root||!d)return;
+  const t=dw.T,g=root.querySelector("[data-dw-obj]");if(g)g.innerHTML=dwObjSvg(d,((t%DW_T)+DW_T)%DW_T);
+  const ck=root.querySelector("[data-dw-clock]");if(ck)ck.textContent=dwClock(t);
+  const nw=root.querySelector("[data-dw-now]");if(nw)nw.textContent=dw.now!=null&&dwKindOf(d)!=="other"?`${i18n("Детектор видит в кадре")}: ${dw.now}`:"";
+  // Раз в секунду живого времени: графики «до и после», лента, итог плана после очереди
+  const sec=Math.floor(dw.T);if(sec!==dw.shown){dw.shown=sec;
+    const sk=d.id,sj=JSON.stringify(dwSaved(d)),was=(dw.sjm||(dw.sjm={}))[sk];if(sj!==was){dw.sjm[sk]=sj;if(was!=null){gear();renderTree();return}}
+    const cm=root.querySelector("[data-dw-cmp]");if(cm){const C=dwCmpData(d);cm.innerHTML=dwCmpHtml(d,C);
+      const cs=root.querySelector("[data-dw-cstrip]");if(cs&&+cs.dataset.dwCstrip!==C.strip.length){cs.dataset.dwCstrip=C.strip.length;cs.innerHTML=dwCmpStripHtml(d,C)}}
+    const st=root.querySelector("[data-dw-strip]");if(st){const n=dwFiresIn(dwSaved(d),dwKindOf(d),dw.T-DW_T,dw.T).length;if(+st.dataset.dwStrip!==n)dwPv("live")}}
+}
+function dwStart(){if(dw.raf)return;dw.last=performance.now();dw.raf=requestAnimationFrame(dwLoop)}
+function dwLoop(ts){
+  if(!dwRoot()){dw.raf=0;return}
+  const dt=Math.min(.1,(ts-dw.last)/1000);dw.last=ts;
+  dw.T+=dt*dw.tsp;
+  dwPaintObj();dw.raf=requestAnimationFrame(dwLoop);
+}
+function dwBarHtml(){
+  return`<span class="dw-live"><i class="dw-rec"></i>${i18n("Живое видео")}</span><b data-dw-clock>${dwClock(dw.T)}</b>`;
+}
+function dwTagHtml(){return`<i class="dw-rec"></i>${i18n("Живое видео")}`}
+function dwPer(v){dw.per=+v;dw.shown=-1;dwPv("cmp")}
+function dwTsp(v){dw.tsp=+v;gear()}
+function dwTool(t){dw.tool=dw.tool===t?null:t;gear()}
+function dwLay(key){dw.lay[key]=!dw.lay[key];gear()}
+function dwSelect(aid){dw.sel=dw.sel===aid?null:aid;gear()}
+function dwSet(id,key,v,el){
+  const c=dwC(detNodeOf(id));if(v===""||v==null)return;v=+v;if(!Number.isFinite(v))return;
+  // Целые — все значения, кроме долей кадра (размер объекта и ширина номера)
+  if(!["pw","min","max"].includes(key.split(".")[0]))v=Math.round(v);
+  if(el&&el.min!==""&&v<+el.min)v=+el.min;if(el&&el.max!==""&&v>+el.max)v=+el.max;
+  if(key.includes(".")){const[a,i]=key.split(".");c[a][+i]=a==="pw"||a==="min"||a==="max"?v/100:v;if(a==="pw"&&c.pw[0]>c.pw[1])c.pw[+i?0:1]=c.pw[+i];
+    if(a==="min"&&c.min[+i]>c.max[+i])c.max[+i]=c.min[+i];if(a==="max"&&c.max[+i]<c.min[+i])c.min[+i]=c.max[+i]}
+  else c[key]=v;
+  dwSoon();
+}
+function dwClass(id,cl){const c=dwC(detNodeOf(id)),i=c.classes.indexOf(cl);if(i<0)c.classes.push(cl);else c.classes.splice(i,1);gear()}
+function dwDir(id,v){dwC(detNodeOf(id)).dir=v;gear()}
+function dwAreaDel(id,aid){const c=dwC(detNodeOf(id));c.areas=c.areas.filter(a=>a.id!==aid);gear()}
+function dwSubOf(id,sid){return dwC(detNodeOf(id)).subs.find(s=>s.id===sid)}
+// Пока идёт операция плана, черновик окна не меняется и из дерева: строка дерева — вне окна только для чтения
+function dwRoRefuse(id){if(!dw.sent[id])return false;toast("Консоль применяет изменения. Править настройки можно после конца операции.");return true}
+function dwSubOn(id,sid){if(dwRoRefuse(id))return;const s=dwSubOf(id,sid);if(s)s.on=!s.on;gear()}
+function dwSubSet(id,sid,key,v,el){
+  const s=dwSubOf(id,sid);if(v===""||v==null)return;v=Math.round(+v);if(!s||!Number.isFinite(v)||v<0)return;
+  if(el&&el.min!==""&&v<+el.min)v=+el.min;if(el&&el.max!==""&&v>+el.max)v=+el.max;
+  if(key.includes(".")){const[a,i]=key.split(".");s[a][+i]=v;if(a==="spd"&&s.spd[0]>s.spd[1])s.spd[+i?0:1]=v}else s[key]=v;
+  dwSoon();
+}
+function dwSubDir(id,sid,v){const s=dwSubOf(id,sid);if(s)s.dir=v;gear()}
+function dwSubMode(id,sid,v){const s=dwSubOf(id,sid);if(s)s.mode=v;gear()}
+function dwSubGrp(id,sid){const s=dwSubOf(id,sid);if(s)s.grp=!s.grp;dw.subAdv=true;gear()}
+function dwSubName(id,sid,v){const s=dwSubOf(id,sid);if(!s)return;s.name=v;const b=dwRoot()?.querySelector(`[data-dw-sub="${CSS.escape(sid)}"] .dw-sub-t b`);if(b)b.textContent=v;dwSoon()}
+function dwSubClass(id,sid,cl){const s=dwSubOf(id,sid);if(!s)return;const i=s.classes.indexOf(cl);if(i<0)s.classes.push(cl);else s.classes.splice(i,1);gear()}
+function dwSubSel(sid){dw.subSel=dw.subSel===sid?null:sid;dw.subAdv=false;gear();renderTree()}
+function dwSubNewOpen(){dw.subNew=!dw.subNew;gear();if(dw.subNew)setTimeout(()=>dwRoot()?.querySelector(".dw-new-q")?.focus(),0)}
+function dwSubAdd(id,kind){
+  const c=dwC(detNodeOf(id)),n=c.subs.filter(s=>s.kind===kind).length+1,sid="s"+Date.now()%1e7;
+  c.subs.push(dwSubNew(kind,`${i18n(DW_SUBN[kind])}${n>1?" "+n:""}`,sid));
+  dw.subSel=sid;dw.subNew=false;dw.subAdv=false;gear();renderTree();
+}
+function dwSubFilter(v){
+  const r=dwRoot()?.querySelector("[data-dw-new]");if(!r)return;
+  const q=String(v||"").trim(),cs=[...r.querySelectorAll(".dw-new-c")];let n=0;
+  cs.forEach(el=>{const on=matchesText(q,el.textContent);el.hidden=!on;if(on)n++;el.classList.remove("act");el.querySelector("b").innerHTML=hlText(el.dataset.nm,q)});
+  cs.find(el=>!el.hidden)?.classList.add("act");
+  r.querySelector("[data-dw-new-x]").textContent=n?`${i18n("Показано")} ${n} ${i18n("из")} ${cs.length}`:i18n("Ничего не найдено");
+}
+function dwSubKey(id,e){
+  const r=dwRoot()?.querySelector("[data-dw-new]");if(!r)return;
+  const vis=[...r.querySelectorAll(".dw-new-c:not([hidden])")],i=vis.findIndex(el=>el.classList.contains("act"));
+  if(e.key==="ArrowDown"||e.key==="ArrowUp"){e.preventDefault();if(!vis.length)return;const j=Math.max(0,Math.min(vis.length-1,i+(e.key==="ArrowDown"?1:-1)));vis.forEach(el=>el.classList.remove("act"));vis[j].classList.add("act");vis[j].scrollIntoView({block:"nearest"})}
+  else if(e.key==="Enter"){e.preventDefault();const el=vis[i]||vis[0];if(el)dwSubAdd(id,el.dataset.kind)}
+  else if(e.key==="Escape"){e.preventDefault();dwSubNewOpen()}
+}
+function dwSubDel(id,sid){
+  if(dwRoRefuse(id))return;
+  const d=detNodeOf(id),c=dwC(d),s=c.subs.find(x=>x.id===sid);if(!s)return;
+  const saved=dwSaved(d).subs.some(x=>x.id===sid);
+  askConfirm(`${i18n("Удалить поддетектор")} «${s.name}»?`,`<ul class="bk-del">
+      <li>${i18n(s.kind==="line"?"Пропадут линия и настройки поддетектора.":s.kind==="a2a"?"Пропадут две области и настройки поддетектора.":"Пропадут область и настройки поддетектора.")}</li>
+      <li>${i18n(saved?"Детектор перестанет создавать события этого поддетектора после «Применить».":"Детектор ещё не работает с этим поддетектором: его нет в применённых настройках.")}</li>
+      <li>${i18n("Останутся")}: ${i18n("детектор")} «${escHtml(locName(d))}», ${i18n("другие поддетекторы, события в архиве")}.</li></ul>`,"","Удалить",()=>{
+    if(dwRoRefuse(id))return;
+    const i=c.subs.indexOf(s);if(i<0)return;c.subs.splice(i,1);if(dw.subSel===sid)dw.subSel=null;gear();
+    toastAction("dwsub",`${i18n("Консоль убрала поддетектор из черновика")}: «${s.name}»`,i18n("Отменить"),()=>{const cc=dwC(detNodeOf(id));if(!cc||dw.sent[id]||cc.subs.some(x=>x.id===sid))return;if(saved&&!dwSaved(detNodeOf(id)).subs.some(x=>x.id===sid))return;cc.subs.splice(Math.min(i,cc.subs.length),0,s);if(sel===id)dw.subSel=sid;gear();renderTree()},10000);
+  },{html:true,rawTitle:true,typeCount:1});
+}
+// Из дерева и со вкладки камеры: открыть детектор, раскрыть поддетектор; переход по ссылке моргает карточкой поддетектора
+function dwSubPick(did,sid,link){
+  const d=detNodeOf(did);if(!d)return;
+  dw.id=did+dwKindOf(d);dw.sel=null;dw.tool=null;dw.subNew=false;dw.subAdv=false;dw.subSel=sid;dw.subFlash=!!link;
+  if(link)detFromCam(did);else if(sel===did){gear();renderTree()}else pick(did);
+}
+// Меню поддетектора — по «⋮» в строке дерева и по правой кнопке: те же действия, что в карточке
+function dwSubCtx(did,sid,xy,el){
+  const d=detNodeOf(did);if(!d)return;
+  const s=dwC(d).subs.find(x=>x.id===sid);
+  if(!s){const o=dwSaved(d).subs.find(x=>x.id===sid);if(!o)return;
+    rcShow([tctxItem(i18n("Открыть детектор"),["rcRun","pick",did],null,false,"tctx-default"),tctxItem(i18n("Вернуть поддетектор"),["dwSubBack",did,sid])].join(tctxSep()),xy);rcMark(el);return}
+  const open=sel===did&&dw.subSel===sid?[]:[tctxItem(i18n("Открыть"),["rcRun","dwSubPick",did,sid],null,false,"tctx-default")];
+  const g=[open,[tctxItem(i18n(s.on?"Выключить":"Включить"),["dwSubTreeOn",did,sid])],[tctxDanger(i18n("Удалить поддетектор…"),["dwSubTreeDel",did,sid])]];
+  rcShow(g.filter(x=>x.length).map(x=>x.join("")).join(tctxSep()),xy);rcMark(el);
+}
+function dwSubBack(did,sid){
+  closeTreeCtx();if(dwRoRefuse(did))return;const d=detNodeOf(did),c=dwC(d),o=dwSaved(d).subs.find(x=>x.id===sid);
+  if(!o||c.subs.some(x=>x.id===sid))return;c.subs.push(dwClone(o));dwSubPick(did,sid);renderTree();
+}
+function dwSubMenu(e,did,sid){
+  e.preventDefault();e.stopPropagation();
+  const b=e.currentTarget,r=b.getBoundingClientRect();
+  dwSubCtx(did,sid,{x:r.left,y:r.bottom+4},b.closest(".n"));
+}
+function dwSubTreeOn(did,sid){closeTreeCtx();dwSubPick(did,sid);dwSubOn(did,sid);renderTree()}
+function dwSubTreeDel(did,sid){closeTreeCtx();dwSubPick(did,sid);dwSubDel(did,sid)}
+function dwSubCreate(did){
+  const d=detNodeOf(did);if(!d||dw.sent[did])return;
+  dw.id=did+dwKindOf(d);dw.sel=null;dw.tool=null;dw.subSel=null;dw.subNew=true;
+  if(sel===did){gear();renderTree()}else pick(did);
+}
+function dwLand(){
+  const r=dwRoot();if(!r)return;
+  if(dw.subNew){const q=r.querySelector(".dw-new-q");if(q&&document.activeElement!==q){q.scrollIntoView({block:"nearest"});q.focus()}}
+  // Поддетектор по ссылке может прийти раньше своих свойств (dwSubsEnsure): вспышка ждёт, пока строка появится
+  if(dw.subFlash&&dw.subSel){const el=r.querySelector(`[data-dw-sub="${CSS.escape(dw.subSel)}"]`);if(el||dwLoaded.has(sel))dw.subFlash=false;if(el){el.scrollIntoView({block:"nearest"});el.classList.remove("acc-flash");void el.offsetWidth;el.classList.add("acc-flash")}}
+}
+function dwRevert(id){if(dw.sent[id])return;const d=detNodeOf(id);dw.cfg[id]=dwClone(dwSaved(d));if(dwCardRows(d).length)cardRestore();gear();toast("Консоль сбросила изменения")}
+// Рисование и правка на кадре: инструмент — протяжкой; без инструмента — точки и фигуры тянутся мышью
+function dwXY(st,e){const r=st.getBoundingClientRect();if(!r.width||!r.height)return null;return[+Math.min(1,Math.max(0,(e.clientX-r.left)/r.width)).toFixed(4),+Math.min(1,Math.max(0,(e.clientY-r.top)/r.height)).toFixed(4)]}
+function dwDown(st,e){
+  const d=dwD();if(!d||e.button)return;
+  const c=dwC(d),p0=dwXY(st,e),h=e.target.dataset?.h,b=e.target.dataset?.b;if(!p0)return;
+  let move=null,done=null,reSel=false;
+  const subPick=(kd,id)=>{if(/^sub/.test(kd)&&dw.subSel!==id){dw.subSel=id;dw.subNew=false;reSel=true}};
+  if(dw.tool){
+    e.preventDefault();
+    const tool=dw.tool;
+    if(tool==="line"){c.line=[p0,p0];move=q=>{c.line=[p0,q]};done=()=>{if(Math.hypot(c.line[1][0]-p0[0],c.line[1][1]-p0[1])<.02)c.line=[[.47,.5],[.53,.98]]}}
+    else{
+      // Без extraZones у вида det зона одна (zone): новая заменяет прежнюю
+      if(tool==="in"&&!dwHas("extraZones"))c.areas=c.areas.filter(a=>a.type!=="in");
+      const nIn=c.areas.filter(a=>a.type===tool).length+1,a={id:"a"+Date.now()%1e7,type:tool,n:nIn,pts:[p0,p0,p0,p0]};
+      c.areas.push(a);dw.sel=a.id;
+      move=q=>{a.pts=[[p0[0],p0[1]],[q[0],p0[1]],[q[0],q[1]],[p0[0],q[1]]]};
+      done=()=>{if(Math.abs(a.pts[2][0]-p0[0])<.02||Math.abs(a.pts[2][1]-p0[1])<.02)c.areas=c.areas.filter(x=>x!==a)};
+    }
+  }else if(h){
+    e.preventDefault();
+    const[kd,id,i]=h.split(":");
+    if(kd==="area"){const a=c.areas.find(x=>x.id===id);if(a){dw.sel=id;move=q=>{a.pts[+i]=q}}}
+    else if(kd==="line")move=q=>{c.line[+id]=q};
+    else if(kd==="sub"){const s=c.subs.find(x=>x.id===id);if(s)move=q=>{s.area.pts[+i]=q}}
+    else if(kd==="sub2"){const s=c.subs.find(x=>x.id===id);if(s)move=q=>{s.area2.pts[+i]=q}}
+    else if(kd==="subl"){const s=c.subs.find(x=>x.id===id);if(s)move=q=>{s.line[+i]=q}}
+    subPick(kd,id);
+    // Угол рамки размера: значение — от 1 до 100 % кадра; минимум не выше максимума, как в полях (dwSet)
+    if(kd==="min"||kd==="max"){const at=c[kd+"At"];move=q=>{
+      const v=[Math.abs(q[0]-at[0])*2,at[1]-q[1]].map(x=>+Math.min(1,Math.max(.01,x)).toFixed(4));c[kd]=v;
+      for(let i=0;i<2;i++){if(kd==="min"&&c.max[i]<v[i])c.max[i]=v[i];if(kd==="max"&&c.min[i]>v[i])c.min[i]=v[i]}}}
+  }else if(b){
+    e.preventDefault();
+    const[kd,id]=b.split(":");
+    subPick(kd,id);
+    const pts=kd==="area"?c.areas.find(x=>x.id===id)?.pts:kd==="sub"?c.subs.find(x=>x.id===id)?.area.pts:kd==="sub2"?c.subs.find(x=>x.id===id)?.area2?.pts:kd==="line"?c.line:kd==="subl"?c.subs.find(x=>x.id===id)?.line:kd==="min"||kd==="max"?[c[kd+"At"]]:null;
+    if(kd==="area")dw.sel=id;
+    if(pts){const orig=pts.map(p=>p.slice());move=q=>{const dx=q[0]-p0[0],dy=q[1]-p0[1];orig.forEach((p,i)=>{pts[i][0]=+Math.min(1,Math.max(0,p[0]+dx)).toFixed(4);pts[i][1]=+Math.min(1,Math.max(0,p[1]+dy)).toFixed(4)})}}
+  }
+  if(!move){if(reSel){gear();renderTree()}return}
+  dw.drag=true;
+  const mm=ev=>{const q=st.isConnected&&dwD()===d?dwXY(st,ev):null;if(!q){up();return}move(q);dwPaintGeo();dwSoon()};
+  const up=()=>{window.removeEventListener("mousemove",mm);window.removeEventListener("mouseup",up);dw.drag=false;done?.();if(dw.tool){dw.tool=null;gear()}else if(reSel){gear();renderTree()}else dwRefresh()};
+  window.addEventListener("mousemove",mm);window.addEventListener("mouseup",up);
 }
 // ── Срез «Детекторы»: главный объект — детектор ──────────────────────────────
 // Строка перечня (DeviceRow) не называет вид, зону и модель камеры, поэтому список читает полные записи
@@ -19218,8 +20571,7 @@ function formBase(n){
     return camGenLayout(n,parts,ips)}
   if(n.type==="det"){
     const cam=find(n.id)?.p;
-    return detBackHtml(cam)+detZoneCardHtml(cam,n)+card("Параметры",`${detFieldsHtml(cam,n,"Имя")}
-      ${cam?detServerNoteHtml(cam,n):""}`);
+    return detWindowHtml(cam,n);
   }
   if(n.type==="acfa_lock"||n.type==="acfa_sensor"||n.type==="acfa_fence"||(n.type==="relay"&&isUnitNode(n)))return unitCardHtml(n);
   if(n.type==="storage"&&tab==="rep")return edgeRepScreenHtml(n);
@@ -21661,6 +23013,7 @@ function raApply(){
 // Карточка нужна там, где устройство бывает событием или действием, и только на первой вкладке («Подключение»).
 function ruleUsesFor(n){
   if(app!=="hw"||!["camera","sensor","relay","acfa_sensor","det"].includes(n.type)||lanTabOpen(n))return"";
+  if(n.type==="det")return"";// у детектора правила — разделом в столбце настроек (dwPanelHtml): карточка делится на две половины
   const tabs=tabsFor(n);
   if(tabs.length&&tab!==tabs[0][0])return"";
   return ruleUsesCardHtml(n);
@@ -33197,6 +34550,8 @@ function rcOnContext(e){
   const text=rcSelectedText(t,byKey);
   if(text){rcCopyText=text;rcShow(tctxItem(i18n("Копировать"),["rcCopy"]),xy);if(byKey)rcFocusFirst();return}
   if(wizOpen()||t.closest(".confirm,.jump,.mask,.ttu,#upop"))return;
+  const subRow=t.closest("#tree [data-dwsub]");
+  if(subRow){const[a,b]=subRow.dataset.dwsub.split("|");dwSubCtx(a,b,xy,subRow);if(byKey)rcFocusFirst();return}
   const link=rcLink(t);
   if(link?.k==="control")return;
   if(link?.k==="node")rcObject(link.id,xy,link.el);
@@ -35749,7 +37104,7 @@ function opOnEvent(m){
     const it=m.payload.item,o=ops[it.index];if(!o||o.done)return;
     // Шаг create создал устройство — в кэш, как только сервер его отдаст
     // Выбранный в карточке новый детектор остаётся выбранным и под id сервера
-    if(it.createdId)API.get(`/units/${it.createdId}`).then(u=>{hwAddUnits([u]);if(o.tempId&&detSel===o.tempId){detSel=u.uid;if(app==="hw")gear()}renderTreeSoon()}).catch(()=>{});
+    if(it.createdId)API.get(`/units/${it.createdId}`).then(u=>{hwAddUnits([u]);if(o.tempId&&detSel===o.tempId){detSel=u.uid;if(app==="hw")gear()}if(o.dwTemp&&dw.subSel===o.dwTemp){dw.subSel=u.uid;if(app==="hw")gear()}renderTreeSoon()}).catch(()=>{});
     if(it.state==="ok"){o.state="ok";o.msg="";bq.ok++}
     else if(problemKept(it)){o.state="ok";o.kept=true;o.msg=i18n("Принято, применится");bq.ok++;keptNote(it.targetId)}
     else{o.state="fail";o.msg=problemText(it.code,o.n);bq.fail++}

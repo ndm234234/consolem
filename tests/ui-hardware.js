@@ -69,8 +69,9 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   ok(!document.querySelector('[data-df="Номер"]'),"номер начинки только для чтения");
   // Детектор: у камеры во вкладке только список, параметры — в карточке самого детектора
   pick(cam.id,{force:true});goTab("det");
-  // Порядок детекторов зависит от порядка чтения: берём тот, у шаблона которого есть чувствительность
-  const d0=camDetectors(cam).find(d=>{const o=detOption(cam,d);return!o||o.sensitivityMin!=null});
+  // Порядок детекторов зависит от порядка чтения: берём тот, у шаблона которого есть чувствительность. У движения и трекера
+  // чувствительность — ползунок окна детектора (tests/ui-okno-detektora.js), поля в «Дополнительно» у них нет
+  const d0=camDetectors(cam).find(d=>{const o=detOption(cam,d);return(!o||o.sensitivityMin!=null)&&!["motion","tracker"].includes(dwKindOf(d))});
   pick(d0.id,{force:true});gear();
   setFld("Чувствительность","33");
   await viaApi("чувствительность детектора из его карточки",async()=>(await uiRec(d0.id)).sensitivity===33);

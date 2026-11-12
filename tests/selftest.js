@@ -13,7 +13,7 @@
    с идущими часами (данные у стенда одни на всех). С ?report=<адрес> итог уходит туда POST-запросом. */
 (() => {
   const q = new URLSearchParams(location.search);
-  const SCENARIOS = ["ui-tree.js", "ui-spisok-poisk.js", "ui-stream.js", "ui-cluster.js", "ui-topology.js", "ui-between.js", "ui-hardware.js", "ui-domains.js", "ui-servers-add.js", "ui-storage.js", "ui-archive.js", "ui-devices.js", "ui-bulk.js", "ui-rule-links.js", "ui-rules.js", "ui-rezhimy.js", "ui-settings.js", "ui-assist.js", "ui-assist-service.js", "ui-start.js", "ui-kinds.js", "ui-pos.js", "ui-edge.js", "ui-webserver.js", "ui-jump.js", "ui-menus.js", "ui-ops.js", "ui-access.js", "ui-profile.js", "ui-live.js", "ui-view.js", "ui-prompts.js", "ui-plan.js", "ui-chat.js", "ui-unknown.js", "ui-export.js", "ui-learn.js"];
+  const SCENARIOS = ["ui-tree.js", "ui-spisok-poisk.js", "ui-stream.js", "ui-cluster.js", "ui-topology.js", "ui-between.js", "ui-hardware.js", "ui-domains.js", "ui-servers-add.js", "ui-storage.js", "ui-archive.js", "ui-devices.js", "ui-bulk.js", "ui-rule-links.js", "ui-rules.js", "ui-rezhimy.js", "ui-settings.js", "ui-assist.js", "ui-assist-service.js", "ui-start.js", "ui-kinds.js", "ui-okno-detektora.js", "ui-pos.js", "ui-edge.js", "ui-webserver.js", "ui-jump.js", "ui-menus.js", "ui-ops.js", "ui-access.js", "ui-profile.js", "ui-live.js", "ui-view.js", "ui-prompts.js", "ui-plan.js", "ui-chat.js", "ui-unknown.js", "ui-export.js", "ui-learn.js"];
   // Сценарии не на эталонном наборе: страница сценария открывается с ?fixture=, стенд сбрасывается на него.
   // Отсюда же берёт наборы tools/check_ui.py
   const FIXTURE_OF = { "ui-profile.js": "one-domain" };
