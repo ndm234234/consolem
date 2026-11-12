@@ -7,8 +7,6 @@ Object.assign(window.I18N_EN,{
 "Время прототипа":"Prototype time",
 "Для этого вида превью пока нет.":"There is no preview for this kind yet.",
 "Зоны нет: детектор смотрит на весь кадр.":"There is no zone: the detector looks at the whole frame.",
-"Кадр показывает новые настройки. Детектор начнёт работать с ними после «Применить».":"The frame shows the new settings. The detector starts to use them after “Apply”.",
-"Кадр показывает применённые настройки.":"The frame shows the applied settings.",
 "Машина":"Car",
 "Помеха":"Interference",
 "Предмет":"Object",
@@ -224,4 +222,5 @@ Object.assign(window.I18N_EN,{
 "Поддетектор получает только объекты, которые нашёл детектор. Поэтому размер объекта у поддетектора всегда такой же, как у детектора.":"The sub-detector gets only the objects that the detector found. Thus the object size of the sub-detector is always the same as in the detector.",
 "Изменить размер у детектора":"Change the size in the detector",
 "Детектор находит объекты, а поддетектор решает, когда сработать. Зоны детектирования и размер объекта детектора действуют на все его поддетекторы.":"The detector finds the objects, and the sub-detector decides when to fire. The detection zones and the object size of the detector apply to all its sub-detectors.",
+"Все изменения применены.":"All changes are applied.",
 });

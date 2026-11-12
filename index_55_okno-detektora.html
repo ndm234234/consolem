@@ -3042,9 +3042,9 @@ body.pj-hdlog .gojump{display:none}
 .dw-grip::before{content:"";position:absolute;left:5px;top:0;bottom:0;width:2px;border-radius:1px;background:var(--ln);transition:background .15s}
 .dw-grip:hover::before,.dw-grip:focus-visible::before,.dw-grip.on::before{background:var(--one-accent);left:4px;width:4px}
 body.dw-resizing,body.dw-resizing *{cursor:col-resize!important;user-select:none!important}
-@media(max-width:1180px){.dw-grid{grid-template-columns:minmax(0,1fr)}.dw-grip{display:none}}
+@media(max-width:1180px){.dw-grid{grid-template-columns:minmax(0,1fr)}.dw-grip{display:none}.dw-right{position:static;max-height:none}}
 .dw-left{background:var(--p);border:1px solid var(--ln);border-radius:10px;padding:12px;min-width:0}
-.dw-right{background:var(--p);border:1px solid var(--ln);border-radius:10px;min-width:0;position:sticky;top:0;max-height:calc(100vh - 150px);overflow:auto;scrollbar-gutter:stable}
+.dw-right{background:var(--p);border:1px solid var(--ln);border-radius:10px;min-width:0;position:sticky;top:0;max-height:var(--dw-rh,calc(100vh - 150px));overflow:auto;scrollbar-gutter:stable;overscroll-behavior:contain}
 .dw-tools{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px}
 .dw-tools .btn,.dw-row .btn{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
 .dw .btn.on{border-color:var(--bl);background:var(--one-info-bg);color:var(--x-link)}
@@ -7282,6 +7282,7 @@ function cardFootHtml(){
 }
 function cardFootRefresh(){
   const el=document.getElementById("cardFoot");if(el)el.outerHTML=cardFootHtml();
+  if(typeof dwFit==="function")dwFit();
   decorateTreeSel();
 }
 function cardPlan(){
@@ -7694,10 +7695,10 @@ function treeStatusSlot(n){
 // а IP и счётчики остаются ровной колонкой.
 // Прототип 39: причину «нет сигнала» строка показывает только значком в колонке статуса (statusMarkHtml).
 // Слово — в окне у значка (stTip), в подсказке строки (treeRowTip) и в карточке.
-function treeRowMeta(n,q,shownLen,expanded,ctx){
+function treeRowMeta(n,q,shownLen,expanded,ctx,tagsX=""){
   // Справа: теги (IP…) → число → статус — как на макете
   const st=treeStatusSlot(n);
-  return treeTail({tags:treeAttrTags(n,q),cnt:treeCntSlot(n,shownLen,expanded),status:st,acts:n.id,ctx});
+  return treeTail({tags:tagsX+treeAttrTags(n,q),cnt:treeCntSlot(n,shownLen,expanded),status:st,acts:n.id,ctx});
 }
 // В какой срез попадает объект. treeKind знает три рода — камеры, ACFA и
 // службы; срез «Все» берёт их все, остальные по одному, а срез «Серверы»
@@ -9411,7 +9412,7 @@ function goFav(i){
 // курсор в поле, и терять это из-за того, что обновилась соседняя строка,
 // он не должен. Положение ищем по устойчивым признакам (селектор прокручиваемого
 // блока и его номер), а не по узлам — узлы после перерисовки уже другие.
-const VIEW_SCROLLERS=[".sc",".tree",".fav-panel-list",".lan-wrap",".gtbl",".dev-results-scroll",".dev-wrap-scroll",".plan-rows",".srv-list",".pos-l"];
+const VIEW_SCROLLERS=[".sc",".dw-right",".tree",".fav-panel-list",".lan-wrap",".gtbl",".dev-results-scroll",".dev-wrap-scroll",".plan-rows",".srv-list",".pos-l"];
 function focusSelector(el){
   if(!el||!/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))return null;
   if(el.id)return"#"+el.id;
@@ -11203,14 +11204,16 @@ function nrow(n,l,ctx){
   if(det?!n.builtin:treeKind(n)!==tview)return"";
   if(q&&!vis(n,q))return"";
   if(!det&&!selfInView(n)&&!kids(n).some(hasTreeIn))return"";
-  const k=treeKids(n),hasKids=k.length>0||!!n._more,op=open.has(n.id)||(autoExpand()&&hasKids);
+  // Детектор раскрывается до поддетекторов — как в срезе «Детекторы» (gdetrow)
+  const dt=det&&typeof dwTreeDet==="function"?dwTreeDet(n,ctx):null,ek=dt?dt.ok:n.id;
+  const k=dt?[]:treeKids(n),hasKids=dt?dt.sp:k.length>0||!!n._more,op=dt?dt.op:open.has(n.id)||(autoExpand()&&hasKids);
   const shown=k.filter(d=>hasTreeIn(d)&&(!q||vis(d,q)));
   const st=nodeStatus(n);
   const childOff=canToggleEnabled(n)&&st.off;
-  let h=`<div class="n ${treeRowHi(n.id,ctx)} ${childOff?"off":""}${n.type==="ipsrv"?sliceParentClass(n.id):""}${treeRenameId===n.id?" renaming":""}" style="--l:${l}"${treeRowPick(n.id,ctx)}${treeCtxAttr(n.id)}${treeExpandMeta(n.id,"node",hasKids)}>
-    ${treeChevron(n.id,"node",hasKids,op)}
-    ${treeRowIcon(n)}<span class="nm">${treeNameCell(n,q)}</span>${treeRowMeta(n,q,shown.length,op,ctx)}</div>`;
-  if(op)h+=shown.map(x=>nrow(x,l+1,ctx)).join("")+treeMoreRow(n.id,l+1);
+  let h=`<div class="n ${treeRowHi(n.id,ctx)} ${childOff?"off":""}${n.type==="ipsrv"?sliceParentClass(n.id):""}${treeRenameId===n.id?" renaming":""}" style="--l:${l}"${treeRowPick(n.id,ctx)}${treeCtxAttr(n.id)}${treeExpandMeta(ek,"node",hasKids)}>
+    ${treeChevron(ek,"node",hasKids,op)}
+    ${treeRowIcon(n)}<span class="nm">${treeNameCell(n,q)}</span>${dt?dt.badge:""}${treeRowMeta(n,q,shown.length,op,ctx,dt?dt.plus:"")}</div>`;
+  if(op)h+=dt?dt.kids(l+1):shown.map(x=>nrow(x,l+1,ctx)).join("")+treeMoreRow(n.id,l+1);
   return h}
 function svcrow(n,l){
   const q=qval();
@@ -11587,15 +11590,20 @@ function gdetrow(d,l,ctx,parentHit=false){
   // Поддетекторы — под детектором, с меткой числа. Создать поддетектор — «+» при наведении на строку, кнопка в карточке
   // детектора (раздел «Поддетекторы») и пункт меню строки («⋮», правая кнопка, «Ещё» в карточке): постоянной строки
   // «Создать…» в дереве нет
+  const{sp,ok,op,badge,plus,kids}=dwTreeDet(d,ctx);
+  let h=`<div class="n ${rowOn(d.id,ctx)}" style="--l:${l}"${treeRowPick(d.id,ctx)}${treeExpandMeta(ok,"node",sp)}>
+    ${treeChevron(ok,"node",sp,op)}${ic("det")}<span class="nm" title="${escHtml(locName(d))} · ${escHtml(i18n(d.kind||DET_TYPES[0]))}">${hlText(locName(d),q)}</span>${badge}${treeTail({tags:plus,status:treeStatusSlot(d),acts:d.id,ctx})}</div>`;
+  if(op)h+=kids(l+1);
+  return h;
+}
+// Строка детектора в любом дереве: метка числа поддетекторов, «+» и строки поддетекторов
+function dwTreeDet(d,ctx){
   const subs=dwHasSubs(d)?dwSaved(d).subs:[],sp=subs.length>0,ok=(ctx?ctx+"|":"")+d.id,op=sp&&open.has(ok);
   const badge=subs.length?`<span class="dw-tsub" title="${subs.length} ${i18n(plural(subs.length,"поддетектор|поддетектора|поддетекторов"))}">${lu("list-tree",12)}${subs.length}</span>`:"";
   // «+» при наведении на строку, как в Notion и Confluence: быстрый путь мышью. С клавиатуры и с сенсорного экрана —
   // кнопка в карточке и пункт меню «⋮»
   const plus=dwHasSubs(d)?`<button type="button" class="dw-tplus" tabindex="-1" aria-label="${i18n("Создать поддетектор")}" title="${i18n("Создать поддетектор")}" ${onEv("click",onEv.stop,["dwSubCreate",d.id])}>${lu("plus",14)}</button>`:"";
-  let h=`<div class="n ${rowOn(d.id,ctx)}" style="--l:${l}"${treeRowPick(d.id,ctx)}${treeExpandMeta(ok,"node",sp)}>
-    ${treeChevron(ok,"node",sp,op)}${ic("det")}<span class="nm" title="${escHtml(locName(d))} · ${escHtml(i18n(d.kind||DET_TYPES[0]))}">${hlText(locName(d),q)}</span>${badge}${treeTail({tags:plus,status:treeStatusSlot(d),acts:d.id,ctx})}</div>`;
-  if(op)h+=subs.map((s,i)=>dwTreeSubRow(d,s,i,l+1)).join("");
-  return h;
+  return{sp,ok,op,badge,plus,kids:l=>subs.map((s,i)=>dwTreeSubRow(d,s,i,l)).join("")};
 }
 function dwTreeSubRow(d,s,i,l){
   const on=sel===d.id&&dw.subSel===s.id,t=i18n(DW_SUBN[s.kind]),gone=!dwC(d).subs.some(x=>x.id===s.id);
@@ -14912,10 +14920,10 @@ function dwClock(t){return new Date(DW_T0+t*1000).toLocaleTimeString("ru-RU",{ho
 function detWindowHtml(cam,d){
   const k=dwKindOf(d),c=dwC(d);
   if(dw.id!==d.id+k){dw.id=d.id+k;dw.sel=null;dw.tool=null;dw.subSel=null;dw.subNew=false}
-  setTimeout(dwStart,0);setTimeout(dwLand,0);setTimeout(dwRwAria,0);
+  setTimeout(dwStart,0);setTimeout(dwLand,0);setTimeout(dwRwAria,0);setTimeout(dwFit,0);
   return detBackHtml(cam)+`<div class="dw" data-dw="${escHtml(d.id)}">
     ${dwStubHtml(d,k)}
-    <div class="dw-grid" style="${dwRwCss()}">
+    <div class="dw-grid" style="${dwRwCss()}${dw.rh?`;--dw-rh:${dw.rh}px`:""}">
       <div class="dw-left">
         <div class="dw-tools">${dwToolsHtml(d,k)}<span class="dw-lay">${dwLayHtml(k)}</span></div>
         <div class="dw-stage${dw.tool?" draw":""}" ${onEv("mousedown",["dwDown",onEv.el,onEv.event])}>
@@ -14941,6 +14949,15 @@ function dwRwCss(){
   return dw.rw?`--dw-rw:clamp(320px,${(dw.rw*100).toFixed(1)}%,calc(100% - 400px))`:"";
 }
 function dwRwNow(g){const grid=g.closest(".dw-grid"),r=g.nextElementSibling;return r.getBoundingClientRect().width/Math.max(1,grid.getBoundingClientRect().width)}
+// Столбец настроек — во всю видимую высоту карточки и не выше: конец столбца не уходит под полосу плана,
+// и до него не нужно прокручивать левый столбец
+function dwFit(){
+  const sc=document.querySelector("#main .sc"),dg=sc&&sc.querySelector(".dw-grid");if(!dg)return;
+  // Высота — от верха сетки до низа видимой части: столбец целиком виден и без прокрутки карточки
+  const top=dg.getBoundingClientRect().top-sc.getBoundingClientRect().top+sc.scrollTop,h=sc.clientHeight-parseFloat(getComputedStyle(sc).paddingBottom)-top;
+  if(h>200){dw.rh=Math.floor(h);dg.style.setProperty("--dw-rh",`${dw.rh}px`)}
+}
+addEventListener("resize",()=>dwFit());
 function dwRwAria(g){
   g=g||document.querySelector("#main .dw-grip");if(!g||!g.isConnected||!g.offsetParent)return;
   const r=g.nextElementSibling.getBoundingClientRect().width;
@@ -15328,7 +15345,9 @@ function dwFootHtml(){
   const n=find(sel)?.n;if(!n||n.type!=="det"||dwKindOf(n)==="other")return null;
   // Правки полей контракта («Включён», «Дополнительно») идут прежним черновиком карточки (cardDiff) — их строки тоже здесь
   const d=[...dwDiffRows(n),...dwCardRows(n)];
-  if(!d.length)return`<div id="cardFoot" hidden></div>`;
+  // Полоса стоит всегда, без изменений — с неактивными кнопками: первая правка не сдвигает карточку
+  if(!d.length)return`<div class="main-actions bk-foot card-foot" id="cardFoot"><span class="sub bk-foot-text">${i18n("Все изменения применены.")}</span><span class="tfoot-gap"></span>
+    <button type="button" class="btn s" disabled>${i18n("Сбросить")}</button><button type="button" class="btn s pri" disabled>${i18n("Показать план")}</button></div>`;
   const busy=bq&&!bq.finished;
   return`<div class="main-actions bk-foot card-foot" id="cardFoot"><span class="sub bk-foot-text">${i18n("Не применено")}: <b>${d.length}</b> ${i18n(plural(d.length,"изменение|изменения|изменений"))} — ${escHtml(d.slice(0,2).map(r=>i18n(r.label)).join(", "))}${d.length>2?"…":""}</span><span class="tfoot-gap"></span>
     <button type="button" class="btn s" ${onEv("click",["dwRevert",`${n.id}`])}>${i18n("Сбросить")}</button>
@@ -15419,7 +15438,7 @@ function dwLoop(ts){
 }
 function dwBarHtml(d){
   return`<span class="dw-live"><i class="dw-rec"></i>${i18n("Живое видео")}</span><b data-dw-clock>${dwClock(dw.T)}</b>
-    <span class="sub">${i18n(dwChanged(d)?"Кадр показывает новые настройки. Детектор начнёт работать с ними после «Применить».":"Кадр показывает применённые настройки.")}</span>`;
+`;
 }
 function dwTagHtml(){return`<i class="dw-rec"></i>${i18n("Живое видео")}`}
 function dwPer(v){dw.per=+v;dw.shown=-1;dwPv("cmp")}
