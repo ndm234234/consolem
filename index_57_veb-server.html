@@ -597,7 +597,7 @@ td.fl-nm>.fl-nm-ic{display:inline-flex;vertical-align:middle;margin-right:8px}
 .web-cb:has(input:disabled){cursor:default}
 .web-dim{opacity:.55}
 .web-addr{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:4px 0 8px;min-height:28px}.web-addr-l{color:var(--mu);font-size:12px}
-.web-hint{margin:6px 0 0;max-width:80ch}
+.web-hint{margin:6px 0 0;max-width:80ch}.web-rtsp-ex{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px;min-width:0}.web-rtsp-ex .cp{max-width:100%}.web-rtsp-n{margin:0;font-size:12px}.web-rtsp-ex .cp-val{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .web-file{display:flex;align-items:center;gap:10px;min-height:32px}.web-file-n{display:inline-flex;align-items:center;gap:6px}.web-file-n svg{width:14px;height:14px}
 .web-file-b{display:inline-flex;margin:0;color:inherit;font-size:inherit;cursor:pointer}
 .web-cert{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-top:12px;padding:10px;background:var(--p2);border:1px solid var(--ln);border-radius:8px;font-size:13px}
@@ -18479,13 +18479,13 @@ const WEB_PORTS=[["http","Порт HTTP"],["https","Порт HTTPS"],["rtsp","П
 const WEB_LBL={on:"Веб-сервер",http:"Порт HTTP",https:"Порт HTTPS",prefix:"Префикс адреса",cert:"Сертификат",key:"Ключ сертификата",cors:"Запросы с других сайтов (CORS)",recode:"Перекодирование видео",rtsp:"Порт RTSP",rtspHttp:"Порт RTSP через HTTP"};
 const WEB_CORES=8;            // заглушка: число ядер процессора сервера, от него — диапазон портов видео 9001…9001+ядра
 const webStore=new Map();     // uid сервера → {vals, base: значения до плана или null}
-let webCertMode="path";       // вариант раунда 1: "path" — путь на диске сервера, "file" — загрузить файлы из браузера
+let webCertMode="file";       // раунд 2: загрузка из браузера (выбор пользователя); "path" — путь на диске сервера, вариант раунда 1
 function webOf(n){
   let st=webStore.get(n.id);
   if(!st){
     // Первый сервер домена демо уже работает по HTTPS с wildcard-сертификатом — так видно, как выглядит готовая настройка
     const first=servers.find(s=>!isUnallocated(s.id))?.id===n.id;
-    st={vals:{...WEB_DEF,...(first?{cert:"C:\\certs\\fullchain.pem",key:"C:\\certs\\privkey.pem"}:{})},base:null};
+    st={vals:{...WEB_DEF,...(first?{cert:"fullchain.pem",key:"privkey.pem"}:{})},base:null};
     webStore.set(n.id,st);
   }
   return st;
@@ -18504,15 +18504,8 @@ function webInput(id,k,el,shown){
 }
 function webCommit(id,k,el){webInput(id,k,el,true)}
 function webToggle(id,k){const n=find(id)?.n;if(!n)return;webSet(id,k,!webOf(n).vals[k]);paint()}
-// Заглушка проверки: сервер читает оба файла, сверяет ключ с сертификатом и права пользователя службы на чтение
-function webCheckCert(id){
-  const n=find(id)?.n;if(!n)return;const v=webOf(n).vals;
-  if(!webHttpsOn(v)){toast("Указать файл сертификата и файл ключа");return}
-  toast(`${i18n("Сервер")} «${locName(n)}» ${i18n("прочитал файлы: ключ подходит к сертификату")}`);
-}
 function webClearCert(id){webSet(id,"cert","");webSet(id,"key","");paint()}
 function webFile(id,k,files){const f=files&&files[0];if(!f)return;webSet(id,k,f.name);paint()}
-function webMode(m){webCertMode=m;paint()}
 function webHttpsOn(v){return !!(v.cert&&v.key)}
 // Ошибки полей: порт вне 1–65535, два одинаковых порта, порт из диапазона видео 9001…9001+ядра, только сертификат или только ключ
 function webErrors(n){
@@ -18577,23 +18570,23 @@ function webCertHtml(n,err,dis){
         <label class="btn s web-file-b">${i18n(v[k]?"Другой файл":"Выбрать файл")}<input type="file" hidden accept=".pem,.crt,.cer,.key" ${dis} ${onEv("change",["webFile",`${n.id}`,`${k}`,onEv.files])}></label></div><div class="fld-err" data-web-err="${k}">${escHtml(err[k]||"")}</div></div>`;
   const hint=webCertMode==="path"
     ?`${i18n("Путь к файлу на диске сервера")} «${escHtml(locName(n))}». ${i18n("Формат PEM: .pem, .crt, .key. Файлы PFX не подходят. Ключ — без пароля. В Linux у пользователя ngp должно быть право читать эти файлы.")}`
-    :i18n("Консоль отправит файлы на сервер. Сервер хранит ключ у себя и не показывает его консоли. Формат PEM: .pem, .crt, .key. Файлы PFX не подходят. Ключ — без пароля.");
+    :`${i18n("Консоль отправит файлы на сервер")} «${escHtml(locName(n))}» ${i18n("после «Применить». Сервер проверит, что ключ подходит к сертификату, и сохранит ключ у себя. Консоль ключ больше не покажет. Формат PEM: .pem, .crt, .key. Файлы PFX не подходят. Ключ — без пароля.")}`;
   const sum=info?`<div class="web-cert">
       <div><span>${i18n("Кому выдан")}</span><b>${escHtml(info.subject)}</b>${info.wildcard?` <span class="bd">${i18n("wildcard: все поддомены")}</span>`:""}</div>
       <div><span>${i18n("Кем выдан")}</span><b>${escHtml(info.issuer)}</b></div>
       <div><span>${i18n("Действует")}</span><b>${info.from} – ${info.to}</b> <span class="sub">${i18n("ещё")} ${info.days} ${i18n(plural(info.days,"день|дня|дней"))}</span></div>
+      <div><span>${i18n("Проверка")}</span><b>${i18n("ключ подходит к сертификату")}</b></div>
       <div><span>${i18n("Цепочка")}</span><b>${i18n(info.chain==="full"?"полная":info.chain==="self"?"нет: сертификат самоподписанный":"без промежуточного сертификата")}</b></div>
     </div>${info.chain==="part"?`<div class="nt bk-warn">${lu("triangle-alert")} ${i18n("В файле нет промежуточного сертификата. Часть браузеров не доверит серверу. Указать файл с полной цепочкой (обычно fullchain.pem).")}</div>`:""}
     ${info.chain==="self"?`<div class="nt bk-warn">${lu("triangle-alert")} ${i18n("Браузеры покажут предупреждение «Подключение не защищено». Для доступа из интернета указать сертификат центра сертификации.")}</div>`:""}`:"";
   const none=!v.cert&&!v.key?`<div class="nt">${i18n("Сертификата нет, поэтому веб-сервер работает только по HTTP. Чтобы включить HTTPS, указать файл сертификата и файл ключа.")}</div>`:"";
   return card("Сертификат HTTPS",`${none}<div class="web-row">${pick("cert","Файл сертификата","C:\\certs\\fullchain.pem")}${pick("key","Файл ключа","C:\\certs\\privkey.pem")}</div>
     <p class="sub web-hint">${hint} ${i18n("Подходят сертификаты TLS 1.2 и 1.3, в том числе wildcard (*.example.ru) — один сертификат на все поддомены.")}</p>${sum}`,
-    v.cert||v.key?`<span class="tfoot-gap"></span>${webHttpsOn(v)?`<button type="button" class="btn s" ${dis} ${onEv("click",["webCheckCert",`${n.id}`])}>${i18n("Проверить файлы")}</button> `:""}<button type="button" class="btn s" ${dis} ${onEv("click",["webClearCert",`${n.id}`])}>${i18n("Убрать сертификат")}</button>`:"");
+    v.cert||v.key?`<span class="tfoot-gap"></span><button type="button" class="btn s" ${dis} ${onEv("click",["webClearCert",`${n.id}`])}>${i18n("Убрать сертификат")}</button>`:"");
 }
 function webSrvHtml(n){
   const st=webOf(n),v=st.vals,err=webErrors(n),dis=v.on?"":"disabled";
-  const strip=`<div class="nt web-stub"><span>${i18n("Заглушка: значения живут в памяти страницы и на сервер не уходят.")}</span>
-    <span class="web-stub-v"><span class="web-stub-l">${i18n("Сертификат")}:</span><span class="rl-seg" role="radiogroup" aria-label="${i18n("Вариант выбора сертификата")}">${[["path","A: путь на сервере (как в Axxon One)"],["file","B: загрузить из браузера"]].map(([m,l])=>`<button type="button" role="radio" aria-checked="${webCertMode===m}" class="${webCertMode===m?"on":""}" ${onEv("click",["webMode",`${m}`])}>${i18n(l)}</button>`).join("")}</span></span></div>`;
+  const strip=`<div class="nt web-stub">${i18n("Заглушка: значения живут в памяти страницы и на сервер не уходят. Сведения о сертификате прототип придумывает по имени файла.")}</div>`;
   const main=card("Веб-сервер",`
     ${webSwHtml(n,"on","Веб-сервер включён","Через веб-сервер к серверу подключаются браузер, мобильные клиенты и внешние программы по HTTP API.")}
     <div class="web-body ${v.on?"":"web-dim"}">
@@ -18606,7 +18599,9 @@ function webSrvHtml(n){
     ${webSwHtml(n,"recode","Перекодировать видео для браузера","Веб-сервер переводит видео, которое браузер не показывает (например, H.265), в формат для браузера. Это нагружает процессор сервера. Выключено: браузер получает видео как есть.",dis)}
     ${webSwHtml(n,"cors","Разрешить запросы с других сайтов (CORS)","Веб-приложения с других адресов смогут обращаться к веб-серверу из браузера. Включить, если ваше веб-приложение работает на другом адресе.",dis)}`);
   const rtsp=card("RTSP-сервер",`<div class="web-row">${webPortFld(n,"rtsp","Порт RTSP",err,"")}${webPortFld(n,"rtspHttp","Порт RTSP через HTTP",err,"")}</div>
-    <p class="sub web-hint">${i18n("Внешние программы забирают видео с сервера по RTSP. Имена и пароли для них задают в разделе")} <button type="button" class="lk" ${onEv("click",["goApp","acc"],["accGo","streams"])}>${i18n("Права → Учётки потоков")}</button>.</p>`);
+    <p class="sub web-hint">${i18n("Плееры и другие системы забирают видео с сервера по RTSP. Они входят под именем и паролем пользователя консоли и получают видео только тех камер, которые этот пользователь может смотреть по своим правам.")}</p>
+    <div class="web-rtsp-ex"><span class="web-addr-l">${i18n("Адрес потока камеры")}:</span> ${copyChipHtml(`rtsp://${i18n("имя")}:${i18n("пароль")}@${n.ip||"localhost"}${Number(webOf(n).vals.rtsp)===554?"":":"+webOf(n).vals.rtsp}/hosts/${i18n("ИМЯ-СЕРВЕРА")}/DeviceIpint.N/SourceEndpoint.video:0:0`,"Адрес")} <span class="sub web-rtsp-n">${i18n("N — номер камеры, имя сервера — заглавными буквами")}</span></div>
+    <p class="sub web-hint">${i18n("Имя пользователя для RTSP начинается с латинской буквы и содержит только латинские буквы, цифры и символы / - _ . : +")}</p>`);
   return`<div class="web-tab">${strip}${main}${webCertHtml(n,err,dis)}${video}${rtsp}</div>`;
 }
 // После ввода: адрес, ошибки и плитка состояния — без перерисовки карточки
