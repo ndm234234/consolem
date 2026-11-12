@@ -1,0 +1,36 @@
+// Английский прототипа 56 (docs/TEXTS.md, «Как менять текст безопасно»): подключён после assets/i18n-en.js
+Object.assign(window.I18N_EN,{
+// меню «Ещё» камеры и причины, почему пункт недоступен
+"Сбросить к умолчаниям…":"Reset to defaults…",
+"Загрузить настройки с устройства…":"Load settings from the device…",
+"У камеры RTSP настройки задают на самой камере":"An RTSP camera keeps its settings on the camera itself",
+"Система не сообщает значения модели по умолчанию":"The system does not report the default values of the model",
+"Система не умеет читать настройки с устройства":"The system cannot read the settings from the device",
+"Модель камеры не задана: консоль не знает значений по умолчанию":"The camera model is not set: the console does not know the default values",
+"Консоль уже показывает настройки камеры: «Отправлять настройки устройству» выключено":"The console already shows the camera settings: “Send settings to device” is off",
+"Закончить правку блоков карточки: нажать «Добавить в план» или «Отменить»":"Finish the edits in the card blocks: click “Add to plan” or “Cancel”",
+// окно сброса и загрузки
+"Сбросить к умолчаниям":"Reset to defaults",
+"Загрузить настройки с устройства":"Load settings from the device",
+"Консоль заменит настройки камеры значениями по умолчанию для модели":"The console replaces the camera settings with the default values for the model",
+"Затем консоль запишет эти значения в камеру.":"Then the console writes these values to the camera.",
+"Камера сообщила свои настройки. Консоль заменит ими свои значения. Камера не изменится.":"The camera reported its settings. The console replaces its own values with them. The camera does not change.",
+"Параметр":"Parameter",
+"В консоли":"In the console",
+"Настройки камеры уже совпадают со значениями модели по умолчанию.":"The camera settings already match the default values of the model.",
+"Настройки в консоли и на камере совпадают.":"The settings in the console and on the camera match.",
+"Консоль включит «Отправлять настройки устройству»: иначе консоль не запишет значения в камеру.":"The console turns on “Send settings to device”: otherwise the console cannot write the values to the camera.",
+"После сброса камера может перезапустить потоки. Тогда видео и запись прервутся на несколько секунд.":"After the reset, the camera can restart the streams. Then the video and the recording stop for a few seconds.",
+"Не изменятся: имя, адрес, учётные данные, архив, детекторы, папки и права.":"These do not change: the name, the address, the credentials, the archive, the detectors, the folders and the rights.",
+"Консоль изменит камеру, только когда вы нажмёте «Применить» в плане карточки.":"The console changes the camera only when you click “Apply” in the card plan.",
+"Консоль заменит значения, только когда вы нажмёте «Применить» в плане карточки.":"The console replaces the values only when you click “Apply” in the card plan.",
+"Заглушка: разрешение и к/с потоков сообщает сервер, а кодек, битрейт и параметры драйвера пока строит страница. Их нет в контракте.":"Stub: the server reports the resolution and the fps of the streams, but the page builds the codec, the bitrate and the driver parameters. They are not in the contract.",
+"Консоль добавила сброс в план карточки. Чтобы записать значения в камеру, нажать «Показать план» внизу карточки":"The console added the reset to the card plan. To write the values to the camera, click “Show plan” at the bottom of the card",
+"Консоль добавила загрузку в план карточки. Чтобы заменить значения, нажать «Показать план» внизу карточки":"The console added the load to the card plan. To replace the values, click “Show plan” at the bottom of the card",
+// строки и заметки плана карточки
+"Сбросить к умолчаниям модели":"Reset to the model defaults",
+"консоль запишет значения в камеру":"the console writes the values to the camera",
+"консоль возьмёт значения камеры":"the console takes the camera values",
+"Первая строка только называет действие. Консоль отправит на сервер строки ниже.":"The first row only names the action. The console sends the rows below to the server.",
+"Заглушка: признака «Отправлять настройки устройству» в контракте пока нет. «Применить» оставит его только в странице.":"Stub: the contract does not have “Send settings to device” yet. “Apply” keeps it only in the page.",
+});
