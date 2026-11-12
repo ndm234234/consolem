@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""PreToolUse (Edit|Write|MultiEdit): напомнить Claude загрузить скилл проекта.
+"""PreToolUse (Edit|Write|MultiEdit): напомнить Claude о правиле проекта.
 
-Правка файла из области скилла (таблица RULES) добавляет в контекст напоминание:
-загрузи скилл. Один раз за сессию на скилл; если скилл уже загружен в этой
-сессии (видно в транскрипте), напоминания нет. Хук ничего не запрещает.
+Правка файла из области правила (таблица RULES) добавляет в контекст напоминание:
+загрузи скилл (`skill`) или сделай шаг (`note`). Один раз за сессию на правило;
+для скилла, уже загруженного в этой сессии (видно в транскрипте), напоминания нет.
+Хук ничего не запрещает. Правки через shell (`cp`, `sed`) хук не видит.
 """
 import fnmatch
 import json
@@ -11,18 +12,27 @@ import os
 import sys
 import tempfile
 
-# скилл → шаблоны путей от корня репозитория (fnmatch: * ловит и «/») и исключения
+# id → шаблоны путей от корня репозитория (fnmatch: * ловит и «/»), исключения и текст
 RULES = [
     {
+        "id": "api-contract",
         "skill": "api-contract",
         "paths": ["api/*", "tests/api-*.js"],
         "except": ["api/requests/*"],
         "why": "правка контракта, сервера, наборов или тестов API",
     },
     {
+        "id": "vms-requests",
         "skill": "vms-requests",
         "paths": ["api/requests/*"],
         "why": "правка запроса, уведомления или ответа команды VMS",
+    },
+    {
+        "id": "gaps-proto",
+        "paths": ["index_[0-9][0-9]*.html"],
+        "note": "это прототип. Если прототип делает функцию из отчёта о пробелах против Axxon One "
+                "(docs/axxon-one-gaps.html), добавь строку в PROTO по docs/axxon-one-gaps.md, "
+                "раздел «Прототипы», шаг 1, — сам, без просьбы, в том же push, что и прототип.",
     },
 ]
 
@@ -68,15 +78,18 @@ def main():
             continue
         if any(fnmatch.fnmatch(rel, p) for p in rule.get("except", [])):
             continue
-        marker = os.path.join(tempfile.gettempdir(), f"consolem-skill-{rule['skill']}-{session}")
+        marker = os.path.join(tempfile.gettempdir(), f"consolem-skill-{rule['id']}-{session}")
         if os.path.exists(marker):
             continue
-        if not skill_loaded(data.get("transcript_path"), rule["skill"]):
+        skill = rule.get("skill")
+        if skill and not skill_loaded(data.get("transcript_path"), skill):
             notes.append(
-                f"Файл {rel}: {rule['why']}. Загрузи скилл проекта `{rule['skill']}` "
-                f"(.claude/skills/{rule['skill']}/SKILL.md) до этой правки и работай по нему, "
+                f"Файл {rel}: {rule['why']}. Загрузи скилл проекта `{skill}` "
+                f"(.claude/skills/{skill}/SKILL.md) до этой правки и работай по нему, "
                 "если ещё не загрузил. Напоминание приходит один раз за сессию."
             )
+        elif not skill:
+            notes.append(f"Файл {rel}: {rule['note']} Напоминание приходит один раз за сессию.")
         try:
             open(marker, "w").close()
         except OSError:
