@@ -68,6 +68,9 @@ section.area>header small{font:13px var(--f-mono);color:var(--muted)}
 .side .st{font-size:13px;line-height:1.2}
 a.st.proto{text-decoration:none;color:var(--ok);background:var(--ok-soft)} a.st.proto.partial{color:var(--mid);background:var(--mid-soft)}
 a.st.proto:hover{text-decoration:underline}
+.item .wt{margin-top:6px;padding:6px 8px;border-left:3px solid var(--accent);background:var(--accent-soft);border-radius:0 4px 4px 0}
+.item .wt b{font-weight:600} .item .wt ul{margin:4px 0 0;padding-left:18px;display:grid;gap:4px} .item .wt a{overflow-wrap:anywhere}
+.st.wait{color:var(--accent)}
 .item .pn{margin-top:4px;padding-left:8px;border-left:3px solid var(--ok)} .item .pn.partial{border-color:var(--mid)}
 .tag{font:12px/1.2 var(--f-mono);color:var(--muted)}
 .tag.next{color:var(--stub)} .tag.util{color:var(--accent)} .tag.new{color:var(--ok)}
@@ -133,6 +136,10 @@ footer{padding-block:28px 40px;color:var(--muted);font-size:13px}
       <button class="chip" type="button" id="f-p-all" data-v="all" aria-pressed="true">все</button>
       <button class="chip" type="button" id="f-p-yes" data-v="yes" aria-pressed="false">есть</button>
       <button class="chip" type="button" id="f-p-no" data-v="no" aria-pressed="false">нет</button>
+    </div>
+    <div class="grp" data-f="wait"><em>Контракт</em>
+      <button class="chip" type="button" id="f-w-all" data-v="all" aria-pressed="true">все</button>
+      <button class="chip" type="button" id="f-w-yes" data-v="yes" aria-pressed="false">ждёт контракта</button>
     </div>
     <input id="q" type="search" placeholder="Поиск: зона, кластер, 292016…" aria-label="Поиск по списку">
     <span id="shown"></span>
@@ -206,7 +213,7 @@ const G=[
 ["A5","conn","low","partial","cfg","","Виртуальные входы HttpListener","Нет «Времени сброса тревоги» (0–100 с). IP-сервер с четырьмя входами вручную не создать.","592296","ручное добавление: камера, хранилище, источник, СКУД — 30839-30843"],
 ["A16","conn","low","partial","cfg","","Платы ввода-вывода Tibbo и AGRG","Добавить плату можно как IP-сервер. Нет настроек платы: диапазоны температуры и влажности канала, период опроса, списка моделей.","292037, 590796","ipsrv subtype io, 3550"],
 ["A17","conn","low","absent","cfg","","Пульты CCTV и USB-контроллеры","Подключение пультов (Axis T8310, Dahua NKB1000, Pelco KBD5000, Hikvision DS-1x00KI) и назначение кнопок.","282589, 282595","есть только экранный джойстик, 17326"],
-["A8","cam","high","partial","cfg","","Сброс камеры и загрузка конфигурации с устройства","«Сбросить к умолчаниям…» и «Загрузить настройки с устройства…» есть, разрешение и к/с потоков консоль берёт с сервера (команды defaults и readConfig, контракт 0.10.0). Кодек, битрейт, опорный кадр и параметры драйвера консоль сбрасывает и загружает заглушкой страницы: их нет в контракте (запрос 2026-11-09-182805Z-mockup-camera-driver-params). Умолчания встроенного сервера одни на все модели.","291976, 292018","openTreeCtx 10950; camActOpen 13721-13749; camResetTarget 13678-13683; camDevReported 13687-13696 (на 9217b50)"],
+["A8","cam","high","partial","cfg","","Сброс камеры и загрузка конфигурации с устройства","«Сбросить к умолчаниям…» и «Загрузить настройки с устройства…» есть. С сервера приходят только разрешение и к/с потоков (команды defaults и readConfig, контракт 0.10.0). Кодек, битрейт, опорный кадр и параметры драйвера консоль сбрасывает и загружает заглушкой страницы. Признак «Отправлять настройки устройству» консоль хранит только в браузере.","291976, 292018","openTreeCtx 10950; camActOpen 13721-13749; camResetTarget 13678-13683; camDevReported 13687-13696 (на 9217b50)"],
 ["A7","cam","medium","absent","cfg","","Параметры драйвера ONVIF","«Переназначение IP-адреса» (NAT), «Режим совместимости», синхронизация времени камеры с сервером.","292012","camDrvSchema0 13322-13409 (заглушка)"],
 ["AX2","cam","medium","absent","cfg","c","«Отправлять настройки устройству» у NVR","В AO переключатель у IP-сервера действует на все каналы сразу. В макете он есть только у камеры.","292019","drvSend 13467-13470"],
 ["A9","cam","medium","partial","cfg","","Замена NVR с сохранением каналов и архива","Камеру заменить можно: правка адреса и модели или тот же ID с архивом. У IP-сервера адрес, вендор, модель и ID неизменяемы.","292109, 590792","ipsrv: ip, vendor, model, identifier — x-immutable"],
@@ -362,6 +369,13 @@ const PROTO={
  "C22":[["55","index_55_okno-detektora.html","full","Вкладки «Лента сработок» и «Сработки до и после новых настроек» в карточке детектора. Сработки создаёт браузер."]],
  "C25":[["55","index_55_okno-detektora.html","partial","Поддетектор «Маскирование треков»: детектор не ведёт объекты в области. Privacy masking и маскирования по людям нет."]]
 };
+// WAIT: почему пункт не закрыт — что в нём упирается в контракт API. Нужен у каждого пункта partial или stub,
+// которому для закрытия не хватает контракта (docs/axxon-one-gaps.md, «Пункт ждёт контракта»).
+// id → [[чего нет в контракте, что index.html делает без этого, файл запроса в api/requests/, пункты запроса]]
+const WAIT={
+ "A8":[["Признака режима потоков камеры («Отправлять настройки устройству», streamsMode) и параметров потока на запись: codec, bitrateKbps, gopFrames. Когда поля появятся, команды defaults и readConfig должны возвращать и их.","Кодек, битрейт и опорный кадр консоль сбрасывает и загружает заглушкой страницы, признак режима хранит только в браузере.","2026-11-08-174207Z-mockup-camera-video-streams-tours-request.md","пп. 1–2"],
+  ["Параметров драйвера камеры: у вида camera нет схемы объекта (schemaPerUnit), в наборе нет камеры с полями x-dev.","Набор параметров драйвера консоль строит сама (camDrvSchema), значения хранит только в браузере.","2026-11-09-182805Z-mockup-camera-driver-params-request.md","п. 6"]]
+};
 const REFUTED=[
 "Тревоги камеры как условие правила (alarm.raised … alarm.missed) — сервер объявляет их, правила их показывают.",
 "Охрана как условие: arm.on, arm.private, arm.off.",
@@ -379,13 +393,13 @@ const REFUTED=[
 "Восстановление пароля root: в AO такой функции нет. Токен Telegram в AO идёт в адресе веб-запроса."
 ];
 const VAL={high:"высокая",medium:"средняя",low:"низкая"}, ST={absent:"нет",partial:"частично",stub:"заглушка"};
-const F={scope:"cfg",value:"all",status:"all",proto:"all",q:""};
+const F={scope:"cfg",value:"all",status:"all",proto:"all",wait:"all",q:""};
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 function summary(){
   const cfg=G.filter(g=>g[4]==="cfg"), op=G.filter(g=>g[4]==="op");
   const t=[[cfg.length,"пробелов в конфигураторе",""],[cfg.filter(g=>g[2]==="high").length,"из них высокой ценности","hi"],
    [cfg.filter(g=>g[3]==="absent").length,"нет совсем",""],[cfg.filter(g=>g[3]!=="absent").length,"есть частично или заглушкой",""],
-   [op.length,"вне конфигуратора (оператор)","op"],[REFUTED.length,"групп опровергнутых пунктов","op"]].concat(cfg.filter(g=>PROTO[g[0]]).length?[[cfg.filter(g=>PROTO[g[0]]).length,"сделано в прототипах (целиком или частично)",""]]:[]).concat(DONE.length?[[DONE.length,"закрыто после исследования","op"]]:[]);
+   [op.length,"вне конфигуратора (оператор)","op"],[REFUTED.length,"групп опровергнутых пунктов","op"]].concat(cfg.filter(g=>PROTO[g[0]]).length?[[cfg.filter(g=>PROTO[g[0]]).length,"сделано в прототипах (целиком или частично)",""]]:[]).concat(cfg.filter(g=>WAIT[g[0]]).length?[[cfg.filter(g=>WAIT[g[0]]).length,"ждут контракта API",""]]:[]).concat(DONE.length?[[DONE.length,"закрыто после исследования","op"]]:[]);
   document.getElementById("sum").innerHTML=t.map(([n,l,c])=>`<div class="tile ${c}"><b>${n}</b><span>${l}</span></div>`).join("");
 }
 function match(g){
@@ -393,7 +407,8 @@ function match(g){
   if(F.value!=="all"&&g[2]!==F.value)return false;
   if(F.status!=="all"&&g[3]!==F.status)return false;
   if(F.proto!=="all"&&!!PROTO[g[0]]!==(F.proto==="yes"))return false;
-  if(F.q){const s=(g.join(" ")+" "+AREAS[g[1]]+" "+(PROTO[g[0]]||[]).map(p=>"прототип "+p[0]+" "+p[3]).join(" ")).toLowerCase();if(!F.q.split(/\s+/).every(w=>s.includes(w)))return false}
+  if(F.wait!=="all"&&!!WAIT[g[0]]!==(F.wait==="yes"))return false;
+  if(F.q){const s=(g.join(" ")+" "+AREAS[g[1]]+" "+(PROTO[g[0]]||[]).map(p=>"прототип "+p[0]+" "+p[3]).join(" ")+" "+(WAIT[g[0]]||[]).map(w=>"контракт "+w.join(" ")).join(" ")).toLowerCase();if(!F.q.split(/\s+/).every(w=>s.includes(w)))return false}
   return true;
 }
 const ORD={high:0,medium:1,low:2};
@@ -404,9 +419,9 @@ function paint(){
     if(!it.length)continue;
     const op=it[0][4]==="op";
     out.push(`<section class="area${op?" scope-op":""}"><header><h2>${esc(AREAS[a])}</h2><small>${it.length}</small></header>`+
-      it.map(g=>{const fl=g[5],pr=PROTO[g[0]]||[];
+      it.map(g=>{const fl=g[5],pr=PROTO[g[0]]||[],wt=WAIT[g[0]]||[];
         const tags=[fl.includes("n")?'<span class="tag next">только Axxon Next</span>':"",fl.includes("u")?'<span class="tag util">в AO — утилита</span>':"",fl.includes("c")?'<span class="tag new">нашёл критик</span>':""].join("");
-        return `<article class="item"><span class="v ${g[2]}">${VAL[g[2]]}</span><div style="min-width:0"><div class="t">${esc(g[6])}</div><div class="m">${esc(g[7])}</div>${pr.map(p=>`<div class="m pn ${p[2]}">В прототипе ${esc(p[0])}: ${esc(p[3])}</div>`).join("")}<div class="ev">AO: ${esc(g[8])} · макет: ${esc(g[9])} · ${esc(g[0])}</div></div><div class="side"><span class="st ${g[3]}">index.html: ${ST[g[3]]}</span>${pr.map(p=>`<a class="st proto ${p[2]}" href="../${esc(p[1])}" title="${esc(p[1])}">прототип ${esc(p[0])}: ${p[2]==="full"?"есть":"частично"}</a>`).join("")}${tags}</div></article>`}).join("")+`</section>`);
+        return `<article class="item"><span class="v ${g[2]}">${VAL[g[2]]}</span><div style="min-width:0"><div class="t">${esc(g[6])}</div><div class="m">${esc(g[7])}</div>${pr.map(p=>`<div class="m pn ${p[2]}">В прототипе ${esc(p[0])}: ${esc(p[3])}</div>`).join("")}${wt.length?`<div class="m wt"><b>Почему не закрыт: ждёт контракта API.</b><ul>${wt.map(w=>`<li>В контракте нет ${esc(w[0].replace(/^./,c=>c.toLowerCase()))} Пока: ${esc(w[1].replace(/^./,c=>c.toLowerCase()))} Запрос: <a href="../api/requests/${esc(w[2])}">${esc(w[2].replace(/-request\.md$/,""))}</a>, ${esc(w[3])}.</li>`).join("")}</ul></div>`:""}<div class="ev">AO: ${esc(g[8])} · макет: ${esc(g[9])} · ${esc(g[0])}</div></div><div class="side"><span class="st ${g[3]}">index.html: ${ST[g[3]]}</span>${pr.map(p=>`<a class="st proto ${p[2]}" href="../${esc(p[1])}" title="${esc(p[1])}">прототип ${esc(p[0])}: ${p[2]==="full"?"есть":"частично"}</a>`).join("")}${wt.length?'<span class="st wait">ждёт контракта</span>':""}${tags}</div></article>`}).join("")+`</section>`);
   }
   document.getElementById("list").innerHTML=out.join("")||'<p class="empty">Ничего не найдено. Сбросьте фильтры или измените поиск.</p>';
   document.getElementById("shown").textContent=`Показано ${rows.length} из ${G.length}`;
