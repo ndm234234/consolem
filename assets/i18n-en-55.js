@@ -215,4 +215,11 @@ Object.assign(window.I18N_EN,{
 "ровно":"exactly",
 "удалить":"to delete",
 "чел.":"people",
+// Ширина столбца и вкладки настроек
+"Ширина настроек":"Settings width",
+"Ширина настроек: тянуть край мышью или нажать стрелки. Двойной щелчок возвращает ширину по умолчанию.":"Settings width: drag the edge with the mouse or press the arrow keys. A double-click sets the default width again.",
+"Все поддетекторы":"All sub-detectors",
+"Поддетектор из списка":"Sub-detector from the list",
+"Открыть вместо списка":"Open instead of the list",
+"Раскрыть в списке":"Expand in the list",
 });

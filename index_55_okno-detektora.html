@@ -3036,8 +3036,13 @@ body.pj-hdlog .gojump{display:none}
 .dw{--dw-in:#4ea1ff;--dw-ex:#ff7a7a;--dw-ln:#fde047}
 .dw-stub{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 10px;margin:0 0 10px;border:1px dashed var(--one-warning-icon);border-radius:8px;background:var(--one-warning-bg);color:var(--one-warning-text);font-size:12px}
 .dw-stub select{width:auto;field-sizing:content;padding:2px 6px;border:1px solid var(--ln);border-radius:6px;background:var(--p)}
-.dw-grid{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:12px;align-items:start}
-@media(max-width:1180px){.dw-grid{grid-template-columns:minmax(0,1fr)}}
+/* Столбец настроек — доля ширины карточки (на широком экране шире), разделитель тянется мышью и стрелками */
+.dw-grid{display:grid;grid-template-columns:minmax(0,1fr) 12px var(--dw-rw,clamp(320px,44%,calc(100% - 400px)));column-gap:2px;row-gap:12px;align-items:start}
+.dw-grip{align-self:stretch;position:relative;cursor:col-resize;touch-action:none;border-radius:4px;outline:0;min-height:120px}
+.dw-grip::before{content:"";position:absolute;left:5px;top:0;bottom:0;width:2px;border-radius:1px;background:var(--ln);transition:background .15s}
+.dw-grip:hover::before,.dw-grip:focus-visible::before,.dw-grip.on::before{background:var(--one-accent);left:4px;width:4px}
+body.dw-resizing,body.dw-resizing *{cursor:col-resize!important;user-select:none!important}
+@media(max-width:1180px){.dw-grid{grid-template-columns:minmax(0,1fr)}.dw-grip{display:none}}
 .dw-left{background:var(--p);border:1px solid var(--ln);border-radius:10px;padding:12px;min-width:0}
 .dw-right{background:var(--p);border:1px solid var(--ln);border-radius:10px;min-width:0;position:sticky;top:0;max-height:calc(100vh - 150px);overflow:auto;scrollbar-gutter:stable}
 .dw-tools{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px}
@@ -3144,6 +3149,9 @@ body.pj-hdlog .gojump{display:none}
 .dw-sub-tt .sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dw-sub-b{padding-top:4px}
 .dw-txt{width:100%;box-sizing:border-box}
+.dw-ptabs{padding:0 14px;border-bottom:1px solid var(--ln);gap:18px}
+.dw-ptabs .tab{display:inline-flex;align-items:center;font-weight:600}
+.dw-back{margin:0 0 10px}
 .dw-sec-n{margin-left:6px;padding:0 7px;border-radius:9px;background:var(--p2);color:var(--mu);font-size:11.5px;font-weight:600;vertical-align:1px}
 .dw-swl{display:flex;align-items:center;gap:8px;cursor:pointer}
 .dw-sa.sel{fill-opacity:.24;stroke-width:1;stroke-dasharray:none}
@@ -14902,10 +14910,10 @@ function dwClock(t){return new Date(DW_T0+t*1000).toLocaleTimeString("ru-RU",{ho
 function detWindowHtml(cam,d){
   const k=dwKindOf(d),c=dwC(d);
   if(dw.id!==d.id+k){dw.id=d.id+k;dw.sel=null;dw.tool=null;dw.subSel=null;dw.subNew=false}
-  setTimeout(dwStart,0);setTimeout(dwLand,0);
+  setTimeout(dwStart,0);setTimeout(dwLand,0);setTimeout(dwRwAria,0);
   return detBackHtml(cam)+`<div class="dw" data-dw="${escHtml(d.id)}">
     ${dwStubHtml(d,k)}
-    <div class="dw-grid">
+    <div class="dw-grid" style="${dwRwCss()}">
       <div class="dw-left">
         <div class="dw-tools">${dwToolsHtml(d,k)}<span class="dw-lay">${dwLayHtml(k)}</span></div>
         <div class="dw-stage${dw.tool?" draw":""}" ${onEv("mousedown",["dwDown",onEv.el,onEv.event])}>
@@ -14919,14 +14927,51 @@ function detWindowHtml(cam,d){
         <div class="dw-play" data-dw-bar>${dwBarHtml(d)}</div>
         <div class="dw-prev" data-dw-prev>${dwPrevHtml(d)}</div>
       </div>
-      <div class="dw-right">${dwPanelHtml(cam,d,k,c)}</div>
+      <div class="dw-grip" role="separator" aria-orientation="vertical" aria-controls="dwRight" tabindex="0" aria-valuemin="15" aria-valuemax="80" aria-label="${i18n("Ширина настроек")}" title="${i18n("Ширина настроек: тянуть край мышью или нажать стрелки. Двойной щелчок возвращает ширину по умолчанию.")}" ${onEv("pointerdown",["dwGripDown",onEv.el,onEv.event])} ${onEv("keydown",["dwGripKey",onEv.el,onEv.event])} ${onEv("dblclick",["dwGripReset",onEv.el])}></div>
+      <div class="dw-right" id="dwRight">${dwPanelHtml(cam,d,k,c)}</div>
     </div>
   </div>`;
 }
+// Ширина столбца настроек: доля ширины карточки; своя у каждого зрителя (localStorage), по умолчанию 44 %
+const DW_RW_KEY="consolem-dw-rw";
+function dwRwCss(){
+  if(dw.rw===undefined){dw.rw=null;try{const v=parseFloat(localStorage.getItem(DW_RW_KEY));if(v>=.15&&v<=.8)dw.rw=v}catch(e){}}
+  return dw.rw?`--dw-rw:clamp(320px,${(dw.rw*100).toFixed(1)}%,calc(100% - 400px))`:"";
+}
+function dwRwNow(g){const grid=g.closest(".dw-grid"),r=g.nextElementSibling;return r.getBoundingClientRect().width/Math.max(1,grid.getBoundingClientRect().width)}
+function dwRwAria(g){
+  g=g||document.querySelector("#main .dw-grip");if(!g||!g.isConnected||!g.offsetParent)return;
+  const r=g.nextElementSibling.getBoundingClientRect().width;
+  g.setAttribute("aria-valuenow",String(Math.round(dwRwNow(g)*100)));g.setAttribute("aria-valuetext",`${Math.round(r)} px`);
+}
+function dwRwSet(g,frac,save){
+  dw.rw=frac==null?null:Math.min(.8,Math.max(.15,frac));
+  g.closest(".dw-grid").style.cssText=dwRwCss();dwRwAria(g);
+  if(save)try{dw.rw==null?localStorage.removeItem(DW_RW_KEY):localStorage.setItem(DW_RW_KEY,String(dw.rw))}catch(e){}
+}
+function dwGripDown(g,e){
+  if(e.button!==0)return;e.preventDefault();g.focus();
+  try{g.setPointerCapture(e.pointerId)}catch(x){}
+  g.classList.add("on");document.body.classList.add("dw-resizing");
+  const mv=ev=>{if(!g.isConnected)return up();const r=g.closest(".dw-grid").getBoundingClientRect();dwRwSet(g,(r.right-ev.clientX)/r.width,false)};
+  const up=()=>{
+    g.classList.remove("on");document.body.classList.remove("dw-resizing");
+    ["pointermove","pointerup","pointercancel","lostpointercapture"].forEach((t,i)=>g.removeEventListener(t,i?up:mv));
+    if(g.isConnected&&dw.rw!=null)dwRwSet(g,dwRwNow(g),true);
+  };
+  g.addEventListener("pointermove",mv);["pointerup","pointercancel","lostpointercapture"].forEach(t=>g.addEventListener(t,up));
+}
+function dwGripKey(g,e){
+  const f={ArrowLeft:dwRwNow(g)+.02,ArrowRight:dwRwNow(g)-.02,Home:.15,End:.8}[e.key];if(f===undefined)return;
+  e.preventDefault();e.stopPropagation();
+  dwRwSet(g,f,true);
+}
+function dwGripReset(g){dwRwSet(g,null,true)}
 function dwStubHtml(d,k){
   return`<div class="dw-stub"><b>${i18n("Заглушка прототипа 55.")}</b><span>${i18n("Показать карточку вида")}</span>
     <select ${onEv("change",["dwKindPick",`${d.id}`,onEv.value])}>${DW_KINDS.map(([v,l])=>`<option value="${v}" ${v===k?"selected":""}>${i18n(l)}</option>`).join("")}${k==="other"?`<option value="other" selected>${escHtml(detKindText(d))}</option>`:""}</select>
     <span>${i18n("Видео, объекты и сработки создаёт браузер.")}</span>
+    ${DW_SUBP.has(k)?`<span>${i18n("Поддетектор из списка")}</span><select ${onEv("change",["dwSubModeSet",onEv.value])}>${[["open","Открыть вместо списка"],["list","Раскрыть в списке"]].map(([v,l])=>`<option value="${v}" ${(dw.subMode||"open")===v?"selected":""}>${i18n(l)}</option>`).join("")}</select>`:""}
     <span class="dw-vs">${i18n("Время прототипа")} <span class="dw-seg">${[1,10,60].map(v=>`<button type="button" class="${dw.tsp===v?"on":""}" ${onEv("click",["dwTsp",v])}>×${v}</button>`).join("")}</span></span></div>`;
 }
 function dwToolsHtml(d,k){
@@ -15177,9 +15222,17 @@ function dwDirHtml(id,cur,fn,sid=""){
   const o=[["ab","A → B"],["ba","B → A"],["both","В обе стороны"]];
   return`<span class="dw-seg">${o.map(([v,l])=>`<button type="button" class="${cur===v?"on":""}" ${onEv("click",sid?[fn,id,sid,v]:[fn,id,v])}>${i18n(l)}</button>`).join("")}</span>`;
 }
+// Вкладка карточки: «Поддетекторы», если поддетектор выбран или создаётся; иначе — что выбрал пользователь
+function dwPtab(){return dw.subSel||dw.subNew?"sub":(dw.ptab||"det")}
+function dwPtabSet(v){dw.ptab=v;if(v==="det"){dw.subSel=null;dw.subNew=false}gear();renderTree()}
+function dwSubModeSet(v){dw.subMode=v;gear()}
 function dwSubsHtml(id,k,c){
   const E=dwEval(c,k);
-  const rows=c.subs.map((s,i)=>{
+  // Вариант «открыть вместо списка»: выбранный поддетектор занимает вкладку, «Все поддетекторы» возвращает список
+  const one=(dw.subMode||"open")==="open"&&c.subs.some(s=>s.id===dw.subSel);
+  const back=one?`<div class="dw-row dw-back"><button type="button" class="btn s" ${onEv("click",["dwSubSel",dw.subSel])}>${lu("chevron-left",14)}${i18n("Все поддетекторы")}</button></div>`:"";
+  const rows=back+c.subs.map((s,i)=>{
+    if(one&&s.id!==dw.subSel)return"";
     const col=DW_SUBC[i%DW_SUBC.length],n=E.fires.filter(f=>f.sub===s.id).length,op=dw.subSel===s.id;
     return`<div class="dw-sub${s.on?"":" off"}${op?" sel":""}" style="--c:${col}" data-dw-sub="${escHtml(s.id)}">
       <div class="dw-sub-h"><button type="button" class="dw-sub-t" aria-expanded="${op}" ${onEv("click",["dwSubSel",s.id])}><span class="tw">${op?TW_OPEN:TW_SHUT}</span><i class="dw-sw" style="background:${col}"></i><span class="dw-sub-tt"><b>${escHtml(s.name)}</b><span class="sub">${i18n(DW_SUBN[s.kind])}</span></span></button>
@@ -15187,6 +15240,7 @@ function dwSubsHtml(id,k,c){
         <div class="sw ${s.on?"on":""}" role="switch" aria-checked="${s.on}" aria-label="${i18n("Включён")}" ${onEv("click",["dwSubOn",id,s.id])}></div></div>
       ${op?`<div class="dw-sub-b">${dwSubBodyHtml(id,k,s)}</div>`:""}</div>`}).join("");
   const empty=c.subs.length?"":`<p class="sub">${i18n(k==="tracker"?"У трекера нет поддетекторов. Трекер сам не создаёт событий: чтобы получать события, создать поддетектор.":"Поддетекторов нет. Поддетектор добавляет к событиям детектора событие по своему условию: линия, область, время.")}</p>`;
+  if(one)return rows;
   const add=dw.subNew?dwSubNewHtml(id,k):`<div class="dw-row"><button type="button" class="btn s" ${onEv("click",["dwSubNewOpen"])}>${lu("plus",14)}${i18n("Создать поддетектор")}</button></div>`;
   return rows+empty+add+dwHelp("Детектор находит объекты, а поддетектор решает, когда сработать. Зоны и размеры детектора действуют на все его поддетекторы.");
 }
@@ -15314,8 +15368,11 @@ function dwPanelHtml(cam,d,k,c){
   if(k==="abandoned")when.push(dwNum(id,"stay","Предмет лежит без движения дольше",5,1800,"с"));
   if(DW_SIZE.has(k))when.push(dwSizeHtml(id));
   const adv=`<details class="dw-adv"><summary>${i18n("Дополнительно")}</summary><div class="dw-adv-b">${detFieldsHtml(cam,d,"Имя")}${cam?detServerNoteHtml(cam,d):""}</div></details>`;
-  const where=dwSec("Где смотреть",dwAreasHtml(id,k,c)),wh=dwSec("Когда сработать",when.join("")),subs=DW_SUBP.has(k)?dwSec("Поддетекторы",dwSubsHtml(id,k,c),`<span class="dw-sec-n">${c.subs.length}</span>`):"";
-  return head+what+where+wh+subs+adv;
+  const where=dwSec("Где смотреть",dwAreasHtml(id,k,c)),wh=dwSec("Когда сработать",when.join(""));
+  if(!DW_SUBP.has(k))return head+what+where+wh+adv;
+  // Вкладки: настройки детектора отдельно от поддетекторов, столбец короче
+  const tab=dwPtab(),tabs=`<div class="tabs dw-ptabs" role="tablist">${[["det","Детектор",""],["sub","Поддетекторы",`<span class="dw-sec-n">${c.subs.length}</span>`]].map(([v,l,x])=>`<button type="button" role="tab" class="tab${tab===v?" on":""}" aria-selected="${tab===v}" data-dw-ptab="${v}" ${onEv("click",["dwPtabSet",v])}>${i18n(l)}${x}</button>`).join("")}</div>`;
+  return head+tabs+(tab==="det"?what+where+wh+adv:`<section class="dw-sec dw-subs-tab">${dwSubsHtml(id,k,c)}</section>`);
 }
 // ── Действия ──
 function dwRoot(){return document.querySelector("[data-dw]")}
