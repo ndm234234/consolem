@@ -3058,7 +3058,7 @@ body.dw-resizing,body.dw-resizing *{cursor:col-resize!important;user-select:none
 .dw-left{background:var(--p);border:1px solid var(--ln);border-radius:10px;padding:12px;min-width:0}
 .dw-right{background:var(--p);border:1px solid var(--ln);border-radius:10px;min-width:0}
 .dw-rules .card{border:0;border-radius:0;margin:0;background:none}
-.dw-rules .ch{padding:0 0 8px;border:0;font-size:13px;font-weight:600}
+.dw-rules .ch{display:none}
 .dw-rules .cb{padding:0}
 .dw-tools{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px}
 .dw-tools .btn,.dw-row .btn{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
@@ -3166,7 +3166,8 @@ body.dw-resizing,body.dw-resizing *{cursor:col-resize!important;user-select:none
 .dw-sub-tt .sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dw-sub-b{padding-top:4px}
 .dw-txt{width:100%;box-sizing:border-box}
-.dw-ptabs{padding:0 14px;border-bottom:1px solid var(--ln);gap:18px}
+.dw-ptabs{padding:0 14px;border-bottom:1px solid var(--ln);gap:18px;overflow-x:auto;scrollbar-width:none}
+.dw-ptabs .tab{white-space:nowrap;flex:none}
 .dw-ptabs .tab{display:inline-flex;align-items:center;font-weight:600}
 .dw-back{margin:0 0 10px}
 .dw-sec-n{margin-left:6px;padding:0 7px;border-radius:9px;background:var(--p2);color:var(--mu);font-size:11.5px;font-weight:600;vertical-align:1px}
@@ -15253,7 +15254,7 @@ function dwDirHtml(id,cur,fn,sid=""){
 }
 // Вкладка карточки: «Поддетекторы», если поддетектор выбран или создаётся; иначе — что выбрал пользователь
 function dwPtab(){return dw.subSel||dw.subNew?"sub":(dw.ptab||"det")}
-function dwPtabSet(v){dw.ptab=v;if(v==="det"){dw.subSel=null;dw.subNew=false}gear();renderTree()}
+function dwPtabSet(v){dw.ptab=v;if(v!=="sub"){dw.subSel=null;dw.subNew=false}gear();renderTree()}
 function dwSubsHtml(id,k,c){
   const E=dwEval(c,k);
   // Выбранный поддетектор занимает вкладку вместо списка, «Все поддетекторы» возвращает список
@@ -15390,8 +15391,15 @@ function dwPanelHtml(cam,d,k,c){
   const head=`<section class="dw-sec dw-head"><div class="dw-name"><input type="text" value="${escHtml(locName(d))}" aria-label="${i18n("Имя")}" readonly><div class="sw ${on?"on":""}" role="switch" aria-checked="${on}" aria-label="${i18n("Включён")}" ${onEv("click",["detEnable",`${id}`])}></div></div>
     <p class="sub">${escHtml(i18n(DW_KINDS.find(x=>x[0]===k)?.[1]||detKindText(d,cam)))} · ${i18n(d.builtin?"на камере":"на сервере")}${cam?` · ${escHtml(locName(cam))}`:""}</p>
     <div class="dw-state" data-dw-st>${dwStateHtml(d)}</div></section>`;
-  const rules=app==="hw"?`<section class="dw-sec dw-rules">${ruleUsesCardHtml(d)}</section>`:"";
-  if(k==="other")return head+dwSec("Параметры",detFieldsHtml(cam,d,"Имя"))+rules;
+  // Вкладки столбца: «Детектор», «Поддетекторы» (у видов с поддетекторами), «Правила автоматизации» (в «Оборудовании»)
+  const hasR=app==="hw",hasS=DW_SUBP.has(k);
+  let tab=dwPtab();if(tab==="sub"&&!hasS||tab==="rules"&&!hasR)tab="det";
+  const tl=[["det","Детектор",""]];
+  if(hasS)tl.push(["sub","Поддетекторы",`<span class="dw-sec-n">${c.subs.length}</span>`]);
+  if(hasR)tl.push(["rules","Правила автоматизации",`<span class="dw-sec-n">${ruleUsersOfId(d.id).length}</span>`]);
+  const tabs=tl.length>1?`<div class="tabs dw-ptabs" role="tablist">${tl.map(([v,l,x])=>`<button type="button" role="tab" class="tab${tab===v?" on":""}" aria-selected="${tab===v}" data-dw-ptab="${v}" ${onEv("click",["dwPtabSet",v])}>${i18n(l)}${x}</button>`).join("")}</div>`:"";
+  if(tab==="rules")return head+tabs+`<section class="dw-sec dw-rules">${ruleUsesCardHtml(d)}</section>`;
+  if(k==="other")return head+tabs+dwSec("Параметры",detFieldsHtml(cam,d,"Имя"));
   const what=k==="linecross"||k==="neural"?dwSec("Классы объектов",dwChips(id,["person","car","bike"],c.classes,"dwClass")+dwHelp("Детектор сработает только на объекты выбранных классов.")):"";
   const when=[];
   if(k==="motion"||k==="tracker")when.push(dwRange(id,"sens","Чувствительность",1,100,1,"","Чем выше чувствительность, тем более слабое движение замечает детектор.","sens"));
@@ -15405,10 +15413,9 @@ function dwPanelHtml(cam,d,k,c){
   if(k==="abandoned")when.push(dwNum(id,"stay","Предмет лежит без движения дольше",5,1800,"с"));
   const adv=`<details class="dw-adv"><summary>${i18n("Дополнительно")}</summary><div class="dw-adv-b">${detFieldsHtml(cam,d,"Имя")}${cam?detServerNoteHtml(cam,d):""}</div></details>`;
   const where=dwSec("Зоны детектирования",dwAreasHtml(id,k,c))+(DW_SIZE.has(k)?dwSizeSec(id):""),wh=when.length?dwSec("Условия срабатывания",when.join("")):"";
-  if(!DW_SUBP.has(k))return head+what+where+wh+adv+rules;
+  if(!hasS)return head+tabs+what+where+wh+adv;
   // Вкладки: настройки детектора отдельно от поддетекторов, столбец короче
-  const tab=dwPtab(),tabs=`<div class="tabs dw-ptabs" role="tablist">${[["det","Детектор",""],["sub","Поддетекторы",`<span class="dw-sec-n">${c.subs.length}</span>`]].map(([v,l,x])=>`<button type="button" role="tab" class="tab${tab===v?" on":""}" aria-selected="${tab===v}" data-dw-ptab="${v}" ${onEv("click",["dwPtabSet",v])}>${i18n(l)}${x}</button>`).join("")}</div>`;
-  return head+tabs+(tab==="det"?what+where+wh+adv+rules:`<section class="dw-sec dw-subs-tab">${dwSubsHtml(id,k,c)}</section>`);
+  return head+tabs+(tab==="det"?what+where+wh+adv:`<section class="dw-sec dw-subs-tab">${dwSubsHtml(id,k,c)}</section>`);
 }
 // ── Действия ──
 function dwRoot(){return document.querySelector("[data-dw]")}
