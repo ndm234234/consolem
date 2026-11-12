@@ -31533,13 +31533,15 @@ function protoFoundAll(sid){
   const sname=locName(find(sid)?.n||{});
   return serverDisks(sid).flatMap((d,i)=>{
     const u=diskUse(sid,d.disk);if(u.part)return[];
+    // Том, который уже подключило хранилище, второй раз не предлагаем
+    const used=f=>u.vols.some(x=>x.v.mode===f.mode&&(x.v.dir||"")===(f.dir||"")&&(x.v.file||"")===(f.file||""));
     const [from,to]=PROTO_PERIODS[i%PROTO_PERIODS.length],srvOf=j=>i===2&&j===0||i===3&&j===2?"SRV-OLD":sname;   // раздел и одна папка — с другого сервера
     const out=[];
     // Раздел SolidStore занимает диск целиком: на таком диске нет файловой системы, поэтому нет файлов .afs и папок
     if(!d.sys&&!u.vols.length&&i%2===0)return[{key:d.disk+"|part",storage:"block",disk:d.disk,mode:"part",size:d.size,from,to,was:"Архив 2025",srv:srvOf(0)}];
     out.push({key:d.disk+"|file",storage:"block",disk:d.disk,mode:"file",dir:`${d.disk}\\Axxon`,file:"Архив 2024.afs",size:"800 ГБ",from:PROTO_PERIODS[(i+1)%3][0],to:PROTO_PERIODS[(i+1)%3][1],was:"Архив 2024",srv:srvOf(1)});
     out.push({key:d.disk+"|dir",storage:"object",disk:d.disk,mode:"dir",dir:`${d.disk}\\AxxonArchive\\Объектный`,size:"1 ТБ",from,to,was:"Объектный",srv:srvOf(2)});
-    return out;
+    return out.filter(f=>!used(f));
   });
 }
 // Тома с записями для хранилища a: тот же тип хранения, диск не занят этим хранилищем
@@ -31549,7 +31551,8 @@ function protoFound(a){
 }
 function protoFoundNas(path){
   if(!String(path||"").trim())return[];
-  return[{key:"nas|1",file:"vol1.afs",size:"2 ТБ",from:"05.01.2026",to:"11.11.2026",was:"Сетевое NAS"},{key:"nas|2",file:"Архив 2024.afs",size:"1 ТБ",from:"01.03.2024",to:"30.12.2024",was:"Архив 2024",srv:"SRV-OLD"}];
+  const used=f=>arch.some(a=>archAddr(a)==="nas"&&archVols(a).some(v=>v.disk===path&&v.file===f.file));
+  return[{key:"nas|1",file:"vol1.afs",size:"2 ТБ",from:"05.01.2026",to:"11.11.2026",was:"Сетевое NAS"},{key:"nas|2",file:"Архив 2024.afs",size:"1 ТБ",from:"01.03.2024",to:"30.12.2024",was:"Архив 2024",srv:"SRV-OLD"}].filter(f=>!used(f));
 }
 function protoVolOf(f,nas){
   const rec={from:f.from,to:f.to,was:f.was,srv:f.srv||""};
@@ -31654,7 +31657,10 @@ function anBlockVol(){
   if(anFoundOn()){
     if(addr==="disk"&&!an.server)return i18n("Выберите сервер");
     if(addr==="nas"&&(!String(v.disk||"").trim()||!String(v.user||"").trim()))return i18n("Указать путь и пользователя");
-    if(!an.found)return i18n("Выбрать том с записями");
+    if(addr==="nas"&&an.needKey&&!String(v.pass||"").trim())return i18n("Ввести пароль или секрет снова. Черновик не хранит их");
+    // Черновик мог пролежать: выбранного тома уже нет в списке — выбор не считается
+    const list=addr==="nas"?protoFoundNas(v.disk):protoFound(anDraft()).list;
+    if(!an.found||!list.some(f=>f.key===an.found))return i18n("Выбрать том с записями");
     return"";
   }
   if(addr==="disk"){
@@ -31825,7 +31831,7 @@ function addVolumeNew(a,d0){
     const v=volById(r.id);if(rec&&v)protoMarkRec(v,rec);
     closeBulkModal();av=null;
     open.add(a.id);sel=r.id;tab="gen";setD(true);
-    toast(i18n(rec?"Том с записями добавлен. Сервер подключил его без форматирования":"Том добавлен"));
+    toast(i18n(rec?"Сервер подключил том с записями без форматирования":"Том добавлен"));
     paint();
   }).catch(e=>toast(problemText(e)));
 }
@@ -31833,20 +31839,27 @@ function addVolumeNew(a,d0){
 let av=null;
 function avOpen(a){av={archId:a.id,src:"new",found:null,nas:{disk:"\\\\nas01\\vms",user:"",pass:""}};avPaint()}
 function avSrc(v){if(!av)return;av.src=v;av.found=null;avDefault();avPaint()}
-function avDefault(){const a=archById(av.archId);if(av.src==="found"&&a)av.found=protoFirst(avList(a),locName(find(a.server)?.n||{}))}
+function avDefault(){const a=archById(av.archId);if(av.src==="found"&&a)av.found=protoFirst(avList(a),(a.server?locName(find(a.server)?.n||{}):""))}
 function avPick(key){if(!av)return;av.found=key;avPaint()}
-function avNas(k,v){if(!av)return;av.nas[k]=v;if(k==="disk")av.found=null}
+function avNas(k,v){
+  if(!av)return;av.nas[k]=v;if(k==="disk")av.found=null;
+  const a=archById(av.archId),f=document.getElementById("bmFoot");if(a&&f)f.innerHTML=avFootHtml(a);
+}
+function avFootHtml(a){
+  const why=avBlock(a);
+  return wzFootHtml({cancel:["avClose"],sum:escHtml(why),next:{label:i18n(av.src==="found"?"Подключить том":"Добавить том"),on:["avCreate"],off:!!why}});
+}
 function avList(a){return archAddr(a)==="nas"?protoFoundNas(av.nas.disk):protoFound(a).list}
 function avBlock(a){
   if(av.src==="new")return volDefaults(a)?"":i18n("Нет свободного диска");
-  if(archAddr(a)==="nas"&&!String(av.nas.user||"").trim())return i18n("Указать путь и пользователя");
-  return av.found?"":i18n("Выбрать том с записями");
+  if(archAddr(a)==="nas"&&(!String(av.nas.disk||"").trim()||!String(av.nas.user||"").trim()))return i18n("Указать путь и пользователя");
+  return av.found&&avList(a).some(f=>f.key===av.found)?"":i18n("Выбрать том с записями");
 }
 function avPaint(){
   const a=av&&archById(av.archId);if(!a)return;
-  const nas=archAddr(a)==="nas",d=volDefaults(a),sname=locName(find(a.server)?.n||{});
+  const nas=archAddr(a)==="nas",d=volDefaults(a),sname=(a.server?locName(find(a.server)?.n||{}):"");
   let body=protoSrcHtml(av.src,["avSrc"]);
-  if(av.src==="new")body+=d?`<div class="nt ok an-found-note">${i18n("Сервер создаст том")}: <b>${escHtml(volLabelOf(a,d))}</b> · ${escHtml(volDesc(Object.assign({archId:a.id},d)))}. ${i18n("Место и размер можно изменить в карточке тома.")}</div>`
+  if(av.src==="new")body+=d?`<div class="nt ok an-found-note">${i18n("Сервер создаст том")}: <b>${escHtml(volLabelOf(a,d))}</b> · ${escHtml(volDesc(Object.assign({archId:a.id},d)))}. ${i18n("Чтобы изменить место и размер, открыть карточку тома.")}</div>`
     :`<div class="nt err an-found-note">${i18n("На сервере нет свободных дисков. На каждом диске уже есть том этого хранилища или раздел другого.")}</div>`;
   else if(nas){
     const inp=(l,k,t,h)=>`<div><label>${i18n(l)}</label><input type="${t||"text"}" value="${escHtml(av.nas[k]??"")}" ${onEv("input",["avNas",k,onEv.value])} ${k==="disk"?onEv("change",["avNasPath"]):""}>${h?`<div class="bk-hint">${i18n(h)}</div>`:""}</div>`;
@@ -31860,9 +31873,7 @@ function avPaint(){
       ${list.length?`<div class="an-founds">${list.map(f=>protoFoundRow(f,av.found===f.key,["avPick"],sname)).join("")}</div>`:`<div class="nt">${i18n("На дисках сервера нет томов с записями этого типа.")}</div>`}
       ${other?`<div class="bk-hint">${i18n("На дисках есть ещё")} ${other} ${i18n(plural(other,"том|тома|томов"))} ${i18n(a.storage==="object"?"блочного типа":"объектного типа")}. ${i18n("Хранилище этого типа не может их подключить.")}</div>`:""}${protoFoundNote()}`;
   }
-  const why=avBlock(a);
-  openBulkModal(`${i18n("Новый том")} · ${escHtml(locName(a))}`,`<div class="av-body">${body}</div>`,
-    wzFootHtml({cancel:["avClose"],sum:escHtml(why),next:{label:i18n(av.src==="found"?"Подключить том":"Добавить том"),on:["avCreate"],off:!!why}}),"bbox-wide av-box");
+  openBulkModal(`${i18n("Новый том")} · ${escHtml(locName(a))}`,`<div class="av-body">${body}</div>`,avFootHtml(a),"bbox-wide av-box");
 }
 function avNasPath(){avDefault();avPaint()}
 function avClose(){av=null;closeBulkModal()}

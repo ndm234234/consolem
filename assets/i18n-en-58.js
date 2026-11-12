@@ -41,8 +41,8 @@ Object.assign(window.I18N_EN,{
 "Том подключён с записями":"The volume is connected with recordings",
 "Сервер не форматировал том. Форматирование удалит эти записи.":"The server did not format the volume. Formatting will delete these recordings.",
 "Сервер создаст том":"The server will create the volume",
-"Место и размер можно изменить в карточке тома.":"You can change the location and the size in the volume card.",
+"Чтобы изменить место и размер, открыть карточку тома.":"To change the location and the size, open the volume card.",
 "На сервере нет свободных дисков. На каждом диске уже есть том этого хранилища или раздел другого.":"The server has no free disks. Each disk already has a volume of this storage or a partition of another storage.",
 "Подключить том":"Connect volume",
-"Том с записями добавлен. Сервер подключил его без форматирования":"Volume with recordings added. The server connected it without formatting",
+"Сервер подключил том с записями без форматирования":"The server connected the volume with recordings without formatting",
 });
