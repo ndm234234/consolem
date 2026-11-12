@@ -2871,6 +2871,122 @@
      }
     },
     {
+     "id": "defaults",
+     "label": {
+      "key": "action.camera.defaults",
+      "text": "Получить значения модели по умолчанию",
+      "lang": "ru"
+     },
+     "execution": "instant",
+     "scope": [
+      "unit"
+     ],
+     "params": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+     },
+     "result": {
+      "type": "object",
+      "required": [
+       "streams"
+      ],
+      "additionalProperties": false,
+      "properties": {
+       "streams": {
+        "type": "array",
+        "description": "Значения модели по умолчанию для каждого потока камеры. Команда ничего не меняет: интерфейс применяет значения правкой потоков (PATCH /units/{uid}). Камера без модели — 422 NOT_SUPPORTED, field /properties/model",
+        "items": {
+         "type": "object",
+         "required": [
+          "uid",
+          "streamId"
+         ],
+         "additionalProperties": false,
+         "properties": {
+          "uid": {
+           "type": "string",
+           "format": "uuid",
+           "description": "Поток — дочерний объект вида stream"
+          },
+          "streamId": {
+           "type": "string"
+          },
+          "res": {
+           "type": "string",
+           "pattern": "^[0-9]+x[0-9]+$",
+           "description": "Разрешение: ширина x высота. Нет поля — значение неизвестно"
+          },
+          "fps": {
+           "type": "integer",
+           "minimum": 1,
+           "description": "Кадров в секунду. Нет поля — значение неизвестно"
+          }
+         }
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": "readConfig",
+     "label": {
+      "key": "action.camera.readConfig",
+      "text": "Прочитать настройки с устройства",
+      "lang": "ru"
+     },
+     "execution": "instant",
+     "scope": [
+      "unit"
+     ],
+     "params": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+     },
+     "result": {
+      "type": "object",
+      "required": [
+       "streams"
+      ],
+      "additionalProperties": false,
+      "properties": {
+       "streams": {
+        "type": "array",
+        "description": "Настройки потоков, которые сообщила камера. Команда ничего не меняет: интерфейс берёт значения правкой потоков (PATCH /units/{uid}). Камера без связи — 409 DEVICE_OFFLINE",
+        "items": {
+         "type": "object",
+         "required": [
+          "uid",
+          "streamId"
+         ],
+         "additionalProperties": false,
+         "properties": {
+          "uid": {
+           "type": "string",
+           "format": "uuid",
+           "description": "Поток — дочерний объект вида stream"
+          },
+          "streamId": {
+           "type": "string"
+          },
+          "res": {
+           "type": "string",
+           "pattern": "^[0-9]+x[0-9]+$",
+           "description": "Разрешение: ширина x высота. Нет поля — значение неизвестно"
+          },
+          "fps": {
+           "type": "integer",
+           "minimum": 1,
+           "description": "Кадров в секунду. Нет поля — значение неизвестно"
+          }
+         }
+        }
+       }
+      }
+     }
+    },
+    {
      "id": "arm",
      "label": {
       "key": "action.camera.arm",
@@ -50772,6 +50888,12 @@
    "count": 2000,
    "days": 30,
    "seed": 20261110
+  },
+  "deviceConfig": {
+   "$comment": "Стенд: что сообщает камера, если её перенастроили в её веб-интерфейсе (команда readConfig). Ключ — uid потока, значения — res и fps. Потока нет в списке — камера сообщает то, что хранит сервер",
+   "30000013-0001-4000-8000-000000000000": {
+    "fps": 15
+   }
   }
  }
 }

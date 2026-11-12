@@ -455,6 +455,8 @@ const raw = (method, path, body, headers) =>
 | `status.observed.recordingTarget` | объект `{serverId, copies}` | приёмник записи камеры w2c и камеры другого кластера; меняется `PUT /units/{uid}/recording-target`; нет поля — назначения нет |
 | `status.observed.replicaLagSec` | integer | на сколько секунд `replica` отстаёт от источника |
 
+Команды камеры `defaults` и `readConfig` (с 0.10.0) только читают: умолчания модели и то, что сообщила камера, по строке на поток (`uid`, `streamId`, `res`, `fps`). Записывает значения интерфейс обычной правкой потоков, поэтому бэкенду не нужна своя команда записи. `defaults` камере без модели — `422 NOT_SUPPORTED`, `field: /properties/model`; обе команды камере без связи — `409 DEVICE_OFFLINE` (общее правило команд). Тестовый стенд: что «сообщает камера» на `readConfig`, задаёт `stand.deviceConfig` набора (ключ — `uid` потока, значения — `res`, `fps`); потока нет в нём — камера сообщает то, что хранит сервер. Правка `res` или `fps` потока снимает его строку в `stand.deviceConfig`: камера сообщает новое значение. Подробно — `README.md`, «Что добавлено в 0.10.0».
+
 #### `vms.archive/1` — Хранилище
 
 Виды эталонного набора: `archive.local`, `archive.network`, `archive.cloud`, `archive.backup`, `archive.edge`, `archive.incidents`.

@@ -506,5 +506,58 @@
     assert.status(await env.call("GET", U(one.items[0].createdId)), 404, "NOT_FOUND", "снятое не вернулось");
   }, { needs: ["patchUnit", "kind:camera", "kind:det"] });
 
+  /* ===== Команды камеры defaults и readConfig (0.10.0): сброс к умолчаниям и загрузка настроек с устройства ===== */
+
+  test("Команды камеры defaults и readConfig: по строке на поток, только чтение; без модели — 422, без связи — 409", async () => {
+    const mainUid = `${cam.id.slice(0, 9)}0001${cam.id.slice(13)}`;
+    const env = await makeEnv({ fixturePatch: { stand: { deviceConfig: { [mainUid]: { fps: 15 } } } } });
+    const kinds = (await env.call("GET", "/kinds")).body;
+    const acts = ((kinds.items || kinds).find((k) => k.kind === "camera").actions || []).filter((a) => ["defaults", "readConfig"].includes(a.id));
+    assert.eq(acts.length, 2, "у вида camera обе команды");
+    acts.forEach((a) => assert.eq(a.execution, "instant", `${a.id}: instant`));
+    const kids = (await env.pages(`/units?parentId=${cam.id}&kind=stream&limit=100`)).filter((u) => u.kind === "stream");
+    assert.ok(kids.length >= 1, "у камеры есть потоки");
+    const before = (await env.call("GET", U(cam.id))).body.version;
+    const shape = (rows, what) => {
+      assert.eq(rows.length, kids.length, `${what}: строка на каждый поток`);
+      rows.forEach((r) => {
+        assert.ok(kids.some((k) => k.uid === r.uid), `${what}: uid ${r.uid} — поток камеры`);
+        assert.ok(/^[0-9]+x[0-9]+$/.test(r.res), `${what}: разрешение ${r.res}`);
+        assert.ok(Number.isInteger(r.fps) && r.fps >= 1, `${what}: к/с ${r.fps}`);
+      });
+    };
+    const def = await env.call("POST", `${U(cam.id)}/actions/defaults`, {});
+    assert.status(def, 200, null, "defaults");
+    shape(def.body.result.streams, "defaults");
+    const main = def.body.result.streams.find((r) => r.uid === mainUid);
+    assert.eq(`${main.res} ${main.fps}`, "1920x1080 25", "основной поток: умолчания модели, как configMode: default");
+    const camOpts = (await env.call("GET", U(cam.id))).body.properties.resOptions;
+    def.body.result.streams.forEach((r) => {
+      const k = kids.find((x) => x.uid === r.uid), opts = (k.properties || {}).resOptions || (r.uid === mainUid ? camOpts : null);
+      if (opts && opts.length) assert.ok(opts.includes(r.res), `defaults: разрешение ${r.res} — из вариантов потока`);
+    });
+    const told = await env.call("POST", `${U(cam.id)}/actions/readConfig`, {});
+    assert.status(told, 200, null, "readConfig");
+    shape(told.body.result.streams, "readConfig");
+    told.body.result.streams.forEach((r) => {
+      const k = kids.find((x) => x.uid === r.uid);
+      const want = r.uid === mainUid ? 15 : k.properties.fps;
+      assert.eq(r.fps, want, `readConfig: к/с потока ${k.name} — как сообщила камера (stand.deviceConfig)`);
+      assert.eq(r.res, k.properties.res, `readConfig: разрешение потока ${k.name}`);
+    });
+    assert.eq((await env.call("GET", U(cam.id))).body.version, before, "команды ничего не меняют: версия камеры та же");
+    // Правку потока сервер передаёт камере: дальше камера сообщает новое значение
+    const mainKid = kids.find((k) => k.uid === mainUid);
+    assert.status(await env.call("PATCH", U(mainUid), { properties: { fps: 20 } }, at(mainKid.version)), 200, null, "PATCH основного потока");
+    const after = (await env.call("POST", `${U(cam.id)}/actions/readConfig`, {})).body.result.streams.find((r) => r.uid === mainUid);
+    assert.eq(after.fps, 20, "readConfig после правки потока — новое значение");
+    // Камера под регистратором без своей модели: умолчаний нет
+    const noModel = FX.devices.find((d) => d.type === "camera" && !d.model);
+    if (noModel) assert.status(await env.call("POST", `${U(noModel.id)}/actions/defaults`, {}), 422, "NOT_SUPPORTED", "defaults без модели");
+    // Без связи камера настроек не сообщит
+    assert.status(await env.call("POST", "/test/events", { type: "device.signal", deviceId: cam.id, online: false }), 200);
+    assert.status(await env.call("POST", `${U(cam.id)}/actions/readConfig`, {}), 409, "DEVICE_OFFLINE", "readConfig без связи");
+  }, { needs: ["runUnitAction", "kind:camera", "action:camera/defaults", "action:camera/readConfig"] });
+
   ApiTest.loaded("api-hardware.js");
 })();

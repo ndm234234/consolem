@@ -205,6 +205,13 @@
       if (n.startsWith("type:")) return !usableKind(n.slice(5));
       if (n.startsWith("feature:")) return !CAPS.features.includes(n.slice(8));
       if (n.startsWith("kind:")) return !usableKind(n.slice(5));
+      // action:<вид>/<команда> — команду объявил вид (UnitKind.actions): команды, добавленные позже (defaults и readConfig
+      // камеры с 0.10.0), у системы без них — SKIP, а не провал
+      if (n.startsWith("action:")) {
+        const [k, a] = n.slice(7).split("/");
+        const x = KINDS && KINDS.items.find((i) => i.kind === k);
+        return !x || !(x.actions || []).some((y) => y.id === a);
+      }
       // cap:<вид>:<capability> — что система умеет с видом (UnitKind.capabilities): завести, удалить домен или том
       if (n.startsWith("cap:")) {
         const at = n.lastIndexOf(":");

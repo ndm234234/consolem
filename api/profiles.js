@@ -1093,6 +1093,16 @@
     },
     dependents: (u, ctx) => ({ remove: cameraRows(u, ctx), detach: [] }),
   };
+  // Умолчания модели у встроенного сервера одни на всех: основной поток — MODEL_DEFAULT, остальные — SUB_DEFAULT.
+  // Разрешение — из вариантов устройства, если устройство их назвало и умолчания среди них нет. Варианты основного потока
+  // хранит запись камеры (Device.resOptions), а не объект потока: основной поток — это Device.res
+  const SUB_DEFAULT = { res: "640x360", fps: 25 };
+  function streamDefault(p, i, camOpts) {
+    const d = Object.assign({}, i ? SUB_DEFAULT : MODEL_DEFAULT), opts = p.resOptions || (i ? null : camOpts);
+    if (opts && opts.length && !opts.includes(d.res)) d.res = opts[0];
+    return d;
+  }
+  const camStreamUnits = (u, ctx) => ctx.units.byParent(u.uid).filter((x) => x.kind === "stream").sort((a, b) => streamNo(a.uid) - streamNo(b.uid));
 
   /* ===== vms.stream/1 — поток камеры: дочерний объект вида stream; основной поток — Device.res и Device.fps ===== */
 
@@ -1182,6 +1192,9 @@
         delete p.height;
         Object.assign(p, sizeOf(p.res));
       }
+      // Стенд: правку потока сервер передал камере — дальше камера сообщает на readConfig новое значение (stand.deviceConfig)
+      const told = ((ctx.db.stand || {}).deviceConfig || {})[u.uid];
+      if (told) ["res", "fps"].forEach((k) => { if (k in before.properties) delete told[k]; });
       const cam = camOfStream(u, ctx);
       const main = cam && streamsOf(cam)[0];
       if (!main || main.id !== p.streamId || !("res" in before.properties || "fps" in before.properties)) return;
@@ -1969,13 +1982,32 @@
     test: edgeTest,
     status: edgeStatus,
   };
-  // Команда replicate шагом правила: камера забирает со своего встроенного хранилища или с диска регистратора
+  // Команды камеры: replicate шагом правила — камера забирает со своего встроенного хранилища или с диска регистратора;
+  // defaults и readConfig (с 0.10.0) — ниже
   camera.actions = {
     replicate(u, params, ctx) {
       const st = edgeStorageOf(u, ctx);
       if (!st) return { result: {} };
       edgeOrder(st, u, { period: params.period || "offline", minutes: params.minutes, beforeSec: params.beforeSec, afterSec: params.afterSec, archive: params.archive }, ctx);
       return { result: {} };
+    },
+    // Сброс к умолчаниям и загрузка настроек с устройства (Axxon One: Reset): обе команды только читают. Интерфейс показывает
+    // «Сейчас → Станет» и применяет значения обычной правкой потоков (PATCH /units/{uid}). Камера без связи — 409 у сервера
+    defaults(u, params, ctx) {
+      if (!recOf(u, ctx).model) return ctx.problem(422, "NOT_SUPPORTED", "Модель камеры не задана: умолчаний нет", { field: "/properties/model" });
+      const camOpts = recOf(u, ctx).resOptions;
+      return { result: { streams: camStreamUnits(u, ctx).map((s, i) => Object.assign({ uid: s.uid, streamId: props(s).streamId }, streamDefault(props(s), i, camOpts))) } };
+    },
+    readConfig(u, params, ctx) {
+      const told = (ctx.db.stand || {}).deviceConfig || {};
+      return {
+        result: {
+          streams: camStreamUnits(u, ctx).map((s) => {
+            const p = props(s), d = told[s.uid] || {};
+            return stripUndefined({ uid: s.uid, streamId: p.streamId, res: d.res !== undefined ? d.res : p.res, fps: d.fps !== undefined ? d.fps : p.fps });
+          }),
+        },
+      };
     },
   };
 
