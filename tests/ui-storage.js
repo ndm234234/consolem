@@ -17,8 +17,11 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   ok(/^5/.test(a.id) && a.vols.length === 1, "id с сервера, первый том на месте: " + a.vols[0]?.name);
   const srvA = await uiRec(a.id);
   ok(srvA.name === "Хранилище — сценарий" && srvA.serverId === srvFree.id, "на сервере");
-  // Ещё том
+  // Ещё том: «＋ Том» спрашивает, новый том или том с записями
   addVolume(a.id);
+  ok(await until(() => document.querySelector("#bmodal.open .av-body")), "«＋ Том» открывает окно выбора");
+  ok(av?.src === "new" && !document.querySelector("#bmFoot .btn.pri")?.disabled, "по умолчанию — новый том, «Добавить том» доступна");
+  avCreate();
   ok(await until(() => a.vols.length === 2 && sel === a.vols[1].id), "том добавлен, открыт");
   const v2 = a.vols[1];
   // Правка тома через черновик и операцию
@@ -85,6 +88,46 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   ok(await until(() => part.state === "format"), "форматируется");
   ok(await until(() => part.state === undefined && part.used === "0%"), "готов, 0%");
   ok(await until(() => /отформатирован/.test(toastText())), "тост «Том отформатирован»");
+  // Том с записями: блочное хранилище из найденного тома, без форматирования
+  wzCancelQuiet("arch");
+  addArchive(srvFree.id);
+  anSet("kind", "local");
+  anSet("storage", "block");
+  anGo(2);
+  anSrc("found");
+  const found = protoFound(anDraft()).list, pickedKey = an.found;
+  ok(found.length > 0 && found.some((f) => f.key === pickedKey), "найдены тома с записями, первый выбран: " + pickedKey);
+  ok(!anBlockVol(), "том выбран — «Далее» доступна");
+  anGo(3);
+  ok(/без форматирования/.test(document.getElementById("bmBody")?.textContent || ""), "шаг «Проверка»: сервер подключит том без форматирования");
+  const nF = arch.length;
+  createArchive();
+  ok(await until(() => arch.length === nF + 1), "хранилище из тома с записями создано");
+  const fa = arch[arch.length - 1], fv = fa.vols[0];
+  ok(PROTO_REC.has(fv.id) && fv.state !== "unfmt", "том с записями не «Не отформатирован»: " + volStateText(fv));
+  ok(/без форматирования/.test(toastText()), "тост: «" + toastText() + "»");
+  // Подключённый том второй раз не предлагается
+  addArchive(srvFree.id);
+  anSet("kind", "local");
+  anSet("storage", "block");
+  anGo(2);
+  anSrc("found");
+  ok(!protoFound(anDraft()).list.some((f) => f.key === pickedKey), "подключённый том в списке больше нет");
+  wzCancelQuiet("arch");
+  an = null;
+  // «＋ Том»: том с записями
+  addVolume(fa.id);
+  avSrc("found");
+  const avL = avList(fa);
+  if (avL.length) {
+    ok(av.found === avL[0].key || avL.some((f) => f.key === av.found), "в окне «＋ Том» выбран найденный том");
+    avCreate();
+    ok(await until(() => fa.vols.length === 2), "том с записями добавлен");
+    ok(PROTO_REC.has(fa.vols[1].id), "второй том помечен «с записями»");
+  } else {
+    ok(!!avBlock(fa), "томов с записями нет — «Подключить том» недоступна");
+    avClose();
+  }
   // Удалить том
   deleteVolume(v2.id);
   await confirmWith(1);
