@@ -839,8 +839,10 @@ table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:8px;borde
 table.lan-tbl th.lan-chk,table.lan-tbl td.lan-chk{width:30px;padding-right:0}
 /* Прототип 61: таблица каналов регистратора. Ширины столбцов заданы: раскрытие и отметка не двигают соседей */
 .ips-ch-wrap{overflow:auto;max-width:100%;border:1px solid var(--ln);border-radius:8px;scrollbar-gutter:stable}
-table.ips-ch{table-layout:fixed;min-width:820px}
+table.ips-ch{table-layout:fixed;min-width:800px}
 table.ips-ch td,table.ips-ch th{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* bridge.css задаёт ячейкам 12px по бокам: в узкой таблице каналов заголовки тогда обрезаны */
+.ips-ch-wrap table.ips-ch th,.ips-ch-wrap table.ips-ch td{padding-left:8px;padding-right:8px}
 table.ips-ch tbody tr{cursor:pointer}
 table.ips-ch tbody tr:hover td{background:var(--one-control-hover)}
 table.ips-ch tbody tr.ts-on td{background:color-mix(in srgb,var(--bl) 10%,transparent)}
@@ -853,6 +855,18 @@ table.ips-ch .ips-nm small{display:block;color:var(--mu);font-size:11px}
 .ips-sel b{font-weight:600}
 .ips-foot{margin-top:6px;font-size:12px;color:var(--mu)}
 .cs-mode-inh{align-items:flex-start}
+.ips-fa-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0 6px}
+.ips-fa-tools input{flex:1 1 100%;min-width:0}
+.ips-fa-tools .ips-fa-l{color:var(--mu);font-size:12px}
+.ips-fa-list{max-height:300px;overflow:auto;scrollbar-gutter:stable;border:1px solid var(--ln);border-radius:8px}
+.ips-fa-row{display:grid;grid-template-columns:24px 40px minmax(0,1fr) minmax(0,1fr);gap:8px;align-items:center;padding:5px 10px;border-bottom:1px solid var(--ln);cursor:pointer}
+.ips-fa-row:last-child{border-bottom:0}
+.ips-fa-row span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ips-fa-row .ips-fa-no,.ips-fa-row .ips-fa-w{font-size:12px;color:var(--mu);margin:0}
+.ips-fa-row input{margin:0}
+.ips-fa-row.dis{opacity:.6;cursor:default}
+.ips-fa-row mark{background:color-mix(in srgb,var(--bl) 25%,transparent);color:inherit;border-radius:2px}
+.ips-fa-foot{margin-top:6px;font-size:12px;color:var(--mu)}
 .cs-mode-inh .lk{font-weight:600}
 table.lan-tbl td.lan-act{text-align:right;white-space:nowrap}
 .lan-th{cursor:pointer;user-select:none}
@@ -5813,10 +5827,12 @@ function folderFullName(id){
   return(d?locName(d)+" / ":"")+folderPathName(id);
 }
 function flatFolders(){const out=[];walkFolders(f=>out.push(f));return out}
-// Все папки, в которые входит объект (прямо или через родительское устройство)
+// Все папки, в которые входит объект (прямо или через родительское устройство).
+// Прототип 61: камера регистратора на регистраторе останавливается — у неё своё расположение (Axxon One: в группы
+// и на карту кладут камеры, а не IP-сервер). Входы и микрофоны камеры по-прежнему берут папку камеры
 function foldersOfDevice(id){
   const own=new Set();let f=find(id);
-  while(f){own.add(f.n.id);f=f.p?find(f.p.id):null}
+  while(f){own.add(f.n.id);if(f.n.type==="camera"&&f.p?.type==="ipsrv")break;f=f.p?find(f.p.id):null}
   if(findMemo){
     if(!findMemo.folderOf){
       const m=findMemo.folderOf=new Map();
@@ -7361,6 +7377,10 @@ function cardDiff(){
   if(gone.length||came.length)out.push({node:n,folders:fNow,fromFolders:fWas,label:i18n("Папки"),
     fromT:`${fWas.length} ${i18n(plural(fWas.length,"папка|папки|папок"))}`,
     toT:[...gone.map(id=>`${i18n("убрать из")} «${folderPathName(id)}»`),...came.map(id=>`${i18n("добавить в")} «${folderPathName(id)}»`)].join("; ")});
+  // Прототип 61: камеры, которые положили в папку вместе с регистратором (ipsFaApply), — строки того же черновика
+  (cardDraft.kidFolders||new Map()).forEach((was,id)=>{const c=find(id)?.n;if(!c)return;const now=cardFolders(id),add=now.filter(x=>!was.includes(x)),del=was.filter(x=>!now.includes(x));
+    if(add.length||del.length)out.push({node:c,folders:now,fromFolders:was,label:`${i18n("Папки камеры")} «${locName(c)}»`,fromT:`${was.length} ${i18n(plural(was.length,"папка|папки|папок"))}`,
+      toT:[...del.map(x=>`${i18n("убрать из")} «${folderPathName(x)}»`),...add.map(x=>`${i18n("добавить в")} «${folderPathName(x)}»`)].join("; ")})});
   Object.entries(cardDraft.fields).forEach(([l,f])=>out.push({node:n,fld:l,prop:CARD_FLD_PROP[l]||null,from:f.from,to:f.to,label:i18n(l),fromT:f.from===""?"—":f.from,toT:f.to===""?"—":f.to}));
   Object.entries(edits).forEach(([k,v])=>{const[id,f]=splitEditKey(k);if(id!==n.id)return;out.push({node:n,edit:k,prop:f,from:n[f],to:v,label:i18n(CARD_PROP[f]||f),fromT:cardFmt(f,n[f]),toT:cardFmt(f,v)})});
   posMergeProto(out,n);
@@ -7383,6 +7403,7 @@ function cardRestoreNode(live,snap){
 function cardRestore(){
   if(!cardDraft)return;
   const n=find(cardDraft.id)?.n;if(n){cardRestoreNode(n,cardDraft.snap);if(cardDraft.folders)cardSetFolders(n.id,cardDraft.folders)}
+  cardDraft.kidFolders?.forEach((fs,id)=>cardSetFolders(id,fs));
   Object.keys(edits).forEach(k=>{if(splitEditKey(k)[0]===cardDraft.id)delete edits[k]});
   // Значения в блоках камеры верны только для этого черновика: после «Сбросить» или «Применить» открытые блоки закрываются,
   // заглушки (параметры драйвера, кодек и битрейт потоков, туры) возвращаются к значениям до плана
@@ -7478,7 +7499,7 @@ function cardApply(ok){
     if(r.streamSet)return mkOp(n,`${r.label}: ${r.toT}`,"param",()=>{const x=(n.streams||[]).find(y=>y.uid===r.streamSet.uid);if(x)Object.assign(x,r.streamSet.props)});
     if(r.streamAdd)return mkOp(n,r.label,"param",()=>{(n.streams||(n.streams=[])).push(cardClone(r.streamAdd))},null,()=>{n.streams=(n.streams||[]).filter(x=>x.id!==r.streamAdd.id)});
     if(r.streamDel)return mkOp(n,r.label,"param",()=>{n.streams=(n.streams||[]).filter(x=>x.id!==r.streamDel.id)});
-    if(r.folders)return mkOp(n,`${r.label}: ${r.toT}`,"folder",()=>cardSetFolders(n.id,r.folders),null,()=>cardSetFolders(n.id,r.fromFolders));
+    if(r.folders){const t=r.node||n;return mkOp(t,`${r.label}: ${r.toT}`,"folder",()=>cardSetFolders(t.id,r.folders),null,()=>cardSetFolders(t.id,r.fromFolders))}
     if(r.add)return mkOp(r.node,r.label,"param",()=>{(r.node.devices||(r.node.devices=[])).push(r.add);hwIdxDrop()},null,()=>{r.node.devices=r.node.devices.filter(x=>x!==r.add);hwIdxDrop()});
     if(r.fld||r.edit){const k=r.prop,prev=k?n[k]:undefined,v=k==="port"||k==="ch"?Number(r.to)||r.to:String(r.to).trim();
       const pf=n._f?.[r.fld];
@@ -7858,6 +7879,14 @@ function hasTreeIn(n){
   const hit=selfInView(n)||kids(n).some(hasTreeIn);
   treeMatchCache.set(key,hit);return hit;
 }
+// Прототип 61: регистратор в папке показывает только камеры этой папки; камера, чей регистратор лежит в той же папке,
+// стоит под ним, а не второй строкой
+function ipsTreeKids(n,ctx,k){
+  if(n.type!=="ipsrv"||!ctx||!String(ctx).startsWith("f:"))return k;
+  const f=folderById(String(ctx).slice(2));if(!f)return k;
+  return k.filter(d=>d.type!=="camera"||f.items.includes(d.id));
+}
+function ipsUnderOwnerIn(d,f){if(d.type!=="camera")return false;const o=ipsrvOwnerNode(d);return!!o&&f.items.includes(o.id)}
 function treeKids(n){return(n.devices||[]).filter(d=>(d.type!=="det"||d.builtin)&&hasTreeIn(d))}
 function hasTreeKids(n){return treeKids(n).length>0}
 // Число объектов среза под каждым родителем, независимо от раскрытия ветвей.
@@ -11342,7 +11371,7 @@ function nrow(n,l,ctx){
   if(!det&&!selfInView(n)&&!kids(n).some(hasTreeIn))return"";
   // Детектор раскрывается до поддетекторов — как в срезе «Детекторы» (gdetrow)
   const dt=det?dwTreeDet(n,ctx):null,ek=dt?dt.ok:n.id;
-  const k=dt?[]:treeKids(n),hasKids=dt?dt.sp:k.length>0||!!n._more,op=dt?dt.op:open.has(n.id)||(autoExpand()&&hasKids);
+  const k=dt?[]:ipsTreeKids(n,ctx,treeKids(n)),hasKids=dt?dt.sp:k.length>0||!!n._more,op=dt?dt.op:open.has(n.id)||(autoExpand()&&hasKids);
   const shown=k.filter(d=>hasTreeIn(d)&&(!q||vis(d,q)));
   const st=nodeStatus(n);
   const childOff=canToggleEnabled(n)&&st.off;
@@ -11474,7 +11503,7 @@ function frow(f,l){
   const want=open.has(f.id)||autoExpand();
   const subs=want?(f.folders||[]).map(x=>frow(x,l+1)).filter(Boolean).join(""):"";
   const anySub=want?!!subs:(f.folders||[]).some(x=>frow(x,l+1)!=="");
-  const devs=treeFolderNodes(f).filter(d=>hasTreeIn(d)&&(!q||vis(d,q)));
+  const devs=treeFolderNodes(f).filter(d=>hasTreeIn(d)&&(!q||vis(d,q))&&!ipsUnderOwnerIn(d,f));
   if(statusFilts.size&&!anySub&&!devs.length)return"";
   if(!selfHit&&!anySub&&!devs.length)return"";
   const hasKids=anySub||!!devs.length||sliceUnread(f.id);
@@ -13707,7 +13736,7 @@ function ipsGenHtml(n){
   return ident+conn+drvSecsHtml(n,"gen")+comp+csWrap("folders",deviceFoldersCardHtml(n));
 }
 // Вкладка «Каналы»: видеоканалы — таблицей с отметкой строк (отметка общая с деревом: treeSel), фильтр — по образцу
-const IPS_DIMS=[["st","состояние",c=>c.enabled===false?"Выключена":devErr(c)?"Нет сигнала":"Работает",i18n],["rec","запись",c=>isRecording(c)?recordModeLabel(c.rec):"Не пишется",i18n],["res","разрешение",c=>c.res||""]];
+const IPS_DIMS=[["st","состояние",c=>c.enabled===false?"Выключена":devErr(c)?"Нет сигнала":"Работает",i18n],["loc","расположение",c=>{const fs=cardFolders(c.id);return fs.length?locName(folderById(fs[0])):i18n("Без расположения")}],["rec","запись",c=>isRecording(c)?recordModeLabel(c.rec):"Не пишется",i18n],["res","разрешение",c=>c.res||""]];
 const ipsF=new Map(),ipsMore=new Map();
 function ipsFOf(id){if(!ipsF.has(id))ipsF.set(id,{});return ipsF.get(id)}
 function ipsFacet(d,v){const f=ipsFOf(sel);if(f[d]===v)delete f[d];else f[d]=v;const snap=bulkScopeSnap();gear();bulkScopeFlip(snap)}
@@ -13741,7 +13770,8 @@ function ipsChanHtml(n){
     const s0=c._row?null:camStreams(c)[0]||{},stream=c._row?`<span class="cs-empty">${i18n("Загрузка…")}</span>`:`<span title="${escHtml(s0.codec||c.codec||"")}">${escHtml([(s0.res||c.res||"").replace(/x/g,"×"),(s0.fps||c.fps)&&`${s0.fps||c.fps} ${i18n("к/с")}`].filter(Boolean).join(" · ")||"—")}</span>`;
     // Включена ли камера, видно по переключателю: здесь — только сигнал
     const e=devErr(c),st=off?`<span class="cs-empty">${i18n("выключена")}</span>`:e?`<span class="bd off" title="${escHtml(devErrText(c))}">${i18n("Нет сигнала")}</span>`:`<span class="bd">${i18n("Есть сигнал")}</span>`;
-    return`<tr class="${off?"off":""} ${tsOn(c.id)?"ts-on":""}" ${onEv("click",["pick",`${c.id}`])}><td class="lan-chk">${tsChk(c.id,locName(c))}</td><td class="ips-no">${escHtml(vch)}</td><td class="ips-nm" title="${escHtml(locName(c))}">${escHtml(locName(c))}<small>${escHtml(c.short??"")}</small></td><td class="ips-st">${st}</td><td>${stream}</td><td>${c._row?"":rec}</td>
+    const fs=cardFolders(c.id),loc=fs.length?`<span title="${escHtml(fs.map(folderPathName).join("\n"))}">${escHtml(locName(folderById(fs[0])))}${fs.length>1?` <span class="sub">+${fs.length-1}</span>`:""}</span>`:`<span class="cs-empty">${i18n("не задано")}</span>`;
+    return`<tr class="${off?"off":""} ${tsOn(c.id)?"ts-on":""}" ${onEv("click",["pick",`${c.id}`])}><td class="lan-chk">${tsChk(c.id,locName(c))}</td><td class="ips-no">${escHtml(vch)}</td><td class="ips-nm" title="${escHtml(locName(c))}">${escHtml(locName(c))}<small>${escHtml(c.short??"")}</small></td><td class="ips-st">${st}</td><td>${loc}</td><td>${stream}</td><td>${c._row?"":rec}</td>
       <td class="ips-sw" ${onEv("click",onEv.stop)}><div class="sw ${off?"":"on"}" role="switch" aria-checked="${!off}" aria-label="${escHtml(i18n("Включена")+" "+locName(c))}" ${onEv("click",["ipsRowSw",`${c.id}`,onEv.el])}></div></td></tr>`};
   const sel2=k?`<div class="ips-sel"><span>${i18n("Отмечено")} <b>${k}</b> ${i18n("из")} ${cams.length}</span>
       <button type="button" class="btn s" ${onEv("click",["ipsChanEnable",`${n.id}`,true])}>${i18n("Включить")}</button><button type="button" class="btn s" ${onEv("click",["ipsChanEnable",`${n.id}`,false])}>${i18n("Выключить")}</button>
@@ -13750,10 +13780,10 @@ function ipsChanHtml(n){
     <div class="ips-bar">${listSearchHtml("ipsch","Имя или номер канала…","list")}</div>
     <div class="bk-sum bk-scope"><div class="bk-scope-h"><span class="bk-scope-l">${i18n("Показать")}</span><button type="button" data-fk="all" class="stchip ${on?"":"on"}" ${onEv("click",["ipsFacetClear"])}><span class="stchip-lab">${i18n("все")}</span><span class="stchip-cnt">${scope.length}</span></button>${facets?`<span class="sub bk-scope-or" data-fk="or">${i18n("или уточните")}:</span>`:""}</div>${facets}${on?`<div class="bk-scope-sum on" data-fk="sum">${i18n("Показано")} <b>${found.length} ${i18n("из")} ${scope.length}</b>: ${escHtml(said)}</div>`:""}</div>
     ${sel2}
-    <div class="ips-ch-wrap"><table class="lan-tbl ips-ch"><colgroup><col style="width:36px"><col style="width:72px"><col><col style="width:120px"><col style="width:170px"><col style="width:170px"><col style="width:100px"></colgroup>
-      <thead><tr><th class="lan-chk">${tsHead("ipsch",ids,ids)}</th><th class="ips-no">${i18n("Канал")}</th><th>${i18n("Камера")}</th><th class="ips-st">${i18n("Состояние")}</th><th>${i18n("Основной поток")}</th><th>${i18n("Запись")}</th><th class="ips-sw">${i18n("Включена")}</th></tr></thead>
-      <tbody>${found.map(row).join("")||`<tr><td class="empty" colspan="7">${i18n("Ничего не найдено")}</td></tr>`}</tbody></table></div>
-    <div class="ips-foot">${i18n("Строка открывает окно камеры. Каждая включённая камера занимает лицензию видеоканала. Отмеченные камеры можно настроить вместе: видео, архив и детекторы.")}</div></div></div>`:"";
+    <div class="ips-ch-wrap"><table class="lan-tbl ips-ch"><colgroup><col style="width:36px"><col style="width:60px"><col><col style="width:98px"><col style="width:122px"><col style="width:130px"><col style="width:110px"><col style="width:88px"></colgroup>
+      <thead><tr><th class="lan-chk">${tsHead("ipsch",ids,ids)}</th><th class="ips-no">${i18n("Канал")}</th><th>${i18n("Камера")}</th><th class="ips-st">${i18n("Состояние")}</th><th>${i18n("Расположение")}</th><th>${i18n("Основной поток")}</th><th>${i18n("Запись")}</th><th class="ips-sw">${i18n("Включена")}</th></tr></thead>
+      <tbody>${found.map(row).join("")||`<tr><td class="empty" colspan="8">${i18n("Ничего не найдено")}</td></tr>`}</tbody></table></div>
+    <div class="ips-foot">${i18n("Строка открывает окно камеры. Каждая включённая камера занимает лицензию видеоканала. Отмеченные камеры можно настроить вместе: видео, архив, детекторы и расположение.")}</div></div></div>`:"";
   // Каналы ввода-вывода (модуль ввода-вывода, пульт): у канала — входы и выходы; камеры к ним привязывают в окне входа
   const ch=ipsKids(n,"channel");
   const io=ch.length?card("Каналы ввода-вывода",`<div class="ips-ch-wrap"><table class="lan-tbl ips-ch"><colgroup><col style="width:72px"><col><col style="width:110px"><col style="width:110px"><col style="width:140px"></colgroup>
@@ -13768,6 +13798,64 @@ function ipsChanHtml(n){
 }
 // Камера регистратора: блок «Подключение» только для чтения. Адрес, модель и прошивку задаёт регистратор (Axxon One
 // показывает их у камеры как свойства объекта); свой у канала — номер видеоканала, у регистратора RTSP — адрес RTSP канала
+// ── Расположение регистратора и его камер (прототип 61) ──
+// Папка регистратора — место самого устройства (например, серверная). Камеры регистратора её не берут: камеры одного
+// регистратора стоят в разных местах. Регистратор кладут в папку — консоль спрашивает, какие камеры положить туда же.
+// Камеру кладут в папку — без вопросов.
+function ipsFolderNote(n){
+  if(n.type==="camera"){
+    const o=ipsrvOwnerNode(n);if(!o)return"";
+    const fs=cardFolders(o.id);
+    return`<p class="sub">${i18n("Камера не берёт папку регистратора")} <button type="button" class="lk" ${onEv("click",["pick",`${o.id}`])}>${escHtml(locName(o))}</button>${fs.length?` (${escHtml(fs.map(folderPathName).join(", "))})`:""}. ${i18n("Камеры одного регистратора могут стоять в разных местах, поэтому у каждой камеры своё расположение.")}</p>`;
+  }
+  if(n.type!=="ipsrv")return"";
+  const cams=ipsrvCameras(n);if(!cams.length)return"";
+  const none=cams.filter(c=>!cardFolders(c.id).length).length;
+  return`<p class="sub">${i18n("Папка регистратора показывает, где стоит само устройство. Камеры регистратора не берут её: у каждой камеры своё расположение.")} ${none?`${i18n("Без расположения")}: <b>${none}</b> ${i18n("из")} ${cams.length}.`:""} <button type="button" class="lk" ${onEv("click",["goTab","chan"])}>${i18n("Расположение камер — на вкладке «Каналы»")}</button></p>`;
+}
+let ipsFa=null;
+function ipsFolderPick(el,id){const fid=el.value;el.value="";if(fid)ipsFolderAsk(fid,id)}
+function ipsFolderAsk(fid,id){
+  const o=find(id)?.n,f=folderById(fid);if(!o||!f)return;
+  const cams=ipsrvCameras(o);
+  if(!cams.length){addDeviceToFolder(fid,id);return}
+  // Отмечены заранее камеры без расположения: их, скорее всего, ещё никуда не клали
+  ipsFa={fid,id,q:"",pick:new Set(cams.filter(c=>!f.items.includes(c.id)&&!cardFolders(c.id).length).map(c=>c.id))};
+  askConfirm(i18n("Добавить регистратор в папку"),`<p>${i18n("Консоль добавит регистратор")} «${escHtml(locName(o))}» ${i18n("в папку")} «${escHtml(folderPathName(fid))}».</p>
+    <p>${i18n("Камеры регистратора не берут его папку: они могут стоять в других местах. Отметить камеры, которые стоят там же.")}</p>
+    <div class="ips-fa-tools">${cams.length>=CBX_MIN?`<input type="search" placeholder="${escHtml(i18n("Имя или номер канала…"))}" aria-label="${escHtml(i18n("Найти камеру"))}" ${onEv("input",["ipsFaQ",onEv.value])}>`:""}
+      <span class="ips-fa-l">${i18n("Отметить")}:</span><button type="button" class="lk lk-act" ${onEv("click",["ipsFaSet","none"])}>${i18n("без расположения")}</button><button type="button" class="lk lk-act" ${onEv("click",["ipsFaSet","all"])}>${i18n("все")}</button><button type="button" class="lk lk-act" ${onEv("click",["ipsFaSet","off"])}>${i18n("ни одной")}</button></div>
+    <div class="ips-fa-list" id="ipsFaList"></div><div class="ips-fa-foot" id="ipsFaFoot"></div>`,"",i18n("Добавить"),ipsFaApply,{html:true,rawTitle:true,onCancel:()=>{ipsFa=null}});
+  ipsFaPaint();
+}
+function ipsFaCams(){const o=find(ipsFa.id)?.n;return o?ipsrvCameras(o).slice().sort((a,b)=>(+ipsrvCameraVideoChannel(a,o)||0)-(+ipsrvCameraVideoChannel(b,o)||0)):[]}
+function ipsFaPaint(){
+  if(!ipsFa)return;const o=find(ipsFa.id)?.n,f=folderById(ipsFa.fid),cams=ipsFaCams(),q=ipsFa.q.trim().toLowerCase();
+  const hit=cams.filter(c=>!q||[locName(c),ipsrvCameraVideoChannel(c,o)].join(" ").toLowerCase().includes(q));
+  const list=document.getElementById("ipsFaList");if(!list)return;
+  list.innerHTML=hit.map(c=>{const inF=f.items.includes(c.id),fs=cardFolders(c.id),on=inF||ipsFa.pick.has(c.id);
+    const where=inF?i18n("уже в этой папке"):fs.length?fs.map(folderPathName).join(", "):i18n("без расположения");
+    return`<label class="ips-fa-row ${inF?"dis":""}"><input type="checkbox" ${on?"checked":""} ${inF?"disabled":""} ${onEv("change",["ipsFaTog",`${c.id}`,onEv.checked])}><span class="ips-fa-no">${escHtml(String(ipsrvCameraVideoChannel(c,o)))}</span><span title="${escHtml(locName(c))}">${hlText(locName(c),q)}</span><span class="ips-fa-w" title="${escHtml(where)}">${escHtml(where)}</span></label>`}).join("")||`<div class="ips-fa-row dis"><span></span><span></span><span>${i18n("Ничего не найдено")}</span></div>`;
+  const k=ipsFa.pick.size;
+  document.getElementById("ipsFaFoot").innerHTML=`${i18n("Отмечено")} <b>${k}</b> ${i18n("из")} ${cams.length}${q?` · ${i18n("Показано")} ${hit.length} ${i18n("из")} ${cams.length}`:""}`;
+  document.getElementById("confirmOk").textContent=k?`${i18n("Добавить регистратор и камеры")}: ${k}`:i18n("Добавить только регистратор");
+}
+function ipsFaQ(v){if(!ipsFa)return;ipsFa.q=v||"";ipsFaPaint()}
+function ipsFaTog(id,on){if(!ipsFa)return;if(on)ipsFa.pick.add(id);else ipsFa.pick.delete(id);ipsFaPaint()}
+function ipsFaSet(how){
+  if(!ipsFa)return;const f=folderById(ipsFa.fid),free=ipsFaCams().filter(c=>!f.items.includes(c.id));
+  ipsFa.pick=new Set(how==="off"?[]:free.filter(c=>how==="all"||!cardFolders(c.id).length).map(c=>c.id));ipsFaPaint();
+}
+function ipsFaApply(){
+  const a=ipsFa;ipsFa=null;if(!a)return;
+  const was=new Map([...a.pick].map(cid=>[cid,cardFolders(cid)]));
+  folderAddDevice(a.fid,a.id);a.pick.forEach(cid=>folderAddDevice(a.fid,cid));
+  setD(true);
+  // «Сбросить» и план карточки регистратора видят и камеры: их папки — строки того же черновика
+  if(cardDraft&&cardDraft.id===a.id){const k=cardDraft.kidFolders||(cardDraft.kidFolders=new Map());was.forEach((fs,id)=>{if(!k.has(id))k.set(id,fs)})}
+  open.add(a.fid);treeMatchCache.clear();searchMatchCache.clear();paint();
+  toast(a.pick.size?`${i18n("Регистратор и камеры")} (${a.pick.size}) ${i18n("добавлены в папку")} «${folderPathName(a.fid)}»`:`${i18n("Регистратор добавлен в папку")} «${folderPathName(a.fid)}». ${i18n("Камеры остались на своих местах.")}`);
+}
 function ipsCamConnHtml(n,ips){
   const txt=v=>v===""||v==null?`<span class="cs-empty">—</span>`:escHtml(String(v));
   const rtsp=isRtspVendor(ips.vendor||""),fw=drvState(ips).vals.firmware;
@@ -14444,8 +14532,8 @@ function deviceFoldersCardHtml(n){
     empty:"Не входит ни в одну папку",
     ph:"Имя или путь папки…",
     unit:"папка|папки|папок",
-    tools:`<select class="lst-add" aria-label="${i18n("Добавить в папку")}" ${onEv("change",["addDeviceToFolderPick",onEv.el,n.id])}><option value="" hidden selected>${i18n("+ Добавить в папку…")}</option>${folderOptionGroups("")}</select>`,
-    extra:`<p class="sub">${sv?i18n("Запись ведётся на сервер:")+` <b>${escHtml(locName(sv))}</b>`:i18n("Запись не настроена, поэтому объекту не нужен сервер.")}</p>`
+    tools:`<select class="lst-add" aria-label="${i18n("Добавить в папку")}" ${onEv("change",[n.type==="ipsrv"?"ipsFolderPick":"addDeviceToFolderPick",onEv.el,n.id])}><option value="" hidden selected>${i18n("+ Добавить в папку…")}</option>${folderOptionGroups("")}</select>`,
+    extra:ipsFolderNote(n)+`<p class="sub">${sv?i18n("Запись ведётся на сервер:")+` <b>${escHtml(locName(sv))}</b>`:i18n("Запись не настроена, поэтому объекту не нужен сервер.")}</p>`
   });
 }
 // Итог прошлого поиска читается только в окне поиска, страницами
@@ -35740,7 +35828,7 @@ function bulkScopeHtml(all){
 // Что умеет объект — из этого собирается пересечение для «Все».
 const CREDS_TYPES=new Set(["camera","ipsrv","acfa","eventsrc"]);
 function canCreds(n){return CREDS_TYPES.has(n.type)}
-function canFolder(n){return devicePool.includes(n)}
+function canFolder(n){return devicePool.includes(n)||(n?.type==="camera"&&!!ipsrvOwnerNode(n))}
 // Параметры типа: у начинки — из справочника, у служб и детекторов — свои.
 function typeParams(kind){
   const own=devParams(kind==="spk:srv"?"spk":kind);
@@ -35848,7 +35936,7 @@ function bulkGenHtml(nodes,allCams){
     const inFolders=countBy(nodes.flatMap(n=>foldersOfDevice(n.id).filter(f=>f.items.includes(n.id)).map(f=>f.id)),id=>id);
     const removeOpts=inFolders.map(([id,c])=>[id,`${folderPathName(id)} (${c})`]);
     const addOpts=flatFolders().map(f=>[f.id,folderPathName(f.id)]);
-    h+=card("Расположение",`<div class="g">${bkSelect("Добавить в папку","folderAdd",addOpts,null,"")}${bkSelect("Убрать из папки","folderRemove",removeOpts,null,removeOpts.length?"":`<div class="bk-hint">${i18n("ни одного объекта нет в папках")}</div>`)}</div>`);
+    h+=card("Расположение",`<div class="g">${bkSelect("Добавить в папку","folderAdd",addOpts,null,"")}${bkSelect("Убрать из папки","folderRemove",removeOpts,null,removeOpts.length?"":`<div class="bk-hint">${i18n("ни одного объекта нет в папках")}</div>`)}</div>${nodes.some(n=>n.type==="ipsrv")?`<p class="sub" style="margin:0">${i18n("Консоль положит в папку только отмеченные объекты. Камеры регистратора не берут его папку. Чтобы положить камеры, отметить их.")}</p>`:""}`);
   }
   if(!one&&kinds.length>1)miss.push(`${i18n("Параметры типов")} — ${i18n("у каждого типа свои")}`);
   if(miss.length)h+=card("Не показано",`<ul class="bk-miss">${miss.map(x=>`<li>${x}</li>`).join("")}</ul>
@@ -37637,7 +37725,7 @@ function cardApiItems(n,d){
     const target=r.node||n;if(!isApiDevice(target))return null;
     if(r.schemaProp){items.push(xp(r));continue}
     if(r.add){items.push({targetId:target.id,create:nodeCreate(r.add)});continue}
-    if(r.folders){items.push({targetId:n.id,folderIds:r.folders});continue}
+    if(r.folders){items.push({targetId:(r.node||n).id,folderIds:r.folders});continue}
     const det=r.fld?cardFldTarget(target,r):null;
     if(det){if(!isApiDevice(det))continue;items.push({targetId:det.id,set:keyToApi(det,DET_FLD[r.fld],r.to)});continue}
     const set=r.fld?fldToApi(r.fld,r.prop,r.to):keyToApi(target,r.key,r.to);
