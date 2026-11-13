@@ -837,6 +837,23 @@ table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:8px;borde
 .lan-chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
 .lan-wrap{container-type:inline-size;overflow:hidden;max-width:100%;border:1px solid var(--ln);border-radius:8px}
 table.lan-tbl th.lan-chk,table.lan-tbl td.lan-chk{width:30px;padding-right:0}
+/* Прототип 61: таблица каналов регистратора. Ширины столбцов заданы: раскрытие и отметка не двигают соседей */
+.ips-ch-wrap{overflow:auto;max-width:100%;border:1px solid var(--ln);border-radius:8px;scrollbar-gutter:stable}
+table.ips-ch{table-layout:fixed;min-width:820px}
+table.ips-ch td,table.ips-ch th{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+table.ips-ch tbody tr{cursor:pointer}
+table.ips-ch tbody tr:hover td{background:var(--one-control-hover)}
+table.ips-ch tbody tr.ts-on td{background:color-mix(in srgb,var(--bl) 10%,transparent)}
+table.ips-ch tr.off td:not(.lan-chk):not(.ips-sw){color:var(--mu)}
+
+table.ips-ch .ips-nm small{display:block;color:var(--mu);font-size:11px}
+.ips-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;min-height:30px}
+.ips-bar .lan-sq{flex:1 1 220px}
+.ips-sel{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 10px;border-radius:8px;background:color-mix(in srgb,var(--bl) 10%,transparent);margin-bottom:8px}
+.ips-sel b{font-weight:600}
+.ips-foot{margin-top:6px;font-size:12px;color:var(--mu)}
+.cs-mode-inh{align-items:flex-start}
+.cs-mode-inh .lk{font-weight:600}
 table.lan-tbl td.lan-act{text-align:right;white-space:nowrap}
 .lan-th{cursor:pointer;user-select:none}
 .lan-th.on .gtbl-th-txt{color:var(--tx)}
@@ -12185,7 +12202,8 @@ function tabsForHand(n){
   // У папки одно окно содержимого, как в Проводнике: вложенные — переключателем, а добавление — отдельным шагом
   if(n.type==="folder")return[];
   if(n.type==="camera")return(can("startUnitLive")?[["view","Просмотр"]]:[]).concat([["gen","Подключение"],["vid","Видео"],["rec","Архив"],["det","Детекторы"],["io","Периферия"],["acc","Доступ"]]);
-  if(n.type==="ipsrv")return ipsrvCameras(n).length?[["gen","Подключение"],["rec","Архив"],["kids","Дочерние"]]:[["gen","Подключение"],["kids","Дочерние"]];
+  // Регистратор (прототип 61): вкладки как у камеры. «Каналы» — таблица его камер и каналов вместо списка «Дочерние»
+  if(n.type==="ipsrv")return[["gen","Подключение"],["chan","Каналы"]].concat(ipsrvCameras(n).length?[["rec","Архив"]]:[]);
   if(n.type==="channel")return[["gen","Основные"],["kids","Дочерние"]];
   if(n.type==="eventsrc")return[["gen","Подключение"],["overlay","Титры"]];
   if(n.type==="acfa")return[["gen","Подключение"],["kids","Подобъекты"]];
@@ -12251,7 +12269,7 @@ function gear(){
   if(n.type==="server")serverArchives(n.id).forEach(a=>volsEnsure(a).catch(()=>{}));
   if(n.type==="eventsrc"&&tab==="words")tab="overlay"; // прежняя вкладка «Подсветка» теперь внутри «Титров»
   if(tabs.length&&!tabs.some(([id])=>id===tab))tab=tabs[0][0];
-  const csOpen=n.type==="camera"&&!isSchemaNode(n)?csOpenTabs(n):new Set();
+  const csOpen=(n.type==="camera"||n.type==="ipsrv")&&!isSchemaNode(n)?csOpenTabs(n):new Set();
   const tabsH=tabs.map(([id,x])=>`<button class="tab ${tab===id?"on":""}" data-tab="${id}" ${onEv("click",["tabGo",id])}>${i18n(x)}${csOpen.has(id)?`<span class="tab-dot" role="img" title="${i18n("На этой вкладке вы не закончили правку блока")}" aria-label="${i18n("На этой вкладке вы не закончили правку блока")}"></span>`:""}</button>`).join("");
   // Слева направо — вход добавления устройств (он один, остальное — стрелкой рядом);
   // дальше собственные действия объекта, а звезда последней и без подписи.
@@ -13599,12 +13617,166 @@ function csIdentDrvFields(n){
 }
 // Снимок и итог правки этой группы — вместе с «Изменить», «Отменить», «Добавить в план» блока «Идентификация»
 function csIdentDrvEdit(id,mode){
-  const n=find(id)?.n;if(!n||n.type!=="camera"||isSchemaNode(n))return;
+  const n=find(id)?.n;if(!n||(n.type!=="camera"&&n.type!=="ipsrv")||isSchemaNode(n))return;
   const st=drvState(n),g=DRV_IDENT;
   if(mode==="start"){if(!st.snap[g]){const snap={};drvGroupProps(n,g).forEach((p,f)=>{if(f in st.vals)snap[f]=cardClone({v:st.vals[f]}).v});drvBaseTake(n,g);st.snap[g]=snap}return}
   const snap=st.snap[g];if(!snap)return;
   if(mode==="cancel")drvGroupProps(n,g).forEach((p,f)=>{if(f in snap)st.vals[f]=snap[f];else delete st.vals[f]});
   delete st.snap[g];setD(true);
+}
+// ── Окно регистратора (прототип 61): только параметры самого устройства ──────────────────────────────────────
+// Как IP-сервер в Axxon One (doc 292019): идентификация, адрес и порт, учётные данные, прошивка и драйвер,
+// обмен с устройством и «Отправлять настройки устройству». Признак есть только у регистратора: его камеры и каналы
+// берут его от регистратора. Каждая камера регистратора — видеоканал (VideoChannel): её открывают в том же окне
+// камеры, где адрес, модель и прошивка регистратора видны только для чтения. Вкладка «Каналы» — обзор каналов и
+// групповые действия; настройки канала — в его окне.
+// ЗАГЛУШКА (запрос api/requests/2026-11-09-182805Z-mockup-camera-driver-params-request.md): признак и параметры драйвера
+// регистратора живут в браузере (cvCfg, drvStore), как у камеры
+const IPS_OWN=["firmware","driverVersion","deviceSerialNumber","breakUnusedConnections","edgeStorage"];
+function ipsModeOf(o){if(!cvCfg.has(o.id))cvCfg.set(o.id,{mode:"device",streams:{}});return cvCfg.get(o.id).mode}
+function ipsSendOn(o){return!isRtspVendor(o.vendor||"")&&ipsModeOf(o)==="console"}
+function ipsModeSet(id,mode){
+  const o=find(id)?.n;if(!o)return;ipsModeOf(o);
+  const n=ipsrvCameras(o).length;
+  if(mode!=="console"){cvCfg.get(o.id).mode=mode;gear();return}
+  mainSeen.html=null;gear();
+  askConfirm("Включить «Отправлять настройки устройству»?",`<ul class="bk-del"><li>${i18n("Консоль запишет в регистратор")} «${escHtml(locName(o))}» ${i18n("и во все его камеры")} (${n}) ${i18n("значения, которые показывает сейчас: параметры потоков, изображения и другие настройки в блоках с замком.")}</li><li>${i18n("Если кто-то изменит настройки в веб-интерфейсе регистратора, консоль заменит их своими.")}</li><li>${i18n("Регистратор может перезапустить потоки. Тогда видео и запись его камер прервутся на несколько секунд.")}</li></ul>`,"",i18n("Включить"),()=>{cvCfg.get(o.id).mode="console";gear()},{html:true});
+}
+function ipsSendToggle(id){const o=find(id)?.n;if(!o)return;const m=ipsSendOn(o)?"device":"console";setTimeout(()=>ipsModeSet(id,m),0)}
+function ipsSendKey(id,e){if(e.key===" "||e.key==="Enter"){e.preventDefault();ipsSendToggle(id)}}
+// Строка над блоками — как у камеры, но о регистраторе и всех его камерах. У модуля ввода-вывода и SIP камер нет,
+// настроек потоков тоже: строки нет
+function ipsModeLine(o,tabId){
+  if(!["gen","chan"].includes(tabId))return"";
+  const k=ipsrvCameras(o).length;if(!k)return"";
+  if(isRtspVendor(o.vendor||""))return`<div class="cs-mode">${lu("lock",14)}<span>${i18n("Регистратор RTSP: консоль не меняет настройки его камер. Их меняют в веб-интерфейсе регистратора.")}</span></div>`;
+  const on=ipsSendOn(o),t=i18n("Включено: консоль передаёт в регистратор и его камеры параметры потоков и изображения. Выключено: консоль показывает настройки так, как их сообщил регистратор, и не меняет их.");
+  const sw=`<span class="cs-send" title="${escHtml(t)}" ${onEv("click",["ipsSendToggle",`${o.id}`])}><span class="sw ${on?"on":""}" role="switch" tabindex="0" aria-checked="${on}" aria-label="${i18n("Отправлять настройки устройству")}" ${onEv("keydown",["ipsSendKey",`${o.id}`,onEv.event])}></span><b>${i18n("Отправлять настройки устройству")}</b></span>`;
+  const txt=on?`${i18n("Консоль передаёт настройки в регистратор и во все его камеры")} (${k}).`:`${lu("lock",13)} ${i18n("Консоль показывает настройки регистратора и его камер")} (${k}) ${i18n("так, как их сообщил регистратор, и не меняет их.")}`;
+  return`<div class="cs-mode cs-mode-sw ${on?"on":""}">${sw}<span class="cs-mode-t">${txt} ${i18n("Камеры регистратора берут этот признак от него.")}</span></div>`;
+}
+// Параметры драйвера регистратора (Axxon One: DeviceIpint). Набор — по одному снимку окна IP-сервера Axxon One и форме
+// DEVICE_IPINT веб-конфигуратора: у разных драйверов он может отличаться
+const ipsSchemaMemo=new Map();
+function ipsDrvSchema(o){
+  const k=o.id+"|"+(o.vendor||""),c=ipsSchemaMemo.get(k);if(c)return c;
+  const d=isRtspVendor(o.vendor||"")?"rtsp":/onvif|generic/i.test(o.vendor||"")?"onvif":"native",P={};
+  const G=DRV_IDENT,C="Обмен с устройством",GEO="Геолокация";
+  P.firmware=drvP("gen",G,10,"Прошивка","string",{readOnly:true,default:d==="rtsp"?"":o.subtype==="io"?"1.9":"V4.51.006"});
+  P.driverVersion=drvP("gen",G,11,"Версия драйвера","string",{readOnly:true,default:d==="rtsp"?"1.4":"3.0.0"});
+  if(d==="native")P.deviceSerialNumber=drvP("gen",G,12,"Серийный номер устройства","string",{readOnly:true,default:o.subtype==="nvr"?"6L0B2E8PAZ1F4C7":""});
+  P.comment=drvP("gen",G,13,"Комментарий","string",{"x-ui-widget":"textarea",default:""});
+  P.breakUnusedConnections=drvP("gen",C,20,"Прервать неиспользуемое соединение","boolean",{default:false});
+  if(d!=="rtsp"&&o.subtype!=="io"&&o.subtype!=="sip")P.lowGop=drvP("gen",C,21,"Low GOP","boolean",{default:false});
+  P.geoLocationLatitude=drvP("gen",GEO,40,"Широта","number",{minimum:-90,maximum:90,default:o.lat??0});
+  P.geoLocationLongitude=drvP("gen",GEO,41,"Долгота","number",{minimum:-180,maximum:180,default:o.lon??0});
+  P.geoLocationAzimuth=drvP("gen",GEO,42,"Азимут","number",{minimum:0,maximum:360,default:o.azimuth??0,"x-ui-unit":"°"});
+  const sc={type:"object",properties:P,allOf:[]};ipsSchemaMemo.set(k,sc);return sc;
+}
+function ipsKids(o,t){return(o.devices||[]).filter(d=>[].concat(t).includes(d.type))}
+function ipsIoCount(o){let i=0,r=0;walk(x=>{if(x.type==="sensor")i++;else if(x.type==="relay")r++},o.devices||[],o);return{i,r}}
+// Вкладка «Подключение» регистратора: блоки как у камеры — значения текстом, поля по «Изменить»
+function ipsGenHtml(n){
+  ipsChanEnsure(n);
+  const val=(l,v)=>camConnVal(n,l,v);
+  const txt=v=>v===""||v==null?`<span class="cs-empty">—</span>`:escHtml(String(v));
+  // Идентификация: имя, номер, вид и то, что сообщил драйвер (прошивка, версия драйвера, серийный номер)
+  let ident;
+  if(!csEditOn(n.id,"ident")){
+    const rows=[["Имя",txt(val("Имя",n.name)),csChanged("Имя")],["Короткое имя",txt(n.short??"")],["ID",txt(deviceIdentifierValue(n)||"—")],["Вид",txt(i18n(IPSUB[n.subtype]||"IP-сервер"))],...csIdentDrvRows(n)];
+    ident=card("Идентификация объекта",`${bdg(n)}${enabledToggleHtml(n)}${n.derived?`<p class="sub">${i18n("Консоль создала регистратор из устройства. У регистратора нет своей записи. Имя, адрес и состав задаёт устройство. Удалить регистратор нельзя.")}</p>`:""}<div style="margin-top:10px">${csDl(rows)}</div>`);
+  }else ident=card("Идентификация объекта",`${bdg(n)}${enabledToggleHtml(n)}<div class="g" style="margin-top:10px">${devFld(n,"Имя","name",n.name)}${fldRo("Короткое имя",n.short??"")}${fldRo("ID",deviceIdentifierValue(n)||"—")}${fldRo("Вид",i18n(IPSUB[n.subtype]||"IP-сервер"))}</div>${csIdentDrvFields(n)}`);
+  ident=csHead(csWrap("ident",ident),n.derived?"":csEditBtns(n,"ident"));
+  // Подключение: адрес, порт, производитель и модель консоль задаёт при добавлении (x-immutable), учётные данные — меняются
+  const pd=cardDraft&&cardDraft.id===n.id?cardDraft.fields["Пароль"]:null,pass=pd?pd.to:(n.pass||n.hasPassword);
+  let conn;
+  if(!csEditOn(n.id,"conn"))conn=card("Подключение",csDl([["Производитель",txt(n.vendor||"")],["Модель",txt(n.model||"")],["IP-адрес и порт",txt(n.ip?`${n.ip}:${n.port||80}`:"")],
+    ["Имя пользователя",txt(val("Имя пользователя",n.user||n.login||"")||i18n("Авто")),csChanged("Имя пользователя")],["Пароль",pass?"••••":`<span class="cs-empty">${i18n("не задан")}</span>`,csChanged("Пароль")],["MAC",txt(n.mac||"—")]]));
+  else conn=card("Подключение",`<div class="g cam-conn">${fldRo("Производитель",n.vendor||"")}${fldRo("Модель",n.model||"")}${fldRo("IP-адрес",n.ip||"")}${fldRo("Порт",n.port||80)}
+    ${fldLbl("Имя пользователя","Имя пользователя",n.user||n.login||"","Авто")}
+    <div><label>${i18n("Пароль")}</label><div class="dev-pass-wrap"><input class="dev-pass-input" type="password" value="${escHtml(cardFldVal("Пароль",n.pass||"")??"")}" placeholder="****" data-df="Пароль" data-orig="${escHtml(n.pass||"")}" ${onEv("input",["cardFld",onEv.el])}>${devPassToggleBtn(false)}</div></div>
+    ${fldRo("MAC",n.mac||"—")}</div><p class="sub">${i18n("Адрес, порт, производителя и модель консоль задала при добавлении регистратора. Чтобы сменить их, добавить регистратор заново.")}</p>`);
+  conn=csHead(csWrap("conn",conn),n.derived?"":csEditBtns(n,"conn"));
+  // Состав: сколько каналов какого вида; плитка ведёт на вкладку «Каналы» или «Архив»
+  const cams=ipsrvCameras(n),ch=ipsKids(n,"channel"),au=ipsKids(n,["mic","spk"]),st=ipsKids(n,"storage")[0],io=ipsIoCount(n),on=cams.filter(c=>c.enabled!==false).length;
+  const tile=(l,v,go)=>go?`<button type="button" class="mc" ${onEv("click",["goTab",go])}><span>${i18n(l)}</span><b>${v}</b></button>`:`<div class="mc"><span>${i18n(l)}</span><b>${v}</b></div>`;
+  const tiles=[cams.length?tile("Камеры",cams.length===on?cams.length:`${on} ${i18n("из")} ${cams.length}`,"chan"):"",ch.length?tile("Каналы ввода-вывода",ch.length,"chan"):"",io.i||io.r?tile("Входы и выходы",`${io.i} · ${io.r}`,"chan"):"",au.length?tile("Микрофоны и динамики",au.length,"chan"):"",st?tile("Встроенное хранилище",escHtml(st.size||"есть"),cams.length?"rec":""):""].join("");
+  const sum=[cams.length?`${cams.length} ${i18n(plural(cams.length,"камера|камеры|камер"))}`:"",ch.length?`${ch.length} ${i18n(plural(ch.length,"канал|канала|каналов"))}`:""].filter(Boolean).join(", ");
+  const comp=`<div class="card" data-sec="comp" data-cs-sum="${escHtml(sum)}"><div class="ch">${i18n("Каналы устройства")}</div><div class="cb">${tiles?`<div class="mx">${tiles}</div>`:`<p class="sub">${i18n("Устройство не сообщило о каналах.")}</p>`}
+    <p class="sub" style="margin-top:8px">${i18n("Каждый канал настраивают в его окне. Регистратор задаёт им адрес, учётные данные, прошивку и «Отправлять настройки устройству».")}</p></div></div>`;
+  return ident+conn+drvSecsHtml(n,"gen")+comp+csWrap("folders",deviceFoldersCardHtml(n));
+}
+// Вкладка «Каналы»: видеоканалы — таблицей с отметкой строк (отметка общая с деревом: treeSel), фильтр — по образцу
+const IPS_DIMS=[["st","состояние",c=>c.enabled===false?"Выключена":devErr(c)?"Нет сигнала":"Работает",i18n],["rec","запись",c=>isRecording(c)?recordModeLabel(c.rec):"Не пишется",i18n],["res","разрешение",c=>c.res||""]];
+const ipsF=new Map(),ipsMore=new Map();
+function ipsFOf(id){if(!ipsF.has(id))ipsF.set(id,{});return ipsF.get(id)}
+function ipsFacet(d,v){const f=ipsFOf(sel);if(f[d]===v)delete f[d];else f[d]=v;const snap=bulkScopeSnap();gear();bulkScopeFlip(snap)}
+function ipsFacetClear(){ipsF.set(sel,{});const snap=bulkScopeSnap();gear();bulkScopeFlip(snap)}
+function ipsFacetMore(d){if(!ipsMore.has(sel))ipsMore.set(sel,new Set());ipsMore.get(sel).add(d);gear()}
+function ipsChanEnable(id,on){
+  const o=find(id)?.n;if(!o)return;const cams=ipsrvCameras(o).filter(c=>treeSel.has(c.id)&&c.enabled!==on);
+  if(!cams.length){toast(i18n(on?"Отмеченные камеры уже включены":"Отмеченные камеры уже выключены"));return}
+  cams.forEach(c=>{c.enabled=on});setD(true);gear();
+  toast(`${i18n(on?"Включено камер":"Выключено камер")}: ${cams.length}. ${i18n("Правка — в плане, её применит «Применить».")}`);
+}
+function ipsRowSw(id,el){toggleNodeEnabled(id,el)}
+// Строки дерева приходят без полей (n._row): таблице нужны поток и запись, поэтому полные записи камер читаются один раз
+const ipsLoading=new Set();
+// Дети регистратора и входы-выходы каналов приходят веткой дерева (n._more): читаются так же, как при раскрытии строки
+function ipsChanEnsure(n){
+  const br=[n,...ipsKids(n,"channel")].filter(x=>x._more&&!(x.devices||[]).length&&!ipsLoading.has("br:"+x.id));
+  const need=(n.devices||[]).filter(c=>c._row&&c.type!=="det"&&!ipsLoading.has(c.id));if(!need.length&&!br.length)return;
+  need.forEach(c=>ipsLoading.add(c.id));br.forEach(x=>ipsLoading.add("br:"+x.id));
+  Promise.all([...br.map(x=>treeLoad(treeLayout(),x.id).catch(()=>{})),...need.map(c=>hwFull(c.id).catch(()=>{}))]).then(()=>{if(sel===n.id)gear()});
+}
+function ipsChanHtml(n){
+  ipsChanEnsure(n);
+  const cams=ipsrvCameras(n),q=(listQ.ipsch||"").trim().toLowerCase(),f=ipsFOf(n.id),on=Object.values(f).some(Boolean);
+  const scope=cams.filter(c=>!q||[locName(c),c.short,ipsrvCameraVideoChannel(c,n)].join(" ").toLowerCase().includes(q));
+  const found=scope.filter(c=>facetHit(IPS_DIMS,c,f)).sort((a,b)=>(+ipsrvCameraVideoChannel(a,n)||0)-(+ipsrvCameraVideoChannel(b,n)||0)),ids=found.map(c=>c.id);
+  const facets=facetRowsHtml(IPS_DIMS,scope,f,"ipsFacet",ipsMore.get(n.id)||new Set(),"ipsFacetMore");
+  const said=IPS_DIMS.filter(([d])=>f[d]).map(([d,,,lab])=>lab?lab(f[d]):f[d]).join(" · ");
+  const k=cams.filter(c=>tsOn(c.id)).length,enOn=cams.filter(c=>c.enabled!==false).length;
+  const row=c=>{const vch=ipsrvCameraVideoChannel(c,n),off=c.enabled===false,an=arch.find(a=>a.id===c.arch)?.name||"",rec=isRecording(c)?`<span title="${escHtml(an)}">${i18n(recordModeLabel(c.rec))} · ${escHtml(an)}</span>`:`<span class="cs-empty">${i18n("не пишется")}</span>`;
+    const s0=c._row?null:camStreams(c)[0]||{},stream=c._row?`<span class="cs-empty">${i18n("Загрузка…")}</span>`:`<span title="${escHtml(s0.codec||c.codec||"")}">${escHtml([(s0.res||c.res||"").replace(/x/g,"×"),(s0.fps||c.fps)&&`${s0.fps||c.fps} ${i18n("к/с")}`].filter(Boolean).join(" · ")||"—")}</span>`;
+    // Включена ли камера, видно по переключателю: здесь — только сигнал
+    const e=devErr(c),st=off?`<span class="cs-empty">${i18n("выключена")}</span>`:e?`<span class="bd off" title="${escHtml(devErrText(c))}">${i18n("Нет сигнала")}</span>`:`<span class="bd">${i18n("Есть сигнал")}</span>`;
+    return`<tr class="${off?"off":""} ${tsOn(c.id)?"ts-on":""}" ${onEv("click",["pick",`${c.id}`])}><td class="lan-chk">${tsChk(c.id,locName(c))}</td><td class="ips-no">${escHtml(vch)}</td><td class="ips-nm" title="${escHtml(locName(c))}">${escHtml(locName(c))}<small>${escHtml(c.short??"")}</small></td><td class="ips-st">${st}</td><td>${stream}</td><td>${c._row?"":rec}</td>
+      <td class="ips-sw" ${onEv("click",onEv.stop)}><div class="sw ${off?"":"on"}" role="switch" aria-checked="${!off}" aria-label="${escHtml(i18n("Включена")+" "+locName(c))}" ${onEv("click",["ipsRowSw",`${c.id}`,onEv.el])}></div></td></tr>`};
+  const sel2=k?`<div class="ips-sel"><span>${i18n("Отмечено")} <b>${k}</b> ${i18n("из")} ${cams.length}</span>
+      <button type="button" class="btn s" ${onEv("click",["ipsChanEnable",`${n.id}`,true])}>${i18n("Включить")}</button><button type="button" class="btn s" ${onEv("click",["ipsChanEnable",`${n.id}`,false])}>${i18n("Выключить")}</button>
+      <button type="button" class="btn pri s" ${onEv("click",["bulkBack"])}>${i18n("Настроить отмеченные")} →</button><button type="button" class="lk lk-act" ${onEv("click",["tsSetKey","ipsch","all",false])}>${i18n("Снять")}</button></div>`:"";
+  const vid=cams.length?`<div class="card" data-sec="vch" data-cs-sum="${enOn} ${i18n("из")} ${cams.length} ${i18n("включены")}"><div class="ch">${i18n("Видеоканалы")} <span class="sub">${cams.length}</span></div><div class="cb">
+    <div class="ips-bar">${listSearchHtml("ipsch","Имя или номер канала…","list")}</div>
+    <div class="bk-sum bk-scope"><div class="bk-scope-h"><span class="bk-scope-l">${i18n("Показать")}</span><button type="button" data-fk="all" class="stchip ${on?"":"on"}" ${onEv("click",["ipsFacetClear"])}><span class="stchip-lab">${i18n("все")}</span><span class="stchip-cnt">${scope.length}</span></button>${facets?`<span class="sub bk-scope-or" data-fk="or">${i18n("или уточните")}:</span>`:""}</div>${facets}${on?`<div class="bk-scope-sum on" data-fk="sum">${i18n("Показано")} <b>${found.length} ${i18n("из")} ${scope.length}</b>: ${escHtml(said)}</div>`:""}</div>
+    ${sel2}
+    <div class="ips-ch-wrap"><table class="lan-tbl ips-ch"><colgroup><col style="width:36px"><col style="width:72px"><col><col style="width:120px"><col style="width:170px"><col style="width:170px"><col style="width:100px"></colgroup>
+      <thead><tr><th class="lan-chk">${tsHead("ipsch",ids,ids)}</th><th class="ips-no">${i18n("Канал")}</th><th>${i18n("Камера")}</th><th class="ips-st">${i18n("Состояние")}</th><th>${i18n("Основной поток")}</th><th>${i18n("Запись")}</th><th class="ips-sw">${i18n("Включена")}</th></tr></thead>
+      <tbody>${found.map(row).join("")||`<tr><td class="empty" colspan="7">${i18n("Ничего не найдено")}</td></tr>`}</tbody></table></div>
+    <div class="ips-foot">${i18n("Строка открывает окно камеры. Каждая включённая камера занимает лицензию видеоканала. Отмеченные камеры можно настроить вместе: видео, архив и детекторы.")}</div></div></div>`:"";
+  // Каналы ввода-вывода (модуль ввода-вывода, пульт): у канала — входы и выходы; камеры к ним привязывают в окне входа
+  const ch=ipsKids(n,"channel");
+  const io=ch.length?card("Каналы ввода-вывода",`<div class="ips-ch-wrap"><table class="lan-tbl ips-ch"><colgroup><col style="width:72px"><col><col style="width:110px"><col style="width:110px"><col style="width:140px"></colgroup>
+    <thead><tr><th class="ips-no">${i18n("Канал")}</th><th>${i18n("Имя")}</th><th>${i18n("Входы")}</th><th>${i18n("Выходы")}</th><th class="ips-st">${i18n("Состояние")}</th></tr></thead>
+    <tbody>${ch.slice().sort((a,b)=>(a.ch??a.channel??0)-(b.ch??b.channel??0)).map(c=>{const ks=c.devices||[],wait=c._row?`<span class="cs-empty">…</span>`:null,e=devErr(c);
+      return`<tr class="${c.enabled===false?"off":""}" ${onEv("click",["pick",`${c.id}`])}><td class="ips-no">${escHtml(String(c.ch??c.channel??"—"))}</td><td>${escHtml(locName(c))}</td><td>${wait??ks.filter(x=>x.type==="sensor").length}</td><td>${wait??ks.filter(x=>x.type==="relay").length}</td>
+      <td class="ips-st">${c.enabled===false?`<span class="cs-empty">${i18n("выключен")}</span>`:e?`<span class="bd off">${i18n("Нет сигнала")}</span>`:`<span class="bd">${i18n("Есть сигнал")}</span>`}</td></tr>`}).join("")}</tbody></table></div>
+    <p class="sub" style="margin-top:6px">${i18n("Выключенный канал выключает свои входы и выходы. Камеру к входу или выходу привязывают в окне входа или выхода.")}</p>`):"";
+  const au=ipsKids(n,["mic","spk","sensor","relay"]);
+  const aud=au.length?childListCard(n,{key:"ipsau",title:"Микрофоны, динамики, входы и выходы",filter:d=>["mic","spk","sensor","relay"].includes(d.type),empty:"Нет"}):"";
+  return vid+io+aud||`<div class="nt">${i18n("Устройство не сообщило о каналах.")}</div>`;
+}
+// Камера регистратора: блок «Подключение» только для чтения. Адрес, модель и прошивку задаёт регистратор (Axxon One
+// показывает их у камеры как свойства объекта); свой у канала — номер видеоканала, у регистратора RTSP — адрес RTSP канала
+function ipsCamConnHtml(n,ips){
+  const txt=v=>v===""||v==null?`<span class="cs-empty">—</span>`:escHtml(String(v));
+  const rtsp=isRtspVendor(ips.vendor||""),fw=drvState(ips).vals.firmware;
+  if(rtsp&&csEditOn(n.id,"conn"))return csHead(csWrap("conn",card("Подключение через регистратор",`<div class="g">${fldLbl("RTSP","RTSP-адрес канала",cardFldOrig("RTSP",""),"rtsp://адрес:554/поток")}</div>`)),csEditBtns(n,"conn"));
+  const rows=[["Регистратор",`<button type="button" class="lk" ${onEv("click",["pick",`${ips.id}`])}>${escHtml(locName(ips))}</button>`],["Номер видеоканала",txt(ipsrvCameraVideoChannel(n,ips))],
+    ...(rtsp?[["RTSP-адрес канала",txt(camConnVal(n,"RTSP",cardFldOrig("RTSP",""))),csChanged("RTSP")]]:[]),
+    ["Производитель и модель",txt([ips.vendor,ips.model].filter(Boolean).join(" "))],["IP-адрес и порт",txt(ips.ip?`${ips.ip}:${ips.port||80}`:"")],["Прошивка",txt(fw||"")]];
+  const c=card("Подключение через регистратор",`${csDl(rows)}<p class="sub">${i18n("Адрес, учётные данные, прошивку и обмен с устройством задаёт регистратор. Камера берёт видео через регистратор по номеру канала.")} <button type="button" class="lk" ${onEv("click",["pick",`${ips.id}`])}>${i18n("Открыть регистратор")}</button></p>`);
+  return rtsp?csHead(csWrap("conn",c),csEditBtns(n,"conn")):csWrap("conn",c);
 }
 function camGenLayout(n,p,ips){
   const val=(l,v)=>camConnVal(n,l,v);
@@ -13612,12 +13784,12 @@ function camGenLayout(n,p,ips){
   let ident=p.ident,conn=p.conn,place=p.place;
   if(!csEditOn(n.id,"ident")){
     const rows=[["Имя",txt(val("Имя",n.name)),csChanged("Имя")],["Короткое имя",txt(val("Короткое имя",n.short??"")),csChanged("Короткое имя")],["ID",txt(deviceIdentifierValue(n)||"—")]];
-    if(ips)rows.push(["Номер видеоканала",txt(ipsrvCameraVideoChannel(n,ips))]);
     rows.push(...csIdentDrvRows(n));
     ident=card("Идентификация объекта",`${bdg(n)}${enabledToggleHtml(n)}<div style="margin-top:10px">${csDl(rows)}</div>`);
   }else ident=ident.replace(/<\/div><\/div>$/,`${csIdentDrvFields(n)}</div></div>`);
   ident=csHead(csWrap("ident",ident),csEditBtns(n,"ident"));
-  if(!(ips&&!n.ip)){
+  if(ips&&!n.ip)conn=ipsCamConnHtml(n,ips);
+  else{
     if(!csEditOn(n.id,"conn")){
       const vendor=val("Производитель",n.vendor||""),rtsp=isRtspVendor(vendor);
       const addr=rtsp?txt(cardFldOrig("RTSP","")):txt(val("IP",n.ip||"")?`${val("IP",n.ip||"")}:${val("Порт",n.port||80)}`:"");
@@ -13629,7 +13801,7 @@ function camGenLayout(n,p,ips){
         ["Пароль",pass?"••••":`<span class="cs-empty">${i18n("не задан")}</span>`,csChanged("Пароль")],["MAC",txt(n.mac||"—")]]));
     }
     conn=csHead(csWrap("conn",conn),csEditBtns(n,"conn"));
-  }else conn=csWrap("conn",conn);
+  }
   if(!csEditOn(n.id,"place")){
     const chips=l=>l&&l.length?`<div class="cs-chips">${l.map(x=>`<span class="cs-tag">${escHtml(i18n(x))}</span>`).join("")}</div>`:`<span class="cs-empty">${i18n("не заданы")}</span>`;
     place=card("Размещение и тревоги",csDl([["Метки серверов: где работает",chips(n.labels)],["Что считать тревогой",chips(n.alarmKinds)]]));
@@ -13649,12 +13821,13 @@ function camGenLayout(n,p,ips){
 const DRV_IDENT="Идентификация объекта";
 // Группа «Встроенное хранилище»: её рисует карточка встроенного хранилища на вкладке «Архив», а не отдельный блок
 const DRV_EDGE="Встроенное хранилище";
-function camDriver(n){const v=camConnVal(n,"Производитель",n.vendor||"");return isRtspVendor(v)?"rtsp":/onvif|generic/i.test(v)?"onvif":"native"}
+function camDriver(n){const o=n.type==="camera"&&ipsrvOwnerNode(n),v=o?(o.vendor||""):camConnVal(n,"Производитель",n.vendor||"");return isRtspVendor(v)?"rtsp":/onvif|generic/i.test(v)?"onvif":"native"}
 function drvP(tab,group,order,label,type,x={}){return{type,"x-ui-tab":tab,"x-ui-group":group,"x-ui-order":order,"x-label":label,...x}}
 function drvE(labels,def){return{enum:Object.keys(labels),"x-enum-labels":labels,default:def}}
 // Схема строится при каждом рисовании несколько раз; список резервных камер обходит всё дерево, поэтому — короткий кэш
 const drvSchemaMemo=new Map();
 function camDrvSchema(n){
+  if(n.type==="ipsrv")return ipsDrvSchema(n);
   const k=n.id+"|"+camConnVal(n,"Производитель",n.vendor||"")+"|"+!!n.ptz,c=drvSchemaMemo.get(k),t=performance.now();
   if(c&&t-c.t<500)return c.s;
   const sc=camDrvSchema0(n);drvSchemaMemo.set(k,{t,s:sc});return sc;
@@ -13750,6 +13923,12 @@ function camDrvSchema0(n){
       cacheDepth:drvP("rec",E,11,"Глубина кэша","integer",{minimum:0,maximum:365,default:0,"x-ui-unit":"дн.","x-hint":"0 — кэш выключен"}),
       cacheUpdatePeriod:drvP("rec",E,12,"Период обновления кэша","integer",{minimum:0,maximum:86400,default:0,"x-ui-unit":"с"})});
   }
+  // Камера регистратора: прошивку, драйвер, тайм-ауты и обмен с устройством задаёт регистратор (Axxon One: DeviceIpint),
+  // диск — тоже у регистратора. У камеры остаётся то, что принадлежит видеоканалу (VideoChannel): буфер, панорама, резерв
+  if(n.type==="camera"&&ipsrvOwnerNode(n)){
+    IPS_OWN.forEach(f=>delete P[f]);
+    for(let i=allOf.length-1;i>=0;i--)if(Object.keys(allOf[i].if.properties).some(f=>IPS_OWN.includes(f)))allOf.splice(i,1);
+  }
   return{type:"object",properties:P,allOf};
 }
 // Условие ветки if: const, enum или not.enum по текущему значению поля
@@ -13814,7 +13993,7 @@ function drvEditDone(id,g){
 // «Отправлять настройки устройству» и режим «Параметров потоков» — одно и то же: cvCfg.mode ("console" — консоль
 // передаёт настройки в камеру, "device" — консоль только показывает то, что сообщила камера). Включение — с подтверждением
 // ЗАГЛУШКА: признак живёт в cvCfgOf(n).mode (запрос api/requests/2026-11-09-182805Z-mockup-camera-driver-params-request.md, п. 7)
-function drvSend(n){return camDriver(n)!=="rtsp"&&cvCfgOf(n).mode==="console"}
+function drvSend(n){const o=n.type==="camera"&&ipsrvOwnerNode(n);if(o)return ipsSendOn(o);return camDriver(n)!=="rtsp"&&cvCfgOf(n).mode==="console"}
 // Окно подтверждения открывается после клика: иначе тот же клик закроет его как клик мимо окна
 function drvSendToggle(id){const n=find(id)?.n;if(!n)return;const m=drvSend(n)?"device":"console";setTimeout(()=>cvModeSet(id,m),0)}
 function drvSendKey(id,e){if(e.key===" "||e.key==="Enter"){e.preventDefault();drvSendToggle(id)}}
@@ -13830,6 +14009,9 @@ function csModeLine(n,tabId){
   if(rtsp)return tabId==="vid"?`<div class="cs-mode">${lu("lock",14)}<span>${i18n("Консоль показывает параметры потоков так, как их сообщила камера. У камеры RTSP их меняют в веб-интерфейсе камеры.")}</span></div>`:"";
   const dev=tabId==="vid"||[...drvGroups(n,tabId).values()].some(fs=>fs.some(([,p])=>p["x-dev"]));
   if(!dev)return"";
+  const ips=ipsrvOwnerNode(n);
+  if(ips){const on=drvSend(n);
+    return`<div class="cs-mode cs-mode-inh ${on?"on":""}">${on?"":lu("lock",13)}<span class="cs-mode-t"><b>${i18n("Отправлять настройки устройству")}</b>: ${i18n(on?"включено":"выключено")} ${i18n("у регистратора")} <button type="button" class="lk" ${onEv("click",["pick",`${ips.id}`])}>${escHtml(locName(ips))}</button>. ${on?i18n("Консоль передаёт в камеру параметры потоков и изображения."):i18n("Блоки с замком содержат настройки самой камеры. Консоль показывает их так, как их сообщил регистратор, и не меняет их.")} ${i18n("Переключатель находится в окне регистратора и действует на все его камеры.")}</span></div>`}
   const on=drvSend(n),t=i18n("Включено: консоль передаёт в камеру параметры потоков и изображения. Выключено: консоль показывает настройки так, как их сообщила камера, и не меняет их.");
   const sw=`<span class="cs-send" title="${escHtml(t)}" ${onEv("click",["drvSendToggle",`${n.id}`])}><span class="sw ${on?"on":""}" role="switch" tabindex="0" aria-checked="${on}" aria-label="${i18n("Отправлять настройки устройству")}" ${onEv("keydown",["drvSendKey",`${n.id}`,onEv.event])}></span><b>${i18n("Отправлять настройки устройству")}</b></span>`;
   const txt=on?i18n("Консоль передаёт в камеру параметры потоков и изображения."):`${lu("lock",13)} ${i18n("Блоки с замком содержат настройки самой камеры. Консоль показывает их так, как их сообщила камера, и не меняет их.")}`;
@@ -14142,7 +14324,8 @@ function csSumOf(el,ch){
 // нет: правку снимает «Сбросить» внизу. Список членства («Расположение»: папки камеры) — не значение блока, а действия
 // над списком, поэтому «Изменить» у него нет и «+ Добавить в папку…» всегда на виду. Фильтр списка (.acc-bar) — тоже не значение.
 // Без «Изменить» поля блока выглядят как текст, кнопки действий скрыты; поиск по списку и ссылки работают.
-const CS_LOCK_SKIP=new Set(["view"]);
+// «Каналы» регистратора — обзор и действия над каналами, а не значения блока: без «Изменить» (прототип 61)
+const CS_LOCK_SKIP=new Set(["view","chan"]);
 function csSearchInput(c){return c.type==="search"||!!c.closest(".lst-sq")}
 // «Изменить» нужен блоку с полями (поле ввода, список, переключатель). Блок только с кнопками действий («Скан»,
 // «+ Детектор», «Создать правило») оставляет их на виду: это действия, а не значения блока
@@ -19055,6 +19238,7 @@ function cvCfgOf(n){
   }
   const c=cvCfg.get(n.id);
   camStreams(n).forEach((s,i)=>{if(!c.streams[s.id])c.streams[s.id]={codec:s.codec||"H.264",profile:"Main",brc:"vbr",kbps:1024,quality:"5",gop:2*(s.fps||12),live:true}});
+  const o=n.type==="camera"&&ipsrvOwnerNode(n);if(o)c.mode=ipsModeOf(o);
   return c;
 }
 function cvMp(res){const m=/^(\d+)x(\d+)$/.exec(res||"");return m?(+m[1])*(+m[2])/1e6:0}
@@ -19745,7 +19929,10 @@ function cvStreamColHtml(n,s,i,c,con){
   </div>${warn.length?`<ul class="cv-warn">${warn.map(w=>`<li>${escHtml(w)}</li>`).join("")}</ul>`:""}</div>`;
 }
 function cvModeSet(id,mode){
-  const n=find(id)?.n;if(!n)return;const c=cvCfgOf(n);
+  const n=find(id)?.n;if(!n)return;
+  // Камера регистратора своего признака не имеет: переключатель — у регистратора, он действует на все его камеры
+  const o=n.type==="camera"&&ipsrvOwnerNode(n);if(o){ipsModeSet(o.id,mode);return}
+  const c=cvCfgOf(n);
   // Выключение: открытые правки параметров устройства закрываются с возвратом значений, иначе поля остались бы открыты
   if(mode!=="console"){
     const l=csDirtyList(id,true);
@@ -20531,6 +20718,7 @@ function lanTabOpen(n){
 // Карточки устройства плюс «Правила автоматизации»: где оно используется, видно, не заходя в раздел правил.
 function form(n){
   if(n.type==="camera"&&!isSchemaNode(n))return`<div class="cs-cq">${csModeLine(n,tab)}${csTabWrap(n,formBase(n)+(tab==="gen"?"":drvSecsHtml(n,tab)+ruleUsesFor(n)))}</div>`;
+  if(n.type==="ipsrv"&&!isSchemaNode(n))return`<div class="cs-cq">${ipsModeLine(n,tab)}${csTabWrap(n,formBase(n)+(tab==="gen"?ruleUsesFor(n):""))}</div>`;
   return tab==="topo"&&(n.type==="domain"||n.type==="server")?g7Html(n):formBase(n)+ruleUsesFor(n)}
 // Переключатель карточки: вид меняется сразу, значение уходит с «Применить»
 function swToggle(el){el.classList.toggle("on");setD(true)}
@@ -20762,15 +20950,8 @@ function formBase(n){
       <p class="sub">${i18n("Устройства не привязаны к серверу. Они находятся в разделе")} <button class="lk" ${onEv("click",["goApp","hw"])}>${i18n("Устройства")}</button>. ${i18n("Камера получает сервер только через архив, на который идёт запись.")}</p>`)}
   if(n.type==="ipsrv"){
     if(tab==="rec")return nvrRecCardHtml(n);
-    if(tab==="kids")return childListCard(n,{filter:d=>d.type!=="storage",head:`<button class="btn s btn-icon" aria-label="${i18n("Добавить")}" title="${i18n("Добавить")}" ${onEv("click",["openW"])}>${lu("plus")}</button>${unitAddBtn()}`})+
-      (n.subtype==="nvr"?`<p class="sub">NVR консоль показывает как IP-сервер с камерами и каналами. Под каналом находятся датчики и реле.</p>`:
-      n.subtype==="io"?`<p class="sub">I/O-устройство без камер. Датчики и реле находятся под каналом.</p>`:
-      n.subtype==="sip"||n.subtype==="mic"?`<p class="sub">Аудиоустройство: микрофоны, динамики или оба, без видеоканалов.</p>`:"");
-    return card("Подключение",`${bdg(n)}${n.derived?`<p class="sub">${i18n("Консоль создала регистратор из устройства. У регистратора нет своей записи. Имя, адрес и состав задаёт устройство. Удалить регистратор нельзя.")}</p>`:""}${enabledToggleHtml(n)}<div class="g" style="margin-top:10px">${devFld(n,"Имя","name",n.name)}${fldRo("ID",deviceIdentifierValue(n)||"—")}${devFld(n,"IP","ip",n.ip)}${devFld(n,"Порт","port",n.port||80,"number")}
-      ${devFld(n,"Производитель","vendor",n.vendor)}${devFld(n,"Модель","model",n.model)}${devFld(n,"MAC","mac",n.mac||"")}${fldRo("Тип",IPSUB[n.subtype]||"IP-сервер")}</div>
-      <div class="g" style="margin-top:10px">${devFld(n,"Широта","lat",n.lat??"")}${devFld(n,"Долгота","lon",n.lon??"")}${devFld(n,"Азимут","azimuth",n.azimuth??"","number")}</div>
-      <div class="ln"><div>Отправлять настройки устройству</div><div class="sw on" ${onEv("click",["swToggle",onEv.el])}></div></div>`)
-      +deviceFoldersCardHtml(n)+card("Дерево объектов",ipsrvObjTreeHtml(n),`<button class="btn s btn-icon" aria-label="${i18n("Добавить")}" title="${i18n("Добавить")}" ${onEv("click",["openW"])}>${lu("plus")}</button>`)}
+    if(tab==="chan")return ipsChanHtml(n);
+    return ipsGenHtml(n)}
   if(n.type==="channel"){
     if(tab==="kids")return childListCard(n,{key:"io",title:"Датчики и реле",filter:d=>d.type==="sensor"||d.type==="relay",empty:"Нет датчиков и реле"});
     return card("Канал",`${bdg(n)}${enabledToggleHtml(n)}<div class="g" style="margin-top:10px">${devFld(n,"Имя","name",n.name)}${fldRo("Номер канала",n.ch??"—")}</div>`)+childListCard(n)}
@@ -20816,7 +20997,7 @@ function formBase(n){
     const ips=ipsrvOwnerNode(n);
     const underIpsrv=!!ips;
     const camIdFld=fldRo("ID",deviceIdentifierValue(n)||"—");
-    const vchFld=underIpsrv?fldRo("Номер видеоканала",ipsrvCameraVideoChannel(n,ips)):"";
+    const vchFld="";
     const parts={ident:card("Идентификация объекта",`${bdg(n)}${enabledToggleHtml(n)}<div class="g" style="margin-top:10px">${fld("Имя",n.name)}${fld("Короткое имя",n.short??"")}${camIdFld}${vchFld}</div>`)
       ,conn:(underIpsrv&&!n.ip?card("Подключение",`<div class="g">${fldRo("Регистратор",locName(ips))}${fldRo("IP регистратора",ips.ip||"—")}${fldRo("RTSP",cardFldOrig("RTSP","")||"—")}</div>
         <p class="sub">${i18n("У камеры регистратора нет своего IP. Сервер берёт её видео через регистратор по номеру канала. Адрес и учётные данные есть в карточке")} <button class="lk" ${onEv("click",["pick",`${ips.id}`])}>${escHtml(locName(ips))}</button>.</p>`)
@@ -37937,13 +38118,14 @@ function cpCandidates(src){
   return out;
 }
 function cpChips(src){
-  if(src.type==="camera")return[["model","Та же модель"],["server","Тот же сервер"],["folder","Та же папка"],["all","Все камеры"]];
+  if(src.type==="camera")return[...(ipsrvOwnerNode(src)?[["nvr","Камеры этого регистратора"]]:[]),["model","Та же модель"],["server","Тот же сервер"],["folder","Та же папка"],["all","Все камеры"]];
   const own=cpOwner(src);
   return[...(own?[["model",own.type==="camera"?"Камеры той же модели":"Устройства той же модели"]]:[]),["server","Тот же сервер"],["domain","Тот же домен"],["all","Все"]];
 }
 function cpMatch(n,k){
   const src=cp.src;
   if(k==="model")return src.type==="camera"?modelOf(n)===modelOf(src):!!cpOwnModel(src)&&cpOwnModel(n)===cpOwnModel(src);
+  if(k==="nvr")return!!ipsrvOwnerNode(src)&&ipsrvOwnerNode(n)===ipsrvOwnerNode(src);
   if(k==="server")return srv(n.id)?.id===srv(src.id)?.id;
   if(k==="folder")return foldersOfDevice(src.id).some(f=>f.items.includes(n.id));
   if(k==="domain")return nodeDomainId(n)===nodeDomainId(src);
