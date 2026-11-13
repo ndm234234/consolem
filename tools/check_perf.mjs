@@ -34,7 +34,9 @@ import path from "node:path";
 // - key 150 — отклик буквы ввода: от клавиши до кадра, где буква видна в поле. Эхо медленнее 100–150 мс заметно при
 //   наборе, буквы «догоняют» палец
 // - результат ввода — TYPE_PAUSE_MS + click: поиск и фильтр страница запускает после паузы в наборе, а после паузы
-//   ответ — как на клик. Множитель машины — только на click: пауза — таймер, а не работа
+//   ответ — как на клик. Множитель машины — только на click: пауза — таймер, а не работа. К пределу добавлено время
+//   встроенного сервера после последней буквы (сумма его запросов, srvMs): проход по складу large — работа бэкенда, в
+//   консоли его делает сервер, а не страница; так меряется интерфейс, как у старта (task ниже)
 // - task 200 — самая длинная задача главного потока: всё это время страница не отвечает на клик и клавишу.
 //   У старта не проверяется (длинная задача старта — построение набора large во встроенном сервере, ~0,4 с: заглушка);
 //   у грубых шагов равна их пределу — одна перерисовка целиком им разрешена
@@ -374,7 +376,7 @@ const LOAD_EXPECT = expectCode(STEPS[0].expect);
 const INSTR = `(() => {
   if (window.__perf) return;
   const now = () => performance.now();
-  const P = (window.__perf = { lt: [], loaf: [], frames: [], act: 0, t0: 0, lt0: 0, reqs: 0, reqs0: 0, keys: [], log: [], err: null,
+  const P = (window.__perf = { lt: [], loaf: [], frames: [], srv: [], act: 0, t0: 0, lt0: 0, reqs: 0, reqs0: 0, keys: [], log: [], err: null,
     mutTree: 0, mutMain: 0, mark: 0, muts: [], exp: null, okAt: 0, why: "", typing: null, inputs: 0, delivered: new Map(), self: 0 });
   const touch = (t) => { if (t > P.act) P.act = t; };
   const obs = (type, arr) => { try { new PerformanceObserver((l) => l.getEntries().forEach((e) => { arr.push([e.startTime, e.duration]); touch(e.startTime + e.duration); })).observe({ type, buffered: true }); } catch (e) {} };
@@ -436,7 +438,7 @@ const INSTR = `(() => {
     const create = v.create;
     v.create = (o) => {
       const s = create(Object.assign({}, o, { testSupport: true })), h = s.handle, sub = s.subscribe;
-      s.handle = (...a) => { P.reqs++; if (P.log.length < 40) P.log.push([Math.round(now() - P.t0), a[0] + " " + String(a[1]).slice(0, 120)]); try { return h(...a); } finally { touch(now()); } };
+      s.handle = (...a) => { P.reqs++; if (P.log.length < 40) P.log.push([Math.round(now() - P.t0), a[0] + " " + String(a[1]).slice(0, 120)]); const t = now(); try { return h(...a); } finally { const e = now(); P.srv.push([t, e]); if (P.srv.length > 20000) P.srv.splice(0, 10000); touch(e); } };
       s.subscribe = (fn, ...rest) => sub((m) => { if (m && m.entityId != null) P.delivered.set(m.entityId, (P.delivered.get(m.entityId) || 0) + 1); return fn(m); }, ...rest);
       return s;
     };
@@ -528,6 +530,8 @@ const INSTR = `(() => {
       const last = P.keys[P.keys.length - 1];
       r.keys = P.keys.map((k) => (k.shown ? k.shown - k.at : null)); r.texts = P.keys.map((k) => k.text); r.inputs = P.inputs;
       r.result = last && r.ok ? end - last.at : null;
+      // Работа встроенного сервера между последней буквой и концом шага (handle синхронный: запрос — отрезок времени)
+      r.srvMs = last ? P.srv.reduce((n, [a, b]) => n + Math.max(0, Math.min(b, end) - Math.max(a, last.at)), 0) : null;
       P.typing = null;
     }
     P.exp = null;
@@ -1036,8 +1040,13 @@ async function main() {
     const okRuns = per.filter((x) => x && !x.error);
     const longest = median(okRuns.map((x) => (x.longest != null ? x.longest : null)));
     const busy = median(okRuns.map((x) => (x.busy != null ? x.busy : null)));
-    // Ввод: время — результат (предел — пауза страницы и click), отдельно отклик буквы (key)
-    const lim = st.behave ? null : st.keys ? resultLimit(factor, pause) : LIMITS[st.limit] * factor;
+    // Ввод: время — результат (предел — пауза страницы и click), отдельно отклик буквы (key). Работа встроенного сервера
+    // после последней буквы (см. «результат ввода») вычитается из результата в каждом прогоне, потом берётся медиана;
+    // в таблице предел показан с медианой этой работы
+    const srvMs = st.keys ? median(okRuns.map((x) => (x.srvMs != null ? x.srvMs : 0))) || 0 : 0;
+    const lim = st.behave ? null : st.keys ? resultLimit(factor, pause) + srvMs : LIMITS[st.limit] * factor;
+    const cmpMs = st.keys ? median(vals.map((v, i) => (v == null || v === Infinity ? v : v - ((per[i] && per[i].srvMs) || 0)))) : ms;
+    const cmpLim = st.keys ? resultLimit(factor, pause) : lim;
     const echoes = st.keys ? per.map((x) => echoValue(st, x)) : [];
     const echo = st.keys ? median(echoes) : null, klim = st.keys ? LIMITS.key * factor : null;
     const tk = st.behave ? null : taskLimitKey(st), tlim = tk ? LIMITS[tk] * factor : null, blim = st.behave ? null : busyLimit(st) * factor;
@@ -1047,7 +1056,7 @@ async function main() {
     // Любая ошибка, пропуск или несбывшееся ожидание хотя бы в одном прогоне — FAIL шага
     // Проверка поведения: все проверки и итог сбылись, время не ограничено
     const pass = st.behave ? !errs.length && !missing && vals.every((v) => v != null && v !== Infinity)
-      : !errs.length && !missing && vals.every((v) => v != null && v !== Infinity) && ms <= lim && (tlim == null || (longest != null && longest <= tlim)) && busy != null && busy <= blim &&
+      : !errs.length && !missing && vals.every((v) => v != null && v !== Infinity) && cmpMs <= cmpLim && (tlim == null || (longest != null && longest <= tlim)) && busy != null && busy <= blim &&
         (!st.keys || (echoes.every((v) => v != null && v !== Infinity) && echo <= klim));
     if (!pass && !skippedWhy) failed++;
     const notes = [];
@@ -1067,13 +1076,14 @@ async function main() {
     if (st.id === "stream-100" && okRuns.some((x) => x.burstN != null && x.burstN !== 100)) notes.push(`камер в дереве ${median(okRuns.map((x) => x.burstN))} — событий столько же`);
     if (st.id === "load" && okRuns.length) notes.push(`рабочее дерево ${fmtMs(median(okRuns.map((x) => x.okMs)))}`);
     if (okRuns.length && okRuns.some((x) => x.reqs != null)) notes.push(`запросов ${num(median(okRuns.map((x) => x.reqs || 0)))}`);
+    if (st.keys && srvMs >= 1) notes.push(`встроенный сервер после последней буквы ${fmtMs(srvMs)} — в пределе`);
     if (whys.length) notes.push("не сбылось: " + whys.join(" | "));
     if (errs.length) notes.push(`ошибка в ${errs.length} из ${RUNS}: ${errs[0]}`);
     if (missing) notes.push(`не выполнен в ${missing} из ${RUNS}`);
     const lostRuns = per.filter((x) => x && x.lost && x.lost.length);
     if (lostRuns.length) notes.push(`после перезапуска (без ${[...new Set(lostRuns.flatMap((x) => x.lost))].join(", ")}) в ${lostRuns.length} из ${RUNS}`);
     if (skippedWhy) notes.unshift(`не проверялось (${skippedWhy})`);
-    rows.push({ st, ms: skippedWhy ? null : ms, echo, longest, busy, lim, klim, tlim, blim, pass: skippedWhy ? null : pass, notes, vals, echoes, per });
+    rows.push({ st, ms: skippedWhy ? null : ms, echo, longest, busy, lim, srvMs: st.keys ? srvMs : null, klim, tlim, blim, pass: skippedWhy ? null : pass, notes, vals, echoes, per });
   }
   const W = Math.max(...rows.map((x) => x.st.title.length), 4);
   const head = ["шаг".padEnd(W), "время".padStart(10), "буква".padStart(10), "задача".padStart(8), "занят".padStart(8), "предел".padStart(25), "итог"].join("  ");
@@ -1094,7 +1104,7 @@ async function main() {
       page: PAGE, fixture: FIXTURE, runs: RUNS, timeoutSec: TIMEOUT_MS / 1000, cpu: CPU || 1, calibrations: cals, calibrationMs: calMs, refCalibMs: REF_CALIB_MS, ratio, factor, warn, limits: LIMITS,
       at: new Date().toISOString(), totalSec: total,
       typePauseMs: pause, keyGapMs: KEY_GAP_MS, midPauseMs: MID_PAUSE_MS,
-      steps: rows.map((x) => ({ id: x.st.id, title: x.st.title, limit: x.st.limit, limitMs: x.lim, echoLimitMs: x.klim, taskLimitMs: x.tlim, busyLimitMs: x.blim, ms: x.ms === Infinity ? null : x.ms, tripped: x.ms === Infinity,
+      steps: rows.map((x) => ({ id: x.st.id, title: x.st.title, limit: x.st.limit, limitMs: x.lim, srvMs: x.srvMs, echoLimitMs: x.klim, taskLimitMs: x.tlim, busyLimitMs: x.blim, ms: x.ms === Infinity ? null : x.ms, tripped: x.ms === Infinity,
         echo: x.echo === Infinity ? null : x.echo, longest: x.longest, busy: x.busy, pass: x.pass,
         runs: x.per.map((p, i) => (p ? Object.assign({ value: x.vals[i] === Infinity ? null : x.vals[i] }, x.st.keys ? { echo: x.echoes[i] === Infinity ? null : x.echoes[i] } : {}, p) : null)) })),
     };

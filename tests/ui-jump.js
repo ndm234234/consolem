@@ -1,6 +1,6 @@
 /* Сценарий интерфейса: поиск и путь приводят к объекту: цель — видимая строка дерева, прокрученная к ней,
    при любом срезе. Запуск — tools/check_ui.py. */
-UiCheck(async ({ ok, sleep, until }) => {
+UiCheck(async ({ ok, until }) => {
   const serverOfDet = (d) => cameraTreeServer(d.parentId)?.id;
   const devices = (await uiDevices()).filter((d) => find(d.id));
   const shown = (id, on) => {
@@ -52,7 +52,8 @@ UiCheck(async ({ ok, sleep, until }) => {
       syncViews();
       goApp("hw");
       jumpToNode(find(d.id).n);
-      await sleep(1);
+      // Под нагрузкой (самопроверка гонит сценарии параллельно) ветка читается дольше одного тика
+      await until(() => shownDev(d), 2000);
       if (!shownDev(d)) note(bad, `${d.type}/${slice}/${group()}`, d.name);
     }
     ok(!Object.keys(bad).length, `срез ${s}: поиск ведёт к строке` + (Object.keys(bad).length ? ": " + report(bad) : ""));
@@ -61,7 +62,7 @@ UiCheck(async ({ ok, sleep, until }) => {
   const last = devices[devices.length - 1];
   document.getElementById("tree").scrollTop = 0;
   jumpToNode(find(last.id).n);
-  await sleep(1);
+  await until(() => shown(last.id), 2000);
   ok(shown(last.id), "цель внизу дерева прокручена к ней");
   // Без сервера — прямо под доменом, после серверов, со своими детьми; с сервером — под ним, раскладка не меняется
   const atServers = () => { slice = "all"; groupBy.all = "server"; syncViews(); };
@@ -69,7 +70,7 @@ UiCheck(async ({ ok, sleep, until }) => {
   const did = deviceDomain(loose.id);
   atServers();
   jumpToNode(find(loose.id).n);
-  await sleep(1);
+  await until(() => shown(loose.id), 2000);
   const rowsAll = [...document.querySelectorAll("#tree .n[data-pick]")];
   const looseRow = rowsAll.find((el) => el.dataset.pick === loose.id);
   ok(shown(loose.id) && slice === "all" && group() === "server", "устройство без сервера видно в раскладке по серверам");
@@ -80,20 +81,20 @@ UiCheck(async ({ ok, sleep, until }) => {
   const kid = devices.find((d) => d.parentId === loose.id);
   atServers();
   jumpToNode(find(kid.id).n);
-  await sleep(1);
+  await until(() => shown(kid.id), 2000);
   ok(shown(kid.id) && slice === "all" && group() === "server", "ребёнок раскрыт под ним");
   const moxa = devices.find((d) => d.type === "ipsrv" && d.serverId && !devices.some((x) => x.parentId === d.id && x.type === "camera"));
   const pos = devices.find((d) => d.type === "eventsrc");
   for (const d of [moxa, pos]) {
     atServers();
     jumpToNode(find(d.id).n);
-    await sleep(1);
+    await until(() => shown(d.id), 2000);
     ok(shown(d.id) && slice === "all" && group() === "server", d.name + " стоит под своим сервером");
   }
   const det = devices.find((d) => d.type === "det" && d.builtin);
   slice = "cam"; groupBy.cam = "server"; syncViews();
   jumpToNode(find(det.id).n);
-  await sleep(1);
+  await until(() => shown(det.id), 2000);
   const row = document.querySelector(`#tree .n[data-pick="${det.id}"]`), parentRow = row?.previousElementSibling;
   ok(slice === "cam" && shown(det.id), "встроенный детектор виден в срезе «Камеры»");
   ok(!!parentRow && [...document.querySelectorAll(`#tree .n[data-pick="${det.parentId}"]`)].length > 0, "под своей камерой");
