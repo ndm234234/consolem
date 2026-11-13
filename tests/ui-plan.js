@@ -676,8 +676,17 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   ok(d2S3Rec.kind === "cloud" && d2S3Rec.provider === "s3" && d2S3Rec.storage === "object" && d2S3Rec.serverId === d2Srv.id, "S3: сервер записал вид, провайдера и владельца — " + d2S3Rec.kind + ", " + d2S3Rec.provider);
   ok(document.querySelector("#tree .n.on") && !document.querySelector("#tree .n.on .tag-cloud") && serverArchives(d2Srv.id).includes(d2S3), "S3: строка хранилища в дереве без метки вида (вид — в подсказке), хранилище в списке сервера");
   ok(/^s3:\/\/vms-archive\//.test(archDiskLabel(d2S3)), "S3: в строке списка адрес бакета, а не код провайдера — " + archDiskLabel(d2S3));
-  deleteVolume(archVols(d2S3)[0].id);
-  ok(/s3:\/\/vms-archive\//.test(document.getElementById("confirmMsg").textContent), "S3: в удалении тома адрес бакета — " + document.getElementById("confirmMsg").textContent);
+  // Прототип 67: последний том не удаляют (как в Axxon One) — окно тома не открывается, адрес бакета видно в окне хранилища
+  const d2S3Last = typeof volDelWhy === "function" && !!volDelWhy(archVols(d2S3)[0]);
+  if (d2S3Last) {
+    deleteVolume(archVols(d2S3)[0].id);
+    ok(!document.getElementById("confirm").classList.contains("open"), "S3: последний том не удаляется — окно не открылось");
+    deleteArchive(d2S3.id);
+    ok(/объекты в папке бакета/.test(document.getElementById("confirmMsg").textContent), "S3: в удалении хранилища — объекты в папке бакета — " + document.getElementById("confirmMsg").textContent);
+  } else {
+    deleteVolume(archVols(d2S3)[0].id);
+    ok(/s3:\/\/vms-archive\//.test(document.getElementById("confirmMsg").textContent), "S3: в удалении тома адрес бакета — " + document.getElementById("confirmMsg").textContent);
+  }
   document.getElementById("confirmCancel").click();
   addArchive(d2Dom.id);
   ok(d2Cards().length === 6 && an.kind === "network", "S3: на домене те же шесть карточек, выбрано удалённое");
