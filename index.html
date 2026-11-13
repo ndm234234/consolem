@@ -34620,8 +34620,13 @@ function planPanelHtml(){
 // После добавления: одно правило «движение — запись» на камеры плана в режиме «По движению», как автоправило Axxon One.
 // Событие правила — на камерах, поэтому правило не ждёт, пока сервер создаст детекторы
 function planRecRulesCreate(rows,done){
-  // У RTSP-регистратора правило получают камеры каналов
-  const cams=done.filter(d=>{const r=rows[d.index]?.r;return r&&(r.type||"camera")==="camera"&&r.arch&&r.record==="motion"}).flatMap(d=>{const top=d.devices[0],n=top&&find(top.id)?.n;return n?.type==="ipsrv"?(n.devices||[]).filter(c=>c.type==="camera"):[top]})
+  // У RTSP-регистратора правило получают камеры каналов. Другие IP-серверы берут правило сами, как раньше
+  const cams=done.filter(d=>{const r=rows[d.index]?.r;return r&&(r.type||"camera")==="camera"&&r.arch&&r.record==="motion"}).flatMap(d=>{
+    const top=d.devices[0];
+    if(planRowChannels(rows[d.index])<2)return[top];
+    const n=top&&find(top.id)?.n;
+    return n?.type==="ipsrv"?(n.devices||[]).filter(c=>c.type==="camera"):[top];
+  })
     .filter(d=>{const n=d&&find(d.id)?.n;return d&&!(n&&camRecMotionRules(n).length)});   // папку или сервер камеры уже пишет правило — второе не нужно
   if(!cams.length||!camRecRuleOk())return;
   const name=cams.length===1?`${cams[0].name||cams[0].id} — ${i18n("запись по движению")}`:`${i18n("Запись по движению")}: ${cams.length} ${i18n(plural(cams.length,"камера|камеры|камер"))}`;
