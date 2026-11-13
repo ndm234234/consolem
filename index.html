@@ -33538,7 +33538,8 @@ function commitManualDevice(disabled){
   if(!s)return;
   if(!isAutoIdentifier(m.identifier)&&identifierTaken(s,String(m.identifier).trim())){toast("ID уже используется");return}
   const node=manualNode(m,s,disabled);
-  const fid=node.type==="camera"?(m.group||wizd.folder||null):null;
+  // Регистратор — IP-сервер, но папку в форме выбирают: её сохраняют, как у IP-сервера из файла
+  const fid=node.type==="camera"||rtspChannelsOf(m)>1?(m.group||wizd.folder||null):null;
   devicesCreate([{node,domainId:folderDomain(m.group||wizd.folder)||folderDomain(s.id),folderId:fid}]).then(res=>{
     if(!res.done.length){toast(problemText(res.failed[0]?.code));return}
     open.add(s.id);treeMatchCache.clear();searchMatchCache.clear();wizd.manualAddedId=res.done[0].devices[0].id;
@@ -34335,17 +34336,37 @@ function planEdit(pid,key,value){
   }
   if(key==="arch"){if(!value)row.r.record="none";row.archWas=null}
   if(key==="rtspUrl")row.r.rtsp=value;
-  if(key==="channels"||key==="model"&&isRtspVendor(row.r.vendor)){
-    const n=key==="channels"?Math.max(1,Math.min(RTSP_CH_MAX,parseInt(value,10)||1)):rtspModelChannels(value)||1;
+  if(key==="channels"||key==="model"&&isRtspVendor(row.r.vendor)&&rtspModelChannels(value)){
+    const n=key==="channels"?Math.max(1,Math.min(RTSP_CH_MAX,parseInt(value,10)||1)):rtspModelChannels(value);
     row.r.channels=n;
     if(n>1)row.r.model=rtspChannelModel(n);else if(key==="channels"&&rtspModelChannels(row.r.model))row.r.model="";
   }
   if(row.state==="fail")row.code=null;   // правка снимает прежнюю причину отказа
   planTouch();
-  if(key==="arch"||key==="record"||key==="vendor"||key==="channels"||key==="model"&&isRtspVendor(row.r.vendor)){planRender();return}
+  if(key==="channels"||key==="model"&&isRtspVendor(row.r.vendor)&&rtspModelChannels(value)){planChannelsSync(row);return}
+  if(key==="arch"||key==="record"||key==="vendor"){planRender();return}
   planSyncRow(row);
 }
 // Поле правят на ходу: перерисовываем только то, что от него зависит, а не поле под курсором
+// Число каналов меняет подпись строки, модель, подпись и подсказку адреса и итог записи.
+// Консоль правит эти места на месте: перерисовка всей панели увела бы курсор из поля и съела бы нажатие на кнопку
+function planChannelsSync(row){
+  const el=document.querySelector(`.plan-row[data-pid="${row.pid}"]`);
+  const chN=planRowChannels(row);
+  if(el){
+    const mo=el.querySelector('[data-pf="model"]');if(mo&&mo.value!==(row.r.model||""))mo.value=row.r.model||"";
+    const ch=el.querySelector('[data-pf="channels"]');if(ch&&document.activeElement!==ch&&ch.value!==String(row.r.channels||1))ch.value=row.r.channels||1;
+    const url=el.querySelector('[data-pf="rtspUrl"]');
+    if(url){
+      url.placeholder=chN>1?"rtsp://адрес:554/ch{канал}":"rtsp://адрес:554/поток";
+      const lb=url.closest(".dev-field")?.querySelector("label");
+      if(lb)lb.textContent=chN>1?i18n("Шаблон адреса RTSP"):"RTSP";
+    }
+  }
+  const sum=document.querySelector("[data-plan-rec-sum]");
+  if(sum)sum.outerHTML=planRecSumHtml(addPlan.rows)||`<div class="plan-rec-sum" data-plan-rec-sum hidden></div>`;
+  planSyncRow(row);
+}
 function planSyncRow(row){
   const el=document.querySelector(`.plan-row[data-pid="${row.pid}"]`);
   if(el){
@@ -34479,7 +34500,7 @@ function planSend(rows,retry){
     const node=planNode(row,ctx);
     if(isAutoIdentifier(row.r.identifier))ctx.next++;   // номер получит каждая строка с «Авто»: дальше строки файла считают от него
     const fid=row.r.group||row.folderId||null;
-    return{node,domainId:row.domainId,folderId:row.source==="manual"&&node.type!=="camera"?null:fid,candidateId:row.candidateId};
+    return{node,domainId:row.domainId,folderId:row.source==="manual"&&node.type!=="camera"&&planRowChannels(row)<2?null:fid,candidateId:row.candidateId};
   });
   addPlan.applying=true;addPlan.added=[];
   planRender();
@@ -34553,15 +34574,14 @@ function planRowHtml(row){
   const r=row.r,lock=addPlan.applying,dis=lock?"disabled":"";
   const rtsp=planIsRtsp(r),chN=planRowChannels(row);
   const who=planRowTitle(row).title,al=l=>escHtml(`${i18n(l)} · ${who}`);   // подпись поля называет и строку: полей «Название» в плане много
-  // «Каналы» перерисовывают строку, поэтому их читают по «change»: при вводе каждой цифры курсор уходил бы в начало поля
-  const inp=(k,label,val,ph,ev)=>`<div class="dev-field"><label>${i18n(label)}</label><input class="dev-inline-input" data-pf="${k}" aria-label="${al(label)}" value="${escHtml(val??"")}" placeholder="${escHtml(ph||"")}" ${dis} ${onEv(ev||"input",["planEdit",row.pid,k,onEv.value])}></div>`;
+  const inp=(k,label,val,ph)=>`<div class="dev-field"><label>${i18n(label)}</label><input class="dev-inline-input" data-pf="${k}" aria-label="${al(label)}" value="${escHtml(val??"")}" placeholder="${escHtml(ph||"")}" ${dis} ${onEv("input",["planEdit",row.pid,k,onEv.value])}></div>`;
   let body="";
   if(row.open){
     body=`<div class="plan-edit"><div class="plan-issues">${planIssuesHtml(row)}</div>
       ${inp("name","Название",isDefaultDeviceName(r.name)?"":r.name,i18n("По умолчанию"))}
       <div class="plan-two"><div class="dev-field"><label>${i18n("Производитель")}</label>${comboVendorHtml(r.vendor,["planEdit",row.pid,"vendor"],{lock,pf:"vendor",aria:al("Производитель")})}</div>
       <div class="dev-field"><label>${i18n("Модель")}</label>${comboModelHtml(r.vendor,r.model,["planEdit",row.pid,"model"],{lock,pf:"model",aria:al("Модель")})}</div></div>
-      ${row.source==="manual"&&rtsp?inp("channels","Каналы",r.channels||1,"1","change"):""}
+      ${row.source==="manual"&&rtsp?inp("channels","Каналы",r.channels||1,"1"):""}
       ${planShowsAddr(row.source)?`${rtsp?inp("rtspUrl",chN>1?"Шаблон адреса RTSP":"RTSP",r.rtspUrl||r.rtsp,chN>1?"rtsp://адрес:554/ch{канал}":"rtsp://адрес:554/поток"):""}${!rtsp||r.ip?`<div class="plan-two">${inp("ip","IP-адрес",r.ip)}${inp("port","Порт",r.port)}</div>`:""}`:""}
       ${inp("identifier","ID",isAutoIdentifier(r.identifier)?"":r.identifier,i18n("Авто"))}
       <div class="plan-two">${inp("user","Имя пользователя",r.user,i18n("Авто"))}

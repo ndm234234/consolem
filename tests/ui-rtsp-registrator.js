@@ -83,10 +83,28 @@ UiCheck(async ({ ok, until }) => {
   const cn = csvDeviceNode(r, s, false, "current");
   ok(cn.type === "ipsrv" && cn.devices.length === 3 && cn.devices[2]._f?.RTSP === "rtsp://10.9.0.20:554/ch3" && cn.devices[0].short === "dvr.1", "CSV: IP-сервер с 3 камерами, адрес и короткое имя из строки");
 
-  // Применение плана: сервер сохраняет IP-сервер и камеры каналов
+  // Правка строки плана: модель не регистратора каналы не трогает, число каналов не перерисовывает строку
   addPlan.rows.splice(0, addPlan.rows.length, row);
+  wizStepGo(1);
+  row.open = true;
+  planRender();
+  ok(await until(() => !!document.querySelector('[data-pf="channels"]'), 5000), "строка плана открыта");
+  planEdit(row.pid, "model", "DHI-XVR5104");
+  ok(row.r.channels === 4 && row.r.model === "DHI-XVR5104", "модель не регистратора оставляет 4 канала: " + row.r.channels);
+  planEdit(row.pid, "model", "4_channel_device");
+  const chEl = document.querySelector('[data-pf="channels"]');
+  chEl.focus();
+  planEdit(row.pid, "channels", "6");
+  ok(document.querySelector('[data-pf="channels"]') === chEl && document.activeElement === chEl, "правка каналов не заменяет поле: курсор остаётся на месте");
+  ok(document.querySelector('[data-pf="model"]').value === "6_channel_device" && /6 каналов/.test(document.querySelector(".plan-row-hd").textContent), "правка каналов обновляет модель и подпись строки");
+  planEdit(row.pid, "channels", "4");
+
+  // Применение плана: сервер сохраняет IP-сервер, камеры каналов и папку
+  const fold = flatFolders().find((f) => folderDomain(f.id) === row.domainId);
+  planEdit(row.pid, "group", fold.id);
   planApply();
   ok(await until(() => addPlan.added.length === 1, 30000), "план применён");
   const rec = find(addPlan.added[0].id)?.n;
   ok(rec?.type === "ipsrv" && rec.model === "4_channel_device" && rec.devices?.filter((c) => c.type === "camera").length === 4, "на сервере: IP-сервер с 4 камерами каналов");
+  ok((find(fold.id)?.n?.items || []).includes(rec.id), "регистратор лёг в выбранную папку «" + fold.name + "»");
 });
