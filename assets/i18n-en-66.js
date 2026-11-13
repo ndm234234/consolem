@@ -1,4 +1,15 @@
 window.I18N_EN={
+// Прототип 66, после ревью
+"Не работает":"Does not run",
+"тип":"type",
+"Кончается через":"Ends in",
+"сверх лимита":"over the limit by",
+"в ключе не хватает":"the key is short by",
+"Когда оператор подключится в следующий раз, сервер предложит обновить клиент.":"When the operator connects next time, the server asks to update the client.",
+"Все ключи и их домены показывает раздел":"See all keys and their domains in",
+"Чтобы добавить ключ, назначить домены или задать лимиты, перейти туда.":"To add a key, assign domains or set limits, go there.",
+"У домена нет ключа, поэтому его камеры и детекторы не работают.":"The domain has no key, so its cameras and detectors do not work.",
+"Система не показывает ключи лицензий, поэтому раздела «Лицензии» нет.":"The system does not show license keys, so there is no \u201CLicenses\u201D section.",
 // Прототип 66, раунд 2: лицензия домена на вкладке «Лицензии» и кросс-ссылки
 "Все ключи и домены…":"All keys and domains\u2026",
 "Все ключи и домены":"All keys and domains",
@@ -13,9 +24,7 @@ window.I18N_EN={
 "Срок ключа не ограничен.":"The key has no end date.",
 "Ключ не даёт ни одной функции.":"The key gives no feature.",
 "Другие домены ключа":"Other domains of the key",
-"Ключи и их домены ведут в разделе":"Keys and their domains are managed in",
 "«Опции» → «Лицензии»":"\u201COptions\u201D \u2192 \u201CLicenses\u201D",
-"Там же добавляют ключ, назначают домены и задают лимиты.":"There you add a key, assign domains and set limits.",
 "У домена нет ключа, поэтому его камеры и детекторы не работают. Чтобы добавить ключ, перейти в «Опции» → «Лицензии».":"The domain has no key, so its cameras and detectors do not work. To add a key, go to \u201COptions\u201D \u2192 \u201CLicenses\u201D.",
 "Домен берёт лицензии из общего пула ключа. Свободную лицензию получает домен, который первым подключит устройство. Лимит домена — это наибольшее число лицензий, которое домен может взять.":"The domain takes licenses from the shared pool of the key. The domain that connects a device first gets a free license. The limit of the domain is the largest number of licenses that the domain can take.",
 // Прототип 66: версии и состояние лицензии на карточке сервера
@@ -25,7 +34,6 @@ window.I18N_EN={
 "Имя компьютера":"Computer name",
 "Состояние сервера":"Server state",
 "Работает":"Runs",
-"Остановлен":"Stopped",
 "Лицензия домена":"Domain license",
 "Лицензии домена":"Domain licenses",
 "Действует":"Active",
@@ -34,7 +42,6 @@ window.I18N_EN={
 "Этот сервер старше других серверов домена:":"This server is older than the other servers of the domain:",
 "Обновить этот сервер до версии домена.":"Update this server to the version of the domain.",
 "Клиент на этом сервере старше самого сервера:":"The client on this server is older than the server:",
-"Сервер обновит клиент при следующем подключении оператора.":"The server updates the client at the next connection of the operator.",
 "У домена нет ключа, поэтому его камеры не работают.":"The domain has no key, so its cameras do not work.",
 "Сервер не входит в домен, поэтому у него нет ключа.":"The server is not in a domain, so it has no key.",
 "Drivers Pack и DetectorPack обновляет установщик на самом сервере. Консоль их не обновляет.":"The installer on the server updates Drivers Pack and DetectorPack. The console does not update them.",

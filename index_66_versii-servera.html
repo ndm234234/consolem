@@ -2137,6 +2137,9 @@ button.op-sw{border:0;padding:0}.op-sw:disabled{opacity:.5;cursor:default}.op-sw
 .lic-card .cb{container-type:inline-size}.lic-card .lic-tb td .lk.lk-act{white-space:nowrap}.lic-c1{width:24%}.lic-c3{width:108px}.lic-c4{width:116px}.lic-c5{width:190px}.lic-nbar{display:none}
 @container (max-width:640px){.lic-c1{width:auto}.lic-c2{width:0}.lic-c3{width:92px}.lic-c4{width:96px}.lic-c5{width:132px}.lic-tb td:nth-child(2),.lic-tb th:nth-child(2){display:none}.lic-nbar{display:block;margin-top:5px}.lic-tb tr.lic-own td:first-child{display:none}.lic-tb tr.lic-own td:nth-child(2){display:table-cell}}
 @container (max-width:460px){.lic-tb,.lic-tb tbody,.lic-tb tr,.lic-tb td{display:block}.lic-tb colgroup,.lic-tb tr:first-child{display:none}.lic-tb tr{display:grid;grid-template-columns:auto 1fr auto;gap:4px 10px;align-items:baseline;padding:8px 0;border-top:1px solid var(--ln)}.lic-tb td{border:0;padding:0;overflow:visible}.lic-tb td:first-child{grid-column:1/-1}.lic-tb td.lic-num{text-align:left}.lic-tb td:nth-child(5){text-align:right;white-space:nowrap}.lic-tb td:nth-child(5) .lk{max-width:none;white-space:nowrap}.lic-tb td:nth-child(4):before{content:attr(data-h) " ";color:var(--mu)}.lic-tb tr.lic-own{border-top:0;padding-top:0}.lic-tb tr.lic-own td:nth-child(2){grid-column:1/-1}}
+.dom-lic-tb .lic-c3{width:140px}.dom-lic-tb .lic-c5{width:230px}
+@container (max-width:640px){.dom-lic-tb .lic-c3{width:120px}.dom-lic-tb .lic-c5{width:180px}}
+@container (max-width:460px){.dom-lic-tb td:nth-child(3):before,.dom-lic-tb td:nth-child(5):before{content:attr(data-h) " ";color:var(--mu)}.dom-lic-tb tr{display:flex;flex-wrap:wrap;gap:4px 14px}.dom-lic-tb td:first-child{flex-basis:100%;min-width:0}.dom-lic-tb td.lic-num,.dom-lic-tb td:nth-child(5){text-align:left;white-space:normal;max-width:100%}}
 tr.lic-over td{color:var(--one-danger-text)}.lic-neg{color:var(--one-danger-text);font-weight:600}
 tr.lic-own td{white-space:normal;border-top:0;padding-top:0}
 .lic-ownc{display:inline-block;font-size:11px;padding:2px 8px;margin:0 6px 4px 0;border-radius:99px;background:var(--one-control-bg)}
@@ -21102,8 +21105,9 @@ function formBase(n){
   if(n.type==="domain"){
     if(tab==="flds")return folderCardHtml(flHolder(n.id));
     if(tab==="cams")return lanCardHtml(n);
-    if(tab==="lic")return domLicHtml(n)+card("Лицензии",`<div class="g">${fldEdit("Серийный номер лицензии",n.id,"license",n.license||"")}</div>
-      <p class="sub">Лицензии выдаются на домен (кластер) и расходуются устройствами независимо от того, на каком сервере ведётся запись.</p>`)+
+    // Ключ найден — его серийный номер уже в карточке ключа, второе поле номера только путало бы
+    if(tab==="lic")return domLicHtml(n)+(licOfDomain(n)&&!licOfDomain(n).none?"":card("Лицензии",`<div class="g">${fldEdit("Серийный номер лицензии",n.id,"license",n.license||"")}</div>
+      <p class="sub">Лицензии выдаются на домен (кластер) и расходуются устройствами независимо от того, на каком сервере ведётся запись.</p>`))+
       listCard({
         key:"lic:"+n.id,
         title:"Серверы домена",
@@ -21289,12 +21293,18 @@ function formBase(n){
   return card("Устройство",`${bdg(n)}${enabledToggleHtml(n)}<div class="g" style="margin-top:10px">${devFld(n,"Имя","name",n.name)}${fldRo("Тип",i18n(LB[n.type]||n.type))}${devFld(n,"Номер","channel",n.ch??"—")}</div>${devParamsHtml(n)}`)}
 
 // ── Версии сервера и состояние лицензии (ЗАГЛУШКА: в контракте 0.12.0 этих полей нет, запрос api/requests/2026-11-13-153000Z-mockup-server-versions-request.md) ──
-// Вид server отдаёт только ip, port, role, сеть, метки и webServer. Версии, имя компьютера, состояние
-// сервера и состояние лицензии консоль берёт отсюда, а не с сервера. Значения постоянны у одного сервера:
+// Вид server отдаёт только ip, port, role, сеть, метки и webServer. Версии, имя компьютера и состояние
+// сервера консоль берёт отсюда, а не с сервера. Значения постоянны у одного сервера:
 // их считает srvVerHash по uid, поэтому после перерисовки они не меняются.
 const SRV_VER_NEW={version:"3.0.0.42",client:"3.0.0.42 x64",drivers:"3.89.467",detectors:"2.14.3"};
 const SRV_VER_OLD={version:"3.0.0.38",client:"3.0.0.38 x64",drivers:"3.84.112",detectors:"2.12.9"};
 function srvVerHash(id){let h=2166136261;const s=String(id);for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)>>>0}return h}
+// Версии сравниваются по числам частей: «3.0.0.9» старше «3.0.0.42». Хвост после пробела («x64») не считается.
+function verCmp(a,b){
+  const p=v=>String(v||"").split(" ")[0].split(".").map(x=>parseInt(x,10)||0),x=p(a),y=p(b);
+  for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d}
+  return 0;
+}
 // Заглушка показывает три случая: сервер той же версии, сервер старше домена, клиент старше сервера.
 function srvVer(n){
   const h=srvVerHash(n.id),k=h%3;
@@ -21303,59 +21313,77 @@ function srvVer(n){
   v.host="DESKTOP-"+h.toString(36).toUpperCase().slice(0,7);
   return v;
 }
-function srvVerState(n){return n.online===false?"Нет связи":srvVerHash(n.id)%11===4?"Остановлен":"Работает"}
-// Лицензия живёт у домена: карточка сервера берёт тот же ключ, что и раздел «Опции» → «Лицензии»
+function srvVerState(n){return n.online===false?"Нет связи":srvVerHash(n.id)%11===4?"Не работает":"Работает"}
+// Лицензия живёт у домена: карточка сервера берёт тот же ключ, что и раздел «Опции» → «Лицензии».
+// short и text приходят уже переведёнными: в них числа.
 function srvVerLic(n){
   const d=domainOf(n.id);
-  if(!d)return{state:"missing",short:"Ключа нет",text:i18n("Сервер не входит в домен, поэтому у него нет ключа.")};
+  if(!d)return{state:"missing",short:i18n("Ключа нет"),text:i18n("Сервер не входит в домен, поэтому у него нет ключа.")};
   const L=licOfDomain(d);
-  if(!L)return{state:"missing",short:"Ключа нет",domId:d.id,text:i18n("У домена нет ключа, поэтому его камеры не работают.")};
-  const j=L.doms.indexOf(d),f=licCamFeat(L),rest=f?licDomRest(L,j,f):null;
-  const cam=f?` ${i18n("Камеры")}: ${f.by[j]} ${i18n("из")} ${f.lim[j]??f.total}, ${rest<0?`${i18n("без лицензии")} ${-rest}`:`${i18n("свободно")} ${rest}`}.`:"";
+  if(!L)return{state:"missing",short:i18n("Ключа нет"),domId:d.id,text:i18n("У домена нет ключа, поэтому его камеры не работают.")};
+  const j=L.doms.indexOf(d),f=licCamFeat(L),r=f?licDomRest(L,j,f):null;
+  const cam=f?` ${i18n("Камеры")}: ${f.by[j]} ${i18n("из")} ${f.lim[j]??f.total}, ${r.say}.`:"";
   const text=L.none?i18n("У домена нет ключа, поэтому его камеры не работают.")
-    :`${licKeyName(L)}, ${i18n("тип")} ${L.product}. ${licExpText(L)}${cam}`;
+    :`${licKeyName(L)}${L.serial!=="—"?`, ${i18n("тип")} ${L.product}`:""}. ${licExpText(L)}${cam}`;
   return{state:L.state,short:licShortState(L),domId:d.id,keyId:L.none?"":L.id,text};
 }
 // Версия домена — старшая среди его серверов на связи: с ней консоль и сравнивает этот сервер.
 function srvVerDomainBest(n){
   const d=domainOf(n.id);
   if(!d)return null;
-  const all=(d.servers||[]).filter(s=>s.online!==false).map(s=>srvVer(s).version).sort();
+  const all=(d.servers||[]).filter(s=>s.online!==false).map(s=>srvVer(s).version).sort(verCmp);
   return all.length?all[all.length-1]:null;
 }
 function srvVerWarn(n){
   const v=srvVer(n),best=srvVerDomainBest(n);
-  if(best&&best>v.version)return i18n("Этот сервер старше других серверов домена:")+" "+v.version+" "+i18n("против")+" "+best+". "+i18n("Обновить этот сервер до версии домена.");
-  if(v.client.split(" ")[0]<v.version)return i18n("Клиент на этом сервере старше самого сервера:")+" "+v.client+" "+i18n("против")+" "+v.version+". "+i18n("Сервер обновит клиент при следующем подключении оператора.");
+  if(best&&verCmp(best,v.version)>0)return i18n("Этот сервер старше других серверов домена:")+" "+v.version+" "+i18n("против")+" "+best+". "+i18n("Обновить этот сервер до версии домена.");
+  if(verCmp(v.client,v.version)<0)return i18n("Клиент на этом сервере старше самого сервера:")+" "+v.client+" "+i18n("против")+" "+v.version+". "+i18n("Когда оператор подключится в следующий раз, сервер предложит обновить клиент.");
   return"";
 }
 function srvVerHtml(n){
   const v=srvVer(n),lc=srvVerLic(n),warn=srvVerWarn(n);
   const go=lc.domId?onEv("click",["pick",`${lc.domId}`],["goTab","lic"]):"";
   return card("Версии и лицензия",
-    `${warn?`<div class="nt err" data-ver-warn>${escHtml(warn)}</div>`:""}
+    `${warn?`<div class="nt err" role="status" data-ver-warn>${escHtml(warn)}</div>`:""}
       <div class="g">${fldRo("Версия сервера",v.version)}${fldRo("Версия клиента",v.client)}${fldRo("Drivers Pack",v.drivers)}${fldRo("DetectorPack",v.detectors)}${fldRo("Имя компьютера",v.host)}${fldRo("Состояние сервера",i18n(srvVerState(n)))}</div>
       <div class="mx" style="margin-top:10px">
-        ${lc.domId?`<button type="button" class="mc" data-ver-lic ${go}><span>${i18n("Лицензия домена")}</span><b>${i18n(lc.short)}</b></button>`:`<div class="mc" data-ver-lic><span>${i18n("Лицензия домена")}</span><b>${i18n(lc.short)}</b></div>`}
+        ${lc.domId?`<button type="button" class="mc" data-ver-lic ${go}><span>${i18n("Лицензия домена")}</span><b>${escHtml(lc.short)}</b></button>`:`<div class="mc" data-ver-lic><span>${i18n("Лицензия домена")}</span><b>${escHtml(lc.short)}</b></div>`}
       </div>
-      <p class="sub" style="margin-top:10px">${escHtml(lc.text)}${lc.domId?` <button class="lk" ${go}>${i18n("Лицензии домена")}</button>`:""}${lc.keyId?` <button class="lk" ${onEv("click",["licGoAll",`${lc.domId}`,`${lc.keyId}`])}>${i18n("Все ключи и домены")}</button>`:""}</p>
+      <p class="sub" style="margin-top:10px">${escHtml(lc.text)}${lc.domId?` <button class="lk" ${go}>${i18n("Лицензии домена")}</button>`:""}${lc.keyId&&licPageOn()?` <button class="lk" ${onEv("click",["licGoAll",`${lc.domId}`,`${lc.keyId}`])}>${i18n("Все ключи и домены")}</button>`:""}</p>
       <p class="sub">${i18n("Drivers Pack и DetectorPack обновляет установщик на самом сервере. Консоль их не обновляет.")}</p>`);
 }
 // Лицензия домена: карточка домена и карточка сервера берут тот же ключ, что и раздел «Опции» → «Лицензии»
 // (licKeys, licData). Поэтому запас лицензий в трёх местах один и тот же.
 function licOfDomain(d){if(!d)return null;const k=licKeys().find(x=>x.doms.includes(d));return k?licData(k):null}
 function licCamFeat(L){return L&&L.feats.find(f=>f.code==="cameras")||null}
-// Сколько ещё лицензий функции домен может взять: свободное в пуле, но не больше остатка своего лимита
-function licDomRest(L,j,f){const free=f.total-f.used,lim=f.lim[j];return lim==null?free:Math.min(free,lim-f.by[j])}
+// Страницы «Лицензии» нет, если система не объявила listLicenses: тогда ссылок на неё тоже нет.
+function licPageOn(){return sysOpts.some(o=>o.id==="lic")}
+// Сколько ещё лицензий функции домен может взять: свободное в пуле, но не больше остатка своего лимита.
+// «В ключе не хватает» значит то же, что «не хватает» в «Опциях»: пул ключа меньше, чем заняли все его домены.
+// Домен, который занял больше своего лимита, получает «сверх лимита» — это другая беда, и слово другое.
+function licDomRest(L,j,f){
+  const free=f.total-f.used,lim=f.lim[j],by=f.by[j];
+  // txt — для ячейки и плитки, say — для предложения в карточке сервера
+  if(lim!=null&&by>lim){const t=`${i18n("сверх лимита")} ${by-lim}`;return{n:lim-by,short:true,txt:t,say:t}}
+  if(free<0){const t=`${i18n("в ключе не хватает")} ${-free}`;
+    return lim==null?{n:0,short:true,txt:t,say:t}:{n:0,short:true,txt:`0 · ${t}`,say:`${i18n("свободно")} 0, ${t}`}}
+  const n=lim==null?free:Math.min(free,lim-by);
+  return{n,short:false,txt:String(n),say:`${i18n("свободно")} ${n}`};
+}
 function licShortState(L){
-  return{active:"Действует",expiring:`Кончается через ${licDays(L.days)}`,expired:"Срок истёк",mismatch:"Ключ не подходит",
-    missing:"Нет ключа",unassigned:"Не назначен доменам",offline:"Нет связи"}[L.state]||L.state;
+  if(L.state==="expiring")return`${i18n("Кончается через")} ${licDays(L.days)}`;
+  return i18n({active:"Действует",expired:"Срок истёк",mismatch:"Ключ не подходит",
+    missing:"Нет ключа",unassigned:"Не назначен доменам",offline:"Нет связи"}[L.state]||L.state);
 }
 function licExpText(L){
-  return L.exp?`${i18n("Ключ действует до")} ${new Intl.DateTimeFormat("ru-RU",{day:"numeric",month:"long",year:"numeric"}).format(L.exp)}.`:i18n("Срок ключа не ограничен.");
+  // Дата по-русски кончается на «г.» — вторую точку не ставим
+  if(!L.exp)return i18n("Срок ключа не ограничен.");
+  const t=`${i18n("Ключ действует до")} ${new Intl.DateTimeFormat("ru-RU",{day:"numeric",month:"long",year:"numeric"}).format(L.exp)}`;
+  return t.endsWith(".")?t:t+".";
 }
 // Раздел «Опции» → «Лицензии» со всеми доменами и ключами. Ключ назван — консоль прокручивает к нему и моргает им.
 function licGoAll(domId,keyId){
+  if(!licPageOn()){toast(i18n("Система не показывает ключи лицензий, поэтому раздела «Лицензии» нет."));return}
   navMark();goApp("sys");sys="lic";tab="gen";
   if(domId!==undefined)domainFilter=domId||"";
   renderDomainMenu();paint();
@@ -21366,44 +21394,43 @@ function licGoDomLic(id){
   navMark();goApp("hw");domainFilter=id;sel=id;tab="lic";open.add(id);
   renderDomainMenu();applyFiltersFromState();paint();hwFlashLanding();
 }
+// Узкая карточка прячет заголовки таблицы: подписи столбцов 3–5 приходят из data-h (CSS «dom-lic-tb»)
 function domLicFeatRow(L,j,f){
-  const lim=f.lim[j],rest=licDomRest(L,j,f),over=f.used>f.total||(lim!=null&&f.by[j]>lim);
+  const lim=f.lim[j],r=licDomRest(L,j,f),over=f.used>f.total||(lim!=null&&f.by[j]>lim);
   return`<tr class="${over?"lic-over":""}"><td title="${escHtml(i18n(f.n))}">${escHtml(i18n(f.n))}<div class="lic-nbar">${licBar(L,f)}</div></td><td>${licBar(L,f)}</td>
-    <td class="lic-num"><b>${f.by[j]}</b>${lim!=null?` ${i18n("из лимита")} ${lim}`:""}</td>
-    <td class="lic-num">${f.used} ${i18n("из")} ${f.total}</td>
-    <td class="lic-num">${rest<0?`<span class="lic-neg">${i18n("не хватает")} ${-rest}</span>`:rest}</td></tr>`;
+    <td class="lic-num" data-h="${escHtml(i18n("Этот домен"))}" title="${escHtml(`${f.by[j]}${lim!=null?` ${i18n("из лимита")} ${lim}`:""}`)}"><b>${f.by[j]}</b>${lim!=null?` ${i18n("из лимита")} ${lim}`:""}</td>
+    <td class="lic-num" data-h="${escHtml(i18n("Весь ключ"))}">${f.used} ${i18n("из")} ${f.total}</td>
+    <td class="lic-num" data-h="${escHtml(i18n("Домен может взять ещё"))}" title="${escHtml(r.txt)}">${r.short?`<span class="lic-neg">${escHtml(r.txt)}</span>`:r.n}</td></tr>`;
 }
 // Вкладка «Лицензии» домена: тот же ключ, что в «Опциях», но глазами одного домена
 function domLicHtml(d){
   const L=licOfDomain(d);
   if(!L)return"";
-  const j=L.doms.indexOf(d),shared=L.doms.length>1;
-  const all=`<button type="button" class="btn s" ${onEv("click",["licGoAll",`${d.id}`,`${L.id}`])}>${i18n("Все ключи и домены…")}</button>`;
+  const j=L.doms.indexOf(d),shared=L.doms.length>1,page=licPageOn();
+  const all=page?`<button type="button" class="btn s" ${onEv("click",["licGoAll",`${d.id}`,`${L.id}`])}>${i18n("Все ключи и домены…")}</button>`:"";
   const head=`<span class="lic-dn">${escHtml(licKeyName(L))}</span>${shared?`<span class="lic-st lic-st-mu">${i18n("Общий")} · ${L.doms.length} ${i18n(plural(L.doms.length,"домен|домена|доменов"))}</span>`:""}${licStateChip(L)}<span class="lic-acts">${all}</span>`;
   const meta=L.none?"":`<div class="lic-meta"><div><span>${i18n("Тип")}</span><b>${escHtml(L.product)}</b></div>
     <div><span>${i18n("Серийный номер")}</span><b>${escHtml(L.serial)}</b></div>
     <div><span>${i18n("Действует до")}</span><b class="${L.state==="expiring"?"lic-warn":""}">${escHtml(L.exp?new Intl.DateTimeFormat("ru-RU",{day:"numeric",month:"long",year:"numeric"}).format(L.exp):i18n("бессрочно"))}</b></div>
     <div><span>${i18n("Серверов домена")}</span><b>${(d.servers||[]).length}</b></div></div>`;
   const body=`${meta}
-    ${L.none?`<div class="nt err" role="status">${i18n("У домена нет ключа, поэтому его камеры и детекторы не работают. Чтобы добавить ключ, перейти в «Опции» → «Лицензии».")}</div>`:""}
+    ${L.none?`<div class="nt err" role="status">${i18n(page?"У домена нет ключа, поэтому его камеры и детекторы не работают. Чтобы добавить ключ, перейти в «Опции» → «Лицензии».":"У домена нет ключа, поэтому его камеры и детекторы не работают.")}</div>`:""}
     ${L.stateText?`<div class="nt err" role="status">${escHtml(i18n(L.stateText))}</div>`:""}
     ${shared?`<div class="nt" role="note">${i18n("Домен берёт лицензии из общего пула ключа. Свободную лицензию получает домен, который первым подключит устройство. Лимит домена — это наибольшее число лицензий, которое домен может взять.")} ${i18n("Другие домены ключа")}: ${L.doms.filter(x=>x!==d).map(x=>`<button type="button" class="lk" ${onEv("click",["licGoDomLic",`${x.id}`])}>${escHtml(locName(x))}</button>`).join(", ")}</div>`:""}
-    ${L.feats.length?`<table class="lic-tb"><colgroup><col class="lic-c1"><col class="lic-c2"><col class="lic-c3"><col class="lic-c4"><col class="lic-c5"></colgroup>
+    ${L.feats.length?`<table class="lic-tb dom-lic-tb"><colgroup><col class="lic-c1"><col class="lic-c2"><col class="lic-c3"><col class="lic-c4"><col class="lic-c5"></colgroup>
       <tr><th>${i18n("Функция")}</th><th>${i18n(shared?"Занято по доменам":"Занято")}</th><th class="lic-num">${i18n("Этот домен")}</th><th class="lic-num">${i18n("Весь ключ")}</th><th class="lic-num">${i18n("Домен может взять ещё")}</th></tr>
       ${L.feats.map(f=>domLicFeatRow(L,j,f)).join("")}</table>`:`<p class="sub">${i18n("Ключ не даёт ни одной функции.")}</p>`}
-    <p class="sub" style="margin-top:10px">${i18n("Ключи и их домены ведут в разделе")} <button type="button" class="lk" ${onEv("click",["licGoAll",`${d.id}`,`${L.id}`])}>${i18n("«Опции» → «Лицензии»")}</button>. ${i18n("Там же добавляют ключ, назначают домены и задают лимиты.")}</p>`;
+    ${page?`<p class="sub" style="margin-top:10px">${i18n("Все ключи и их домены показывает раздел")} <button type="button" class="lk" ${onEv("click",["licGoAll",`${d.id}`,`${L.id}`])}>${i18n("«Опции» → «Лицензии»")}</button>. ${i18n("Чтобы добавить ключ, назначить домены или задать лимиты, перейти туда.")}</p>`:""}`;
   return`<div class="card lic-card lic-${L.state}" data-dom-lic="${d.id}"><div class="ch lic-hd">${head}</div><div class="cb">${body}</div></div>`;
 }
 // Плитки запаса лицензий на вкладке «Общие» домена
 function domLicTiles(d){
   const L=licOfDomain(d);
   if(!L)return"";
-  const j=L.doms.indexOf(d),f=licCamFeat(L);
-  const rest=f?licDomRest(L,j,f):null;
-  const restTxt=f==null?i18n("нет"):rest<0?`${i18n("не хватает")} ${-rest}`:String(rest);
+  const j=L.doms.indexOf(d),f=licCamFeat(L),r=f?licDomRest(L,j,f):null;
   return`<button type="button" class="mc" data-dom-lic-tile ${onEv("click",["goTab","lic"])}><span>${i18n("Лицензии камер")}</span><b>${f?`${f.by[j]} ${i18n("из")} ${f.lim[j]??f.total}`:i18n("нет")}</b></button>
-    <button type="button" class="mc" data-dom-lic-rest ${onEv("click",["goTab","lic"])}><span>${i18n("Лицензий камер свободно")}</span><b class="${rest!=null&&rest<=0?"lic-warn":""}">${restTxt}</b></button>
-    <button type="button" class="mc" data-dom-lic-key ${onEv("click",["goTab","lic"])}><span>${i18n("Ключ домена")}</span><b>${i18n(licShortState(L))}</b></button>`;
+    <button type="button" class="mc" data-dom-lic-rest ${onEv("click",["goTab","lic"])}><span>${i18n("Лицензий камер свободно")}</span><b class="${r&&r.n<=0?"lic-warn":""}">${r?escHtml(r.txt):i18n("нет")}</b></button>
+    <button type="button" class="mc" data-dom-lic-key ${onEv("click",["goTab","lic"])}><span>${i18n("Ключ домена")}</span><b>${escHtml(licShortState(L))}</b></button>`;
 }
 // ── Автоматизация ──────────────────────────────────────────────
 // Каталог — это граница, а не удобство. Форма строится из него, поэтому
