@@ -32965,7 +32965,7 @@ function manualIsRtsp(m){return m.type==="camera"&&isRtspVendor(m.vendor)}
 const GBT_PORT=5060;
 function isGbtVendor(v){return /^gbt28181$/i.test(String(v||"").trim())}
 function manualIsGbt(m){return m.type==="camera"&&isGbtVendor(m.vendor)}
-function gbtIpOk(s){return /^\d{1,3}(\.\d{1,3}){3}$/.test(s)&&s.split(".").every(x=>+x<=255)}
+function gbtIpOk(s){return /^(0|[1-9]\d{0,2})(\.(0|[1-9]\d{0,2})){3}$/.test(s)&&s.split(".").every(x=>+x<=255)}
 function gbtParse(s){
   const t=String(s||"").trim();
   if(!t)return{err:"Ввести адрес GB/T28181."};
@@ -32983,51 +32983,84 @@ function gbtParse(s){
   const sm=rest.match(/^([^-]*)(?:-([^/]*)(?:\/(.*))?)?$/);
   if(!sm||!/^\d{20}$/.test(sm[1]))return{err:"ID SIP-сервера после @ должен содержать 20 цифр."};
   const loc=sm[2]||"",ext=sm[3]||"";
+  // Хвост без адреса («…@S-», «…-IP/») драйвер прочтёт иначе, чем консоль сравнит: такой строки не пускаем
+  if(sm[2]!==undefined&&!loc&&!ext)return{err:"После знака «-» ввести локальный или внешний IP-адрес сервера."};
+  if(sm[3]!==undefined&&!ext)return{err:"После знака «/» ввести внешний IP-адрес сервера."};
   if(loc&&!gbtIpOk(loc))return{err:"Локальный IP-адрес сервера неверный. Пример: 10.0.40.246."};
   if(ext&&!gbtIpOk(ext))return{err:"Внешний IP-адрес сервера неверный. Пример: 113.125.160.58."};
   return{dev,p1,p2,server:sm[1],loc,ext,sip:sm[1]+(loc||ext?"-"+loc+(ext?"/"+ext:""):"")};
 }
 // Ключ SIP-сервера: часть после @ и порт — Axxon One требует, чтобы совпадало всё
 function gbtKey(sip,port){return sip+" : "+(+port||GBT_PORT)}
-// Другие устройства GB/T: с сервера и из плана (ещё не применённые строки)
+// Порт по умолчанию: у GB/T — SIP-порт 5060, у остальных — 80
+function gbtDefPort(vendor,type){return(type||"camera")==="camera"&&isGbtVendor(vendor)?GBT_PORT:80}
+// Устройства GB/T на серверах: GET /units?q=GBT28181&fields=vendor. Счётчик — общий: ответ закрытого мастера не попадёт в новый
+let gbtLoadSeq=0;
 function gbtPeersLoad(){
-  wizd.gbtPeers=null;
-  const seq=wizd.gbtSeq=(wizd.gbtSeq||0)+1;
+  if(!wizd)return;
+  wizd.gbtPeers=null;wizd.gbtPeersFailed=false;
+  const seq=++gbtLoadSeq,w=wizd;
+  const done=()=>{if(addPlan)addPlan.gbtMemo=null;gbtNotePaint();if(addPlan?.rows?.some(r=>isGbtVendor(r.r?.vendor)))planRepaint()};
   unitsAll({q:"GBT28181",fields:"vendor"}).then(items=>{
-    if(seq!==wizd.gbtSeq)return;
-    wizd.gbtPeers=items.filter(u=>isGbtVendor(u.properties?.vendor)).map(u=>({name:u.name,ip:String(u.properties?.ip||""),port:+u.properties?.port||GBT_PORT}));
-    gbtNotePaint();
-  }).catch(()=>{if(seq===wizd.gbtSeq){wizd.gbtPeers=[];wizd.gbtPeersFailed=true;gbtNotePaint()}});
+    if(seq!==gbtLoadSeq||w!==wizd)return;
+    wizd.gbtPeers=items.filter(u=>isGbtVendor(u.properties?.vendor)).map(u=>({name:u.name,ip:String(u.properties?.ip||""),port:+u.properties?.port||GBT_PORT,serverId:u.properties?.serverId||null}));
+    done();
+  }).catch(()=>{if(seq===gbtLoadSeq&&w===wizd){wizd.gbtPeers=[];wizd.gbtPeersFailed=true;done()}});
 }
-function gbtPeers(){
-  const out=[...(wizd.gbtPeers||[])],seen=new Set(out.map(p=>p.ip.trim().toLowerCase()));
-  (addPlan?.rows||[]).forEach(row=>{
+// Список ещё не пришёл: проверять не с чем. undefined — не просили: просим (план из файла, правка строки плана)
+function gbtPeersPending(){
+  if(!wizd)return false;
+  if(wizd.gbtPeers===undefined)gbtPeersLoad();
+  return wizd.gbtPeers===null;
+}
+// SIP-серверы одного сервера Axxon (serverID и локальный IP — адреса этого сервера, правило «один SIP-сервер» — на сервер):
+// устройства на нём и строки плана, что встанут на него. Ключ → {sip, port, n, names, pids}. Память сбрасывает planTouch
+function gbtCounts(sid){
+  const memo=addPlan.gbtMemo||(addPlan.gbtMemo=new Map());
+  if(memo.has(sid))return memo.get(sid);
+  const by=new Map(),add=(ip,port,name,pid)=>{
+    const g=gbtParse(ip);if(g.err)return;
+    const key=gbtKey(g.sip,port),x=by.get(key)||{key,sip:g.sip,port:+port||GBT_PORT,n:0,names:[],pids:new Set()};
+    x.n++;if(name&&!x.names.includes(name))x.names.push(name);if(pid)x.pids.add(pid);by.set(key,x);
+  };
+  (wizd?.gbtPeers||[]).forEach(p=>{if(!sid||!p.serverId||p.serverId===sid)add(p.ip,p.port,p.name,null)});
+  (addPlan.rows||[]).forEach(row=>{
     const r=row.r||{};
     if((r.type||"camera")!=="camera"||!isGbtVendor(r.vendor)||row.state==="fail")return;
+    if(sid&&row.serverId&&row.serverId!==sid)return;
     const ip=String(r.ip||"").trim();
-    if(seen.has(ip.toLowerCase()))return;
-    seen.add(ip.toLowerCase());out.push({name:`${r.name||gbtParse(ip).dev||ip} — ${i18n("в плане")}`,ip,port:+r.port||GBT_PORT,plan:true});
+    add(ip,r.port,`${r.name||gbtParse(ip).dev||ip} — ${i18n("в плане")}`,row.pid);
   });
-  return out.map(p=>{const g=gbtParse(p.ip);return{...p,key:g.err?null:gbtKey(g.sip,p.port),sip:g.err?null:g.sip}}).filter(p=>p.key);
+  memo.set(sid,by);
+  return by;
 }
-// SIP-сервер, который уже выбран: тот, что у большинства устройств GB/T
-function gbtRefSip(peers){
-  const by=new Map();
-  peers.forEach(p=>{const x=by.get(p.key)||{key:p.key,sip:p.sip,port:p.port,n:0};x.n++;by.set(p.key,x)});
-  return [...by.values()].sort((a,b)=>b.n-a.n)[0]||null;
+// Что принято на сервере без проверяемой строки (pid — её строка плана, её не считаем): ref — SIP-сервер большинства,
+// same и diff — сколько других устройств с ключом key и с другим
+function gbtRef(sid,key,pid){
+  let ref=null,same=0,diff=0;
+  gbtCounts(sid).forEach(x=>{
+    const n=x.n-(pid&&x.pids.has(pid)?1:0);if(n<=0)return;
+    if(x.key===key)same+=n;else diff+=n;
+    if(!ref||n>ref.n)ref={...x,n};
+  });
+  return{ref,same,diff};
 }
-// Что мешает добавить: текст ошибки или ""
-function gbtBlock(m){
-  if(!manualIsGbt(m))return"";
-  const g=gbtParse(m.ip);
+// Сервер, на который встанет устройство из формы: выбранный в дереве сервер или сервер плана
+function gbtFormSid(){const s=deviceTarget();return s?.type==="server"?s.id:planServerId()}
+const GBT_ONE_SIP="Все устройства GB/T одного сервера должны использовать один SIP-сервер. Взять SIP-сервер других устройств или изменить его у них.";
+const GBT_WAIT="Подождать: консоль проверяет SIP-сервер других устройств GB/T.";
+// Что мешает добавить: текст ошибки или "". pid — строка плана, sid — её сервер
+function gbtIssue(ip,port,sid,pid){
+  const g=gbtParse(ip);
   if(g.err)return g.err;
-  const ref=gbtRefSip(gbtPeers());
-  if(ref&&ref.key!==gbtKey(g.sip,m.port))return i18n("Все устройства GB/T должны использовать один SIP-сервер. Взять SIP-сервер других устройств или изменить его у них.");
-  return"";
+  if(gbtPeersPending())return GBT_WAIT;
+  const {ref}=gbtRef(sid,gbtKey(g.sip,port),pid);
+  return ref&&ref.key!==gbtKey(g.sip,port)?GBT_ONE_SIP:"";
 }
+function gbtBlock(m){return manualIsGbt(m)?gbtIssue(m.ip,m.port,gbtFormSid(),null):""}
 function gbtNoteHtml(m){
   const ex="34020000001320000008@34020000002000000001";
-  const fmt=`<span>${i18n("Формат")}: <code>[gbt://]${i18n("ID устройства")}[/${i18n("порт видео")}]@${i18n("ID SIP-сервера")}[-${i18n("локальный IP")}[/${i18n("внешний IP")}]]</code>. ${i18n("Пример")}: <code>${ex}</code></span>`;
+  const fmt=`<span>${i18n("Формат")}: <code>[gbt://]${i18n("ID устройства")}[/${i18n("порт видео")}]@${i18n("ID SIP-сервера")}[-[${i18n("локальный IP")}][/${i18n("внешний IP")}]]</code>. ${i18n("Пример")}: <code>${ex}</code></span>`;
   const t=String(m.ip||"").trim();
   if(!t)return fmt;
   const g=gbtParse(t);
@@ -33037,29 +33070,29 @@ function gbtNoteHtml(m){
   if(g.loc)parts.push(`${i18n("локальный IP")} ${g.loc}`);
   if(g.ext)parts.push(`${i18n("внешний IP")} ${g.ext}`);
   const ok=`<span class="gbt-st ok">${lu("circle-check",14)} ${escHtml(parts.join(", "))}</span>`;
-  if(wizd.gbtPeers===null||wizd.gbtPeers===undefined)return `${fmt}${ok}<span class="gbt-st">${i18n("Консоль проверяет SIP-сервер других устройств GB/T…")}</span>`;
-  const peers=gbtPeers(),ref=gbtRefSip(peers),mine=gbtKey(g.sip,m.port);
-  if(!ref)return `${fmt}${ok}<span class="gbt-st">${i18n(wizd.gbtPeersFailed?"Консоль не смогла проверить другие устройства GB/T.":"Других устройств GB/T нет. Следующие устройства GB/T должны использовать этот же SIP-сервер и порт.")}</span>`;
-  const same=peers.filter(p=>p.key===mine).length,diff=peers.length-same;
-  if(ref.key===mine&&!diff)return `${fmt}${ok}<span class="gbt-st ok">${lu("circle-check",14)} ${escHtml(i18n("SIP-сервер и порт совпадают с другими устройствами GB/T")+": "+peers.length)}</span>`;
-  if(ref.key===mine)return `${fmt}${ok}<span class="gbt-st warn">${lu("triangle-alert",14)} ${escHtml(i18n("У других устройств GB/T другой SIP-сервер или порт. Драйвер не запустит их")+": "+diff)}</span>`;
-  const names=[...new Set(peers.filter(p=>p.key===ref.key).map(p=>p.name))].slice(0,3).join(", ");
-  return `${fmt}${ok}<span class="gbt-st err">${lu("triangle-alert",14)} ${escHtml(i18n("Другие устройства GB/T используют SIP-сервер")+` ${ref.sip}, ${i18n("порт")} ${ref.port} (${names}${ref.n>3?" …":""}). `+i18n("Консоль может подключить устройства GB/T только к одному SIP-серверу."))}
+  if(gbtPeersPending())return `${fmt}${ok}<span class="gbt-st">${i18n("Консоль проверяет SIP-сервер других устройств GB/T…")}</span>`;
+  const mine=gbtKey(g.sip,m.port),{ref,same,diff}=gbtRef(gbtFormSid(),mine,null);
+  if(!ref)return `${fmt}${ok}<span class="gbt-st">${i18n(wizd.gbtPeersFailed?"Консоль не смогла проверить другие устройства GB/T.":"На этом сервере других устройств GB/T нет. Следующие устройства GB/T этого сервера должны использовать этот же SIP-сервер и порт.")}</span>`;
+  if(ref.key===mine&&!diff)return `${fmt}${ok}<span class="gbt-st ok">${lu("circle-check",14)} ${escHtml(i18n("SIP-сервер и порт совпадают с другими устройствами GB/T этого сервера")+": "+same)}</span>`;
+  if(ref.key===mine)return `${fmt}${ok}<span class="gbt-st warn">${lu("triangle-alert",14)} ${escHtml(i18n("У других устройств GB/T этого сервера другой SIP-сервер или порт. Драйвер не запустит их")+": "+diff)}</span>`;
+  const names=ref.names.slice(0,3).join(", ");
+  return `${fmt}${ok}<span class="gbt-st err">${lu("triangle-alert",14)} ${escHtml(i18n("Другие устройства GB/T этого сервера используют SIP-сервер")+` ${ref.sip}, ${i18n("порт")} ${ref.port} (${names}${ref.names.length>3?" …":""}). `+i18n("Консоль может подключить устройства GB/T одного сервера только к одному SIP-серверу."))}
     <button type="button" class="btn s" ${onEv("click",["gbtUseRef"])}>${escHtml(i18n("Взять этот SIP-сервер"))}</button></span>`;
 }
 function gbtNotePaint(){
-  const m=wizd.manual,el=document.getElementById("gbtNote");
-  if(!el||!manualIsGbt(m))return;
+  const m=wizd?.manual,el=document.getElementById("gbtNote");
+  if(!el||!m||!manualIsGbt(m))return;
   el.innerHTML=gbtNoteHtml(m);
-  const g=String(m.ip||"").trim()?gbtParse(m.ip):{};
-  document.getElementById("devManIp")?.classList.toggle("gbt-bad",!!g.err||!!(String(m.ip||"").trim()&&gbtBlock(m)));
+  const bad=!!String(m.ip||"").trim()&&!!gbtBlock(m)&&gbtBlock(m)!==GBT_WAIT;
+  document.getElementById("devManIp")?.classList.toggle("gbt-bad",bad);
 }
 // Подставить SIP-сервер и порт других устройств: ID устройства и порт видео остаются
 function gbtUseRef(){
-  const m=wizd.manual,ref=gbtRefSip(gbtPeers()),g=gbtParse(m.ip);
-  if(!ref||g.err)return;
-  const head=String(m.ip).trim().replace(/@.*$/,"");
-  m.ip=head+"@"+ref.sip;m.port=ref.port;
+  const m=wizd.manual,g=gbtParse(m.ip);
+  if(g.err)return;
+  const {ref}=gbtRef(gbtFormSid(),gbtKey(g.sip,m.port),null);
+  if(!ref)return;
+  m.ip=String(m.ip).trim().replace(/@.*$/,"")+"@"+ref.sip;m.port=ref.port;
   renderDeviceWizard();
   document.getElementById("devManIp")?.focus();
 }
@@ -33111,7 +33144,7 @@ function manualNode(m,s,disabled,prof){
   const autoName=isDefaultDeviceName(m.name.trim())?(LB[m.type]||"Камера"):m.name.trim();
   const configMode=prof?prof.devMode:(wizd.devMode||"current");
   const template=configMode==="template"?(prof?find(prof.templateId)?.n:deviceTemplates().find(x=>x.id===wizd.templateId)):null;
-  const common={id:"obj"+Date.now()+Math.floor(Math.random()*1000),name:autoName,identifier,short:m.short??"",ip:m.ip,port:+m.port||80,vendor:m.vendor,model:m.model,user:m.user&&m.user!=="Авто"?m.user:"",pass:m.pass||"",online:true,devices:[],configMode};
+  const common={id:"obj"+Date.now()+Math.floor(Math.random()*1000),name:autoName,identifier,short:m.short??"",ip:m.ip,port:+m.port||gbtDefPort(m.vendor,m.type),vendor:m.vendor,model:m.model,user:m.user&&m.user!=="Авто"&&!manualIsGbt(m)?m.user:"",pass:manualIsGbt(m)?"":m.pass||"",online:true,devices:[],configMode};
   if(m.rtsp)common._f={RTSP:m.rtsp};
   if(disabled)common.enabled=false;
   if(configMode==="template"&&template){
@@ -33155,7 +33188,7 @@ function deviceManualHtml(){
       <div><label>Производитель</label>${comboVendorHtml(m.vendor,["changeManualVendor"],{inline:false})}</div>
       <div><label>Модель</label><div class="inline-field">${comboModelHtml(m.vendor,m.model,["updateManual","model"],{inline:false,ph:rtsp?i18n("Необязательно"):""})}${rtsp||gbt?"":`<button type="button" class="btn s" title="Определить модель по данным подключения" ${onEv("click",["detectManualModel"])}>${ic("search")} Определить</button>`}</div></div>
       ${rtsp?`<div class="full"><label>RTSP</label><input id="devManIp" value="${escHtml(m.rtsp||"")}" placeholder="rtsp://адрес:554/поток" ${onEv("input",["updateManual","rtsp",onEv.value])}></div>`
-      :gbt?`<div class="full"><label>${i18n("Адрес GB/T28181")}</label><input id="devManIp" class="${String(m.ip||"").trim()&&gbtBlock(m)?"gbt-bad":""}" value="${escHtml(m.ip)}" placeholder="34020000001320000008@34020000002000000001" spellcheck="false" autocomplete="off" ${onEv("input",["updateManual","ip",onEv.value])}></div>
+      :gbt?`<div class="full"><label>${i18n("Адрес GB/T28181")}</label><input id="devManIp" class="${String(m.ip||"").trim()&&gbtBlock(m)&&gbtBlock(m)!==GBT_WAIT?"gbt-bad":""}" value="${escHtml(m.ip)}" placeholder="34020000001320000008@34020000002000000001" spellcheck="false" autocomplete="off" ${onEv("input",["updateManual","ip",onEv.value])}></div>
       <div class="gbt-note" id="gbtNote" aria-live="polite">${gbtNoteHtml(m)}</div>
       <div><label>${i18n("Порт SIP")}</label><input type="number" value="${m.port}" title="${escHtml(i18n("Локальный порт, на который сервер принимает сообщения SIP от устройства. По умолчанию 5060"))}" ${onEv("input",["updateManual","port",onEv.value])}></div>`
       :`<div><label>${m.type==="eventsrc"?"Адрес кассы или сервера":"IP-адрес"}</label><input id="devManIp" value="${escHtml(m.ip)}" placeholder="192.168.1.100" ${onEv("input",["updateManual","ip",onEv.value])}></div>
@@ -33228,7 +33261,7 @@ function csvRowFrom(cols,index,colMap){
   const recordName=legacy?(oldLegacy?cols[12]:cols[13]):csvPick(cols,colMap,"record",13);
   const groupName=legacy?"":csvPick(cols,colMap,"group");
   const rtspUrl=legacy?"":String(csvPick(cols,colMap,"rtspUrl")||"").trim();
-  const row={id:"csv"+index,ip,port:+port||80,vendor,model,user,pass,identifier,short:shortName,name,lat,lon,azimuth,arch:"",record:"motion",group:"",rtspUrl,errors:[],skipImport:false};
+  const row={id:"csv"+index,ip,port:+port||gbtDefPort(vendor),vendor,model,user,pass,identifier,short:shortName,name,lat,lon,azimuth,arch:"",record:"motion",group:"",rtspUrl,errors:[],skipImport:false};
   if(!csvRowHasImportRequired(row)){row.skipImport=true;return row;}
   const kind=inferCsvDeviceKind(row);
   if(!row.name)row.name=kind.type==="ipsrv"?(row.model||"IP-сервер"):`Камера ${ip||index}`;
@@ -33668,7 +33701,7 @@ const addPlan={rows:[],links:[],key:null,keySig:null,applying:false,last:null,ad
 let planSeq=0;
 window.addEventListener("beforeunload",e=>{if(!window.Tour?.demo&&(addPlan.rows.length||addPlan.links.length)){e.preventDefault();e.returnValue=""}});
 // Набор строк изменился — прежний ключ запроса уже не про этот набор
-function planTouch(){addPlan.key=null;addPlan.keySig=null}
+function planTouch(){addPlan.key=null;addPlan.keySig=null;addPlan.gbtMemo=null}
 // Счётчик на верхней панели: цифра сама по себе не говорит, что это несохранённый план
 function planBtnCount(){const n=addPlan.rows.length+addPlan.links.length;return n?`${i18n("В плане")}: ${n}`:""}
 function planBtnHint(){
@@ -33833,7 +33866,7 @@ function planAddManual(){
   if(m.type==="camera"&&!rtsp&&(!m.vendor||!m.model)){toast(i18n("Заполните производителя и модель"));return}
   if(m.type!=="camera"&&(!m.ip||!m.vendor||!m.model)){toast(i18n("Заполните IP, производителя и модель"));return}
   // Уходит только адрес, который виден в форме: набранный раньше другой адрес в строку не попадает
-  const r={...m,ip:rtsp?"":m.ip,port:rtsp?80:m.port,rtsp:rtsp?m.rtsp:"",rtspUrl:rtsp?m.rtsp:"",status:"ok"};
+  const r={...m,ip:rtsp?"":m.ip,port:rtsp?80:m.port,rtsp:rtsp?m.rtsp:"",rtspUrl:rtsp?m.rtsp:"",status:"ok",...(manualIsGbt(m)?{user:"",pass:""}:{})};
   const sid=planServerId();
   if(planFindByAddr(r,SERVER_DOMAIN[sid]||wizd.domain)){planDone(0,1);return}
   const row=planPush("manual",r);
@@ -33912,6 +33945,9 @@ function planEdit(pid,key,value){
     if(planShowsAddr(row.source)&&(row.r.type||"camera")==="camera"){
       if(isRtspVendor(value)){row.r.ip="";row.r.port=80}
       else if(isRtspVendor(was)){row.r.rtspUrl="";row.r.rtsp=""}
+      // GB/T: порт — SIP-порт 5060; уход с GB/T возвращает 80, если порт не меняли
+      if(isGbtVendor(value)&&!isGbtVendor(was)&&(!+row.r.port||+row.r.port===80))row.r.port=GBT_PORT;
+      else if(isGbtVendor(was)&&!isGbtVendor(value)&&+row.r.port===GBT_PORT)row.r.port=80;
     }
     if(value!==was&&manualModels(value).length&&!manualModels(value).includes(row.r.model))row.r.model=manualModels(value)[0];
   }
@@ -33952,9 +33988,7 @@ function planConnError(row){
   if((r.type||"camera")==="camera"&&isRtspVendor(r.vendor))return"Укажите адрес RTSP";
   // GB/T28181 (прототип 61): строка адреса и SIP-сервер — те же проверки, что в форме «По адресу»; модель — как у всех
   if((r.type||"camera")==="camera"&&isGbtVendor(r.vendor)){
-    const g=gbtParse(r.ip);if(g.err)return g.err;
-    const me=String(r.ip).trim().toLowerCase(),ref=gbtRefSip(gbtPeers().filter(p=>p.ip.trim().toLowerCase()!==me));
-    if(ref&&ref.key!==gbtKey(g.sip,r.port))return"Все устройства GB/T должны использовать один SIP-сервер. Взять SIP-сервер других устройств или изменить его у них.";
+    const issue=gbtIssue(r.ip,r.port,row.serverId,row.state==="fail"?null:row.pid);if(issue)return issue;
     if(!r.model)return"Указать производителя и модель";
     return"";
   }
@@ -34076,6 +34110,7 @@ function planSend(rows,retry){
     treeMatchCache.clear();searchMatchCache.clear();
     toast(res.failed.length?`${i18n("Добавлено")} ${res.done.length} · ${i18n("не добавлено")} ${res.failed.length}`:`${i18n("Добавлено устройств")}: ${res.done.length}`);
     paint();planRepaint();
+    if(rows.some(r=>(r.r?.type||"camera")==="camera"&&isGbtVendor(r.r?.vendor)))gbtPeersLoad();
   }).catch(e=>{
     addPlan.applying=false;
     // Ответ был — сервер отказал всему запросу: ключ больше не нужен, а причина видна на каждой строке.
