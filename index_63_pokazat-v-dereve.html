@@ -3331,6 +3331,7 @@ body.dw-resizing,body.dw-resizing *{cursor:col-resize!important;user-select:none
 <!-- ONE PSIM: мост по ONE.PSIM.PrototypeKit, подключён после стилей прототипа -->
 <link rel="stylesheet" href="assets/one-psim/bridge.css">
 <script src="assets/i18n-en.js"></script>
+<script src="assets/i18n-en-63.js"></script>
 <!-- API: контракт, эталонный набор, встроенный сервер и клиент (api/README.md) -->
 <script src="api/openapi.js"></script>
 <script src="api/fixture.js"></script>
@@ -10581,6 +10582,8 @@ function panelHeadHtmlRun(){
   if(!detLoadState&&domains.length)setTimeout(detLoad);
   // В «Серверах» и «Хранилищах» кнопка неактивна, но показывает положение, которое ждёт возврата
   const canFolders=sliceGroups().includes("folder"),foldersOn=(canFolders?group():groupBy.cam)==="folder",st=curStatus();
+  // «Показать в дереве» работает только с открытым объектом: без него кнопка неактивна и говорит, чего ждёт
+  const revealable=!!sel&&!!find(sel);
   const ids=Object.keys(SLICE),sliceBtn=(id,last)=>{const k=sliceCountInfo(id);return`<button type="button" class="ph-choice ${slice===id?"on":""}" ${last?'id="phSliceLast"':""} data-slice="${id}" aria-pressed="${slice===id}" title="${escHtml(k.title)}" ${onEv("click",["setSlice",`${id}`])}><span>${SLICE[id]}</span><span class="ph-cnt"${sliceCntAttr(k)}>${k.text}</span></button>`};
   return`<div class="ph"><div class="ph-row"><div class="ph-slices" role="group" aria-label="${i18n("Срез дерева")}" aria-owns="phSliceLast">
     ${ids.slice(0,-1).map(id=>sliceBtn(id)).join("")}
@@ -10588,6 +10591,7 @@ function panelHeadHtmlRun(){
     <button type="button" class="ph-choice ${foldersOn?"on":""}" id="viewBtn" aria-pressed="${foldersOn}" ${canFolders?"":"disabled"} title="${canFolders?`${i18n("Группировка")}: ${GROUP_HINT[group()]}`:i18n("В этом срезе нет папок")}" ${onEv("click",["toggleFolders"])}>${IC.folder}<span>${i18n("Папки")}</span></button>
     <button type="button" class="ph-choice ph-status ${filtPop||st?"on":""}" id="filtBtn" aria-haspopup="menu" aria-controls="filtPop" aria-expanded="${filtPop}" title="${statusLabel(st)}" ${onEv("click",["toggleFiltPop",onEv.event])}><span class="st-dot st-${(st||"all").split(":")[0]}" aria-hidden="true"></span><span class="ph-status-label">${statusLabel(st)}</span><span class="ph-chevron" aria-hidden="true"><svg class="btn-chev" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5.5 7.75 4.5 4.5 4.5-4.5"/></svg></span></button>
     <button type="button" class="ph-tool" id="treeCollapseBtn" title="${i18n("Свернуть всё")}" aria-label="${i18n("Свернуть всё")}" ${onEv("click",["treeCollapseAll"])}>${TREE_IC.shut}</button>
+    <button type="button" class="ph-tool" id="treeRevealBtn" ${revealable?"":"disabled"} title="${i18n(revealable?"Показать открытый объект в дереве":"Сначала открыть объект")}" aria-label="${i18n("Показать открытый объект в дереве")}" ${onEv("click",["treeReveal"])}>${TREE_IC.here}</button>
   </span></span></div></div>`;
 }
 // ── Раскрытие дерева ─────────────────────────────────────────────────────
@@ -10642,6 +10646,21 @@ function treeCollapseAll(){
   treeOpenDefault();
   renderTree();
   const el=document.getElementById("tree");if(el)el.scrollTop=0;
+}
+// «Показать в дереве»: открытый объект бывает не виден — ветку свернули или дерево прокрутили.
+// Кнопка раскрывает путь к объекту, прокручивает дерево к его строке и моргает строкой (правило «Моргание при переходе»).
+function treeReveal(){
+  if(!sel||!find(sel))return;
+  expandTo(sel,selCtx);
+  renderTree();
+  revealSel();
+  setTimeout(()=>{
+    renderTreeFlush();
+    const row=treeRowOf(sel);if(!row)return;
+    row.scrollIntoView({block:"center"});
+    accFlash(()=>{const r=treeRowOf(sel);return r?[r]:null},true);
+    flashKeepSet(["#tree .n.on"]);
+  },40);
 }
 // «Развернуть всё» и «Развернуть всё внутри» убраны: в большой конфигурации (сотни тысяч устройств) они читали
 // ветку за веткой тысячи раз, а 3000 строк никто не читает. Объект находят поиском и «Все статусы», ветку раскрывают
