@@ -3623,4 +3623,18 @@ window.I18N_EN={
 "Имя или путь папки…":"Folder name or path…",
 "Уже в папке":"Already in folder",
 "уже здесь":"already here",
+// Прототип 67: удаление хранилища и тома с сохранением файлов
+"Томов:":"Volumes:",
+"Оставить файлы записей. Новое хранилище сможет подключить их с записями.":"Keep the record files. A new storage can attach them with the records.",
+"Оставить объекты в папке бакета. Новое хранилище сможет подключить их с записями.":"Keep the objects in the bucket folder. A new storage can attach them with the records.",
+"Удалить файлы записей. Консоль не сможет вернуть записи.":"Delete the record files. The console cannot bring the records back.",
+"Удалить объекты из папки бакета. Консоль не сможет вернуть записи.":"Delete the objects from the bucket folder. The console cannot bring the records back.",
+"Консоль оставила файлы записей.":"The console kept the record files.",
+"Консоль оставила объекты в папке бакета.":"The console kept the objects in the bucket folder.",
+"Консоль удалила и файлы записей.":"The console deleted the record files too.",
+"Консоль удалила и объекты в папке бакета.":"The console deleted the objects in the bucket folder too.",
+"Консоль удалит том «{v}» хранилища «{a}».":"The console deletes volume \u00ab{v}\u00bb of storage \u00ab{a}\u00bb.",
+"Консоль удалит хранилище «{a}» и все его тома.":"The console deletes storage \u00ab{a}\u00bb and all its volumes.",
+"Это последний том. Удалить можно хранилище целиком.":"This is the last volume. You can delete the whole storage.",
+"Это последний том хранилища. Удалить можно хранилище целиком.":"This is the last volume of the storage. You can delete the whole storage.",
 };
