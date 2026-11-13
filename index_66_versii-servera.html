@@ -21102,7 +21102,7 @@ function formBase(n){
   if(n.type==="domain"){
     if(tab==="flds")return folderCardHtml(flHolder(n.id));
     if(tab==="cams")return lanCardHtml(n);
-    if(tab==="lic")return card("Лицензии",`<div class="g">${fldEdit("Серийный номер лицензии",n.id,"license",n.license||"")}</div>
+    if(tab==="lic")return domLicHtml(n)+card("Лицензии",`<div class="g">${fldEdit("Серийный номер лицензии",n.id,"license",n.license||"")}</div>
       <p class="sub">Лицензии выдаются на домен (кластер) и расходуются устройствами независимо от того, на каком сервере ведётся запись.</p>`)+
       listCard({
         key:"lic:"+n.id,
@@ -21141,6 +21141,7 @@ function formBase(n){
         <button type="button" class="mc" ${onEv("click",["goTab","srvs"])}><span>${i18n("Сетевых хранилищ")}</span><b>${arcN}</b></button>
         <button type="button" class="mc" ${onEv("click",["setSlice","cam"],["setGroup","folder"],["pick",`${n.id}`])}${fldN.title?` title="${escHtml(fldN.title)}"`:""}><span>${i18n("Папок")}</span><b>${fldN.text}</b></button>
         <button type="button" class="mc" ${onEv("click",["setSlice","cam"],["setGroup","folder"],["pick",`${n.id}`])}><span>${i18n("Устройств")}</span><b>${devN}</b></button>
+        ${domLicTiles(n)}
       </div>`)+
       card("Действия",`<div class="dom-acts">
         <button type="button" class="btn s" ${onEv("click",["openAddServers",`${n.id}`])}>${lu("plus")}${i18n("Серверы")}</button>
@@ -21303,17 +21304,17 @@ function srvVer(n){
   return v;
 }
 function srvVerState(n){return n.online===false?"Нет связи":srvVerHash(n.id)%11===4?"Остановлен":"Работает"}
-// Лицензия живёт у домена: серийный номер берём из его поля license, остальное — заглушка.
+// Лицензия живёт у домена: карточка сервера берёт тот же ключ, что и раздел «Опции» → «Лицензии»
 function srvVerLic(n){
   const d=domainOf(n.id);
-  if(!d)return{state:"missing",short:"Ключа нет",text:"Сервер не входит в домен, поэтому у него нет ключа."};
-  const h=srvVerHash(d.id)%5,serial=d.license||"";
-  if(h===3)return{state:"missing",short:"Ключа нет",domId:d.id,serial,
-    text:"У домена нет ключа, поэтому его камеры не работают."};
-  if(h===1)return{state:"expiring",short:"Осталось 22 дня",domId:d.id,serial,
-    text:"Ключ «Профессиональная» действует до 05.12.2026. Осталось 22 дня."};
-  return{state:"active",short:"Действует",domId:d.id,serial,
-    text:"Ключ «Корпоративная» действует до 12.03.2027."};
+  if(!d)return{state:"missing",short:"Ключа нет",text:i18n("Сервер не входит в домен, поэтому у него нет ключа.")};
+  const L=licOfDomain(d);
+  if(!L)return{state:"missing",short:"Ключа нет",domId:d.id,text:i18n("У домена нет ключа, поэтому его камеры не работают.")};
+  const j=L.doms.indexOf(d),f=licCamFeat(L),rest=f?licDomRest(L,j,f):null;
+  const cam=f?` ${i18n("Камеры")}: ${f.by[j]} ${i18n("из")} ${f.lim[j]??f.total}, ${rest<0?`${i18n("без лицензии")} ${-rest}`:`${i18n("свободно")} ${rest}`}.`:"";
+  const text=L.none?i18n("У домена нет ключа, поэтому его камеры не работают.")
+    :`${licKeyName(L)}, ${i18n("тип")} ${L.product}. ${licExpText(L)}${cam}`;
+  return{state:L.state,short:licShortState(L),domId:d.id,keyId:L.none?"":L.id,text};
 }
 // Версия домена — старшая среди его серверов на связи: с ней консоль и сравнивает этот сервер.
 function srvVerDomainBest(n){
@@ -21337,8 +21338,72 @@ function srvVerHtml(n){
       <div class="mx" style="margin-top:10px">
         ${lc.domId?`<button type="button" class="mc" data-ver-lic ${go}><span>${i18n("Лицензия домена")}</span><b>${i18n(lc.short)}</b></button>`:`<div class="mc" data-ver-lic><span>${i18n("Лицензия домена")}</span><b>${i18n(lc.short)}</b></div>`}
       </div>
-      <p class="sub" style="margin-top:10px">${i18n(lc.text)}${lc.serial?" "+i18n("Серийный номер:")+" "+escHtml(lc.serial)+".":""}${lc.domId?` <button class="lk" ${go}>${i18n("Лицензии домена")}</button>`:""}</p>
+      <p class="sub" style="margin-top:10px">${escHtml(lc.text)}${lc.domId?` <button class="lk" ${go}>${i18n("Лицензии домена")}</button>`:""}${lc.keyId?` <button class="lk" ${onEv("click",["licGoAll",`${lc.domId}`,`${lc.keyId}`])}>${i18n("Все ключи и домены")}</button>`:""}</p>
       <p class="sub">${i18n("Drivers Pack и DetectorPack обновляет установщик на самом сервере. Консоль их не обновляет.")}</p>`);
+}
+// Лицензия домена: карточка домена и карточка сервера берут тот же ключ, что и раздел «Опции» → «Лицензии»
+// (licKeys, licData). Поэтому запас лицензий в трёх местах один и тот же.
+function licOfDomain(d){if(!d)return null;const k=licKeys().find(x=>x.doms.includes(d));return k?licData(k):null}
+function licCamFeat(L){return L&&L.feats.find(f=>f.code==="cameras")||null}
+// Сколько ещё лицензий функции домен может взять: свободное в пуле, но не больше остатка своего лимита
+function licDomRest(L,j,f){const free=f.total-f.used,lim=f.lim[j];return lim==null?free:Math.min(free,lim-f.by[j])}
+function licShortState(L){
+  return{active:"Действует",expiring:`Кончается через ${licDays(L.days)}`,expired:"Срок истёк",mismatch:"Ключ не подходит",
+    missing:"Нет ключа",unassigned:"Не назначен доменам",offline:"Нет связи"}[L.state]||L.state;
+}
+function licExpText(L){
+  return L.exp?`${i18n("Ключ действует до")} ${new Intl.DateTimeFormat("ru-RU",{day:"numeric",month:"long",year:"numeric"}).format(L.exp)}.`:i18n("Срок ключа не ограничен.");
+}
+// Раздел «Опции» → «Лицензии» со всеми доменами и ключами. Ключ назван — консоль прокручивает к нему и моргает им.
+function licGoAll(domId,keyId){
+  navMark();goApp("sys");sys="lic";tab="gen";
+  if(domId!==undefined)domainFilter=domId||"";
+  renderDomainMenu();paint();
+  if(keyId)licGoKey(keyId);
+}
+// Обратный переход: из общего раздела — на вкладку «Лицензии» самого домена
+function licGoDomLic(id){
+  navMark();goApp("hw");domainFilter=id;sel=id;tab="lic";open.add(id);
+  renderDomainMenu();applyFiltersFromState();paint();hwFlashLanding();
+}
+function domLicFeatRow(L,j,f){
+  const lim=f.lim[j],rest=licDomRest(L,j,f),over=f.used>f.total||(lim!=null&&f.by[j]>lim);
+  return`<tr class="${over?"lic-over":""}"><td title="${escHtml(i18n(f.n))}">${escHtml(i18n(f.n))}<div class="lic-nbar">${licBar(L,f)}</div></td><td>${licBar(L,f)}</td>
+    <td class="lic-num"><b>${f.by[j]}</b>${lim!=null?` ${i18n("из лимита")} ${lim}`:""}</td>
+    <td class="lic-num">${f.used} ${i18n("из")} ${f.total}</td>
+    <td class="lic-num">${rest<0?`<span class="lic-neg">${i18n("не хватает")} ${-rest}</span>`:rest}</td></tr>`;
+}
+// Вкладка «Лицензии» домена: тот же ключ, что в «Опциях», но глазами одного домена
+function domLicHtml(d){
+  const L=licOfDomain(d);
+  if(!L)return"";
+  const j=L.doms.indexOf(d),shared=L.doms.length>1;
+  const all=`<button type="button" class="btn s" ${onEv("click",["licGoAll",`${d.id}`,`${L.id}`])}>${i18n("Все ключи и домены…")}</button>`;
+  const head=`<span class="lic-dn">${escHtml(licKeyName(L))}</span>${shared?`<span class="lic-st lic-st-mu">${i18n("Общий")} · ${L.doms.length} ${i18n(plural(L.doms.length,"домен|домена|доменов"))}</span>`:""}${licStateChip(L)}<span class="lic-acts">${all}</span>`;
+  const meta=L.none?"":`<div class="lic-meta"><div><span>${i18n("Тип")}</span><b>${escHtml(L.product)}</b></div>
+    <div><span>${i18n("Серийный номер")}</span><b>${escHtml(L.serial)}</b></div>
+    <div><span>${i18n("Действует до")}</span><b class="${L.state==="expiring"?"lic-warn":""}">${escHtml(L.exp?new Intl.DateTimeFormat("ru-RU",{day:"numeric",month:"long",year:"numeric"}).format(L.exp):i18n("бессрочно"))}</b></div>
+    <div><span>${i18n("Серверов домена")}</span><b>${(d.servers||[]).length}</b></div></div>`;
+  const body=`${meta}
+    ${L.none?`<div class="nt err" role="status">${i18n("У домена нет ключа, поэтому его камеры и детекторы не работают. Чтобы добавить ключ, перейти в «Опции» → «Лицензии».")}</div>`:""}
+    ${L.stateText?`<div class="nt err" role="status">${escHtml(i18n(L.stateText))}</div>`:""}
+    ${shared?`<div class="nt" role="note">${i18n("Домен берёт лицензии из общего пула ключа. Свободную лицензию получает домен, который первым подключит устройство. Лимит домена — это наибольшее число лицензий, которое домен может взять.")} ${i18n("Другие домены ключа")}: ${L.doms.filter(x=>x!==d).map(x=>`<button type="button" class="lk" ${onEv("click",["licGoDomLic",`${x.id}`])}>${escHtml(locName(x))}</button>`).join(", ")}</div>`:""}
+    ${L.feats.length?`<table class="lic-tb"><colgroup><col class="lic-c1"><col class="lic-c2"><col class="lic-c3"><col class="lic-c4"><col class="lic-c5"></colgroup>
+      <tr><th>${i18n("Функция")}</th><th>${i18n(shared?"Занято по доменам":"Занято")}</th><th class="lic-num">${i18n("Этот домен")}</th><th class="lic-num">${i18n("Весь ключ")}</th><th class="lic-num">${i18n("Домен может взять ещё")}</th></tr>
+      ${L.feats.map(f=>domLicFeatRow(L,j,f)).join("")}</table>`:`<p class="sub">${i18n("Ключ не даёт ни одной функции.")}</p>`}
+    <p class="sub" style="margin-top:10px">${i18n("Ключи и их домены ведут в разделе")} <button type="button" class="lk" ${onEv("click",["licGoAll",`${d.id}`,`${L.id}`])}>${i18n("«Опции» → «Лицензии»")}</button>. ${i18n("Там же добавляют ключ, назначают домены и задают лимиты.")}</p>`;
+  return`<div class="card lic-card lic-${L.state}" data-dom-lic="${d.id}"><div class="ch lic-hd">${head}</div><div class="cb">${body}</div></div>`;
+}
+// Плитки запаса лицензий на вкладке «Общие» домена
+function domLicTiles(d){
+  const L=licOfDomain(d);
+  if(!L)return"";
+  const j=L.doms.indexOf(d),f=licCamFeat(L);
+  const rest=f?licDomRest(L,j,f):null;
+  const restTxt=f==null?i18n("нет"):rest<0?`${i18n("не хватает")} ${-rest}`:String(rest);
+  return`<button type="button" class="mc" data-dom-lic-tile ${onEv("click",["goTab","lic"])}><span>${i18n("Лицензии камер")}</span><b>${f?`${f.by[j]} ${i18n("из")} ${f.lim[j]??f.total}`:i18n("нет")}</b></button>
+    <button type="button" class="mc" data-dom-lic-rest ${onEv("click",["goTab","lic"])}><span>${i18n("Лицензий камер свободно")}</span><b class="${rest!=null&&rest<=0?"lic-warn":""}">${restTxt}</b></button>
+    <button type="button" class="mc" data-dom-lic-key ${onEv("click",["goTab","lic"])}><span>${i18n("Ключ домена")}</span><b>${i18n(licShortState(L))}</b></button>`;
 }
 // ── Автоматизация ──────────────────────────────────────────────
 // Каталог — это граница, а не удобство. Форма строится из него, поэтому
@@ -29961,7 +30026,7 @@ function licDomRow(L){
   const sh=optShownDomains(),cam=L.feats.find(f=>f.code==="cameras");
   return`<div class="lic-doms">${L.doms.map((d,j)=>{const ns=(d.servers||[]).length;
     const lims=L.feats.filter(f=>f.lim[j]!=null).map(f=>`<span class="${f.by[j]>=f.lim[j]?"lic-warn":""}">${escHtml(i18n(f.n))} ${f.by[j]} ${i18n("из")} ${f.lim[j]}</span>`);
-    return`<span class="lic-dom${sh.includes(d)?"":" lic-dim"}">${L.doms.length>1?`<i class="lic-sw lic-seg${j%4}${sh.includes(d)&&!L.doms.every(x=>sh.includes(x))?" lic-hl":""}"></i>`:""}<button type="button" class="lk" ${onEv("click",["licGoHw",d.id])}>${escHtml(locName(d))}</button>
+    return`<span class="lic-dom${sh.includes(d)?"":" lic-dim"}">${L.doms.length>1?`<i class="lic-sw lic-seg${j%4}${sh.includes(d)&&!L.doms.every(x=>sh.includes(x))?" lic-hl":""}"></i>`:""}<button type="button" class="lk" ${onEv("click",["licGoDomLic",d.id])}>${escHtml(locName(d))}</button>
     <span class="sub">${ns} ${i18n(plural(ns,"сервер|сервера|серверов"))}${cam&&L.doms.length>1?` · ${i18n("камер")} ${cam.by[j]}`:""}${d.online===false?` · ${i18n("нет связи")}`:""}${lims.length?` · ${i18n("лимит")}: ${lims.join(", ")}`:""}</span>
     ${L.none?"":`<button type="button" class="lic-rm" title="${escHtml(i18n("Снять с ключа"))}" aria-label="${escHtml(`${i18n("Снять с ключа")}: ${locName(d)}`)}" ${onEv("click",["licRmDom",L.id,String(L.dom[j])])}>${lu("x",12)}</button>`}</span>`}).join("")}</div>`;
 }
