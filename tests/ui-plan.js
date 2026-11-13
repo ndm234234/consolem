@@ -676,7 +676,7 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   ok(d2S3Rec.kind === "cloud" && d2S3Rec.provider === "s3" && d2S3Rec.storage === "object" && d2S3Rec.serverId === d2Srv.id, "S3: сервер записал вид, провайдера и владельца — " + d2S3Rec.kind + ", " + d2S3Rec.provider);
   ok(document.querySelector("#tree .n.on") && !document.querySelector("#tree .n.on .tag-cloud") && serverArchives(d2Srv.id).includes(d2S3), "S3: строка хранилища в дереве без метки вида (вид — в подсказке), хранилище в списке сервера");
   ok(/^s3:\/\/vms-archive\//.test(archDiskLabel(d2S3)), "S3: в строке списка адрес бакета, а не код провайдера — " + archDiskLabel(d2S3));
-  // Прототип 67: последний том не удаляют (как в Axxon One) — окно тома не открывается, адрес бакета видно в окне хранилища
+  // Последний том не удаляют (как в Axxon One): окно тома не открывается, слова про бакет — в окне хранилища. Ветка else — для прототипов со старым поведением
   const d2S3Last = typeof volDelWhy === "function" && !!volDelWhy(archVols(d2S3)[0]);
   if (d2S3Last) {
     deleteVolume(archVols(d2S3)[0].id);

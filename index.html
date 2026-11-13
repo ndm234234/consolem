@@ -1655,6 +1655,12 @@ fieldset.rl-tags{border:0;padding:0;min-width:0;margin-top:6px}.rl-tags>legend{d
 #confirmMsg p{margin:0 0 10px}#confirmMsg p:last-child{margin:0}
 .confirm-opt{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:12px;color:var(--mu);cursor:pointer;user-select:none}
 .confirm-opt input{margin:0;cursor:pointer}
+/* Выбор судьбы файлов при удалении хранилища или тома: два исхода названы словами */
+.confirm-files{margin-top:12px;padding:8px 12px;border:1px solid var(--bd);border-radius:8px;background:var(--one-surface-muted)}
+.confirm-files .confirm-opt{align-items:flex-start;margin-top:8px}
+.confirm-files .confirm-opt:first-child{margin-top:0}
+.confirm-files .confirm-opt input{margin-top:2px;flex:none}
+.confirm-files .confirm-opt span{color:var(--tx)}
 .cwarn{margin-top:10px;color:var(--one-danger-text);font-size:12px}
 .confirm-count{margin-top:12px;padding:10px 12px;border:1px solid var(--one-danger);border-radius:8px;background:var(--one-danger-bg)}
 .confirm-count label{display:block;margin:0 0 6px;font-size:12px;color:var(--tx)}
@@ -11381,7 +11387,10 @@ function openTreeCtx(n,xy){
       del.push(tctxDanger(i18n("Удалить папку"),act("deleteFolder",id)));
     }
     if(n.type==="archive")del.push(tctxDanger(i18n("Удалить хранилище"),act("deleteArchive",id)));
-    if(n.type==="vol"&&canDeleteKind("volume"))del.push(tctxDanger(i18n("Удалить том"),act("deleteVolume",id)));
+    if(n.type==="vol"&&canDeleteKind("volume")){
+      const vw=volDelWhy(volById(id));
+      del.push(tctxDanger(tctxWhy(i18n("Удалить том"),vw),act("deleteVolume",id),!!vw));
+    }
     if(n.type==="domain"&&canDeleteKind("domain"))del.push(tctxDanger(i18n("Удалить домен"),act("deleteDomain",id),!canDeleteDomain()));
     if(canTreeCtxDelete(n))del.push(tctxDanger(i18n("Удалить"),act("deleteTreeNode",id)));
     groups.push(del);
@@ -21046,7 +21055,7 @@ function formBase(n){
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
         ${k==="disk"&&n.mode==="part"?`<button type="button" class="btn s" ${onEv("click",["formatVolume",`${n.id}`])} ${n.state==="format"?"disabled":""}>${i18n("Форматировать…")}</button>`:""}${spec.check?`<button type="button" class="btn s" ${onEv("click",["volCheck",`${n.id}`])}>${i18n(k==="bucket"?"Проверить подключение":"Подключиться")}</button>`:""}
-        <button type="button" class="btn s" data-needs="kind:volume/delete" ${onEv("click",["deleteVolume",`${n.id}`])}>${i18n("Удалить том")}</button>
+        <button type="button" class="btn s" data-needs="kind:volume/delete" ${onEv("click",["deleteVolume",`${n.id}`])} ${volDelWhy(n)?`disabled title="${escHtml(i18n(volDelWhy(n)))}"`:""}>${i18n("Удалить том")}</button>
       </div>
       <p class="sub" style="margin-top:10px">${i18n("Глубину и шифрование задают у хранилища. У тома задают место и размер.")}</p>`);
   }
@@ -32577,28 +32586,55 @@ function protoMarkRec(v,rec){
   if(v.state==="unfmt")delete v.state;
   v.used=v.used&&v.used!=="0%"?v.used:"64%";
 }
-// Том удаляется вместе с записями на нём; камеры остаются привязаны к
-// хранилищу. Если том последний — хранилищу некуда писать, об этом и говорим.
+// ЗАГЛУШКА: выбор «оставить файлы» на сервер не уходит. В контракте 0.12.0 у
+// DELETE /units/{uid} нет такого параметра: запрос api/requests/2026-11-13-151549Z-mockup-delete-keep-files-request.md.
+// Прототип помнит выбор в памяти страницы и называет его в тосте.
+// Выбор есть и у блочного, и у объектного хранилища. Слова разные только по адресу: облако держит
+// записи объектами в папке бакета, диск и NAS — файлами, и блочного, и объектного типа.
+function archObjectFiles(a){return archAddr(a)==="bucket"}
+// obj — все хранилища в окне облачные: тогда слова про объекты в папке бакета
+function delFilesHtml(obj){
+  const keep=obj?"Оставить объекты в папке бакета. Новое хранилище сможет подключить их с записями.":"Оставить файлы записей. Новое хранилище сможет подключить их с записями.";
+  const drop=obj?"Удалить объекты из папки бакета. Консоль не сможет вернуть записи.":"Удалить файлы записей. Консоль не сможет вернуть записи.";
+  return`<div class="confirm-files">
+      <label class="confirm-opt"><input type="radio" name="delFiles" value="keep" checked><span>${i18n(keep)}</span></label>
+      <label class="confirm-opt"><input type="radio" name="delFiles" value="drop"><span>${i18n(drop)}</span></label>
+    </div>`;
+}
+// Выбор читают в момент подтверждения: окно уже закрыто, но разметка ещё на месте
+function delFilesKeep(){return document.querySelector('#confirmMsg input[name="delFiles"]:checked')?.value!=="drop"}
+function delFilesToast(a,keep,done){
+  const obj=archObjectFiles(a);
+  if(keep)return`${i18n(done)}. ${i18n(obj?"Консоль оставила объекты в папке бакета.":"Консоль оставила файлы записей.")}`;
+  return`${i18n(done)}. ${i18n(obj?"Консоль удалила и объекты в папке бакета.":"Консоль удалила и файлы записей.")}`;
+}
+// Последний том удалить нельзя: хранилищу будет некуда писать. Удаляют хранилище целиком.
+// Тома, которые уже ждут удаления в отсчёте, не считаются: иначе за 10 секунд можно снять все тома.
+function archLiveVols(a){return archVols(a).filter(x=>!pendingDelHas(x.id))}
+function volDelWhy(v){const a=v&&archById(v.archId);return a&&archLiveVols(a).filter(x=>x.id!==v.id).length===0?"Это последний том. Удалить можно хранилище целиком.":""}
+// Том удаляется вместе с записями или с сохранением файлов: выбор в окне подтверждения.
+// Камеры остаются привязаны к хранилищу.
 function deleteVolume(id){
   closeTreeCtx();
   const v=volById(id),a=v&&archById(v.archId);if(!v||!a)return;
-  const last=archVols(a).length===1,n=archCameras(a.id).length;
+  const why=volDelWhy(v);
   // У бакета в disk лежит код провайдера: два тома одного хранилища различаются только адресом
   const vName=archAddr(a)==="bucket"?volLabel(v):v.disk;
+  if(why){toast(i18n("Это последний том хранилища. Удалить можно хранилище целиком."));return}
   if(pendingDelHas(id)){toast("Консоль удалит том после отсчёта. Чтобы отменить, нажать «Отменить» в уведомлении");return}
   if(busyRefuse(id))return;
-  askConfirm("Удалить том",i18n("Том «{v}» хранилища «{a}» будет удалён вместе с записями на нём.").replace("{v}",()=>escHtml(vName)).replace("{a}",()=>escHtml(locName(a))),
-    (last&&n?`${i18n("Это последний том. Хранилище не сможет записывать видео камер:")} ${n}. `:"")+i18n("После подтверждения консоль покажет отсчёт и кнопку «Отменить»."),
-    "Удалить",()=>scheduleDelete([id],{label:`${i18n("Том")} «${vName}»`,commit:()=>{
+  askConfirm("Удалить том",`<p>${i18n("Консоль удалит том «{v}» хранилища «{a}».").replace("{v}",()=>escHtml(vName)).replace("{a}",()=>escHtml(locName(a)))}</p>${delFilesHtml(archObjectFiles(a))}`,
+    i18n("После подтверждения консоль покажет отсчёт и кнопку «Отменить»."),
+    "Удалить",()=>{const keep=delFilesKeep();scheduleDelete([id],{label:`${i18n("Том")} «${vName}»`,commit:()=>{
       API.del(`/units/${id}`,hwVer.get(id)).then(()=>{
       const i=a.vols.indexOf(v);if(i>=0){a.vols.splice(i,1);hwIdxDrop()}
       hwVer.delete(id);
       if(sel===id){sel=a.id;tab="arch"}
       setD(false);
-      toast(i18n("Том удалён"));
+      toast(delFilesToast(a,keep,"Том удалён"));
       paint();
       }).catch(e=>toast(problemText(e)));
-    }}),{rawMsg:true,typeCount:1});
+    }})},{html:true,typeCount:1});
 }
 // Камеры удалённого хранилища не удаляются: они остаются в системе и уходят в
 // «Без записи» (режим записи помнят — при новом архиве его не надо задавать
@@ -32609,17 +32645,17 @@ function deleteArchive(id){
   const n=archCameras(id).length;
   if(pendingDelHas(id)){toast("Консоль удалит хранилище после отсчёта. Чтобы отменить, нажать «Отменить» в уведомлении");return}
   if(busyRefuse(id))return;
-  askConfirm("Удалить хранилище",`${i18n("Хранилище")} «${locName(a)}» ${i18n("будет удалено вместе с томами.")}`,
+  askConfirm("Удалить хранилище",`<p>${i18n("Консоль удалит хранилище «{a}» и все его тома.").replace("{a}",()=>escHtml(locName(a)))} ${i18n("Томов:")} ${archVols(a).length}.</p>${delFilesHtml(archObjectFiles(a))}`,
     (n?`${i18n("Перестанут писать камер:")} ${n}. ${i18n("Камеры останутся в системе, в разделе «Без записи».")} `:"")+i18n("После подтверждения консоль покажет отсчёт и кнопку «Отменить»."),
-    "Удалить",()=>scheduleDelete([id],{label:`«${locName(a)}»`,commit:()=>{
+    "Удалить",()=>{const keep=delFilesKeep();scheduleDelete([id],{label:`«${locName(a)}»`,commit:()=>{
       // Камеры, что писали сюда, сервер переводит на следующее хранилище или выключает им запись
       API.del(`/units/${id}`,hwVer.get(id)).then(()=>hwReload()).then(()=>{
       if(sel===id){const to=a.server||a.domain||sel;tab=tabOpen(find(to)?.n);sel=to}
       open.delete(id);setD(false);treeMatchCache.clear();searchMatchCache.clear();
-      toast(i18n("Хранилище удалено"));
+      toast(delFilesToast(a,keep,"Хранилище удалено"));
       paint();
       }).catch(e=>toast(problemText(e)));
-    }}),{rawMsg:true,typeCount:1});
+    }})},{html:true,typeCount:1});
 }
 function archOwnerLine(a){
   const sv=archServer(a),dm=archDomain(a);
@@ -38451,10 +38487,15 @@ function deleteSelected(only){
   if(!ids.length){toast(skipped.length?"Серверы исключают из домена, а домены удаляют по одному, из их меню":all.length?"Эти записи создаёт сервер. Их нельзя удалить":"Нечего удалять");return}
   const idSet=new Set(ids);
   const roots=ids.filter(id=>{const n=find(id).n;if(n.type==="vol"&&idSet.has(n.archId))return false;return!path(id).slice(0,-1).some(x=>idSet.has(x.id))}).filter(id=>!pendingDelHas(id));
-  if(!roots.length){toast("Консоль удалит выбранное после отсчёта");return}
-  confirmDeleteNodes(roots,null,skipped);
+  // Последний том хранилища не удаляют и в группе: выбраны все живые тома — один остаётся
+  const lastVols=[],byArch=new Map();
+  roots.forEach(id=>{const n=find(id).n;if(n.type==="vol"){if(!byArch.has(n.archId))byArch.set(n.archId,[]);byArch.get(n.archId).push(id)}});
+  byArch.forEach((vs,aid)=>{const live=archLiveVols(archById(aid)).length;if(vs.length>=live)lastVols.push(vs[vs.length-1])});
+  const keepVol=new Set(lastVols),roots2=roots.filter(id=>!keepVol.has(id));
+  if(!roots2.length){toast(roots.length?i18n("Это последний том хранилища. Удалить можно хранилище целиком."):"Консоль удалит выбранное после отсчёта");return}
+  confirmDeleteNodes(roots2,null,skipped,lastVols);
 }
-function confirmDeleteNodes(roots,back,skipped){
+function confirmDeleteNodes(roots,back,skipped,lastVols){
   const nodes=roots.map(id=>find(id).n);
   const used=ruleUsersOf(nodes);
   // Запись регистратора снимается, его камеры остаются и теряют только родителя
@@ -38476,12 +38517,18 @@ function confirmDeleteNodes(roots,back,skipped){
   const fl=nodes.filter(n=>n.type==="folder"),ar=nodes.filter(n=>n.type==="archive"),vl=nodes.filter(n=>n.type==="vol");
   if(fl.length&&!one)lines.push(`${i18n("папок")}: ${fl.length} — ${i18n("устройства из них останутся в системе")}`);
   if(ar.length){const k=new Set(ar.flatMap(a=>archCameras(a.id).map(c=>c.id))).size;lines.push(`${i18n("хранилищ")}: ${ar.length}, ${i18n("вместе с томами")}${k?` — ${i18n("перестанут писать камер")}: ${k}, ${i18n("камеры останутся в «Без записи»")}`:""}`)}
-  if(vl.length)lines.push(`${i18n("томов")}: ${vl.length} — ${i18n("вместе с записями на них")}`);
+  if(vl.length&&!one)lines.push(`${i18n("томов")}: ${vl.length}`);
+  if(lastVols?.length)lines.push(`<span class="sub">${i18n("Не удаляются последние тома хранилищ")}: ${lastVols.length}. ${i18n("Удалить можно хранилище целиком.")}</span>`);
   if(skipped?.length)lines.push(`<span class="sub">${i18n("Не удаляются")}: ${bulkKinds(skipped).map(([k,c])=>`${escHtml(kindLabel(k).toLowerCase())} (${c})`).join(", ")} — ${i18n("сервер исключают из домена, а домен удаляют по одному, из его меню")}</span>`);
-  const html=`<ul class="bk-del">${lines.map(l=>`<li>${l}</li>`).join("")}</ul>
+  // Хранилища и тома в группе: тот же выбор по файлам, что и в одиночном удалении (ЗАГЛУШКА — см. delFilesHtml)
+  const stores=[...ar,...vl.map(v=>archById(v.archId))].filter(Boolean);
+  const html=`<ul class="bk-del">${lines.map(l=>`<li>${l}</li>`).join("")}</ul>${stores.length?delFilesHtml(stores.every(archObjectFiles)):""}
     <p class="sub" style="margin:10px 0 0">${i18n("После подтверждения консоль покажет отсчёт и кнопку «Отменить».")}</p>`;
-  const opts=one?{label:`«${locName(one)}»`,back}:{back};
-  askConfirm(one?`${i18n("Удалить")} «${escHtml(locName(one))}»?`:"Удалить выбранные объекты?",html,"","Удалить",()=>scheduleDelete(roots,opts),{html:true,typeCount:count});
+  const baseLabel=one?`«${locName(one)}»`:`${count} ${i18n(plural(count,"объект|объекта|объектов"))}`;
+  askConfirm(one?`${i18n("Удалить")} «${escHtml(locName(one))}»?`:"Удалить выбранные объекты?",html,"","Удалить",()=>{
+    const fileNote=stores.length?` (${i18n(delFilesKeep()?"консоль оставит файлы записей":"консоль удалит файлы записей")})`:"";
+    scheduleDelete(roots,{label:baseLabel+fileNote,back});
+  },{html:true,typeCount:count});
 }
 // opts.label — подпись в тосте вместо «N объектов»; opts.commit — своё
 // удаление (папка, хранилище, том, детектор, домен); opts.back — куда
