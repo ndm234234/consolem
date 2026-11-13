@@ -3616,4 +3616,11 @@ window.I18N_EN={
 "Указать позже":"Set later",
 "Пустое поле берёт адрес из шаблона. Адрес канала можно указать и позже, в карточке камеры.":"An empty field takes the address from the template. You can also set the channel address later, in the camera card.",
 "RTSP-регистратор":"RTSP recorder",
+// Папка объекта из дерева
+"Переместить в папку…":"Move to folder…",
+"Добавить в папку…":"Add to folder…",
+"Найти папку":"Find folder",
+"Имя или путь папки…":"Folder name or path…",
+"Уже в папке":"Already in folder",
+"уже здесь":"already here",
 };
