@@ -33561,7 +33561,7 @@ function deviceManualHtml(){
       </select></div>
       <div><label>Производитель</label>${comboVendorHtml(m.vendor,["changeManualVendor"],{inline:false})}</div>
       <div><label>Модель</label><div class="inline-field">${comboModelHtml(m.vendor,m.model,["updateManual","model"],{inline:false,ph:rtsp?i18n("Необязательно"):""})}${rtsp||gbt?"":`<button type="button" class="btn s" title="Определить модель по данным подключения" ${onEv("click",["detectManualModel"])}>${ic("search")} Определить</button>`}</div></div>
-      ${rtsp?`<div><label>${i18n("Каналы")}</label><input type="number" min="1" max="${RTSP_CH_MAX}" value="${chN}" title="${i18n("Ввести число каналов регистратора. Один канал — одна камера.")}" ${onEv("change",["changeManualChannels",onEv.value])}></div><div></div>
+      ${rtsp?`<div><label>${i18n("Каналы")}</label><input type="number" min="1" max="${RTSP_CH_MAX}" value="${chN}" title="${i18n("Ввести число каналов регистратора. Один канал — одна камера.")}" ${onEv("change",["changeManualChannels",onEv.value])}></div>
       <div class="full"><label>${chN>1?i18n("Шаблон адреса RTSP"):"RTSP"}</label><input id="devManIp" value="${escHtml(m.rtsp||"")}" placeholder="${chN>1?"rtsp://адрес:554/ch{канал}":"rtsp://адрес:554/поток"}" ${onEv("input",["updateManual","rtsp",onEv.value])}>${chN>1?`<p class="rtsp-ch-hint">${i18n("Вместо {канал} консоль подставит номер канала: 1, 2, 3…")}</p>`:""}</div>
       ${chN>1?rtspChannelsHtml(m,chN):""}`
       :gbt?`<div class="full"><label>${i18n("Адрес GB/T28181")}</label><input id="devManIp" class="${String(m.ip||"").trim()&&gbtBlock(m)&&gbtBlock(m)!==GBT_WAIT?"gbt-bad":""}" value="${escHtml(m.ip)}" placeholder="34020000001320000008@34020000002000000001" spellcheck="false" autocomplete="off" ${onEv("input",["updateManual","ip",onEv.value])}></div>
@@ -34537,7 +34537,7 @@ function planIssueHtml(row){
 function planRowTitle(row){
   const r=row.r,named=r.name&&!isDefaultDeviceName(r.name);
   const addr=r.ip?`${r.ip}${r.port&&+r.port!==80?":"+r.port:""}`:"";
-  const chN=row.source==="csv"?(isRtspVendor(r.vendor)?rtspModelChannels(r.model):0):rtspChannelsOf(r);
+  const chN=planRowChannels(row);
   const model=[r.vendor,r.model].filter(Boolean).join(" ")+(chN>1?` · ${chN} ${i18n(plural(chN,"канал|канала|каналов"))}`:"");
   return{title:named?r.name:(addr||r.rtspUrl||r.rtsp||"—"),sub:named?[addr,model].filter(Boolean).join(" · "):model};
 }
@@ -34551,7 +34551,7 @@ function planRowHeadHtml(row){
 }
 function planRowHtml(row){
   const r=row.r,lock=addPlan.applying,dis=lock?"disabled":"";
-  const rtsp=planIsRtsp(r);
+  const rtsp=planIsRtsp(r),chN=planRowChannels(row);
   const who=planRowTitle(row).title,al=l=>escHtml(`${i18n(l)} · ${who}`);   // подпись поля называет и строку: полей «Название» в плане много
   // «Каналы» перерисовывают строку, поэтому их читают по «change»: при вводе каждой цифры курсор уходил бы в начало поля
   const inp=(k,label,val,ph,ev)=>`<div class="dev-field"><label>${i18n(label)}</label><input class="dev-inline-input" data-pf="${k}" aria-label="${al(label)}" value="${escHtml(val??"")}" placeholder="${escHtml(ph||"")}" ${dis} ${onEv(ev||"input",["planEdit",row.pid,k,onEv.value])}></div>`;
@@ -34562,7 +34562,7 @@ function planRowHtml(row){
       <div class="plan-two"><div class="dev-field"><label>${i18n("Производитель")}</label>${comboVendorHtml(r.vendor,["planEdit",row.pid,"vendor"],{lock,pf:"vendor",aria:al("Производитель")})}</div>
       <div class="dev-field"><label>${i18n("Модель")}</label>${comboModelHtml(r.vendor,r.model,["planEdit",row.pid,"model"],{lock,pf:"model",aria:al("Модель")})}</div></div>
       ${row.source==="manual"&&rtsp?inp("channels","Каналы",r.channels||1,"1","change"):""}
-      ${planShowsAddr(row.source)?`${rtsp?inp("rtspUrl",rtspChannelsOf(r)>1?"Шаблон адреса RTSP":"RTSP",r.rtspUrl||r.rtsp,rtspChannelsOf(r)>1?"rtsp://адрес:554/ch{канал}":"rtsp://адрес:554/поток"):""}${!rtsp||r.ip?`<div class="plan-two">${inp("ip","IP-адрес",r.ip)}${inp("port","Порт",r.port)}</div>`:""}`:""}
+      ${planShowsAddr(row.source)?`${rtsp?inp("rtspUrl",chN>1?"Шаблон адреса RTSP":"RTSP",r.rtspUrl||r.rtsp,chN>1?"rtsp://адрес:554/ch{канал}":"rtsp://адрес:554/поток"):""}${!rtsp||r.ip?`<div class="plan-two">${inp("ip","IP-адрес",r.ip)}${inp("port","Порт",r.port)}</div>`:""}`:""}
       ${inp("identifier","ID",isAutoIdentifier(r.identifier)?"":r.identifier,i18n("Авто"))}
       <div class="plan-two">${inp("user","Имя пользователя",r.user,i18n("Авто"))}
       <div class="dev-field"><label>${i18n("Пароль")}</label>${devPassFieldHtml(r.pass||"",lock,`planEdit('${row.pid}','pass',this.value)`,`${i18n("Пароль")} · ${who}`,"pass")}</div></div>

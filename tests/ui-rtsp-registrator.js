@@ -74,6 +74,12 @@ UiCheck(async ({ ok, until }) => {
   const txt = buildDeviceCsvText([{ ip: "10.9.0.20", port: "554", vendor: "RTSP", model: "3_channel_device", user: "admin", pass: "p", identifier: "", short: "dvr", name: "", lat: "", lon: "", azimuth: "", archive: "", record: "Нет", group: "", rtspUrl: "rtsp://10.9.0.20:554/ch{канал}" }]);
   const r = parseCsvDeviceRows(txt.replace(/^﻿/, ""))[0];
   ok(inferCsvDeviceKind(r).channels === 3 && !r.errors.length && r.name === i18n("RTSP-регистратор"), "CSV: строка — регистратор на 3 канала: " + r.name);
+  const crow = planPush("csv", r);
+  crow.open = true;
+  const chtml = planRowHtml(crow);
+  ok(/Шаблон адреса RTSP/.test(chtml) && /ch\{канал\}/.test(chtml), "CSV: строка плана называет поле шаблоном адреса");
+  ok(/3 канала/.test(planRowTitle(crow).sub), "CSV: заголовок строки называет число каналов: " + planRowTitle(crow).sub);
+  addPlan.rows.pop();
   const cn = csvDeviceNode(r, s, false, "current");
   ok(cn.type === "ipsrv" && cn.devices.length === 3 && cn.devices[2]._f?.RTSP === "rtsp://10.9.0.20:554/ch3" && cn.devices[0].short === "dvr.1", "CSV: IP-сервер с 3 камерами, адрес и короткое имя из строки");
 
