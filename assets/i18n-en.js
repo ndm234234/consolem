@@ -3523,4 +3523,7 @@ window.I18N_EN={
 "Подождать: консоль проверяет SIP-сервер других устройств GB/T.":"Wait: the console checks the SIP server of the other GB/T devices.",
 "После знака «-» ввести локальный или внешний IP-адрес сервера.":"After the \"-\" sign, enter the local or external IP address of the server.",
 "После знака «/» ввести внешний IP-адрес сервера.":"After the \"/\" sign, enter the external IP address of the server.",
+// Кнопка «Показать в дереве» в шапке дерева (из прототипа 63)
+"Показать открытый объект в дереве":"Show the open object in the tree",
+"Сначала открыть объект":"Open an object first",
 };

@@ -22,11 +22,14 @@ UiCheck(async ({ ok, sleep }) => {
   const fold = btn().parentElement;
   ok(fold.classList.contains("ph-fold") && fold.contains(document.getElementById("filtBtn")), "«Папки» и статус за одной чертой");
   ok(getComputedStyle(fold, ":before").width === "1px", "черта перед настройками");
-  // Шапка дерева — одна строка: «Свернуть всё» за статусом и за своей чертой; «Развернуть всё» и «Показать открытый объект» убраны
+  // Шапка дерева — одна строка: «Свернуть всё» за статусом и за своей чертой, «Показать в дереве» — за ним; «Развернуть всё» убрано
   ok(document.querySelectorAll("#aside .ph .ph-row").length === 1, "шапка дерева — одна строка");
   ok(statusBtn().nextElementSibling === collapseBtn() && fold.contains(collapseBtn()), "«Свернуть всё» — сразу за статусом");
   ok(getComputedStyle(collapseBtn(), ":before").width === "1px", "черта перед «Свернуть всё»");
-  ok(!document.getElementById("treeExpandBtn") && !document.getElementById("treeRevealBtn"), "нет «Развернуть всё» и «Показать открытый объект в дереве»");
+  ok(!document.getElementById("treeExpandBtn"), "нет «Развернуть всё»");
+  // «Показать в дереве» вернулось в index.html; прототипы — копии прежнего макета — живут без него
+  const revealBtn = document.getElementById("treeRevealBtn");
+  ok(!revealBtn || (collapseBtn().nextElementSibling === revealBtn && fold.contains(revealBtn)), "«Показать в дереве» — сразу за «Свернуть всё»");
 
   // Настройки не уезжают отдельно: ни при какой подписи статуса, ни на самой узкой панели
   setAsideWidth(100);
