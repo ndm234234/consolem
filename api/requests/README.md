@@ -17,6 +17,7 @@
 
 | Адресат | Кто (`git config user.name`) |
 |---|---|
+| 2026-11-13 | mockup | владелец контракта | [Параметры регистратора (IP-сервера) и признак «Отправлять настройки устройству»: `firmware` у `ipsrv`, `schemaPerUnit` с параметрами драйвера, признак у регистратора с переходом на его камеры, унаследованные поля камеры](2026-11-13-144218Z-mockup-recorder-driver-params-request.md) | новый | — |
 | владелец контракта | joynickray |
 | mockup | Maxim Kabenin, Maxim |
 | w2c | Murat Altuev |
