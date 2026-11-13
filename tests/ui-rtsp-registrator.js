@@ -31,11 +31,27 @@ UiCheck(async ({ ok, until }) => {
   ok(/4 канала/.test(planRowTitle(row).sub), "строка плана называет число каналов: " + planRowTitle(row).sub);
   ok(!planRowIssues(row).some((i) => i.err), "строка плана без ошибок");
 
-  // Второй регистратор без адреса: пустой адрес не считается повтором
+  // Регистратор без шаблона: адрес канала указывают позже, строку можно применить
   changeManualChannels(2);
   Object.assign(m, { rtsp: "", user: "admin", pass: "x" });
   planAddManual();
+  const bare = addPlan.rows[addPlan.rows.length - 1];
   ok(addPlan.rows.length === n0 + 2, "регистратор без адреса тоже идёт в план");
+  ok(!planRowIssues(bare).some((i) => i.err) && planOkRows().includes(bare), "регистратор без шаблона применяется: " + JSON.stringify(planRowIssues(bare)));
+  const bareNode = manualNode(bare.r, { id: "x", type: "folder", devices: devicePool }, false, { devMode: "current", templateId: "" });
+  ok(bareNode.devices.length === 2 && bareNode.devices.every((c) => !c._f), "регистратор без шаблона: 2 камеры без адреса");
+  addPlan.rows.pop();
+
+  // Пробелы в поле канала — не свой адрес
+  ok(rtspChannelUrls({ rtsp: "rtsp://a/ch{канал}", chUrls: { 2: "   " } }, 2)[1] === "rtsp://a/ch2", "поле канала из пробелов берёт адрес из шаблона");
+
+  // Модель, набранная руками, задаёт число каналов
+  changeManualChannels(1);
+  updateManual("model", "6_channel_device");
+  ok(rtspChannelsOf(wizd.manual) === 6, "модель 6_channel_device руками — 6 каналов: " + wizd.manual.channels);
+  changeManualChannels(4);
+  Object.assign(m, { rtsp: "rtsp://10.9.0.5:554/ch{канал}", user: "admin", pass: "x", name: "DVR проверка" });
+  updateManualChannelUrl(3, "rtsp://10.9.0.6:554/main");
 
   const s = { id: wizd.server || "x", type: "folder", devices: devicePool };
   const node = manualNode(row.r, s, false, { devMode: "current", templateId: "" });

@@ -3609,7 +3609,7 @@ window.I18N_EN={
 // RTSP-регистратор на N каналов (модель N_channel_device)
 "канал":"channel","канала":"channels","каналов":"channels",
 "Каналы регистратора":"Recorder channels",
-"Число каналов регистратора. 1 — одна камера":"The number of recorder channels. 1 is one camera",
+"Ввести число каналов регистратора. Один канал — одна камера.":"Enter the number of recorder channels. One channel is one camera.",
 "Шаблон адреса RTSP":"RTSP address template",
 "Вместо {канал} консоль подставит номер канала: 1, 2, 3…":"The console puts the channel number in place of {канал}: 1, 2, 3…",
 "Консоль создаст IP-сервер с моделью":"The console will create an IP server with the model",

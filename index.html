@@ -33284,7 +33284,7 @@ function rtspChannelModel(n){return`${n}_channel_device`}
 function rtspModelChannels(model){const x=/^(\d+)_channel_device$/i.exec(String(model||"").trim());return x?Math.min(+x[1],RTSP_CH_MAX):0}
 const RTSP_CH_RE=/\{(канал|ch|n)\}/gi;
 function rtspChannelUrl(tpl,i){const t=String(tpl||"").trim();return t.search(RTSP_CH_RE)>=0?t.replace(RTSP_CH_RE,String(i)):""}
-function rtspChannelUrls(m,n){return Array.from({length:n},(_,k)=>{const own=m.chUrls?.[k+1];return own?String(own).trim():rtspChannelUrl(m.rtsp||m.rtspUrl,k+1)})}
+function rtspChannelUrls(m,n){return Array.from({length:n},(_,k)=>{const own=String(m.chUrls?.[k+1]||"").trim();return own||rtspChannelUrl(m.rtsp||m.rtspUrl,k+1)})}
 // Камеры каналов регистратора: «Канал 1…N», адрес RTSP — у каждой своё
 function rtspChannelCams(parentId,urls,o={}){
   const pre=o.short!=null&&o.short!==""?String(o.short):"";
@@ -33458,6 +33458,8 @@ function gbtUseRef(){
 function updateManual(key,value){
   wizd.manual[key]=value;
   if(key==="rtsp")rtspChPreview();
+  // Модель N_channel_device, набранную руками, консоль понимает так же, как выбор в поле «Каналы»
+  if(key==="model"&&manualIsRtsp(wizd.manual)){const n=rtspModelChannels(value);if(n&&n!==rtspChannelsOf(wizd.manual)){changeManualChannels(n);return}}
   if((key==="ip"||key==="port")&&manualIsGbt(wizd.manual))gbtNotePaint();
   if(key==="arch"&&!hasLinkedArchive(value))wizd.manual.record="none";
   if(key==="arch"||key==="record")renderDeviceWizard();
@@ -33516,6 +33518,9 @@ function manualNode(m,s,disabled,prof){
   if(chN>1){
     delete common._f;
     node={...common,type:"ipsrv",subtype:"nvr",model:rtspChannelModel(chN),name:isDefaultDeviceName(m.name.trim())?i18n("RTSP-регистратор"):common.name};
+    if(m.lat)node.lat=m.lat;
+    if(m.lon)node.lon=m.lon;
+    if(m.azimuth)node.azimuth=m.azimuth;
     node.devices=rtspChannelCams(node.id,rtspChannelUrls(m,chN),{short:m.short,arch:m.arch,rec:m.record==="always"?"always":m.record==="motion"?"motion":"none"});
     if(s.type==="server")setDevServer(node,s.id);else bindArchServer(node);
     return node;
@@ -33556,7 +33561,7 @@ function deviceManualHtml(){
       </select></div>
       <div><label>Производитель</label>${comboVendorHtml(m.vendor,["changeManualVendor"],{inline:false})}</div>
       <div><label>Модель</label><div class="inline-field">${comboModelHtml(m.vendor,m.model,["updateManual","model"],{inline:false,ph:rtsp?i18n("Необязательно"):""})}${rtsp||gbt?"":`<button type="button" class="btn s" title="Определить модель по данным подключения" ${onEv("click",["detectManualModel"])}>${ic("search")} Определить</button>`}</div></div>
-      ${rtsp?`<div><label>${i18n("Каналы")}</label><input type="number" min="1" max="${RTSP_CH_MAX}" value="${chN}" title="${i18n("Число каналов регистратора. 1 — одна камера")}" ${onEv("change",["changeManualChannels",onEv.value])}></div><div></div>
+      ${rtsp?`<div><label>${i18n("Каналы")}</label><input type="number" min="1" max="${RTSP_CH_MAX}" value="${chN}" title="${i18n("Ввести число каналов регистратора. Один канал — одна камера.")}" ${onEv("change",["changeManualChannels",onEv.value])}></div><div></div>
       <div class="full"><label>${chN>1?i18n("Шаблон адреса RTSP"):"RTSP"}</label><input id="devManIp" value="${escHtml(m.rtsp||"")}" placeholder="${chN>1?"rtsp://адрес:554/ch{канал}":"rtsp://адрес:554/поток"}" ${onEv("input",["updateManual","rtsp",onEv.value])}>${chN>1?`<p class="rtsp-ch-hint">${i18n("Вместо {канал} консоль подставит номер канала: 1, 2, 3…")}</p>`:""}</div>
       ${chN>1?rtspChannelsHtml(m,chN):""}`
       :gbt?`<div class="full"><label>${i18n("Адрес GB/T28181")}</label><input id="devManIp" class="${String(m.ip||"").trim()&&gbtBlock(m)&&gbtBlock(m)!==GBT_WAIT?"gbt-bad":""}" value="${escHtml(m.ip)}" placeholder="34020000001320000008@34020000002000000001" spellcheck="false" autocomplete="off" ${onEv("input",["updateManual","ip",onEv.value])}></div>
@@ -33703,7 +33708,10 @@ function csvDeviceNode(r,s,disabled,mode){
   let n;
   if(kind?.type==="ipsrv"){
     n=deviceIpsrvNodeFromCsvRow(r,s);
-    if(kind.channels)n.devices=rtspChannelCams(n.id,rtspChannelUrls({rtsp:r.rtspUrl},kind.channels),{short:r.short,arch:r.arch,rec:r.arch?r.record:"none"});
+    if(kind.channels){
+      n.model=rtspChannelModel(kind.channels);   // консоль берёт не больше 64 каналов: модель называет то же число
+      n.devices=rtspChannelCams(n.id,rtspChannelUrls({rtsp:r.rtspUrl},kind.channels),{short:r.short,arch:r.arch,rec:r.arch?r.record:"none"});
+    }
     else autopopulateIpsrvChildren(n);
   }else n=deviceNodeFromData({...r,type:"camera"},s,{...(mode?{configMode:mode}:{}),...(disabled?{disabled:true}:{})});
   if(disabled)n.enabled=false;
@@ -34327,10 +34335,14 @@ function planEdit(pid,key,value){
   }
   if(key==="arch"){if(!value)row.r.record="none";row.archWas=null}
   if(key==="rtspUrl")row.r.rtsp=value;
-  if(key==="channels"){const n=Math.max(1,Math.min(RTSP_CH_MAX,parseInt(value,10)||1));row.r.channels=n;if(n>1)row.r.model=rtspChannelModel(n);else if(rtspModelChannels(row.r.model))row.r.model=""}
+  if(key==="channels"||key==="model"&&isRtspVendor(row.r.vendor)){
+    const n=key==="channels"?Math.max(1,Math.min(RTSP_CH_MAX,parseInt(value,10)||1)):rtspModelChannels(value)||1;
+    row.r.channels=n;
+    if(n>1)row.r.model=rtspChannelModel(n);else if(key==="channels"&&rtspModelChannels(row.r.model))row.r.model="";
+  }
   if(row.state==="fail")row.code=null;   // правка снимает прежнюю причину отказа
   planTouch();
-  if(key==="arch"||key==="record"||key==="vendor"||key==="channels"&&String(value).trim()!==""){planRender();return}
+  if(key==="arch"||key==="record"||key==="vendor"||key==="channels"||key==="model"&&isRtspVendor(row.r.vendor)){planRender();return}
   planSyncRow(row);
 }
 // Поле правят на ходу: перерисовываем только то, что от него зависит, а не поле под курсором
@@ -34360,6 +34372,8 @@ function planConnError(row){
     return"";
   }
   if((r.type||"camera")==="camera"&&(r.rtspUrl||r.rtsp))return"";
+  // Регистратор без шаблона проходит: адрес каждого канала указывают в полях каналов или позже, в карточке камеры
+  if(planRowChannels(row)>1)return"";
   if((r.type||"camera")==="camera"&&isRtspVendor(r.vendor))return"Укажите адрес RTSP";
   // GB/T28181: строка адреса и SIP-сервер — те же проверки, что в форме «По адресу»; модель — как у всех
   if((r.type||"camera")==="camera"&&isGbtVendor(r.vendor)){
@@ -34373,6 +34387,8 @@ function planConnError(row){
 }
 // Камера ли строка: у регистратора из файла архива нет
 function planIsRtsp(r){return!!(r.rtspUrl||r.rtsp)||((r.type||"camera")==="camera"&&isRtspVendor(r.vendor))}
+// Сколько каналов у строки плана: у строки формы — поле «Каналы», у строки файла — модель N_channel_device
+function planRowChannels(row){return row.source==="csv"?(inferCsvDeviceKind(row.r).channels||1):rtspChannelsOf(row.r)}
 function planIsCam(row){return(row.r.type||"camera")==="camera"&&!(row.source==="csv"&&inferCsvDeviceKind(row.r)?.type==="ipsrv")}
 // Сервер, который уйдёт в запросе: у источника событий — выбранный в форме (или «выберет система»), у СКУД — никакой
 function planRowServer(row){
@@ -34537,14 +34553,15 @@ function planRowHtml(row){
   const r=row.r,lock=addPlan.applying,dis=lock?"disabled":"";
   const rtsp=planIsRtsp(r);
   const who=planRowTitle(row).title,al=l=>escHtml(`${i18n(l)} · ${who}`);   // подпись поля называет и строку: полей «Название» в плане много
-  const inp=(k,label,val,ph)=>`<div class="dev-field"><label>${i18n(label)}</label><input class="dev-inline-input" data-pf="${k}" aria-label="${al(label)}" value="${escHtml(val??"")}" placeholder="${escHtml(ph||"")}" ${dis} ${onEv("input",["planEdit",row.pid,k,onEv.value])}></div>`;
+  // «Каналы» перерисовывают строку, поэтому их читают по «change»: при вводе каждой цифры курсор уходил бы в начало поля
+  const inp=(k,label,val,ph,ev)=>`<div class="dev-field"><label>${i18n(label)}</label><input class="dev-inline-input" data-pf="${k}" aria-label="${al(label)}" value="${escHtml(val??"")}" placeholder="${escHtml(ph||"")}" ${dis} ${onEv(ev||"input",["planEdit",row.pid,k,onEv.value])}></div>`;
   let body="";
   if(row.open){
     body=`<div class="plan-edit"><div class="plan-issues">${planIssuesHtml(row)}</div>
       ${inp("name","Название",isDefaultDeviceName(r.name)?"":r.name,i18n("По умолчанию"))}
       <div class="plan-two"><div class="dev-field"><label>${i18n("Производитель")}</label>${comboVendorHtml(r.vendor,["planEdit",row.pid,"vendor"],{lock,pf:"vendor",aria:al("Производитель")})}</div>
       <div class="dev-field"><label>${i18n("Модель")}</label>${comboModelHtml(r.vendor,r.model,["planEdit",row.pid,"model"],{lock,pf:"model",aria:al("Модель")})}</div></div>
-      ${row.source==="manual"&&rtsp?inp("channels","Каналы",r.channels||1,"1"):""}
+      ${row.source==="manual"&&rtsp?inp("channels","Каналы",r.channels||1,"1","change"):""}
       ${planShowsAddr(row.source)?`${rtsp?inp("rtspUrl",rtspChannelsOf(r)>1?"Шаблон адреса RTSP":"RTSP",r.rtspUrl||r.rtsp,rtspChannelsOf(r)>1?"rtsp://адрес:554/ch{канал}":"rtsp://адрес:554/поток"):""}${!rtsp||r.ip?`<div class="plan-two">${inp("ip","IP-адрес",r.ip)}${inp("port","Порт",r.port)}</div>`:""}`:""}
       ${inp("identifier","ID",isAutoIdentifier(r.identifier)?"":r.identifier,i18n("Авто"))}
       <div class="plan-two">${inp("user","Имя пользователя",r.user,i18n("Авто"))}
@@ -34592,7 +34609,7 @@ function planRecRulesCreate(rows,done){
 }
 // Итог записи по плану — строкой, без отдельного шага: сколько детекторов движения и правил записи создаст консоль
 function planRecSumHtml(rows){
-  const mot=rows.filter(x=>(x.r.type||"camera")==="camera"&&x.r.arch&&x.r.record==="motion").reduce((t,x)=>t+(x.source==="manual"?rtspChannelsOf(x.r):1),0);
+  const mot=rows.filter(x=>(x.r.type||"camera")==="camera"&&x.r.arch&&x.r.record==="motion").reduce((t,x)=>t+planRowChannels(x),0);
   if(!mot)return"";
   return`<div class="plan-rec-sum" data-plan-rec-sum><div>${escHtml(`${i18n("Камер в режиме «По движению»:")} ${mot}. ${i18n(camRecRuleOk()?"Консоль создаст им детекторы движения на сервере и правило записи по движению.":"Консоль создаст им детекторы движения на сервере. Создать правило записи в «Автоматизации», иначе запись не начнётся.")}`)}</div></div>`;
 }
