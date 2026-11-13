@@ -759,7 +759,7 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   s3Key(s3V, "Enter");
   await until(() => !combo);
   ok(wizd.manual.vendor === "RTSP", "автокомплит: Enter выбирает — " + wizd.manual.vendor);
-  ok(s3Labels().slice(0, 4).join() === "Тип устройства,Производитель,Модель,RTSP" && !s3Labels().includes("Порт") && !s3Labels().includes("IP-адрес"), "RTSP: поле адреса переименовано, порта нет — " + s3Labels().slice(0, 5));
+  ok(s3Labels().slice(0, 5).join() === "Тип устройства,Производитель,Модель,Каналы,RTSP" && !s3Labels().includes("Порт") && !s3Labels().includes("IP-адрес"), "RTSP: поле адреса переименовано, порта нет, есть «Каналы» — " + s3Labels().slice(0, 5));
   ok(!/Определить/.test(document.querySelector("#wbd .dev-grid").textContent), "RTSP: «Определить» не предлагается");
   ok(document.activeElement === s3Cb("changeManualVendor"), "автокомплит: после выбора фокус в том же поле");
   planAddManual();

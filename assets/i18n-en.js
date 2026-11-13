@@ -3606,4 +3606,14 @@ window.I18N_EN={
 "у регистратора":"for the recorder",
 "убрать из":"remove from",
 "уже в этой папке":"already in this folder",
+// RTSP-регистратор на N каналов (модель N_channel_device)
+"канал":"channel","канала":"channels","каналов":"channels",
+"Каналы регистратора":"Recorder channels",
+"Число каналов регистратора. 1 — одна камера":"The number of recorder channels. 1 is one camera",
+"Шаблон адреса RTSP":"RTSP address template",
+"Вместо {канал} консоль подставит номер канала: 1, 2, 3…":"The console puts the channel number in place of {канал}: 1, 2, 3…",
+"Консоль создаст IP-сервер с моделью":"The console will create an IP server with the model",
+"Указать позже":"Set later",
+"Пустое поле берёт адрес из шаблона. Адрес канала можно указать и позже, в карточке камеры.":"An empty field takes the address from the template. You can also set the channel address later, in the camera card.",
+"RTSP-регистратор":"RTSP recorder",
 };
