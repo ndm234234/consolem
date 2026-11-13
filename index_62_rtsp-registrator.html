@@ -1446,6 +1446,14 @@ select:not([multiple]){white-space:nowrap;overflow:hidden}:root select:not([mult
 .archive-warning{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--one-danger-bg);border:1px solid var(--one-danger);color:var(--one-danger-text);border-radius:8px;padding:10px 12px}
 .archive-warning .lk{color:var(--one-danger-text);white-space:nowrap}
 .dev-grid{display:grid;grid-template-columns:repeat(2,minmax(180px,1fr));gap:12px}.dev-grid .full{grid-column:1/-1}
+/* Прототип 62: каналы RTSP-регистратора */
+.rtsp-ch-hint{margin:4px 0 0;font-size:12px;color:var(--mu)}
+.rtsp-ch{border:1px solid var(--ln);border-radius:8px;padding:8px 10px;background:var(--p1,transparent)}
+.rtsp-ch-hd{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:6px}.rtsp-ch-hd b{font-size:13px}.rtsp-ch-hd span{font-size:12px;color:var(--mu)}
+.rtsp-ch-list{display:grid;grid-template-columns:max-content 1fr;gap:6px 10px;align-items:center;max-height:236px;overflow:auto;scrollbar-gutter:stable;padding-right:4px}
+.rtsp-ch-list label{margin:0;font-size:12px;color:var(--mu);white-space:nowrap}
+.rtsp-ch-list input{width:100%;min-width:0}
+.rtsp-ch-list input.own{border-color:var(--ac)}
 .inline-field{display:flex;gap:7px}.inline-field>*:first-child{flex:1}.inline-field .btn{flex:none}
 .motion-note{grid-column:1/-1;margin:0;color:var(--mu);font-size:12px}
 .csv-drop{text-align:center;border-style:dashed;padding:28px 16px}.csv-drop.over{border-color:var(--bl);background:var(--one-surface-muted)}.csv-drop input{display:none}
@@ -3321,6 +3329,7 @@ body.dw-resizing,body.dw-resizing *{cursor:col-resize!important;user-select:none
 <!-- ONE PSIM: мост по ONE.PSIM.PrototypeKit, подключён после стилей прототипа -->
 <link rel="stylesheet" href="assets/one-psim/bridge.css">
 <script src="assets/i18n-en.js"></script>
+<script src="assets/i18n-en-62.js"></script>
 <!-- API: контракт, эталонный набор, встроенный сервер и клиент (api/README.md) -->
 <script src="api/openapi.js"></script>
 <script src="api/fixture.js"></script>
@@ -32518,6 +32527,8 @@ function csvRowHasImportRequired(row){
 }
 function inferCsvDeviceKind(row){
   const model=String(row.model||""),vendor=String(row.vendor||"");
+  const chN=isRtspVendor(vendor)?rtspModelChannels(model):0;
+  if(chN>1)return{type:"ipsrv",subtype:"nvr",channels:chN};
   if(/\bNVR\b|\bDVR\b|\bXVR\b/i.test(model))return{type:"ipsrv",subtype:"nvr"};
   if(/^MOXA$/i.test(vendor.trim())||/\bE1214\b/i.test(model))return{type:"ipsrv",subtype:"io"};
   if(/\bSIP\b/i.test(vendor)||/\bSIP\b/i.test(model))return{type:"ipsrv",subtype:"sip"};
@@ -32941,8 +32952,48 @@ function manualModels(vendor){return Object.hasOwn(DEVICE_MODELS,vendor||"")?DEV
 // Камеру с производителем RTSP подключают по адресу потока: вместо IP и порта — одно поле RTSP
 function isRtspVendor(v){return /^rtsp$/i.test(String(v||"").trim())}
 function manualIsRtsp(m){return m.type==="camera"&&isRtspVendor(m.vendor)}
+// Прототип 62: RTSP-регистратор на N каналов. В Axxon One это модель N_channel_device производителя RTSP:
+// сервер создаёт IP-сервер и N камер. Адрес канала — шаблон с {канал}, его можно поправить у каждого канала
+const RTSP_CH_MAX=64;
+function rtspChannelsOf(m){const n=parseInt(m?.channels,10);return manualIsRtsp(m)&&n>1?Math.min(n,RTSP_CH_MAX):1}
+function rtspChannelModel(n){return`${n}_channel_device`}
+function rtspModelChannels(model){const x=/^(\d+)_channel_device$/i.exec(String(model||"").trim());return x?Math.min(+x[1],RTSP_CH_MAX):0}
+const RTSP_CH_RE=/\{(канал|ch|n)\}/gi;
+function rtspChannelUrl(tpl,i){const t=String(tpl||"").trim();return t.search(RTSP_CH_RE)>=0?t.replace(RTSP_CH_RE,String(i)):""}
+function rtspChannelUrls(m,n){return Array.from({length:n},(_,k)=>{const own=m.chUrls?.[k+1];return own?String(own).trim():rtspChannelUrl(m.rtsp||m.rtspUrl,k+1)})}
+// Камеры каналов регистратора: «Канал 1…N», адрес RTSP — у каждой своё
+function rtspChannelCams(parentId,urls,o={}){
+  const pre=o.short!=null&&o.short!==""?String(o.short):"";
+  return urls.map((url,k)=>{
+    const id=parentId+"c"+(k+1);
+    const c={id,type:"camera",name:`${i18n("Канал")} ${k+1}`,short:pre?`${pre}.${k+1}`:String(k+1),online:true,arch:o.arch||null,rec:o.rec||"none",devices:[]};
+    if(url)c._f={RTSP:url};
+    if(c.rec==="motion"&&o.arch)c.devices.push({id:id+"det",type:"det",name:"Детектор движения",kind:DET_KIND_RU.motion,online:true});
+    return c;
+  });
+}
+function changeManualChannels(v){
+  const m=wizd.manual,n=Math.max(1,Math.min(RTSP_CH_MAX,parseInt(v,10)||1));
+  m.channels=n;
+  if(n>1)m.model=rtspChannelModel(n);else if(rtspModelChannels(m.model))m.model="";
+  wizd.manualAddedId=null;renderDeviceWizard();
+}
+// Шаблон и правки каналов меняют только подсказки в списке: перерисовка окна сбросила бы фокус поля
+function rtspChPreview(){
+  const m=wizd.manual;
+  document.querySelectorAll("[data-rtsp-ch]").forEach(el=>{const i=+el.dataset.rtspCh;el.placeholder=rtspChannelUrl(m.rtsp,i)||i18n("Указать позже");el.classList.toggle("own",!!String(m.chUrls?.[i]||"").trim())});
+}
+function updateManualChannelUrl(i,v){const m=wizd.manual;m.chUrls={...(m.chUrls||{}),[i]:v};rtspChPreview()}
+function rtspChannelsHtml(m,n){
+  const rows=Array.from({length:n},(_,k)=>{const i=k+1,own=m.chUrls?.[i]||"";
+    return`<label for="rtspCh${i}">${i18n("Канал")} ${i}</label><input id="rtspCh${i}" data-rtsp-ch="${i}" class="${own.trim()?"own":""}" value="${escHtml(own)}" placeholder="${escHtml(rtspChannelUrl(m.rtsp,i)||i18n("Указать позже"))}" ${onEv("input",["updateManualChannelUrl",i,onEv.value])}>`}).join("");
+  return`<div class="full rtsp-ch"><div class="rtsp-ch-hd"><b>${i18n("Каналы регистратора")}</b><span>${escHtml(`${i18n("Консоль создаст IP-сервер с моделью")} ${rtspChannelModel(n)} ${i18n("и")} ${n} ${i18n(plural(n,"камеру|камеры|камер"))}.`)}</span></div>
+    <div class="rtsp-ch-list">${rows}</div>
+    <p class="rtsp-ch-hint">${i18n("Пустое поле берёт адрес из шаблона. Адрес канала можно указать и позже, в карточке камеры.")}</p></div>`;
+}
 function updateManual(key,value){
   wizd.manual[key]=value;
+  if(key==="rtsp")rtspChPreview();
   if(key==="arch"&&!hasLinkedArchive(value))wizd.manual.record="none";
   if(key==="arch"||key==="record")renderDeviceWizard();
 }
@@ -32950,6 +33001,7 @@ function changeManualType(type){
   wizd.manual.type=type;wizd.manualAddedId=null;renderDeviceWizard();
 }
 function changeManualVendor(vendor){
+  if(rtspModelChannels(wizd.manual.model)&&!isRtspVendor(vendor))wizd.manual.channels=1;
   wizd.manual.vendor=vendor;wizd.manual.model=manualModels(vendor)[0]||"";renderDeviceWizard();
 }
 function detectManualModel(){
@@ -32988,6 +33040,14 @@ function manualNode(m,s,disabled,prof){
     common.templateId=template.id;
   }
   let node;
+  const chN=rtspChannelsOf(m);
+  if(chN>1){
+    delete common._f;
+    node={...common,type:"ipsrv",subtype:"nvr",model:rtspChannelModel(chN),name:isDefaultDeviceName(m.name.trim())?i18n("RTSP-регистратор"):common.name};
+    node.devices=rtspChannelCams(node.id,rtspChannelUrls(m,chN),{short:m.short,arch:m.arch,rec:m.record==="always"?"always":m.record==="motion"?"motion":"none"});
+    if(s.type==="server")setDevServer(node,s.id);else bindArchServer(node);
+    return node;
+  }
   if(m.type==="storage")node={...common,type:"ipsrv",subtype:"nvr",devices:[{id:common.id+"storage",type:"storage",name:"Встроенное хранилище",online:true,devices:[]}]};
   else if(m.type==="eventsrc")node={...common,type:"eventsrc",...(m.server?{srvId:m.server}:{})};
   else if(m.type==="acfa")node={...common,type:"acfa"};
@@ -33009,7 +33069,7 @@ function commitManualDevice(disabled){
   }).catch(e=>toast(problemText(e)));
 }
 function deviceManualHtml(){
-  const m=wizd.manual,camera=m.type==="camera",rtsp=manualIsRtsp(m);
+  const m=wizd.manual,camera=m.type==="camera",rtsp=manualIsRtsp(m),chN=rtspChannelsOf(m);
   const idLocked=!!wizd.manualAddedId;
   const idVal=idLocked?deviceIdentifierValue(cam(wizd.manualAddedId))||"—":m.identifier;
   return `${deviceArchiveWarning()}<div class="dev-manual">
@@ -33022,7 +33082,9 @@ function deviceManualHtml(){
       </select></div>
       <div><label>Производитель</label>${comboVendorHtml(m.vendor,["changeManualVendor"],{inline:false})}</div>
       <div><label>Модель</label><div class="inline-field">${comboModelHtml(m.vendor,m.model,["updateManual","model"],{inline:false,ph:rtsp?i18n("Необязательно"):""})}${rtsp?"":`<button type="button" class="btn s" title="Определить модель по данным подключения" ${onEv("click",["detectManualModel"])}>${ic("search")} Определить</button>`}</div></div>
-      ${rtsp?`<div class="full"><label>RTSP</label><input id="devManIp" value="${escHtml(m.rtsp||"")}" placeholder="rtsp://адрес:554/поток" ${onEv("input",["updateManual","rtsp",onEv.value])}></div>`
+      ${rtsp?`<div><label>${i18n("Каналы")}</label><input type="number" min="1" max="${RTSP_CH_MAX}" value="${chN}" title="${i18n("Число каналов регистратора. 1 — одна камера")}" ${onEv("change",["changeManualChannels",onEv.value])}></div><div></div>
+      <div class="full"><label>${chN>1?i18n("Шаблон адреса RTSP"):"RTSP"}</label><input id="devManIp" value="${escHtml(m.rtsp||"")}" placeholder="${chN>1?"rtsp://адрес:554/ch{канал}":"rtsp://адрес:554/поток"}" ${onEv("input",["updateManual","rtsp",onEv.value])}>${chN>1?`<p class="rtsp-ch-hint">${i18n("Вместо {канал} консоль подставит номер канала: 1, 2, 3…")}</p>`:""}</div>
+      ${chN>1?rtspChannelsHtml(m,chN):""}`
       :`<div><label>${m.type==="eventsrc"?"Адрес кассы или сервера":"IP-адрес"}</label><input id="devManIp" value="${escHtml(m.ip)}" placeholder="192.168.1.100" ${onEv("input",["updateManual","ip",onEv.value])}></div>
       ${m.type==="eventsrc"?`<div><label>Сервер</label><select ${onEv("change",["updateManual","server",onEv.value])}><option value="">Выберет система</option>${allocatedServers(wizd.domain).map(x=>`<option value="${x.id}" ${x.id===m.server?"selected":""}>${escHtml(locName(x))}</option>`).join("")}</select></div>`:""}
       <div><label>Порт</label><input type="number" value="${m.port}" ${onEv("input",["updateManual","port",onEv.value])}></div>`}
@@ -33094,7 +33156,7 @@ function csvRowFrom(cols,index,colMap){
   const row={id:"csv"+index,ip,port:+port||80,vendor,model,user,pass,identifier,short:shortName,name,lat,lon,azimuth,arch:"",record:"motion",group:"",rtspUrl,errors:[],skipImport:false};
   if(!csvRowHasImportRequired(row)){row.skipImport=true;return row;}
   const kind=inferCsvDeviceKind(row);
-  if(!row.name)row.name=kind.type==="ipsrv"?(row.model||"IP-сервер"):`Камера ${ip||index}`;
+  if(!row.name)row.name=kind.channels?i18n("RTSP-регистратор"):kind.type==="ipsrv"?(row.model||"IP-сервер"):`Камера ${ip||index}`;
   const errors=row.errors;
   // Регистр в файле — не ошибка. Производитель или модель вне списка — предупреждение: строку поправят в плане
   row.warns=[];
@@ -33151,6 +33213,7 @@ function downloadCsvExample(){
   const sample=buildDeviceCsvText([
     {ip:"192.168.1.101",port:"80",vendor:"Hikvision",model:"DS-2CD2143G2",user:"admin",pass:"password",identifier:"16",short:"1",name:"Камера 101",lat:"53.212558",lon:"50.204991",azimuth:"0",archive:arch[0]?.name||"Архив офиса",record:"По движению",group:"Входы"},
     {ip:"192.168.1.200",port:"80",vendor:"Hikvision",model:"DS-7716NI-I4/16P",user:"admin",pass:"password",identifier:"",short:"nvr1",name:"NVR офис",lat:"53.21",lon:"50.20",azimuth:"",archive:"",record:"Нет",group:""},
+    {ip:"192.168.1.210",port:"554",vendor:"RTSP",model:"8_channel_device",user:"admin",pass:"password",identifier:"",short:"dvr1",name:"DVR склад",lat:"",lon:"",azimuth:"",archive:"",record:"Нет",group:"",rtspUrl:"rtsp://192.168.1.210:554/ch{канал}"},
   ]);
   const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([sample],{type:"text/csv;charset=utf-8"}));a.download="devices-example.csv";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
@@ -33161,7 +33224,8 @@ function csvDeviceNode(r,s,disabled,mode){
   let n;
   if(kind?.type==="ipsrv"){
     n=deviceIpsrvNodeFromCsvRow(r,s);
-    autopopulateIpsrvChildren(n);
+    if(kind.channels)n.devices=rtspChannelCams(n.id,rtspChannelUrls({rtsp:r.rtspUrl},kind.channels),{short:r.short,arch:r.arch,rec:r.arch?r.record:"none"});
+    else autopopulateIpsrvChildren(n);
   }else n=deviceNodeFromData({...r,type:"camera"},s,{...(mode?{configMode:mode}:{}),...(disabled?{disabled:true}:{})});
   if(disabled)n.enabled=false;
   if(mode&&s.type==="server")setDevServer(n,s.id);   // регистратор из файла тоже встаёт на сервер строки
@@ -33689,20 +33753,21 @@ function planAddManual(){
   const m=wizd.manual;
   if(wizd.devMode==="template"&&!wizd.templateId){toast("Выбрать камеру-источник профиля");return}
   const rtsp=manualIsRtsp(m);
-  if(rtsp&&!String(m.rtsp||"").trim()){toast(i18n("Укажите адрес RTSP"));return}
+  const chN=rtspChannelsOf(m);
+  if(rtsp&&chN<2&&!String(m.rtsp||"").trim()){toast(i18n("Укажите адрес RTSP"));return}
   if(m.type==="camera"&&!rtsp&&!m.ip){toast(i18n("Укажите IP-адрес"));return}
   if(m.type==="camera"&&!rtsp&&(!m.vendor||!m.model)){toast(i18n("Заполните производителя и модель"));return}
   if(m.type!=="camera"&&(!m.ip||!m.vendor||!m.model)){toast(i18n("Заполните IP, производителя и модель"));return}
   // Уходит только адрес, который виден в форме: набранный раньше другой адрес в строку не попадает
-  const r={...m,ip:rtsp?"":m.ip,port:rtsp?80:m.port,rtsp:rtsp?m.rtsp:"",rtspUrl:rtsp?m.rtsp:"",status:"ok"};
+  const r={...m,ip:rtsp?"":m.ip,port:rtsp?80:m.port,rtsp:rtsp?m.rtsp:"",rtspUrl:rtsp?m.rtsp:"",channels:chN,chUrls:chN>1?{...(m.chUrls||{})}:{},status:"ok"};
   const sid=planServerId();
-  if(planFindByAddr(r,SERVER_DOMAIN[sid]||wizd.domain)){planDone(0,1);return}
+  if(planAddrKey(r,"")!=="|:80"&&planFindByAddr(r,SERVER_DOMAIN[sid]||wizd.domain)){planDone(0,1);return}
   const row=planPush("manual",r);
   if(!row)return;
   // Профиль, под которым набрали строку, остаётся за ней, что бы потом ни выбрали в окне
   row.devMode=wizd.devMode||"current";row.templateId=wizd.templateId||"";
   // Следующую камеру вводят с теми же производителем, учётными данными и архивом
-  Object.assign(m,{ip:"",name:"",short:"",identifier:"",rtsp:""});
+  Object.assign(m,{ip:"",name:"",short:"",identifier:"",rtsp:"",chUrls:{}});
   wizd.manualAddedId=null;
   planDone(1,0);
   document.getElementById("devManIp")?.focus();
@@ -33778,9 +33843,10 @@ function planEdit(pid,key,value){
   }
   if(key==="arch"){if(!value)row.r.record="none";row.archWas=null}
   if(key==="rtspUrl")row.r.rtsp=value;
+  if(key==="channels"){const n=Math.max(1,Math.min(RTSP_CH_MAX,parseInt(value,10)||1));row.r.channels=n;if(n>1)row.r.model=rtspChannelModel(n);else if(rtspModelChannels(row.r.model))row.r.model=""}
   if(row.state==="fail")row.code=null;   // правка снимает прежнюю причину отказа
   planTouch();
-  if(key==="arch"||key==="record"||key==="vendor"){planRender();return}
+  if(key==="arch"||key==="record"||key==="vendor"||key==="channels"&&String(value).trim()!==""){planRender();return}
   planSyncRow(row);
 }
 // Поле правят на ходу: перерисовываем только то, что от него зависит, а не поле под курсором
@@ -33964,7 +34030,8 @@ function planIssueHtml(row){
 function planRowTitle(row){
   const r=row.r,named=r.name&&!isDefaultDeviceName(r.name);
   const addr=r.ip?`${r.ip}${r.port&&+r.port!==80?":"+r.port:""}`:"";
-  const model=[r.vendor,r.model].filter(Boolean).join(" ");
+  const chN=row.source==="csv"?(isRtspVendor(r.vendor)?rtspModelChannels(r.model):0):rtspChannelsOf(r);
+  const model=[r.vendor,r.model].filter(Boolean).join(" ")+(chN>1?` · ${chN} ${i18n(plural(chN,"канал|канала|каналов"))}`:"");
   return{title:named?r.name:(addr||r.rtspUrl||r.rtsp||"—"),sub:named?[addr,model].filter(Boolean).join(" · "):model};
 }
 function planRowHeadHtml(row){
@@ -33986,7 +34053,8 @@ function planRowHtml(row){
       ${inp("name","Название",isDefaultDeviceName(r.name)?"":r.name,i18n("По умолчанию"))}
       <div class="plan-two"><div class="dev-field"><label>${i18n("Производитель")}</label>${comboVendorHtml(r.vendor,["planEdit",row.pid,"vendor"],{lock,pf:"vendor",aria:al("Производитель")})}</div>
       <div class="dev-field"><label>${i18n("Модель")}</label>${comboModelHtml(r.vendor,r.model,["planEdit",row.pid,"model"],{lock,pf:"model",aria:al("Модель")})}</div></div>
-      ${planShowsAddr(row.source)?`${rtsp?inp("rtspUrl","RTSP",r.rtspUrl||r.rtsp,"rtsp://адрес:554/поток"):""}${!rtsp||r.ip?`<div class="plan-two">${inp("ip","IP-адрес",r.ip)}${inp("port","Порт",r.port)}</div>`:""}`:""}
+      ${row.source==="manual"&&rtsp?inp("channels","Каналы",r.channels||1,"1"):""}
+      ${planShowsAddr(row.source)?`${rtsp?inp("rtspUrl",rtspChannelsOf(r)>1?"Шаблон адреса RTSP":"RTSP",r.rtspUrl||r.rtsp,rtspChannelsOf(r)>1?"rtsp://адрес:554/ch{канал}":"rtsp://адрес:554/поток"):""}${!rtsp||r.ip?`<div class="plan-two">${inp("ip","IP-адрес",r.ip)}${inp("port","Порт",r.port)}</div>`:""}`:""}
       ${inp("identifier","ID",isAutoIdentifier(r.identifier)?"":r.identifier,i18n("Авто"))}
       <div class="plan-two">${inp("user","Имя пользователя",r.user,i18n("Авто"))}
       <div class="dev-field"><label>${i18n("Пароль")}</label>${devPassFieldHtml(r.pass||"",lock,`planEdit('${row.pid}','pass',this.value)`,`${i18n("Пароль")} · ${who}`,"pass")}</div></div>
@@ -34024,7 +34092,8 @@ function planPanelHtml(){
 // После добавления: одно правило «движение — запись» на камеры плана в режиме «По движению», как автоправило Axxon One.
 // Событие правила — на камерах, поэтому правило не ждёт, пока сервер создаст детекторы
 function planRecRulesCreate(rows,done){
-  const cams=done.filter(d=>{const r=rows[d.index]?.r;return r&&(r.type||"camera")==="camera"&&r.arch&&r.record==="motion"}).map(d=>d.devices[0])
+  // Прототип 62: у RTSP-регистратора правило получают камеры каналов
+  const cams=done.filter(d=>{const r=rows[d.index]?.r;return r&&(r.type||"camera")==="camera"&&r.arch&&r.record==="motion"}).flatMap(d=>{const top=d.devices[0],n=top&&find(top.id)?.n;return n?.type==="ipsrv"?(n.devices||[]).filter(c=>c.type==="camera"):[top]})
     .filter(d=>{const n=d&&find(d.id)?.n;return d&&!(n&&camRecMotionRules(n).length)});   // папку или сервер камеры уже пишет правило — второе не нужно
   if(!cams.length||!camRecRuleOk())return;
   const name=cams.length===1?`${cams[0].name||cams[0].id} — ${i18n("запись по движению")}`:`${i18n("Запись по движению")}: ${cams.length} ${i18n(plural(cams.length,"камера|камеры|камер"))}`;
@@ -34032,7 +34101,7 @@ function planRecRulesCreate(rows,done){
 }
 // Итог записи по плану — строкой, без отдельного шага: сколько детекторов движения и правил записи создаст консоль
 function planRecSumHtml(rows){
-  const mot=rows.filter(x=>(x.r.type||"camera")==="camera"&&x.r.arch&&x.r.record==="motion").length;
+  const mot=rows.filter(x=>(x.r.type||"camera")==="camera"&&x.r.arch&&x.r.record==="motion").reduce((t,x)=>t+(x.source==="manual"?rtspChannelsOf(x.r):1),0);
   if(!mot)return"";
   return`<div class="plan-rec-sum" data-plan-rec-sum><div>${escHtml(`${i18n("Камер в режиме «По движению»:")} ${mot}. ${i18n(camRecRuleOk()?"Консоль создаст им детекторы движения на сервере и правило записи по движению.":"Консоль создаст им детекторы движения на сервере. Создать правило записи в «Автоматизации», иначе запись не начнётся.")}`)}</div></div>`;
 }
