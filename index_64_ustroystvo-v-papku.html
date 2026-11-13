@@ -3330,7 +3330,7 @@ body.dw-resizing,body.dw-resizing *{cursor:col-resize!important;user-select:none
 
 /* ── Прототип 64: поиск папки в меню строки дерева ── */
 .tf-q{padding:6px 8px 4px}
-.tf-q input{width:100%;box-sizing:border-box;padding:5px 8px;border-radius:6px;border:1px solid var(--one-border);background:var(--one-input,var(--one-popup));color:inherit}
+.tf-q input{width:100%;box-sizing:border-box;padding:5px 8px;border-radius:6px;border:1px solid var(--one-border);background:var(--one-popup);color:inherit}
 .tf-list{max-height:min(46vh,320px);overflow:auto;scrollbar-gutter:stable}
 .tf-none{padding:8px 10px;color:var(--mu)}
 .tf-here{color:var(--mu);font-size:11px;margin-left:6px}
@@ -11196,6 +11196,7 @@ function treeRowCtx(e){
   if(row)treeCtx(e,row.dataset.pick,row);
 }
 function closeTreeCtx(){
+  tfPickState=null;                                // Прототип 64: выбор папки живёт только в открытом меню
   const m=document.getElementById("tctx");
   // Меню открыла стрелка «Добавить устройства»: фокус из меню возвращается на неё
   const back=m&&addSplitMenu.from&&m.contains(document.activeElement)?addSplitMenu.from:null;
@@ -11218,7 +11219,7 @@ function openTreeCtx(n,xy){
       tctxItem(`${i18n("Включить")} (${k})`,`closeTreeCtx();bulkQuick('on')`),
       tctxItem(`${i18n("Выключить")} (${k})`,`closeTreeCtx();bulkQuick('off')`)]);
     // Прототип 64: папка сразу у всех отмеченных строк
-    const fids=bulkSelNodes().filter(x=>inFolders(x)).map(x=>x.id);
+    const fids=bulkSelNodes().filter(canFolderPick).map(x=>x.id);
     const fgrp=fids.length&&tfFolders(fids).length?[
       tctxItem(`${i18n("Переместить в папку…")} (${fids.length})`,["tfOpen",onEv.el,fids,"move"],tctxFolderIcon()),
       tctxItem(`${i18n("Добавить в папку…")} (${fids.length})`,["tfOpen",onEv.el,fids,"add"],tctxFolderIcon())]:[];
@@ -14815,12 +14816,19 @@ function flGroupBy(f,devs){const m=new Map();devs.forEach(it=>flHomes(f,it).forE
 let tfPickState=null;                              // {ids, how, q}
 // Папки домена объекта: чужой домен папку не примет
 function tfFolders(ids){
-  const doms=new Set(ids.map(id=>deviceDomain(id)).filter(Boolean));
-  return flatFolders().filter(f=>!doms.size||doms.has(folderDomain(f.id)));
+  // Домен узла знает nodeDomainId: у службы сервера DEVICE_DOMAIN пуст, и deviceDomain вернул бы null.
+  // Выборка из двух доменов папок не получает: сервер принял бы только часть, а отменить было бы нечего
+  const doms=new Set(ids.map(id=>{const n=find(id)?.n;return n?nodeDomainId(n):null}).filter(Boolean));
+  if(doms.size!==1)return[];
+  return flatFolders().filter(f=>doms.has(folderDomain(f.id)));
 }
-function canFolderPick(n){return inFolders(n)&&!!tfFolders([n.id]).length}
+// Папки держат объекты, а не домены, серверы, папки и сами срезы дерева
+function canFolderPick(n){
+  if(!n||!inFolders(n)||INFRA_SCREENS.has(n.type)||NOT_PICKABLE.has(n.type)||n.type==="det")return false;
+  return!!tfFolders([n.id]).length;
+}
 function tfOpen(el,ids,how){
-  ids=(Array.isArray(ids)?ids:[ids]).filter(id=>{const n=find(id)?.n;return n&&inFolders(n)});
+  ids=(Array.isArray(ids)?ids:[ids]).filter(id=>canFolderPick(find(id)?.n));
   if(!ids.length||!tfFolders(ids).length)return;
   // Перерисовка меню забирает кнопку, поэтому место запоминаем до неё
   const box=(el&&el.isConnected?el:document.getElementById("tree")).getBoundingClientRect();
@@ -14838,10 +14846,13 @@ function tfListHtml(shown){
   if(!shown.length)return `<div class="tf-none">${i18n("Ничего не найдено")}</div>`;
   const ids=tfPickState.ids;
   return shown.map(f=>{
-    // Папка, где уже лежат все выбранные объекты: класть туда нечего
-    const here=ids.every(id=>(f.items||[]).includes(id));
-    const label=hlText(folderPathName(f.id),tfPickState.q)+(here?` <span class="tf-here">${i18n("уже здесь")}</span>`:"");
-    return tctxItem(label,["tfPick",`${f.id}`],tctxFolderIcon(),here);
+    // Папка, где уже лежат все выбранные объекты. «Добавить» туда нечего, а «Переместить» ещё
+    // уберёт объект из других папок — пункт гаснет, только когда других папок нет
+    const inHere=ids.every(id=>(f.items||[]).includes(id));
+    const other=tfPickState.how==="move"&&ids.some(id=>cardFolders(id).some(x=>x!==f.id));
+    const off=inHere&&!other;
+    const label=hlText(folderPathName(f.id),tfPickState.q)+(inHere?` <span class="tf-here">${i18n("уже здесь")}</span>`:"");
+    return tctxItem(label,["tfPick",`${f.id}`],tctxFolderIcon(),off);
   }).join("");
 }
 function tfMenuHtml(){
@@ -14865,8 +14876,7 @@ function tfType(v){
   if(foot)foot.textContent=`${i18n("Показано")} ${shown.length} ${i18n("из")} ${tfFolders(tfPickState.ids).length}`;
 }
 function tfKey(e){
-  if(e.key==="Escape"){closeTreeCtx();tfPickState=null;return}
-  const first=document.querySelector("#tctx .tf-list button[role=menuitem]");
+  const first=document.querySelector("#tctx .tf-list button[role=menuitem]:not(:disabled)");
   if(e.key==="Enter"){e.preventDefault();if(first)first.click();return}
   if(e.key==="ArrowDown"){e.preventDefault();first?.focus()}
 }
@@ -14890,7 +14900,7 @@ function treeToFolder(ids,tid,how){
   // Папку видно вместе с путём к ней: иначе объект пропал бы из дерева
   folderPath(tid).forEach(f=>open.add(f.id));
   const dom=folderDomain(tid);if(dom)open.add(dom);
-  flChange(changes,`${i18n(how==="move"?"Перемещено в":"Добавлено в")} «${locName(target)}»: ${ids.length}`);
+  flChange(changes,`${i18n(how==="move"?"Перемещено в":"Добавлено ещё в")} «${locName(target)}»: ${ids.length}`);
 }
 function flToFolder(tid,how){
   closeTreeCtx();
