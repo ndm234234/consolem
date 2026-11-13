@@ -21213,7 +21213,7 @@ function formBase(n){
         <div class="mc"><span>${i18n("Ошибки")}</span><b>0</b></div>
       </div>
       <p class="sub" style="margin-top:10px">${i18n("Домен:")} <b>${locName(domainOf(n.id)||{name:"—"})}</b></p>
-      <p class="sub">${i18n("Устройства не привязаны к серверу. Они находятся в разделе")} <button class="lk" ${onEv("click",["goApp","hw"])}>${i18n("Устройства")}</button>. ${i18n("Камера получает сервер только через архив, на который идёт запись.")}</p>`)}
+      <p class="sub">${i18n("Устройства не привязаны к серверу. Они находятся в разделе")} <button class="lk" ${onEv("click",["goApp","hw"])}>${i18n("Устройства")}</button>. ${i18n("Камера получает сервер только через архив, на который идёт запись.")}</p>`)+srvVerHtml(n)}
   if(n.type==="ipsrv"){
     if(tab==="rec")return nvrRecCardHtml(n);
     if(tab==="chan")return ipsChanHtml(n);
@@ -21287,6 +21287,59 @@ function formBase(n){
     return card("Динамик",`${bdg(n)}${enabledToggleHtml(n)}<div class="g" style="margin-top:10px">${devFld(n,"Имя","name",n.name)}${devFld(n,"Номер","channel",n.ch??"—")}</div>${devParamsHtml(n)}`);
   return card("Устройство",`${bdg(n)}${enabledToggleHtml(n)}<div class="g" style="margin-top:10px">${devFld(n,"Имя","name",n.name)}${fldRo("Тип",i18n(LB[n.type]||n.type))}${devFld(n,"Номер","channel",n.ch??"—")}</div>${devParamsHtml(n)}`)}
 
+// ── Версии сервера и состояние лицензии (ЗАГЛУШКА: в контракте 0.12.0 этих полей нет, запрос api/requests/2026-11-13-153000Z-mockup-server-versions-request.md) ──
+// Вид server отдаёт только ip, port, role, сеть, метки и webServer. Версии, имя компьютера, состояние
+// сервера и состояние лицензии консоль берёт отсюда, а не с сервера. Значения постоянны у одного сервера:
+// их считает srvVerHash по uid, поэтому после перерисовки они не меняются.
+const SRV_VER_NEW={version:"3.0.0.42",client:"3.0.0.42 x64",drivers:"3.89.467",detectors:"2.14.3"};
+const SRV_VER_OLD={version:"3.0.0.38",client:"3.0.0.38 x64",drivers:"3.84.112",detectors:"2.12.9"};
+function srvVerHash(id){let h=2166136261;const s=String(id);for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)>>>0}return h}
+// Заглушка показывает три случая: сервер той же версии, сервер старше домена, клиент старше сервера.
+function srvVer(n){
+  const h=srvVerHash(n.id),k=h%3;
+  const v=k===1?{...SRV_VER_OLD}:{...SRV_VER_NEW};
+  if(k===2)v.client=SRV_VER_OLD.client;
+  v.host="DESKTOP-"+h.toString(36).toUpperCase().slice(0,7);
+  return v;
+}
+function srvVerState(n){return n.online===false?"Нет связи":srvVerHash(n.id)%11===4?"Остановлен":"Работает"}
+// Лицензия живёт у домена: серийный номер берём из его поля license, остальное — заглушка.
+function srvVerLic(n){
+  const d=domainOf(n.id);
+  if(!d)return{state:"missing",short:"Ключа нет",text:"Сервер не входит в домен, поэтому у него нет ключа."};
+  const h=srvVerHash(d.id)%5,serial=d.license||"";
+  if(h===3)return{state:"missing",short:"Ключа нет",domId:d.id,serial,
+    text:"У домена нет ключа, поэтому его камеры не работают."};
+  if(h===1)return{state:"expiring",short:"Осталось 22 дня",domId:d.id,serial,
+    text:"Ключ «Профессиональная» действует до 05.12.2026. Осталось 22 дня."};
+  return{state:"active",short:"Действует",domId:d.id,serial,
+    text:"Ключ «Корпоративная» действует до 12.03.2027."};
+}
+// Версия домена — старшая среди его серверов на связи: с ней консоль и сравнивает этот сервер.
+function srvVerDomainBest(n){
+  const d=domainOf(n.id);
+  if(!d)return null;
+  const all=(d.servers||[]).filter(s=>s.online!==false).map(s=>srvVer(s).version).sort();
+  return all.length?all[all.length-1]:null;
+}
+function srvVerWarn(n){
+  const v=srvVer(n),best=srvVerDomainBest(n);
+  if(best&&best>v.version)return i18n("Этот сервер старше других серверов домена:")+" "+v.version+" "+i18n("против")+" "+best+". "+i18n("Обновить этот сервер до версии домена.");
+  if(v.client.split(" ")[0]<v.version)return i18n("Клиент на этом сервере старше самого сервера:")+" "+v.client+" "+i18n("против")+" "+v.version+". "+i18n("Сервер обновит клиент при следующем подключении оператора.");
+  return"";
+}
+function srvVerHtml(n){
+  const v=srvVer(n),lc=srvVerLic(n),warn=srvVerWarn(n);
+  const go=lc.domId?onEv("click",["pick",`${lc.domId}`],["goTab","lic"]):"";
+  return card("Версии и лицензия",
+    `${warn?`<div class="nt err" data-ver-warn>${escHtml(warn)}</div>`:""}
+      <div class="g">${fldRo("Версия сервера",v.version)}${fldRo("Версия клиента",v.client)}${fldRo("Drivers Pack",v.drivers)}${fldRo("DetectorPack",v.detectors)}${fldRo("Имя компьютера",v.host)}${fldRo("Состояние сервера",i18n(srvVerState(n)))}</div>
+      <div class="mx" style="margin-top:10px">
+        ${lc.domId?`<button type="button" class="mc" data-ver-lic ${go}><span>${i18n("Лицензия домена")}</span><b>${i18n(lc.short)}</b></button>`:`<div class="mc" data-ver-lic><span>${i18n("Лицензия домена")}</span><b>${i18n(lc.short)}</b></div>`}
+      </div>
+      <p class="sub" style="margin-top:10px">${i18n(lc.text)}${lc.serial?" "+i18n("Серийный номер:")+" "+escHtml(lc.serial)+".":""}${lc.domId?` <button class="lk" ${go}>${i18n("Лицензии домена")}</button>`:""}</p>
+      <p class="sub">${i18n("Drivers Pack и DetectorPack обновляет установщик на самом сервере. Консоль их не обновляет.")}</p>`);
+}
 // ── Автоматизация ──────────────────────────────────────────────
 // Каталог — это граница, а не удобство. Форма строится из него, поэтому
 // правило физически не может попросить того, под что никто не написал
