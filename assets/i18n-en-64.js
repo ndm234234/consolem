@@ -3523,4 +3523,23 @@ window.I18N_EN={
 "Подождать: консоль проверяет SIP-сервер других устройств GB/T.":"Wait: the console checks the SIP server of the other GB/T devices.",
 "После знака «-» ввести локальный или внешний IP-адрес сервера.":"After the \"-\" sign, enter the local or external IP address of the server.",
 "После знака «/» ввести внешний IP-адрес сервера.":"After the \"/\" sign, enter the external IP address of the server.",
+// Прототип 64: устройство в папку из дерева
+"Переместить":"Move",
+"Переместить в папку":"Move to folder",
+"Переместить в папку…":"Move to folder…",
+"Добавить в папку…":"Add to folder…",
+"Сейчас в папках":"Now in folders",
+"Выбрать папку":"Select folder",
+"Консоль уберёт объект из прежних папок.":"The console removes the object from its previous folders.",
+"Консоль уберёт объекты из прежних папок.":"The console removes the objects from their previous folders.",
+"Прежние папки останутся.":"The previous folders stay.",
+// Прототип 64: папка объекта из дерева
+"Переместить в папку":"Move to folder",
+"Переместить в папку…":"Move to folder…",
+"Добавить в папку…":"Add to folder…",
+"Найти папку":"Find folder",
+"Добавлено в":"Added to",
+"Уже в папке":"Already in folder",
+"Имя или путь папки…":"Folder name or path…",
+"уже здесь":"already here",
 };

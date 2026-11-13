@@ -3327,6 +3327,14 @@ body.dw-resizing,body.dw-resizing *{cursor:col-resize!important;user-select:none
 .dw-cs-h{display:flex;align-items:baseline;gap:10px;margin:0 0 8px;font-size:14px}
 .dw-cs-h .sub{margin:0;font-size:12px;font-weight:400}
 @media(prefers-reduced-motion:reduce){.dw-hd:hover{r:1.7}.dw-pts{animation:none}}
+
+/* ── Прототип 64: поиск папки в меню строки дерева ── */
+.tf-q{padding:6px 8px 4px}
+.tf-q input{width:100%;box-sizing:border-box;padding:5px 8px;border-radius:6px;border:1px solid var(--one-border);background:var(--one-input,var(--one-popup));color:inherit}
+.tf-list{max-height:min(46vh,320px);overflow:auto;scrollbar-gutter:stable}
+.tf-none{padding:8px 10px;color:var(--mu)}
+.tf-here{color:var(--mu);font-size:11px;margin-left:6px}
+.tf-foot{padding:4px 10px 6px;font-size:11px;color:var(--mu);border-top:1px solid var(--one-border)}
 </style>
 <!-- ONE PSIM: мост по ONE.PSIM.PrototypeKit, подключён после стилей прототипа -->
 <link rel="stylesheet" href="assets/one-psim/bridge.css">
@@ -11162,6 +11170,7 @@ function refreshUnalloc(domainId){
 function tctxSep(){return`<div class="tctx-sep" role="separator"></div>`}
 function tctxStarIcon(){return`<span class="tctx-ic tctx-star" aria-hidden="true">${STAR_ON}</span>`}
 function tctxPlusIcon(){return`<span class="tctx-ic tctx-plus" aria-hidden="true">${lu("plus")}</span>`}
+function tctxFolderIcon(){return`<span class="tctx-ic" aria-hidden="true">${lu("folder",14)}</span>`}
 function tctxSearchIcon(){return`<span class="tctx-ic tctx-search" aria-hidden="true">${lu("search")}</span>`}
 function tctxNewTabIcon(){return`<span class="tctx-ic tctx-newtab" aria-hidden="true">${lu("square-arrow-out-up-right")}</span>`}
 function tctxItem(label,action,icon,disabled,cls){
@@ -11208,7 +11217,13 @@ function openTreeCtx(n,xy){
       tctxItem(`${i18n("Изменить выбранные")} (${k})`,`closeTreeCtx();tabFirst()`,`<span class="tctx-ic">${SEL_IC}</span>`),
       tctxItem(`${i18n("Включить")} (${k})`,`closeTreeCtx();bulkQuick('on')`),
       tctxItem(`${i18n("Выключить")} (${k})`,`closeTreeCtx();bulkQuick('off')`)]);
+    // Прототип 64: папка сразу у всех отмеченных строк
+    const fids=bulkSelNodes().filter(x=>inFolders(x)).map(x=>x.id);
+    const fgrp=fids.length&&tfFolders(fids).length?[
+      tctxItem(`${i18n("Переместить в папку…")} (${fids.length})`,["tfOpen",onEv.el,fids,"move"],tctxFolderIcon()),
+      tctxItem(`${i18n("Добавить в папку…")} (${fids.length})`,["tfOpen",onEv.el,fids,"add"],tctxFolderIcon())]:[];
     groups.push([
+      ...fgrp,
       tctxItem(`${i18n("В избранное")} (${k})`,`favSelected()`,tctxStarIcon()),
       tctxItem(i18n("Экспорт выборки в CSV"),`closeTreeCtx();bulkExportCsv()`),
       tctxItem(i18n("Снять выделение"),`closeTreeCtx();clearTreeSel()`)]);
@@ -11250,6 +11265,11 @@ function openTreeCtx(n,xy){
     groups.push(add);
 
     const edit=[];
+    // Прототип 64: папка объекта — из меню строки, а не только из карточки
+    if(canFolderPick(n)){
+      edit.push(tctxItem(i18n("Переместить в папку…"),["tfOpen",onEv.el,`${id}`,"move"],tctxFolderIcon()));
+      edit.push(tctxItem(i18n("Добавить в папку…"),["tfOpen",onEv.el,`${id}`,"add"],tctxFolderIcon()));
+    }
     if(n.type==="server"&&isUnallocated(id)){
       const did=unallocDomainOf(id);
       if(did)edit.push(tctxItem(i18n("Добавить в домен"),act("addToDomain",id,did)));
@@ -14789,6 +14809,89 @@ function flStale(changes){
   });
 }
 function flGroupBy(f,devs){const m=new Map();devs.forEach(it=>flHomes(f,it).forEach(fid=>(m.get(fid)||m.set(fid,[]).get(fid)).push(it.n.id)));return m}
+// ── Прототип 64: папка объекта из дерева ──
+// Папку меняли на экране папки («Переместить в…», «Добавить ещё в…») и в карточке объекта.
+// Меню строки дерева даёт то же двумя пунктами. Список папок длинный, поэтому с поиском.
+let tfPickState=null;                              // {ids, how, q}
+// Папки домена объекта: чужой домен папку не примет
+function tfFolders(ids){
+  const doms=new Set(ids.map(id=>deviceDomain(id)).filter(Boolean));
+  return flatFolders().filter(f=>!doms.size||doms.has(folderDomain(f.id)));
+}
+function canFolderPick(n){return inFolders(n)&&!!tfFolders([n.id]).length}
+function tfOpen(el,ids,how){
+  ids=(Array.isArray(ids)?ids:[ids]).filter(id=>{const n=find(id)?.n;return n&&inFolders(n)});
+  if(!ids.length||!tfFolders(ids).length)return;
+  // Перерисовка меню забирает кнопку, поэтому место запоминаем до неё
+  const box=(el&&el.isConnected?el:document.getElementById("tree")).getBoundingClientRect();
+  const at={getBoundingClientRect:()=>box};
+  tfPickState={ids,how:how==="move"?"move":"add",q:""};
+  bulkOpenMenuAt(at,tfMenuHtml());
+  setTimeout(()=>document.getElementById("tfq")?.focus(),30);
+}
+function tfShown(){
+  const q=(tfPickState.q||"").trim().toLowerCase();
+  const all=tfFolders(tfPickState.ids);
+  return q?all.filter(f=>folderPathName(f.id).toLowerCase().includes(q)):all;
+}
+function tfListHtml(shown){
+  if(!shown.length)return `<div class="tf-none">${i18n("Ничего не найдено")}</div>`;
+  const ids=tfPickState.ids;
+  return shown.map(f=>{
+    // Папка, где уже лежат все выбранные объекты: класть туда нечего
+    const here=ids.every(id=>(f.items||[]).includes(id));
+    const label=hlText(folderPathName(f.id),tfPickState.q)+(here?` <span class="tf-here">${i18n("уже здесь")}</span>`:"");
+    return tctxItem(label,["tfPick",`${f.id}`],tctxFolderIcon(),here);
+  }).join("");
+}
+function tfMenuHtml(){
+  const{ids,how}=tfPickState;
+  const all=tfFolders(ids),shown=tfShown();
+  const who=ids.length===1?`«${escHtml(locName(find(ids[0])?.n||{}))}»`:`${ids.length} ${i18n(plural(ids.length,"объект|объекта|объектов"))}`;
+  const head=`<div class="tctx-head">${i18n(how==="move"?"Переместить в папку":"Добавить в папку")}: ${who}</div>`;
+  const long=all.length>=CBX_MIN;
+  const find_=long?`<div class="tf-q"><input id="tfq" type="text" autocomplete="off" placeholder="${i18n("Имя или путь папки…")}" aria-label="${i18n("Найти папку")}" value="${escHtml(tfPickState.q||"")}" ${onEv("input",["tfType",onEv.value])} ${onEv("keydown",["tfKey",onEv.event])}></div>`:"";
+  const foot=long?`<div class="tf-foot">${i18n("Показано")} ${shown.length} ${i18n("из")} ${all.length}</div>`:"";
+  return head+find_+`<div class="tf-list">${tfListHtml(shown)}</div>`+foot;
+}
+// Поиск правит только список и итог: поле остаётся на месте вместе с курсором
+function tfType(v){
+  if(!tfPickState)return;
+  tfPickState.q=v;
+  const list=document.querySelector("#tctx .tf-list");if(!list)return;
+  const shown=tfShown();
+  list.innerHTML=tfListHtml(shown);
+  const foot=document.querySelector("#tctx .tf-foot");
+  if(foot)foot.textContent=`${i18n("Показано")} ${shown.length} ${i18n("из")} ${tfFolders(tfPickState.ids).length}`;
+}
+function tfKey(e){
+  if(e.key==="Escape"){closeTreeCtx();tfPickState=null;return}
+  const first=document.querySelector("#tctx .tf-list button[role=menuitem]");
+  if(e.key==="Enter"){e.preventDefault();if(first)first.click();return}
+  if(e.key==="ArrowDown"){e.preventDefault();first?.focus()}
+}
+function tfPick(fid){
+  if(!tfPickState)return;
+  const{ids,how}=tfPickState;
+  tfPickState=null;closeTreeCtx();
+  treeToFolder(ids,fid,how);
+}
+// Перенос из дерева: те же изменения состава, что и на экране папки, с отменой в тосте
+function treeToFolder(ids,tid,how){
+  const target=folderById(tid);if(!target)return;
+  const fresh=ids.filter(id=>!(target.items||[]).includes(id));
+  const changes=[[tid,fresh,[]]];
+  if(how==="move"){
+    const from=new Map();
+    ids.forEach(id=>cardFolders(id).forEach(fid=>{if(fid&&fid!==tid)(from.get(fid)||from.set(fid,[]).get(fid)).push(id)}));
+    from.forEach((list,fid)=>changes.push([fid,[],list]));
+  }
+  if(!fresh.length&&changes.length===1){toast(`${i18n("Уже в папке")} «${locName(target)}»`);return}
+  // Папку видно вместе с путём к ней: иначе объект пропал бы из дерева
+  folderPath(tid).forEach(f=>open.add(f.id));
+  const dom=folderDomain(tid);if(dom)open.add(dom);
+  flChange(changes,`${i18n(how==="move"?"Перемещено в":"Добавлено в")} «${locName(target)}»: ${ids.length}`);
+}
 function flToFolder(tid,how){
   closeTreeCtx();
   const f=flHolder(fl.owner),devs=flSelItems(f).filter(it=>!it.fld);if(!devs.length)return;
