@@ -5847,7 +5847,7 @@ function foldersOfDevice(id){
 // ipsTreeKids оставляет её строку под ним. Нужен раскрытию ветки, счётчикам срезов и срезу «Детекторы»
 function treeFoldersOf(id){
   const own=foldersOfDevice(id);if(own.length)return own;
-  const n=find(id)?.n,o=n&&n.type==="camera"?ipsrvOwnerNode(n):null;
+  const n=find(id)?.n,o=n?ipsrvOwnerNode(n):null;
   return o?foldersOfDevice(o.id):own;
 }
 function folderDeviceNodes(f){return(f.items||[]).map(id=>find(id)?.n).filter(Boolean)}
@@ -7962,7 +7962,6 @@ function expandTo(id,ctx){
   const did=deviceDomain(id);if(did)open.add(did);
   const own=treeFoldersOf(id);
   own.forEach(fd=>folderPath(fd.id).forEach(x=>open.add(x.id)));
-  if(own.length&&ipsrvOwnerNode(find(id)?.n||{})&&!foldersOfDevice(id).length)open.add(ipsrvOwnerNode(find(id).n).id);
   if(!own.length&&did)open.add(nofolderId(did));
   const sv=cameraTreeServer(id);
   if(sv){open.add(sv.id);const dom=domainOf(sv.id);if(dom)open.add(dom.id)}
@@ -7982,7 +7981,7 @@ function expandTo(id,ctx){
 // разом. Камеру под самим сервером не трогаем: её копия раскрывается отдельно.
 function openCamDets(cam,gs){
   if(gs&&serverGpu(gs))open.add("gpu:"+gs.id+"|"+cam.id);
-  if(slice==="det"){open.add(cam.id);const fd=foldersOfDevice(cam.id)[0];if(fd)open.add("f:"+fd.id+"|"+cam.id)}
+  if(slice==="det"){open.add(cam.id);const fd=treeFoldersOf(cam.id)[0];if(fd)open.add("f:"+fd.id+"|"+cam.id)}
 }
 // Цель перехода — видимая строка дерева, прокрученная к ней. Нет строки в этом срезе и раскладке, а фильтры ни при
 // чём — срез и раскладка меняются на те, где она есть: карточка без строки в дереве теряет место
@@ -8759,7 +8758,7 @@ function sameCtx(ctx){
   const chosen=normalizeTreeCtx(selCtx);
   if(!chosen&&ctx?.startsWith("srv:"))return cameraTreeServer(sel)?.id===ctx.slice(4);
   // Место не задано (переход по ссылке): в раскладке по папкам отмечена строка в первой папке устройства
-  if(!chosen&&ctx?.startsWith("f:"))return foldersOfDevice(sel)[0]?.id===ctx.slice(2).split("|")[0];
+  if(!chosen&&ctx?.startsWith("f:"))return treeFoldersOf(sel)[0]?.id===ctx.slice(2).split("|")[0];
   if(!chosen&&ctx?.startsWith("nf:"))return true;
   return(chosen||"")===(normalizeTreeCtx(ctx)||"");
 }
@@ -13764,13 +13763,18 @@ function ipsRowSw(id,el){toggleNodeEnabled(id,el)}
 // Строки дерева приходят без полей (n._row): таблице нужны поток и запись, поэтому полные записи камер читаются один раз
 const ipsLoading=new Set();
 // Дети регистратора и входы-выходы каналов приходят веткой дерева (n._more): читаются так же, как при раскрытии строки
+let ipsChanLast=null;
 function ipsChanEnsure(n){
+  // Новый заход в окно снимает отметки: то, что не прочиталось, читается снова
+  if(ipsChanLast!==n.id){ipsChanLast=n.id;ipsLoading.clear()}
   const br=[n,...ipsKids(n,"channel")].filter(x=>x._more&&!(x.devices||[]).length&&!ipsLoading.has("br:"+x.id));
   const need=(n.devices||[]).filter(c=>c._row&&c.type!=="det"&&!ipsLoading.has(c.id));if(!need.length&&!br.length)return;
   need.forEach(c=>ipsLoading.add(c.id));br.forEach(x=>ipsLoading.add("br:"+x.id));
-  const free=()=>{need.forEach(c=>ipsLoading.delete(c.id));br.forEach(x=>ipsLoading.delete("br:"+x.id))};
-  Promise.all([...br.map(x=>treeLoad(treeLayout(),x.id).catch(()=>{})),...need.map(c=>hwFull(c.id).catch(()=>{}))])
-    .then(()=>{free();if(sel===n.id)gear()},free);
+  Promise.all([...br.map(x=>treeLoad(treeLayout(),x.id).catch(()=>{})),...need.map(c=>hwFull(c.id).catch(()=>{}))]).then(()=>{
+    const got=need.filter(c=>!c._row),gotBr=br.filter(x=>!x._more||(x.devices||[]).length);
+    got.forEach(c=>ipsLoading.delete(c.id));gotBr.forEach(x=>ipsLoading.delete("br:"+x.id));
+    if((got.length||gotBr.length)&&sel===n.id)gear();
+  });
 }
 function ipsChanHtml(n){
   ipsChanEnsure(n);
@@ -13847,7 +13851,7 @@ function ipsFolderAsk(fid,id){
 function ipsFaCams(){const o=find(ipsFa.id)?.n;return o?ipsrvCameras(o).slice().sort((a,b)=>(+ipsrvCameraVideoChannel(a,o)||0)-(+ipsrvCameraVideoChannel(b,o)||0)):[]}
 function ipsFaPaint(){
   if(!ipsFa)return;const o=find(ipsFa.id)?.n,f=folderById(ipsFa.fid),cams=ipsFaCams(),q=ipsFa.q.trim().toLowerCase();
-  if(!o||!f){closeConfirm();toast("Папка или регистратор пропали, добавление отменено");return}
+  if(!o||!f){closeConfirm();toast("Консоль не нашла папку или регистратор, поэтому не добавила их");return}
   const hit=cams.filter(c=>!q||[locName(c),ipsrvCameraVideoChannel(c,o)].join(" ").toLowerCase().includes(q));
   const list=document.getElementById("ipsFaList");if(!list)return;
   list.innerHTML=hit.map(c=>{const inF=f.items.includes(c.id),fs=cardFolders(c.id),on=inF||ipsFa.pick.has(c.id);
@@ -16627,7 +16631,7 @@ function detOpen(id,back){
 function detFromCam(id){detOpen(id,find(id)?.p?.id)}
 // Камера в дереве стоит в каждой своей папке: строка без контекста не подсвечивается
 function camTreeCtx(id){
-  const own=foldersOfDevice(id),fd=own.find(x=>x.id===selFolder)||own[0];
+  const own=treeFoldersOf(id),fd=own.find(x=>x.id===selFolder)||own[0];
   return group()==="folder"&&fd?"f:"+fd.id:null;
 }
 function detToCam(id){hwJumpFlash=true;pick(id,{tab:"det",ctx:camTreeCtx(id)});hwJumpFlash=false}

@@ -3527,6 +3527,7 @@ window.I18N_EN={
 "Показать открытый объект в дереве":"Show the open object in the tree",
 "Сначала открыть объект":"Open an object first",
 // Окно регистратора (прототип 61)
+"Консоль не нашла папку или регистратор, поэтому не добавила их":"The console did not find the folder or the recorder, so it did not add them",
 "Это параметры потоков, изображения и другие настройки в блоках с замком.":"These are the stream and image parameters and the other settings in the blocks with a lock.",
 // Соседние чипы «Применить к другим…»: английского у них не было
 "Та же модель":"Same model",
@@ -3595,7 +3596,6 @@ window.I18N_EN={
 "в папку":"to the folder",
 "включены":"enabled",
 "добавить в":"add to",
-"добавлены в папку":"added to the folder",
 "значения, которые она показывает сейчас.":"the values that it shows now.",
 "и во все его камеры":"and to all its cameras",
 "не задано":"not set",
