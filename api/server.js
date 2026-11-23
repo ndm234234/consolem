@@ -2313,7 +2313,7 @@
       const seen = c.serverIds;
       delete c.domainIds;
       delete c.serverIds;
-      if (serverId && Array.isArray(seen) && seen.includes(serverId)) c.serverId = serverId;
+      if (serverId && (!Array.isArray(seen) || seen.includes(serverId))) c.serverId = serverId;
       else if (Array.isArray(seen) && domainId) {
         const own = seen.find((sid) => (byId("servers", sid) || {}).domainId === domainId);
         if (own) c.serverId = own;
@@ -4595,6 +4595,7 @@
           const srv = byId("servers", serverId);
           if (!srv || srv.domainId !== p.id) return problem(422, "VALIDATION_FAILED", "serverId — сервер этой области", { field: "/serverId", params: { serverId } });
         }
+        if (b.idempotencyKey !== undefined && !(typeof b.idempotencyKey === "string" && b.idempotencyKey.length >= 8)) return problem(422, "VALIDATION_FAILED", "idempotencyKey — строка от 8 знаков", { field: "/idempotencyKey" });
         const category = b.category === undefined ? "ip" : b.category;
         if (!["ip", "acfa", "textEvent"].includes(category)) return problem(422, "VALIDATION_FAILED", "category — ip, acfa или textEvent", { field: "/category" });
         const job = discoveryOf(p.id);
