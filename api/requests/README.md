@@ -135,3 +135,4 @@
 | 2026-11-23 | mockup | w2c, владелец контракта | [Сервер и категория поиска в сети внесены в контракт 0.36.0 (`DiscoveryStart`, профиль `vms.discovery/1` 1.1) — проверить](2026-11-23-104355Z-mockup-discovery-server-category-done-request.md) | новый | |
 | 2026-11-23 | mockup | владелец контракта | [Допустить `Discovery.ipScanMax` = 0](2026-11-23-103507Z-mockup-discovery-ipscanmax-zero-request.md) | новый | |
 | 2026-11-23 | mockup | w2c, владелец контракта | [Описания профилей и метка `absent` по сверке w2c — проверить](2026-11-23-105942Z-mockup-profile-absent-done-request.md) | новый | |
+| 2026-11-23 | mockup | w2c, владелец контракта | [Прореживание и дни записи камеры (профиль vms.camera/1 1.3) — проверить](2026-11-23-155440Z-mockup-camera-decimation-depth-done-request.md) | новый | |
