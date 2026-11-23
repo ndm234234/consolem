@@ -962,6 +962,7 @@ table.lan-tbl td.lan-act{text-align:right;white-space:nowrap}
 .lan-sel-l{margin:0;color:var(--mu)}
 .lan-sel select.lan-rec{field-sizing:content;width:auto;min-width:150px;height:28px;padding-top:0;padding-bottom:0}
 .lan-sel-note{font-size:12px;color:var(--mu);overflow:hidden;text-overflow:ellipsis;min-width:0}
+.arch-nocams{margin-bottom:12px;display:grid;gap:4px}
 .lan-sel-idle{background:transparent;border:1px dashed var(--ln);color:var(--mu);font-size:12px}
 /* Узкая карточка: полоса в две строки и той же высоты без отметок — список под ней не сдвигается, список режима не обрезан */
 #lanCard{container-type:inline-size}
@@ -15640,6 +15641,19 @@ function lanMore(k,items){
 }
 function lanRuleLinks(rs,k){return lanMore(k,rs.map(x=>`<button type="button" class="lk" ${onEv("click",onEv.stop,["ruleGoRule",x.id])}>«${escHtml(x.name)}»</button>`))}
 function lanArchGo(id){pick(id);if(sel===id)hwFlashLanding()}
+// Хранилище без вкладки «Устройства» (камеры сюда не пишут: инциденты и подобные виды) говорит об этом сверху карточки
+// и ведёт туда, куда камеры сервера пишут на самом деле, — чтобы пропажа вкладки не выглядела ошибкой
+function archNoCamsHtml(n){
+  if(archRowOk(n)||archSpec(n).recordModes.length)return"";
+  const sv=archServer(n),rec=sv?serverArchives(sv.id).filter(a=>a.id!==n.id&&archRowOk(a)):[];
+  const go=a=>`<button type="button" class="as-link" ${onEv("click",["lanArchGo",`${a.id}`])}>${escHtml(locName(a))}</button>`;
+  const where=!sv?"":rec.length
+    ?`<div>${i18n("Камеры сервера")} «${escHtml(locName(sv))}» ${i18n("записывают видео в эти хранилища:")} ${rec.map(go).join(", ")}.</div>`
+    :`<div>${i18n("У сервера")} «${escHtml(locName(sv))}» ${i18n("нет хранилища для записи камер.")} <button type="button" class="as-link" ${onEv("click",["archNoCamsSrv",`${sv.id}`])}>${i18n("Открыть хранилища сервера")} →</button></div>`;
+  return`<div class="nt arch-nocams" data-arch-nocams${archSpec(n).admits?"":" data-arch-noadmit"}><b>${i18n("Камеры не записывают видео в это хранилище, поэтому у него нет вкладки «Устройства».")}</b>
+    <div>${i18n("Сюда консоль копирует только записи, которые оператор отметил для хранения.")}</div>${where}</div>`;
+}
+function archNoCamsSrv(id){hwJumpFlash=true;pick(id,{tab:"disk"});hwJumpFlash=false}
 function lanRecWhyHtml(n,r,cur,aid,off){
   const c=r.node,out=[],warn=t=>`<div class="lan-why lan-why-warn">${lu("triangle-alert",12)} ${escHtml(t)}</div>`;
   if(off)out.push(`<div class="lan-why">${escHtml(off)}</div>`);
@@ -24460,14 +24474,14 @@ function formBase(n){
     const rules={disk:"На одном диске у хранилища один том. Том — это весь раздел или файл заданного размера. Весь раздел форматируют в SolidStore, и запись заполняет его до конца. Системный диск нельзя отдать целиком.",
       nas:"Том — файл заданного размера в папке NAS (SMB2/SMB3, NFS, CIFS, iSCSI). Пользователь — с префиксом домена или компьютера: домен\\имя. В Windows к одному NAS одновременно подключается один пользователь.",
       bucket:"Том — это бакет (у Azure — контейнер). Его создают заранее в консоли провайдера. Томов может быть несколько. Объём не ограничен, его можно изменить без перезапуска. Делать тома одного размера, иначе глубина архива будет меняться при записи по кругу."}[k];
-    return card("Параметры хранилища",`<div class="nt ${net?"":"ok"}">${archOwnerLine(n)}</div>
+    return archNoCamsHtml(n)+card("Параметры хранилища",`<div class="nt ${net?"":"ok"}">${archOwnerLine(n)}</div>
       <div class="g" style="margin-top:10px">${archFld(n.id,"Имя","name",locName(n))}${pfw(n,"retentionDays",archFld(n.id,"Глубина, дней","days",n.days,"number","0 — без ограничения"))}
         ${fldRo("Тип",archKindLabel(n))}
         <div${pfa(n,"storage")}>${fldRo("Тип хранения",k==="bucket"?i18n("Облачное"):i18n((ARCH_STORAGE.find(x=>x[0]===n.storage)||ARCH_STORAGE[0])[1])).replace(/^<div>|<\/div>$/g,"")}<div class="bk-hint">${i18n("задают при создании, потом его нельзя изменить. Сервер размечает тома под этот тип")}</div></div>
         ${spec.archiveModes.length?`<div data-arch-mode${pfa(n,"recordMode")}><label>${i18n("Когда писать")}</label><select ${onEv("change",["archSet",`${n.id}`,"recordMode",onEv.value])}>${archModeOpts(spec,n.recordMode||"")}</select>${n.recordMode?"":`<small class="sub" data-arch-auto>${i18n(ARCH_AUTO_HINT)}</small>`}</div>`:""}
       </div>
       ${spec.serverWide?`<div class="nt">${i18n("Один на сервер. Работает со всеми камерами сервера. Привязывать камеры не нужно. Выключить его для одной камеры нельзя.")}</div>`:""}
-      ${spec.serverWide?"":spec.admits?`<div class="ln ln-sw" data-arch-admits${pfa(n,"admits")}><div>${i18n("Принимает записи")} <span class="sub">${i18n("выключено. Консоль не привязывает сюда новые камеры")}</span></div><div class="sw ${n.admits===false?"":"on"}" ${onEv("click",["archAdmitsToggle",onEv.el,n.id])}></div></div>`:`<div class="nt" data-arch-noadmit>${i18n("Камеры не записывают сюда видео. Здесь только копии отмеченных записей.")}</div>`}
+      ${spec.serverWide?"":spec.admits?`<div class="ln ln-sw" data-arch-admits${pfa(n,"admits")}><div>${i18n("Принимает записи")} <span class="sub">${i18n("выключено. Консоль не привязывает сюда новые камеры")}</span></div><div class="sw ${n.admits===false?"":"on"}" ${onEv("click",["archAdmitsToggle",onEv.el,n.id])}></div></div>`:archNoCamsHtml(n)?"":`<div class="nt" data-arch-noadmit>${i18n("Камеры не записывают сюда видео. Здесь только копии отмеченных записей.")}</div>`}
       ${spec.encryption?`<div class="ln ln-sw" data-needs="feature:archiveEncryption"${pfa(n,"encrypted")}><div>${i18n("Шифрование томов")} <span class="sub">${canEnc?"AES-256-GCM":i18n("— только у объектного хранилища")}</span></div><div class="sw ${n.enc&&canEnc?"on":""} ${canEnc?"":"dis"}" ${canEnc?`${onEv("click",["archEncToggle",onEv.el,n.id])}`:""}></div></div>`:""}
       <div class="mx" style="margin-top:10px">
         <button type="button" class="mc" ${onEv("click",["goTab","cams"])}><span>${i18n("Камер пишется")}</span><b>${cams.length}</b></button>

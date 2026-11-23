@@ -33,5 +33,12 @@ Object.assign(window.I18N_EN,{
 "Ещё пишет в":"Also records to",
 "Пишет в":"Records to",
 "Режим здесь добавит это хранилище, прежнее останется.":"A mode here adds this storage. The previous storage stays.",
-"Отмечено":"Selected"
+"Отмечено":"Selected",
+"Камеры не записывают видео в это хранилище, поэтому у него нет вкладки «Устройства».":"Cameras do not record video to this storage. That is why it has no «Devices» tab.",
+"Сюда консоль копирует только записи, которые оператор отметил для хранения.":"The console copies here only the recordings that an operator marked to keep.",
+"Камеры сервера":"Cameras of the server",
+"записывают видео в эти хранилища:":"record video to these storages:",
+"У сервера":"The server",
+"нет хранилища для записи камер.":"has no storage for camera recording.",
+"Открыть хранилища сервера":"Open the server storages"
 });
