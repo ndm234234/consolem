@@ -2700,6 +2700,7 @@ p.dl-warn svg{display:inline;vertical-align:-2px}
 .gb-in>span{color:var(--mu);font-size:12px}
 /* Срез «Хранилища»: таблица хранилищ выбранного места */
 body :is(.n:not(.on,.mark),.as-name,.it) .ici.ici-asnet{color:color-mix(in srgb,var(--one-palette-purple) 72%,var(--one-fg))}
+body :is(.n:not(.on,.mark),.as-name,.it,.hd-ic) .ici.ici-asinc{color:color-mix(in srgb,var(--one-palette-amber) 80%,var(--one-fg))}
 body :is(.n:not(.on,.mark),.as-name,.it) .ici.ici-asdisk{color:color-mix(in srgb,var(--one-palette-teal) 72%,var(--one-fg))}
 .n.as-norec-top{margin-top:6px;border-top:1px solid var(--ln)}
 .as-cap{padding:6px 8px 2px calc(var(--l,1)*14px + 26px);font-size:11px;color:var(--mu)}
@@ -4049,7 +4050,7 @@ LU["graduation-cap"]='<path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2
 LU["book-open"]=LU["book-open"]||'<path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/>';
 LU["play"]=LU["play"]||'<path d="M6 4l14 8-14 8z"/>';
 IC.sec_learn=lu("graduation-cap");
-IC.archive=IC.storage;LU.network=`<rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/>`;IC.asnet=lu("network");IC.asdisk=lu("hard-drive");
+IC.archive=IC.storage;LU.network=`<rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/>`;IC.asnet=lu("network");IC.asdisk=lu("hard-drive");LU["archive"]='<rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/>';IC.asinc=lu("archive");
 // Строки-списки — те же знаки, что у их содержимого, только серые: сервер
 // для «Нераспределённых серверов», хранилище для «Без записи», папка для
 // «Без папки». Пунктир на тёмном фоне рассыпался в пиксели и читался как
@@ -7878,7 +7879,11 @@ function archMainOk(a){return archSpec(a).recordModes.some(m=>m!=="backup")&&a.a
 function archRowOk(a){return archSpec(a).recordModes.length>0&&a.admits!==false}
 function cloudLabel(p){return(CLOUD_PROVIDERS.find(x=>x[0]===p)||[0,"S3"])[1]}
 function archKindLabel(a){const k=archKind(a);return archAddr(a)==="bucket"?`${i18n(archKindName(k))} · ${cloudLabel(a.provider)}`:i18n(archKindName(k))}
-function archIcon(a){return ic(archAddr(a)==="disk"?"asdisk":"asnet")}
+// Хранилище, куда камеры не пишут (инциденты и подобные виды): свой знак — ящик для копий, а не диск записи
+// Карта сервера (serverWide) вкладки «Устройства» тоже не имеет, но пишет все камеры сервера — это не она
+function archNoCams(a){const x=archSpec(a);return!(archRowOk(a)||x.recordModes.length||x.serverWide)}
+function archIconKey(a){return archNoCams(a)?"asinc":archAddr(a)==="disk"?"asdisk":"asnet"}
+function archIcon(a){return ic(archIconKey(a))}
 function archKindTag(a){
   const k=archKind(a);
   if(archAddr(a)==="bucket")return a.provider==="azure"?"Azure":a.provider==="minio"?"MinIO":a.provider==="s3c"?i18n("S3-совм."):"S3";
@@ -9769,12 +9774,12 @@ function treeIconHtml(n){
     const rt=ruleTmpTitle();
     return`<span class="ici ici-camera ici-stmark ici-ruletmp" role="img" data-st="ruletmp" data-st-id="${escHtml(n.id)}" aria-label="${rt}">${IC.camera||"•"}<span class="ici-overlay" aria-hidden="true">${IC_RULETMP_BADGE}</span></span>`;
   }
-  return ic(n.type);
+  return ic(n.type==="archive"&&archNoCams(n)?"asinc":n.type);
 }
 // В строке дерева — то же, простой знак маской (ict)
 function treeRowIcon(n){
   if((handOf(n,"server")||handOf(n,"domain"))&&hasNoSignal(n)||handCam(n)&&n.ruleOff)return treeIconHtml(n);
-  return ict(n.type);
+  return ict(n.type==="archive"&&archNoCams(n)?"asinc":n.type);
 }
 function nodeStatus(n){
   const isCam=handCam(n);
@@ -14390,7 +14395,7 @@ function arow(a,l){
   const cnt=slice==="arch"&&!hwDone.archives&&!archCamIds.has(a.id)?"":inventory?allCams.length:hasSliceContext()?sliceParentCount(a.id):cams.length;
   let h=`<div class="n srv stor ${sel===a.id?"on":""}${inventory?"":sliceParentClass(a.id)}${treeRenameId===a.id?" renaming":""}" style="--l:${l}"${treeRowPick(a.id)}${treeCtxAttr(a.id)}${treeExpandMeta(a.id,"srv",hasKids)}>
     ${hasKids?treeChevron(a.id,"srv",hasKids,op):'<span class="tw"></span>'}
-    ${ict(archAddr(a)==="disk"?"asdisk":"asnet")}${treeRenameId===a.id?treeNameCell(a,q):`<span class="nm" title="${escHtml(locName(a))} · ${escHtml(archKindLabel(a))}">${hlText(locName(a),selfHit?q:"")}</span>`}${treeTail({cnt:treeCntHtml(cnt),acts:a.id})}</div>`;
+    ${ict(archIconKey(a))}${treeRenameId===a.id?treeNameCell(a,q):`<span class="nm" title="${escHtml(locName(a))} · ${escHtml(archKindLabel(a))}">${hlText(locName(a),selfHit?q:"")}</span>`}${treeTail({cnt:treeCntHtml(cnt),acts:a.id})}</div>`;
   if(op)h+=children;
   return h;
 }
@@ -15644,7 +15649,7 @@ function lanArchGo(id){pick(id);if(sel===id)hwFlashLanding()}
 // Хранилище без вкладки «Устройства» (камеры сюда не пишут: инциденты и подобные виды) говорит об этом сверху карточки
 // и ведёт туда, куда камеры сервера пишут на самом деле, — чтобы пропажа вкладки не выглядела ошибкой
 function archNoCamsHtml(n){
-  if(archRowOk(n)||archSpec(n).recordModes.length)return"";
+  if(!archNoCams(n))return"";
   const sv=archServer(n),rec=sv?serverArchives(sv.id).filter(a=>a.id!==n.id&&archRowOk(a)):[];
   const go=a=>`<button type="button" class="as-link" ${onEv("click",["lanArchGo",`${a.id}`])}>${escHtml(locName(a))}</button>`;
   const where=!sv?"":rec.length
