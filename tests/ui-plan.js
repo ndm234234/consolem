@@ -63,7 +63,9 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   planAddFound([good[0]]);
   ok(addPlan.rows.length === 2, "тот же адрес второй раз не добавляется");
   const sid = planServerId();
-  ok(addPlan.rows.every((x) => x.serverId === sid && planAllowedArchives(x.serverId, x.domainId).some((a) => a.id === x.r.arch || !x.r.arch)), "строки на выбранном сервере, архив — из его списка");
+  // Прототип 84: находка встаёт на сервер поиска или на сервер, который её нашёл (devFoundServer); index.html — на выбранный в строке «Сервер»
+  const rowSrv = (x) => (typeof devFoundServer === "function" && devFoundServer(x.src || x.r)) || sid;
+  ok(addPlan.rows.every((x) => x.serverId === rowSrv(x) && planAllowedArchives(x.serverId, x.domainId).some((a) => a.id === x.r.arch || !x.r.arch)), "строки на выбранном сервере, архив — из его списка");
   setDeviceTab("manual");
   Object.assign(wizd.manual, { type: "camera", ip: "10.7.7.1", port: "80", vendor: "Axis", model: "P3245-LV", user: "admin", pass: "pw1", name: "Ручная камера", identifier: "", short: "", rtsp: "" });
   planAddManual();
@@ -473,8 +475,10 @@ UiCheck(async ({ ok, until, confirmWith }) => {
     planSetServer(sB);
     planAddFound([fr0]);
     const fr1 = addPlan.rows[addPlan.rows.length - 1];
-    ok(fr1.serverId === sB, "F7: строка встала на сервер из строки «Сервер»");
-    ok(planAllowedArchives(sB, fr1.domainId).some((x) => x.id === fr1.r.arch) || !fr1.r.arch, "F7: у строки архив, доступный серверу из строки «Сервер»");
+    // Прототип 84: на вкладке «В сети» строки «Сервер» над вкладками нет — строка встаёт на сервер поиска или на тот, что её нашёл
+    const wantB = (typeof devFoundServer === "function" && devFoundServer(fr0)) || sB;
+    ok(fr1.serverId === wantB, "F7: строка встала на сервер из строки «Сервер»");
+    ok(planAllowedArchives(wantB, fr1.domainId).some((x) => x.id === fr1.r.arch) || !fr1.r.arch, "F7: у строки архив, доступный серверу из строки «Сервер»");
     ok(!planRowIssues(fr1).some((i) => /недоступен/.test(i.text)) && !fr1.archWas, "F7: без предупреждения об архиве, которого человек не выбирал");
     planClear();
     closeWizard();
