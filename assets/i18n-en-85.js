@@ -1,5 +1,8 @@
 // Английский прототипа 85 (docs/TEXTS.md, «Как менять текст безопасно»): подключён после assets/i18n-en.js
 Object.assign(window.I18N_EN,{
+"свернуть":"collapse",
+"Показать все":"Show all",
+"видят движение.":"see motion.",
 "Отметьте камеры, чтобы задать режим записи сразу нескольким. Изменения попадут в план.":"Select cameras to set the recording mode for several at a time. The changes go to the plan.",
 "Разные режимы":"Different modes",
 "Режим сразу меняется в строках. Применить — кнопкой «Показать план» внизу.":"The mode changes in the rows at once. To apply it, click «Show plan» at the bottom.",

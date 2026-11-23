@@ -966,6 +966,7 @@ table.lan-tbl td.lan-act{text-align:right;white-space:nowrap}
 .lan-rec-line{display:flex;align-items:center;gap:6px}
 .lan-rec-cell select.lan-rec.pend{border-color:var(--one-selected-indicator);color:var(--x-link)}
 .lan-why-plan{color:var(--x-link)}
+.lan-why .lk.lan-more{font-weight:600;text-decoration:underline dotted}
 .lan-sch-line{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .lan-sch-line select.lan-sch{field-sizing:content;width:auto;min-width:140px;max-width:220px;height:24px;padding-top:0;padding-bottom:0;font-size:12px}
 table.lan-tbl th.lan-th-bind{width:300px}
@@ -15615,7 +15616,17 @@ function lanRecCellHtml(n,r){
   const pend=lanCamPending(r.node)?`<span class="tag plan-tag" title="${i18n("Изменение не применено. Применить — кнопкой «Показать план» внизу.")}">${i18n("в плане")}</span>`:"";
   return`<div class="lan-rec-cell"><div class="lan-rec-line">${sel}${pend}</div>${lanRecWhyHtml(n,r,cur,aid,off)}</div>`;
 }
-function lanRuleLinks(rs){return rs.slice(0,2).map(x=>`<button type="button" class="lk" ${onEv("click",onEv.stop,["ruleGoRule",x.id])}>«${escHtml(x.name)}»</button>`).join(", ")+(rs.length>2?` ${i18n("и ещё")} ${rs.length-2}`:"")}
+// Длинный перечень в строке (больше трёх): первые два и кнопка «и ещё N», которая раскрывает весь перечень; «свернуть» — обратно.
+// Раскрытые перечни помнятся по ключу (камера и что перечислено), пока открыта вкладка
+const lanMoreOpen=new Set();
+function lanMoreTog(k){if(lanMoreOpen.has(k))lanMoreOpen.delete(k);else lanMoreOpen.add(k);gear()}
+function lanMore(k,items){
+  if(items.length<=3)return items.join(", ");   // «и ещё 1» не короче самого пункта
+  if(lanMoreOpen.has(k))return items.join(", ")+` <button type="button" class="lk lan-more" ${onEv("click",onEv.stop,["lanMoreTog",k])}>${i18n("свернуть")}</button>`;
+  return items.slice(0,2).join(", ")+` <button type="button" class="lk lan-more" title="${escHtml(i18n("Показать все"))}" ${onEv("click",onEv.stop,["lanMoreTog",k])}>${i18n("и ещё")} ${items.length-2}</button>`;
+}
+function lanRuleLinks(rs,k){return lanMore(k,rs.map(x=>`<button type="button" class="lk" ${onEv("click",onEv.stop,["ruleGoRule",x.id])}>«${escHtml(x.name)}»</button>`))}
+function lanArchGo(id){pick(id);hwFlashLanding()}
 function lanRecWhyHtml(n,r,cur,aid,off){
   const c=r.node,out=[],warn=t=>`<div class="lan-why lan-why-warn">${lu("triangle-alert",12)} ${escHtml(t)}</div>`;
   if(off)out.push(`<div class="lan-why">${escHtml(off)}</div>`);
@@ -15628,7 +15639,7 @@ function lanRecWhyHtml(n,r,cur,aid,off){
     if(c._recRule||(!g&&newDet))out.push(`<div class="lan-why lan-why-plan">${i18n("После «Применить» консоль создаст")} ${[newDet?i18n("детектор движения"):"",c._recRule?`${i18n("правило")} «${escHtml(camRecRuleName(c))}»`:""].filter(Boolean).join(` ${i18n("и")} `)}.</div>`);
     else if(g&&g.k==="nodet")out.push(warn(g.text)+`<div class="lan-why"><button type="button" class="lk" ${onEv("click",onEv.stop,["lanDetsGo",c.id])}>${i18n("Открыть детекторы камеры")} →</button></div>`);
     else if(g)out.push(warn(g.text)+(camRecRuleOk()?`<div class="lan-why"><button type="button" class="btn s" ${onEv("click",onEv.stop,["lanRuleFix",c.id])}>${lu("plus",13)} ${i18n("Создать правило записи")}</button></div>`:""));
-    else out.push(`<div class="lan-why">${i18n("Правило")} ${lanRuleLinks(rr)} ${i18n("запускает запись, когда")} ${i18n(ds.length>1?"детекторы":"детектор")} ${ds.slice(0,1).map(d=>`<button type="button" class="lk" ${onEv("click",onEv.stop,["lanDetGo",c.id,d.id])}>«${escHtml(detTitle(d))}»</button>`).join("")}${ds.length>1?` ${i18n("и ещё")} ${ds.length-1}`:""} ${i18n("видит движение.")}</div>`);
+    else out.push(`<div class="lan-why">${i18n("Правило")} ${lanRuleLinks(rr,c.id+":mrule")} ${i18n("запускает запись, когда")} ${i18n(ds.length>1?"детекторы":"детектор")} ${lanMore(c.id+":det",ds.map(d=>`<button type="button" class="lk" ${onEv("click",onEv.stop,["lanDetGo",c.id,d.id])}>«${escHtml(detTitle(d))}»</button>`))} ${i18n(ds.length>1?"видят движение.":"видит движение.")}</div>`);
   }
   if(cur==="sched"){
     // Расписание выбирают прямо в строке: без него сервер не примет режим. Выбор — тоже строка плана
@@ -15641,9 +15652,9 @@ function lanRecWhyHtml(n,r,cur,aid,off){
   if(cur==="replica")out.push(`<div class="lan-why">${i18n("Копирует записи с другого хранилища.")}</div>`);
   // Правила, которые тоже запускают запись этой камеры, — их видно, даже если режим другой
   const extra=camRecRuleList(c).filter(x=>x.rec&&!shown.includes(x.r.id)).map(x=>x.r);
-  if(extra.length)out.push(`<div class="lan-why">${i18n(cur?"Ещё запускает запись":"Запись запускает")}: ${i18n(extra.length>1?"правила":"правило")} ${lanRuleLinks(extra)}</div>`);
+  if(extra.length)out.push(`<div class="lan-why">${i18n(cur?"Ещё запускает запись":"Запись запускает")}: ${i18n(extra.length>1?"правила":"правило")} ${lanRuleLinks(extra,c.id+":rule")}</div>`);
   const others=camArchs(c).filter(x=>x.rec&&x.rec!=="none"&&x.arch!==aid&&archById(x.arch));
-  if(others.length)out.push(`<div class="lan-why">${i18n(cur?"Ещё пишет в":"Пишет в")} ${others.slice(0,2).map(x=>`«${escHtml(locName(archById(x.arch)))}» (${lanModeName(x.rec).toLowerCase()})`).join(", ")}${others.length>2?` ${i18n("и ещё")} ${others.length-2}`:""}${cur?"":`. ${i18n("Режим здесь добавит это хранилище, прежнее останется.")}`}</div>`);
+  if(others.length)out.push(`<div class="lan-why">${i18n(cur?"Ещё пишет в":"Пишет в")} ${lanMore(c.id+":arch",others.map(x=>`<button type="button" class="lk" ${onEv("click",onEv.stop,["lanArchGo",x.arch])}>«${escHtml(locName(archById(x.arch)))}»</button> (${lanModeName(x.rec).toLowerCase()})`))}${cur?"":`. ${i18n("Режим здесь добавит это хранилище, прежнее останется.")}`}</div>`);
   return out.join("");
 }
 // Все правки записи — черновик карточки хранилища (cardDraft.cams): строка «Не применено» внизу, «Показать план»,
