@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Конфигуратор — API",
-    "version": "0.35.0",
+    "version": "0.36.0",
     "description": "Контракт конфигуратора: всё, что интерфейс читает и меняет. Источник истины: встроенный сервер прототипа (api/server.js) и бэкенд отвечают по нему. Договорённости — api/README.md: версии записей (ETag / If-Match, 428, 412), ошибки application/problem+json с машинным code, групповые операции с частичным успехом и idempotencyKey, поток событий SSE. Система может поддерживать не весь контракт: что она умеет — GET /reference → capabilities; остальные операции отвечают 404 NO_ROUTE, неподдержанные виды устройств и настройки — 422 NOT_SUPPORTED. Операции с тегом test-support есть только на тестовом стенде. Форма работает с одним адресом входа, другой — только если этот недоступен. Список операций, откат и память idempotencyKey у каждого адреса свои: после 5xx и смены адреса запись сперва перечитывается. Версия одной записи на разных адресах может отличаться: 412 и перечитывание. У изменений чужого кластера at — время, когда их увидели.",
     "license": {
       "name": "Внутренний документ",
@@ -707,7 +707,7 @@
           "discovery"
         ],
         "summary": "Запустить поиск устройств в сети домена",
-        "description": "Предметный API объекта по uid (профиль vms.discovery/1): объект области, у VMS — домен. Нет объекта — 404; вид объекта не реализует vms.discovery/1 — 422 NOT_SUPPORTED, field /kind.\n\nНайденное приходит в поток по одному (discovery.progress), конец — discovery.finished. Новый поиск заменяет итог прежнего. Уже идёт — 409 BUSY Поиск идёт на всех серверах кластера, через который вошли: устройство сети другого кластера находится входом через него. Один поиск на домен, второй — 409 BUSY. Заводских логина и пароля система не подбирает: login, password у кандидата пусты. support: ok значит «драйвер есть», а не «вошли». progress — доля времени поиска.",
+        "description": "Предметный API объекта по uid (профиль vms.discovery/1): объект области, у VMS — домен. Нет объекта — 404; вид объекта не реализует vms.discovery/1 — 422 NOT_SUPPORTED, field /kind.\n\nНайденное приходит в поток по одному (discovery.progress), конец — discovery.finished. Новый поиск заменяет итог прежнего. Уже идёт — 409 BUSY Поиск идёт на всех серверах кластера, через который вошли: устройство сети другого кластера находится входом через него. Один поиск на домен, второй — 409 BUSY. Заводских логина и пароля система не подбирает: login, password у кандидата пусты. support: ok значит «драйвер есть», а не «вошли». progress — доля времени поиска.\n\nС 0.36.0 — необязательное тело DiscoveryStart: serverId (искать только с этого сервера области) и category (категория оборудования). Без тела и без полей — как раньше: все серверы области, IP-устройства. serverId не сервер этой области — 422 VALIDATION_FAILED, field /serverId.",
         "parameters": [
           {
             "name": "uid",
@@ -744,6 +744,16 @@
           },
           "default": {
             "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiscoveryStart"
+              }
+            }
           }
         }
       },
@@ -9123,6 +9133,20 @@
           "password": {
             "type": "string",
             "description": "Заводской пароль, который подобрал поиск (упрощение стенда, см. BACKEND.md)"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "ip",
+              "acfa",
+              "textEvent"
+            ],
+            "description": "С 0.36.0, необязательно. Категория устройства; нет — ip"
+          },
+          "serverId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "С 0.36.0, необязательно. Сервер области, который видит устройство в своей сети"
           }
         },
         "additionalProperties": false,
@@ -9196,6 +9220,23 @@
             "minimum": 1,
             "readOnly": true,
             "description": "С 0.30.0, обязательно с 0.32.0. Сколько адресов самое большее проверяет один поиск в сети области"
+          },
+          "serverId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "С 0.36.0, необязательно. Сервер, с которого идёт последний поиск; null — все серверы области"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "ip",
+              "acfa",
+              "textEvent"
+            ],
+            "description": "С 0.36.0, необязательно. Категория оборудования последнего поиска (DiscoveryStart.category); нет — ip"
           }
         },
         "additionalProperties": false,
@@ -9208,6 +9249,36 @@
         ],
         "description": "Поиск устройств в сети домена: последний или идущий",
         "x-layer": "vms.discovery/1"
+      },
+      "DiscoveryStart": {
+        "type": "object",
+        "x-layer": "vms.discovery/1",
+        "additionalProperties": false,
+        "description": "С 0.36.0. Где и что ищет поиск в сети области. Нет поля — прежнее поведение",
+        "properties": {
+          "serverId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Сервер области, с которого идёт поиск (у Axxon One — узел). Нет или null — все серверы области"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "ip",
+              "acfa",
+              "textEvent"
+            ],
+            "description": "Категория оборудования: ip — IP-устройства (у Axxon One IpDevice), acfa — устройства СКУД (AcfaDevice), textEvent — источники текстовых событий (TextEventDevice). Нет — ip, как до 0.36.0"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 8,
+            "description": "Ключ повтора. Мост своей страницы (0.34.0) кладёт его в тело каждой команды startDiscovery. Сервер может его не хранить: второй поиск области и так отвечает 409 BUSY"
+          }
+        }
       },
       "RoleGlobal": {
         "type": "object",

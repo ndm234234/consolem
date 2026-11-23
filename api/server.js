@@ -2307,17 +2307,30 @@
       if (!d) db.discovery.push((d = { domainId, state: "idle", progress: 0, startedAt: null, finishedAt: null, candidateIds: [] }));
       return d;
     }
-    function candidate(id) {
+    // С 0.36.0 находка называет сервер, который её видит (serverId): сервер поиска, иначе первый сервер области из serverIds сети стенда
+    function candidate(id, serverId, domainId) {
       const c = clone(db.network.find((x) => x.id === id));
+      const seen = c.serverIds;
       delete c.domainIds;
+      delete c.serverIds;
+      if (serverId && Array.isArray(seen) && seen.includes(serverId)) c.serverId = serverId;
+      else if (Array.isArray(seen) && domainId) {
+        const own = seen.find((sid) => (byId("servers", sid) || {}).domainId === domainId);
+        if (own) c.serverId = own;
+      }
       return c;
     }
+    // Что видит в сети поиск области (с 0.36.0): сервер — только его сеть (нет serverIds — сеть всех серверов области), категория — нет поля — ip
+    const discoverySees = (c, domainId, serverId, category) =>
+      c.domainIds.includes(domainId) && (c.category || "ip") === category && (!serverId || !Array.isArray(c.serverIds) || c.serverIds.includes(serverId));
     // С 0.30.0 ответ поиска называет предел адресов одного поиска (ipScanMax): число стенда (stand.ipScanMax)
     function discoveryView(domainId) {
       const d = db.discovery.find((x) => x.domainId === domainId);
       const ipScanMax = db.stand.ipScanMax;
       if (!d) return { domainId, state: "idle", progress: 0, startedAt: null, finishedAt: null, candidates: [], ipScanMax };
-      return { domainId, state: d.state, progress: d.progress, startedAt: d.startedAt || null, finishedAt: d.finishedAt || null, candidates: d.candidateIds.map(candidate), ipScanMax };
+      const where = d.serverId === undefined ? {} : { serverId: d.serverId || null };
+      if (d.category) where.category = d.category;
+      return Object.assign({ domainId, state: d.state, progress: d.progress, startedAt: d.startedAt || null, finishedAt: d.finishedAt || null, candidates: d.candidateIds.map((id) => candidate(id, d.serverId, domainId)), ipScanMax }, where);
     }
     function finishDiscovery(domainId, state) {
       searches.delete(domainId);
@@ -2333,7 +2346,7 @@
           const d = discoveryOf(domainId);
           d.candidateIds.push(id);
           d.progress = Math.round(((s.total - s.queue.length) / s.total) * 100);
-          send("discovery.progress", { kind: "discovery", entityId: domainId, payload: { progress: d.progress, candidate: candidate(id) } });
+          send("discovery.progress", { kind: "discovery", entityId: domainId, payload: { progress: d.progress, candidate: candidate(id, d.serverId, domainId) } });
           s.nextAt += DISCOVERY_STEP_MS;
           if (!s.queue.length) {
             finishDiscovery(domainId, "done");
@@ -4570,14 +4583,26 @@
         const doc = scenarioDoc(p.id), st = (db.scenarioStatus || {})[p.id] || {};
         return items(doc.items.filter((x) => st[x.name]).map((x) => clone(st[x.name])));
       },
-      startDiscovery: (p) => {
+      startDiscovery: (p, q, body) => {
         if (!byId("domains", p.id)) return notFound("Домен");
+        // С 0.36.0 — необязательное тело DiscoveryStart: сервер и категория. Нет тела — все серверы области, IP-устройства. idempotencyKey (его кладёт мост) стенд не хранит: второй поиск — 409 BUSY
+        const b = body == null ? {} : body;
+        if (typeof b !== "object" || Array.isArray(b)) return problem(422, "VALIDATION_FAILED", "Тело — объект DiscoveryStart", { field: "/" });
+        const extra = Object.keys(b).find((k) => !["serverId", "category", "idempotencyKey"].includes(k));
+        if (extra) return problem(422, "VALIDATION_FAILED", `Поле ${extra} не входит в DiscoveryStart`, { field: `/${extra}` });
+        const serverId = b.serverId == null ? null : b.serverId;
+        if (serverId !== null) {
+          const srv = byId("servers", serverId);
+          if (!srv || srv.domainId !== p.id) return problem(422, "VALIDATION_FAILED", "serverId — сервер этой области", { field: "/serverId", params: { serverId } });
+        }
+        const category = b.category === undefined ? "ip" : b.category;
+        if (!["ip", "acfa", "textEvent"].includes(category)) return problem(422, "VALIDATION_FAILED", "category — ip, acfa или textEvent", { field: "/category" });
         const job = discoveryOf(p.id);
         if (job.state === "searching") return problem(409, "BUSY", "Поиск в сети домена уже идёт");
         // Новый поиск заменяет итог прежнего: найденное появляется по одному, как при настоящем опросе
-        Object.assign(job, { state: "searching", progress: 0, startedAt: iso(now()), finishedAt: null, candidateIds: [] });
+        Object.assign(job, { state: "searching", progress: 0, startedAt: iso(now()), finishedAt: null, candidateIds: [], serverId, category });
         // Первая находка — сразу, следующие — раз в 140 мс
-        searches.set(p.id, { queue: db.network.filter((c) => c.domainIds.includes(p.id)).map((c) => c.id), total: 0, nextAt: now() });
+        searches.set(p.id, { queue: db.network.filter((c) => discoverySees(c, p.id, serverId, category)).map((c) => c.id), total: 0, nextAt: now() });
         searches.get(p.id).total = searches.get(p.id).queue.length;
         if (!searches.get(p.id).total) finishDiscovery(p.id, "done");
         else tickDiscovery([]);

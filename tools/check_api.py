@@ -468,7 +468,9 @@ def check_fixture(rep, spec, fx, label="Эталонный набор"):
     for key, name in singles.items():
         validate(spec, {"$ref": f"#/components/schemas/{name}"}, fx.get(key), key, problems)
     cand = spec["components"]["schemas"]["DiscoveryCandidate"]
-    net_schema = dict(cand, properties=dict(cand["properties"], domainIds={"type": "array", "items": {"type": "string", "format": "uuid"}}))
+    net_schema = dict(cand, properties=dict(cand["properties"], domainIds={"type": "array", "items": {"type": "string", "format": "uuid"}},
+                                                         # С 0.36.0: какие серверы видят устройство (нет — все серверы домена); serverId находки сервер выводит из него
+                                                         serverIds={"type": "array", "items": {"type": "string", "format": "uuid"}}))
     for i, rec in enumerate(fx.get("network", [])):
         validate(spec, net_schema, rec, f"network[{i}]", problems)
     # modeManual — режим, включённый вручную ({ modeId, until } или null): состояние стенда, ответ — GET /modes/current
@@ -624,6 +626,10 @@ def check_fixture(rep, spec, fx, label="Эталонный набор"):
     for c in network.values():
         for d in c["domainIds"]:
             must(domains, d, f"network {c['name']}", "домена")
+        for sid in c.get("serverIds") or []:
+            must(servers, sid, f"network {c['name']}", "сервера")
+            if sid in servers and servers[sid].get("domainId") not in c["domainIds"]:
+                problems.append(f"network {c['name']}: сервер {sid} не из доменов устройства")
     for x in fx["discovery"]:
         must(domains, x["domainId"], "discovery", "домена")
         for c in x["candidateIds"]:

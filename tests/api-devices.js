@@ -197,7 +197,8 @@
   test("Поиск в сети: найденное по одному в своём порядке, итог заменяет прежний; во время — 409; остановка", async () => {
     const env = await makeEnv();
     const did = d1.id;
-    const expect = FX.network.filter((c) => c.domainIds.includes(did)).map((c) => c.id);
+    // Без тела — все серверы области, IP-устройства (category нет — ip; с 0.36.0)
+    const expect = FX.network.filter((c) => c.domainIds.includes(did) && (c.category || "ip") === "ip").map((c) => c.id);
     const seen = [];
     const stop = ApiTest.subscribeForTest((m) => m.kind === "discovery" && m.entityId === did && seen.push(m.type));
     await ApiTest.settle();
@@ -218,6 +219,36 @@
     assert.eq(stopped.state, "stopped", "остановлен");
     assert.status(await env.call("DELETE", "/units/10009999-0000-4000-8000-000000000000/discovery"), 404, "NOT_FOUND");
   }, { needs: ["startDiscovery", "getDiscovery", "stopDiscovery"] });
+
+  test("Поиск в сети: сервер и категория в теле (с 0.36.0) — только сеть сервера и своя категория; чужой сервер — 422", async () => {
+    const env = await makeEnv();
+    const did = d1.id;
+    const own = FX.servers.filter((x) => x.domainId === did).map((x) => x.id);
+    const other = FX.servers.find((x) => x.domainId !== did);
+    const sees = (c, sid, cat) => c.domainIds.includes(did) && (c.category || "ip") === cat && (!sid || !c.serverIds || c.serverIds.includes(sid));
+    // Сервер, который видит не всё: фильтр заметен
+    const sid = own.find((s) => { const n = FX.network.filter((c) => sees(c, s, "ip")).length; return n > 0 && n < FX.network.filter((c) => sees(c, null, "ip")).length; });
+    const run = async (body) => {
+      const res = await env.call("POST", `/units/${did}/discovery`, body);
+      assert.status(res, 202);
+      return env.until(async () => { const x = await env.ok("GET", `/units/${did}/discovery`); return x.state === "done" && x; }, "поиск закончился");
+    };
+    if (sid) {
+      const byServer = await run({ serverId: sid });
+      assert.eq([byServer.serverId, byServer.candidates.map((c) => c.id)], [sid, FX.network.filter((c) => sees(c, sid, "ip")).map((c) => c.id)], "только сеть сервера");
+      assert.ok(byServer.candidates.every((c) => c.serverId === undefined || c.serverId === sid), "находку видит сервер поиска");
+    }
+    const cats = [...new Set(FX.network.filter((c) => c.domainIds.includes(did)).map((c) => c.category || "ip"))].filter((c) => c !== "ip");
+    for (const cat of cats) {
+      const x = await run({ category: cat });
+      assert.eq([x.category, x.candidates.map((c) => c.id)], [cat, FX.network.filter((c) => sees(c, null, cat)).map((c) => c.id)], `категория ${cat}`);
+      assert.ok(x.candidates.every((c) => c.category === cat), `у находок категория ${cat}`);
+    }
+    if (other) assert.status(await env.call("POST", `/units/${did}/discovery`, { serverId: other.id }), 422, "VALIDATION_FAILED", "сервер другой области");
+    assert.status(await env.call("POST", `/units/${did}/discovery`, { category: "camera" }), 422, "VALIDATION_FAILED", "неизвестная категория");
+    const plain = await run(undefined);
+    assert.eq(plain.candidates.map((c) => c.id), FX.network.filter((c) => sees(c, null, "ip")).map((c) => c.id), "без тела — как раньше");
+  }, { needs: ["startDiscovery", "getDiscovery"] });
 
   /* ===== Виды, которые находит сервер ===== */
 
