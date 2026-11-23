@@ -15336,7 +15336,7 @@ function lanNvrHeadHtml(n,nvrId,found){
   const edge=edgeStorage(nvr);
   // Те же колонки, что у строк: объединённая ячейка ломала сетку таблицы,
   // когда узкая ширина прячет колонки производителя и модели.
-  return`<tr class="lan-grp"><td class="lan-chk"><input type="checkbox" ${on?"checked":""} ${pk.length?"":"disabled"} aria-label="${i18n("Отметить камеры регистратора")}" ${onEv("change",["lanPickNvr",`${nvrId}`,onEv.checked])}></td>
+  return`<tr class="lan-grp" data-lk="g:${escHtml(nvrId)}"><td class="lan-chk"><input type="checkbox" ${on?"checked":""} ${pk.length?"":"disabled"} aria-label="${i18n("Отметить камеры регистратора")}" ${onEv("change",["lanPickNvr",`${nvrId}`,onEv.checked])}></td>
     <td><span class="lan-grp-h">${ic("ipsrv")}<b>${escHtml(locName(nvr))}</b></span><span class="lan-sub lan-grp-sub">${mates.length} ${i18n(plural(mates.length,"камера|камеры|камер"))} ${i18n("на одном IP")}</span></td>
     <td><span class="tag tag-ip" title="${i18n("Единственный IP. У камер регистратора нет своих адресов")}">${escHtml(nvr.ip||"—")}</span></td>
     <td>${escHtml(nvr.mac||"")}</td><td>${escHtml(nvr.vendor||"")}</td><td>${escHtml(nvr.model||"")}</td>
@@ -15622,7 +15622,7 @@ function lanRecCellHtml(n,r){
 // Длинный перечень в строке (больше трёх): первые два и кнопка «и ещё N», которая раскрывает весь перечень; «свернуть» — обратно.
 // Раскрытые перечни помнятся по ключу (камера и что перечислено), пока открыта вкладка
 const lanMoreOpen=new Set();
-function lanMoreTog(k){if(lanMoreOpen.has(k))lanMoreOpen.delete(k);else lanMoreOpen.add(k);gear()}
+function lanMoreTog(k){lanSmooth(()=>{if(lanMoreOpen.has(k))lanMoreOpen.delete(k);else lanMoreOpen.add(k);gear()})}
 function lanMore(k,items){
   if(items.length<=3)return items.join(", ");   // «и ещё 1» не короче самого пункта
   if(lanMoreOpen.has(k))return items.join(", ")+` <button type="button" class="lk lan-more" ${onEv("click",onEv.stop,["lanMoreTog",k])}>${i18n("свернуть")}</button>`;
@@ -15667,9 +15667,11 @@ function lanDraftCams(cams,mutate){
   if(!cardDraft){toast(i18n("Консоль не может начать черновик на этой вкладке"));return false}
   const m=cardDraft.cams||(cardDraft.cams=new Map());
   cams.forEach(c=>{if(!m.has(c.id))m.set(c.id,cardClone(c))});
-  mutate();
-  hwIdxDrop();treeMatchCache.clear();searchMatchCache.clear();
-  paint();
+  lanSmooth(()=>{
+    mutate();
+    hwIdxDrop();treeMatchCache.clear();searchMatchCache.clear();
+    paint();
+  });
   return true;
 }
 // Камера в черновике и её записи отличаются от снимка
@@ -15677,6 +15679,29 @@ function lanCamPending(c){
   const snap=cardDraft?.cams?.get(c.id);if(!snap)return false;
   return JSON.stringify(camArchs(c))!==JSON.stringify(camArchs(snap))||!!c._recRule||(c.devices||[]).length!==(snap.devices||[]).length;
 }
+// Плавность, как у «Прав» (accEffRowsFlip): строка с правкой меняет высоту плавно, строки ниже съезжают за ней,
+// новые строки пояснения проявляются. Строки вне экрана не анимируем; prefers-reduced-motion отключает движение
+function lanRowsSnap(){
+  const m=new Map();
+  document.querySelectorAll("#lanCard tr[data-lk]").forEach(tr=>{const c=tr.querySelector(".lan-rec-cell");
+    m.set(tr.dataset.lk,{top:tr.getBoundingClientRect().top,h:c?c.getBoundingClientRect().height:0,why:new Set([...tr.querySelectorAll(".lan-why")].map(x=>x.textContent))})});
+  return m;
+}
+function lanRowsFlip(m){
+  if(matchMedia("(prefers-reduced-motion: reduce)").matches)return;
+  const ease="cubic-bezier(.2,.8,.3,1)",dur=260,vh=innerHeight;
+  document.querySelectorAll("#lanCard tr[data-lk]").forEach(tr=>{
+    const r=tr.getBoundingClientRect();if(r.bottom<0||r.top>vh||!tr.animate)return;
+    const was=m.get(tr.dataset.lk);
+    if(!was){tr.animate([{opacity:0},{opacity:1}],{duration:220,delay:60,easing:"ease-out",fill:"backwards"});return}
+    if(Math.abs(was.top-r.top)>.5)tr.animate([{transform:`translateY(${was.top-r.top}px)`},{transform:"none"}],{duration:dur,easing:ease});
+    const c=tr.querySelector(".lan-rec-cell");if(!c)return;
+    const h=c.getBoundingClientRect().height;
+    if(Math.abs(was.h-h)>1){c.style.overflow="hidden";c.animate([{height:`${was.h}px`},{height:`${h}px`}],{duration:dur,easing:ease}).onfinish=()=>{c.style.overflow=""}}
+    c.querySelectorAll(".lan-why").forEach(w=>{if(!was.why.has(w.textContent))w.animate([{opacity:0},{opacity:1}],{duration:200,delay:120,easing:"ease-out",fill:"backwards"})});
+  });
+}
+function lanSmooth(fn){const m=lanRowsSnap();fn();lanRowsFlip(m)}
 // Режим v камер строк rows в хранилище строки; "" — не писать сюда
 function lanDraftMode(n,rows,v){
   const jobs=rows.filter(r=>r.kind==="sys"&&r.node&&handCam(r.node)&&(r.bind==="here"||!lanAction(n,r).off)).map(r=>({c:r.node,aid:lanRowArch(n,r),here:r.bind==="here"}));
@@ -15738,7 +15763,7 @@ function lanSysRowHtml(n,r){
     :`<button type="button" class="btn s ${a.pri?"pri":""}" ${a.tip?`title="${escHtml(a.tip)}"`:""} ${onEv("click",onEv.stop,a.fn)}>${a.label}</button>`;
   const chk=lanCheckable(n,r)
     ?`<input type="checkbox" class="ts-chk" ${lanChecked(r)?"checked":""} aria-label="${escHtml(r.name)}" ${onEv("click",onEv.stop)} ${onEv("change",["lanPick",`${r.key}`,onEv.checked])}>`:"";
-  return`<tr class="gtbl-r lan-r ${r.nvr?"lan-r-nvr":""} ${lanChecked(r)?"ts-on":""}" ${onEv("click",["pick",`${r.id}`])}>
+  return`<tr class="gtbl-r lan-r ${r.nvr?"lan-r-nvr":""} ${lanChecked(r)?"ts-on":""}" data-lk="${escHtml(r.key)}" ${onEv("click",["pick",`${r.id}`])}>
     <td class="lan-chk">${chk}</td>
     <td><span class="lan-name">${hlText(r.name,lan.q)}</span><span class="lan-sub">${escHtml(r.nvr?`${i18n("канал")} ${r.ch} · ${r.nvrName}`:[r.vendor,r.model].filter(Boolean).join(" · "))}</span></td>
     <td>${r.nvr?`<span class="tag tag-ch" title="${i18n("Своего IP нет. Видео идёт через регистратор")} ${escHtml(r.ip)}">${i18n("кан.")} ${escHtml(r.ch)}</span> <span class="lan-ip-via">${i18n("через")} ${hlText(r.ip,lan.q)}</span>`:hlText(r.ip,lan.q)}</td><td>${hlText(r.mac,lan.q)}</td>
@@ -15754,7 +15779,7 @@ function lanNetRowHtml(n,r){
     :a.off
     ?`<button type="button" class="btn s" disabled title="${escHtml(a.off)}">${lanBulkLabel(n)}</button>`
     :`<button type="button" class="btn pri s" ${onEv("click",a.fn)}>${a.label}</button>`;
-  return`<tr class="lan-net"><td colspan="8">
+  return`<tr class="lan-net" data-lk="${escHtml(r.key)}"><td colspan="8">
     <div class="dev-result"><div class="dev-result-main">
       <input type="checkbox" class="ts-chk" ${lan.sel.has(r.key)?"checked":""} ${a.off?`disabled title="${escHtml(a.off)}"`:""} aria-label="${escHtml(i18n("Выбрать")+" "+r.ip)}" ${onEv("click",onEv.stop)} ${onEv("change",["lanPick",`${r.key}`,onEv.checked])}>
       <span class="dev-dot ${escHtml(src.status||"")}" title="${escHtml(i18n(DEVICE_STATUS_LABELS[src.status]||""))}"></span>
