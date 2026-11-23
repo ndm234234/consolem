@@ -34,12 +34,7 @@ Object.assign(window.I18N_EN,{
 "Пишет в":"Records to",
 "Режим здесь добавит это хранилище, прежнее останется.":"A mode here adds this storage. The previous storage stays.",
 "Отмечено":"Selected",
-"Хранилище копий. Здесь сервер хранит копии отрезков записи, которые оператор удержал.":"Copy storage. The server keeps here copies of the recording segments that an operator held.",
-"Хранилище записи получает видео камер всё время. Когда место кончается, сервер стирает в нём старую запись.":"A recording storage gets camera video all the time. When it has no more space, the server erases the oldest recording in it.",
-"Хранилище копий не получает видео камер. Когда оператор нажимает «Удержать» на отрезке записи, сервер копирует этот отрезок сюда. Копия остаётся здесь, когда сервер стирает запись в хранилище записи. Срок хранения копий — «Глубина, дней» ниже.":"A copy storage does not get camera video. When an operator clicks «Hold» on a recording segment, the server copies this segment here. The copy stays here when the server erases the recording in the recording storage. The copies are kept for the «Depth, days» period below.",
-"Камеры не записывают видео в это хранилище, поэтому у него нет вкладки «Устройства».":"Cameras do not record video to this storage. That is why it has no «Devices» tab.",
-"Хранилища записи сервера":"Recording storages of the server",
-"У сервера":"The server",
-"нет хранилища записи.":"has no recording storage.",
-"Открыть хранилища сервера":"Open the server storages"
+"Хранилище копий: сюда сервер копирует отрезки записи, которые оператор удержал.":"Copy storage: the server copies here the recording segments that an operator held.",
+"Камеры записывают видео в хранилище записи, а не сюда. Там сервер стирает старую запись, а копии здесь остаются.":"Cameras record video to a recording storage, not here. The server erases old recording there, but the copies stay here.",
+"Хранилища сервера":"Server storages"
 });
