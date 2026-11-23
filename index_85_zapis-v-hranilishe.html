@@ -966,6 +966,8 @@ table.lan-tbl td.lan-act{text-align:right;white-space:nowrap}
 .lan-rec-line{display:flex;align-items:center;gap:6px}
 .lan-rec-cell select.lan-rec.pend{border-color:var(--one-selected-indicator);color:var(--x-link)}
 .lan-why-plan{color:var(--x-link)}
+.lan-sch-line{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.lan-sch-line select.lan-sch{field-sizing:content;width:auto;min-width:140px;max-width:220px;height:24px;padding-top:0;padding-bottom:0;font-size:12px}
 table.lan-tbl th.lan-th-bind{width:300px}
 .lan-bind{font-size:11px;color:var(--mu);border:1px solid var(--ln);border-radius:4px;padding:1px 6px;white-space:nowrap}
 .lan-bind-here{color:var(--one-success-text);border-color:var(--one-success-icon)}
@@ -15629,9 +15631,12 @@ function lanRecWhyHtml(n,r,cur,aid,off){
     else out.push(`<div class="lan-why">${i18n("Правило")} ${lanRuleLinks(rr)} ${i18n("запускает запись, когда")} ${i18n(ds.length>1?"детекторы":"детектор")} ${ds.slice(0,1).map(d=>`<button type="button" class="lk" ${onEv("click",onEv.stop,["lanDetGo",c.id,d.id])}>«${escHtml(detTitle(d))}»</button>`).join("")}${ds.length>1?` ${i18n("и ещё")} ${ds.length-1}`:""} ${i18n("видит движение.")}</div>`);
   }
   if(cur==="sched"){
+    // Расписание выбирают прямо в строке: без него сервер не примет режим. Выбор — тоже строка плана
     const g=camRecGap(c,"sched"),sc=c.recordScheduleId?schById(c.recordScheduleId):null;
+    const pick=lanSchedHtml(c);
+    out.push(`<div class="lan-why lan-sch-line"><span>${i18n("Расписание")}</span>${pick}${sc?`<button type="button" class="lk" ${onEv("click",onEv.stop,["camRecSchOpen",sc.id])}>${i18n("Открыть")} →</button>`:""}</div>`);
+    if(sc&&!g)out.push(`<div class="lan-why">${escHtml(schText(sc,true))}</div>`);
     if(g)out.push(warn(g.text));
-    else if(sc)out.push(`<div class="lan-why">${i18n("Расписание")} <button type="button" class="lk" ${onEv("click",onEv.stop,["camRecSchOpen",sc.id])}>«${escHtml(sc.name)}»</button>: ${escHtml(schText(sc,true))}</div>`);
   }
   if(cur==="replica")out.push(`<div class="lan-why">${i18n("Копирует записи с другого хранилища.")}</div>`);
   // Правила, которые тоже запускают запись этой камеры, — их видно, даже если режим другой
@@ -15681,6 +15686,18 @@ function lanSetCamMode(c,aid,v){
   const x=(c.archx||[]).find(y=>y.arch===aid);if(x)x.rec=v;
 }
 function lanRuleFix(id){const c=find(id)?.n;if(c)lanDraftCams([c],()=>{camRecMotionBind(c,camMotionDetEnsure(c));camRecRuleEnsure(c)})}
+// Список расписаний — как recSchedHtml карточки камеры, но выбор идёт в черновик хранилища (lanSchedPick)
+function lanSchedHtml(c){
+  const cur=c.recordScheduleId&&schById(c.recordScheduleId)?c.recordScheduleId:"";
+  return`<select class="lan-sch" aria-label="${i18n("Расписание записи")}" title="${escHtml(schById(cur)?.name||"")}" ${onEv("click",onEv.stop)} ${onEv("change",["lanSchedPick",`${c.id}`,onEv.value])}>${cur?"":`<option value="" selected disabled>${i18n("Выбрать расписание…")}</option>`}${recSchedules().map(s=>`<option value="${escHtml(s.id)}" ${s.id===cur?"selected":""}>${escHtml(s.name)}</option>`).join("")}${can("createSchedule")?`<option value="__new">${i18n("Новое расписание…")}</option>`:""}</select>`;
+}
+// Расписание записи камеры из строки таблицы — в черновик хранилища; «Новое расписание…» — окно расписания
+function lanSchedPick(id,v){
+  const c=find(id)?.n;if(!c)return;
+  if(v!=="__new"){lanDraftCams([c],()=>{c.recordScheduleId=v});return}
+  const d=schBlank({name:`${i18n("Запись")} — ${locName(c)}`});
+  schDlgOpen(d.id,{draft:d,isNew:true,onSave:sid=>{const m=find(id)?.n;if(m)lanDraftCams([m],()=>{m.recordScheduleId=sid});else paint()}});paint();
+}
 function lanDetsGo(id){pick(id);goTab("det");hwFlashLanding()}
 function lanDetGo(id,detId){pick(id);detSel=detId;goTab("det");hwFlashLanding()}
 // Режим отмеченных: общий, если у всех один, иначе null — «разные»
