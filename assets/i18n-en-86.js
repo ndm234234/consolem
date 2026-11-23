@@ -46,8 +46,6 @@ Object.assign(window.I18N_EN,{
 "Этого поля нет в API. Значения — заглушка прототипа.":"The API does not have this field. The values are a prototype stub.",
 "Прореживания и места камеры в хранилище нет в API. Значения — заглушка прототипа.":"The API does not have frame decimation or the camera's space in the storage. The values are a prototype stub.",
 "Ключевые кадры":"Key frames",
-"1 кадр / 30 с":"1 frame / 30 s",
-"1 кадр / 60 с":"1 frame / 60 s",
 "нет в API":"not in API",
 "ГБ":"GB",
 "дн. записи":"days of recording",
@@ -55,5 +53,10 @@ Object.assign(window.I18N_EN,{
 "как у хранилища":"as in storage",
 "Поток записи":"Recording stream",
 "Заглушка: прореживания нет в API, консоль не сохранит выбор.":"Stub: the API does not have frame decimation. The console does not save the choice.",
-"Изменить":"Edit"
+"Изменить":"Edit",
+"1 кадр / 20 с":"1 frame / 20 s",
+"1 кадр / 30 с":"1 frame / 30 s",
+"1 кадр / 60 с":"1 frame / 60 s",
+"1 кадр / 120 с":"1 frame / 120 s",
+"1 кадр / 240 с":"1 frame / 240 s"
 });
