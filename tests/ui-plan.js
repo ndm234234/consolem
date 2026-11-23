@@ -1210,11 +1210,19 @@ UiCheck(async ({ ok, until, confirmWith }) => {
       ok(lanRowMode(aN, rowOf(c2.id)) === "sched" && lanRowMode(aN, rowOf(c3.id)) === "sched", "режим из полосы — у отмеченных камер");
       lanSetRows([rowOf(c2.id), rowOf(c3.id)], false);
       // Расписание в строке — тоже строка плана
-      const sch = recSchedules()[0];
+      // Не то расписание, что подставила привязка (camReplicaSync — первое): выбор в строке должен его сменить
+      const sch = recSchedules().find((x) => x.id !== c2.recordScheduleId);
       ok(document.querySelector(`#lanCard tr[data-lk="${rowOf(c2.id).key}"] select.lan-sch`), "«По расписанию»: в строке список расписаний");
       lanSchedPick(c2.id, sch.id);
       ok(cardDiff().some((r) => r.node === c2 && r.key === "recordScheduleId" && r.to === sch.id), "расписание — строка плана");
       ok(!writes.length, "до «Применить» запросов на запись нет: " + writes.join(", "));
+      // Режим и снова «Не пишет» — камера как в снимке: ни сервера, ни расписания в плане
+      const c4 = free[3]?.node;
+      if (c4) {
+        lanRecSet(rowOf(c4.id).key, "sched");
+        lanRecSet(rowOf(c4.id).key, "");
+        ok(!cardDiff().some((r) => r.node === c4), "режим и «Не пишет»: у камеры нет строк плана");
+      }
       // B3: «Сбросить» возвращает камеры
       cardReset();
       ok(!isRecording(c1) && !isRecording(c2) && !c2.recordScheduleId && !cardDiff().length, "«Сбросить»: камеры как до правки");
@@ -1233,8 +1241,10 @@ UiCheck(async ({ ok, until, confirmWith }) => {
     ok(rowOf(c3.id).fbind === "here" && lanFilter(lanRows(aN)).every((r) => r.id !== c3.id), "после «Применить» камера ушла из «Без записи»");
     // Вернуть камеры: «Не пишет» — тоже через план
     lanDraftMode(aN, [rowOf(c2.id), rowOf(c3.id)], "");
+    ok(cardDiff().some((r) => r.node === c3 && r.key === "rec"), "«Не пишет» — строка плана");
     cardApply();
     await until(() => bq && bq.finished, 15000);
+    ok(!bq.fail && !isRecording(c2) && !isRecording(c3), "«Не пишет» применено: камеры не пишут, отказов нет — " + bq.fail);
     lanSetChip("all");
     goTab("gen");
   }

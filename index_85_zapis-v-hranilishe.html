@@ -9545,7 +9545,7 @@ function cardPlanOpen(){
      ${off?`<div class="nt bk-warn">${lu("triangle-alert")} ${i18n("сервер")} «${escHtml(locName(s))}» ${i18n("без связи. Консоль не применит изменения, в отчёте у них будет статус «не применено»")}</div>`:""}
      <p class="sub" style="margin:10px 0 0">${i18n(d.some(r=>!r.stub&&!camCallOf(r)&&!webCallOf(r))?"Как изменение выборки: консоль отправляет изменения на сервер одной операцией. Итог будет в отчёте. После применения можно нажать «Отменить».":"Итог будет в отчёте. «Отменить» после применения нет: на сервере нет операции, которую можно отменить.")}</p>
      ${handCam(n)&&d.some(r=>["arch","rec","archx","recDets","recordScheduleId"].includes(r.key))?camRecGaps(n).map(g=>`<div class="nt bk-warn" data-plan-rec-gap="${g.k}">${lu("triangle-alert")} ${escHtml(g.text)}</div>`).join(""):""}
-     ${[...(cardDraft.cams?.keys()||[])].map(id=>find(id)?.n).filter(Boolean).flatMap(c=>camRecGaps(c).map(g=>`<div class="nt bk-warn" data-plan-rec-gap="${g.k}">${lu("triangle-alert")} «${escHtml(locName(c))}»: ${escHtml(g.text)}</div>`)).join("")}
+     ${[...(cardDraft.cams?.keys()||[])].filter(id=>d.some(r=>r.node?.id===id)).map(id=>find(id)?.n).filter(Boolean).flatMap(c=>camRecGaps(c).map(g=>`<div class="nt bk-warn" data-plan-rec-gap="${g.k}">${lu("triangle-alert")} «${escHtml(locName(c))}»: ${escHtml(g.text)}</div>`)).join("")}
      ${d.some(r=>r.recRule)?`<p class="sub" data-plan-rule>${i18n("Правило записи по движению консоль создаст после операции, если все изменения применятся. «Отменить» после применения правило не удалит.")}</p>`:""}
      ${d.some(camCallOf)?`<p class="sub" data-plan-rt>${i18n("«Сервер записи» и потоки консоль запишет отдельными запросами до операции. «Отменить» после применения их не вернёт.")}</p>`:""}
      ${webPlanNote(n,d)}
@@ -15182,7 +15182,7 @@ function lanDomainOf(n){
 function lanEnsure(n){
   if(lan.owner===n.id)return;
   lanStopSearch();
-  lan.owner=n.id;lan.q="";lan.sort="name";lan.dir=1;lan.sel.clear();
+  lan.owner=n.id;lan.q="";lan.sort="name";lan.dir=1;lan.sel.clear();lanMoreOpen.clear();
   // У архива закладка называется «Камеры», так что первым делом показываем
   // тех, кто сюда пишет; остальные — в соседних чипах.
   lan.chip=lanIsPlace(n)?"all":"here";
@@ -15314,7 +15314,7 @@ function lanFilter(rows){
   const dir=lan.dir,k=lan.sort;
   out=out.slice().sort((a,b)=>{
     if((a.kind==="net")!==(b.kind==="net"))return a.kind==="net"?1:-1;
-    const x=String(a[k]??""),y=String(b[k]??"");
+    const x=String((k==="bind"?a.fbind:null)??a[k]??""),y=String((k==="bind"?b.fbind:null)??b[k]??"");
     return x.localeCompare(y,"ru",{numeric:true})*dir;
   });
   // Камеры регистратора держатся вместе, по номеру канала, — там, где в
@@ -15601,9 +15601,11 @@ function lanUnbindChecked(){lanUnbindKeys(lanCheckedKeys())}
 function lanModeName(v){return i18n((REC_MODES_ALL.find(x=>x[0]===v)||[0,v])[1])}
 // Хранилище строки: куда камера уже пишет из целей вкладки; иначе — куда её привяжут
 function lanRowArch(n,r){
-  const t=lanTargets(n),x=r.node?camArchs(r.node).find(y=>y.rec!=="none"&&t.some(a=>a.id===y.arch)):null;
+  const t=lanTargets(n),x=r.node?camArchs(r.node).find(y=>!y.ro&&y.rec!=="none"&&t.some(a=>a.id===y.arch)):null;
   return x?x.arch:(lanIsArch(n)?n.id:lan.arch);
 }
+// Строка хранилища у камеры только для чтения (ro): режим в ней задаёт сервер, таблица его не меняет
+function lanRowRo(n,r){const aid=lanRowArch(n,r);return!!r.node&&camArchs(r.node).some(x=>x.arch===aid&&x.ro)}
 function lanRowMode(n,r){
   if(r.bind!=="here"||!r.node)return"";
   const aid=lanRowArch(n,r),x=camArchs(r.node).find(y=>y.arch===aid);
@@ -15612,7 +15614,7 @@ function lanRowMode(n,r){
 function lanRecCellHtml(n,r){
   if(!r.node||!handCam(r.node))return`<span class="lan-bind lan-bind-${r.bind}">${escHtml(r.bindText)}</span>`;
   const a=lanAction(n,r),cur=lanRowMode(n,r),aid=lanRowArch(n,r),ar=lanIsArch(n)?n:archById(aid);
-  const off=r.bind!=="here"&&a.off?a.off:"";
+  const off=lanRowRo(n,r)?i18n("Хранилище работает со всеми камерами сервера. Режим камеры здесь можно только читать."):r.bind!=="here"&&a.off?a.off:"";
   const opts=[["",r.bind==="other"?"Не пишет сюда":"Не пишет"],...(ar?recModesOf(ar):[])]
     .map(([v,l])=>`<option value="${v}" ${v===cur?"selected":""}>${i18n(l)}</option>`).join("");
   const sel=`<select class="lan-rec ${cur?"on":""} ${lanCamPending(r.node)?"pend":""}" ${off?`disabled title="${escHtml(off)}"`:""} aria-label="${escHtml(i18n("Режим записи")+": "+r.name)}" ${onEv("click",onEv.stop)} ${onEv("change",["lanRecSet",`${r.key}`,onEv.value])}>${opts}</select>`;
@@ -15629,7 +15631,7 @@ function lanMore(k,items){
   return items.slice(0,2).join(", ")+` <button type="button" class="lk lan-more" title="${escHtml(i18n("Показать все"))}" ${onEv("click",onEv.stop,["lanMoreTog",k])}>${i18n("и ещё")} ${items.length-2}</button>`;
 }
 function lanRuleLinks(rs,k){return lanMore(k,rs.map(x=>`<button type="button" class="lk" ${onEv("click",onEv.stop,["ruleGoRule",x.id])}>«${escHtml(x.name)}»</button>`))}
-function lanArchGo(id){pick(id);hwFlashLanding()}
+function lanArchGo(id){pick(id);if(sel===id)hwFlashLanding()}
 function lanRecWhyHtml(n,r,cur,aid,off){
   const c=r.node,out=[],warn=t=>`<div class="lan-why lan-why-warn">${lu("triangle-alert",12)} ${escHtml(t)}</div>`;
   if(off)out.push(`<div class="lan-why">${escHtml(off)}</div>`);
@@ -15675,10 +15677,10 @@ function lanDraftCams(cams,mutate){
   return true;
 }
 // Камера в черновике и её записи отличаются от снимка
-function lanCamPending(c){
-  const snap=cardDraft?.cams?.get(c.id);if(!snap)return false;
-  return JSON.stringify(camArchs(c))!==JSON.stringify(camArchs(snap))||!!c._recRule||(c.devices||[]).length!==(snap.devices||[]).length;
-}
+// Камера с правкой — та, у которой есть строки плана. Набор собирает lanCardBuild на каждую отрисовку
+let lanPendIds=new Set();
+function lanPendCollect(){lanPendIds=new Set(cardDraft?.cams?.size?cardDiff().filter(r=>r.node&&cardDraft.cams.has(r.node.id)).map(r=>r.node.id):[])}
+function lanCamPending(c){return lanPendIds.has(c.id)}
 // Плавность, как у «Прав» (accEffRowsFlip): строка с правкой меняет высоту плавно, строки ниже съезжают за ней,
 // новые строки пояснения проявляются. Строки вне экрана не анимируем; prefers-reduced-motion отключает движение
 function lanRowsSnap(){
@@ -15704,15 +15706,24 @@ function lanRowsFlip(m){
 function lanSmooth(fn){const m=lanRowsSnap();fn();lanRowsFlip(m)}
 // Режим v камер строк rows в хранилище строки; "" — не писать сюда
 function lanDraftMode(n,rows,v){
-  const jobs=rows.filter(r=>r.kind==="sys"&&r.node&&handCam(r.node)&&(r.bind==="here"||!lanAction(n,r).off)).map(r=>({c:r.node,aid:lanRowArch(n,r),here:r.bind==="here"}));
+  const jobs=rows.filter(r=>r.kind==="sys"&&r.node&&handCam(r.node)&&!lanRowRo(n,r)&&(r.bind==="here"||!lanAction(n,r).off)).map(r=>({c:r.node,aid:lanRowArch(n,r),here:r.bind==="here"}));
   if(!jobs.length){gear();return}
+  // Режим, которого нет у хранилища строки, не ставим: сервер отказал бы всей операции
+  const fits=(aid)=>!v||recModesOf(archById(aid)).some(([m])=>m===v);
+  const tg=lanTargets(n).map(a=>a.id);
   lanDraftCams(jobs.map(j=>j.c),()=>jobs.forEach(({c,aid,here})=>{
-    if(!aid)return;
-    if(!v){if(here)camDropArch(c,aid)}
+    if(!aid||!fits(aid))return;
+    // «Не пишет» у сервера — все его хранилища, как прежняя отвязка (lanUnbind)
+    if(!v){if(here)camArchs(c).filter(x=>!x.ro&&(lanIsArch(n)?x.arch===aid:tg.includes(x.arch))).forEach(x=>camDropArch(c,x.arch))}
     else if(here)lanSetCamMode(c,aid,v);
     else{camAddArch(c,aid,v);if(handOf(n,"server")&&!c.srvId)setDevServer(c,n.id);bindArchServer(c)}
     // «По движению» — детектор и правило, как в карточке камеры; ушли с режима — убрать то, что консоль добавила
     camRecModeSet(c,{},v||"none");
+    // Расписание и источник репликации — по строкам хранилищ, как в карточке камеры (camArchRowSet)
+    camReplicaSync(c);
+    // Вернули как было — камера снова как в снимке: без сервера и расписания, которые подставила привязка
+    const snap=cardDraft.cams.get(c.id),key=x=>JSON.stringify(camArchs(x).map(y=>[y.arch,y.rec,y.stream||""]));
+    if(snap&&key(c)===key(snap))cardRestoreNode(c,snap);
   }));
 }
 function lanRecSet(key,v){
@@ -15737,25 +15748,30 @@ function lanSchedPick(id,v){
   const d=schBlank({name:`${i18n("Запись")} — ${locName(c)}`});
   schDlgOpen(d.id,{draft:d,isNew:true,onSave:sid=>{const m=find(id)?.n;if(m)lanDraftCams([m],()=>{m.recordScheduleId=sid});else paint()}});paint();
 }
-function lanDetsGo(id){pick(id);goTab("det");hwFlashLanding()}
-function lanDetGo(id,detId){pick(id);detSel=detId;goTab("det");hwFlashLanding()}
+// Переход по ссылке: pick спросит о черновике хранилища и откроет камеру сразу на «Детекторах»; моргает — только если пришли
+function lanDetsGo(id){pick(id,{tab:"det"});if(sel===id)hwFlashLanding()}
+function lanDetGo(id,detId){pick(id,{tab:"det"});if(sel===id){detSel=detId;gear();hwFlashLanding()}}
 // Режим отмеченных: общий, если у всех один, иначе null — «разные»
 function lanSelMode(n,rows){const ms=[...new Set(rows.map(r=>lanRowMode(n,r)))];return ms.length===1?ms[0]:null}
 function lanSelSet(v){
   const n=find(lan.owner)?.n;if(!n)return;
   if(v==="_mixed"){gear();return}
-  lanDraftMode(n,lanRows(n).filter(lanChecked),v);
+  lanDraftMode(n,lanFilter(lanRows(n)).filter(lanChecked),v);
 }
 // Полоса над таблицей стоит всегда и одной высоты: отметка строк меняет только её содержимое, список не сдвигается
 function lanSelBarHtml(n,selRows,total){
   if(!selRows.length)return`<div class="lan-sel lan-sel-idle">${lu("info",13)} ${i18n("Отметьте камеры, чтобы задать режим записи сразу нескольким. Изменения попадут в план.")}</div>`;
   const cams=selRows.filter(r=>r.kind==="sys"&&r.node&&handCam(r.node)),cur=cams.length?lanSelMode(n,cams):null;
-  const aid=lanIsArch(n)?n.id:lan.arch,ar=archById(aid),modes=ar?recModesOf(ar):[];
+  const nets=selRows.filter(r=>r.kind==="net"&&lanAction(n,r).pri).length;
+  // Режимы, которые есть у хранилищ всех отмеченных камер
+  const archs=[...new Set(cams.map(r=>lanRowArch(n,r)).filter(Boolean))];
+  const modes=archs.length?recModesOf(archById(archs[0])).filter(([m])=>archs.every(a=>recModesOf(archById(a)).some(([x])=>x===m))):[];
   const opts=[...(cur===null?[["_mixed","Разные режимы"]]:[]),["","Не пишет"],...modes].map(([v,l])=>`<option value="${v}" ${(cur===null?v==="_mixed":v===cur)?"selected":""}>${i18n(l)}</option>`).join("");
   const all=selRows.length<total?` · <button type="button" class="lk lk-act" ${onEv("click",["lanPickAllOwner",true])}>${i18n("Отметить все")} ${total}</button>`:"";
   return`<div class="lan-sel"><span><b>${i18n("Отмечено")}: ${selRows.length}</b> ${i18n("из")} ${total}${all} · <button type="button" class="lk lk-act" ${onEv("click",["lanPickAllOwner",false])}>${i18n("Снять")}</button></span>
     <label class="lan-sel-l">${i18n("Режим записи")}</label><select class="lan-rec" ${cams.length?"":"disabled"} ${onEv("change",["lanSelSet",onEv.value])}>${opts}</select>
-    <span class="lan-sel-note">${i18n("Режим сразу меняется в строках. Применить — кнопкой «Показать план» внизу.")}</span></div>`;
+    ${nets?`<button type="button" class="btn s" ${onEv("click",["lanBulk"])}>${i18n("В план")} (${nets})</button>`:""}
+    <span class="lan-sel-note">${i18n(cams.length?"Режим сразу меняется в строках. Применить — кнопкой «Показать план» внизу.":"Устройства, которых нет в системе, сначала попадают в план добавления.")}</span></div>`;
 }
 function lanSysRowHtml(n,r){
   const a=lanAction(n,r);
@@ -15795,7 +15811,7 @@ function lanCardHtml(n){
   try{return lanCardBuild(n)}finally{if(keep)wizd=keep}
 }
 function lanCardBuild(n){
-  lanEnsure(n);lanWizard(n);
+  lanEnsure(n);lanWizard(n);lanPendCollect();
   const key="lan:"+n.id;
   const all=lanRows(n),found=lanFilter(all);
   // Страницу режем только под таблицей: «выбрать все» и счётчик отмеченных
@@ -15807,7 +15823,8 @@ function lanCardBuild(n){
   // править группой, а отмеченное в дереве — привязать здесь.
   const pageCk=rows.filter(r=>lanCheckable(n,r)),allCk=found.filter(r=>lanCheckable(n,r));
   const pagePicked=pageCk.filter(lanChecked).length,allPicked=allCk.filter(lanChecked).length;
-  const selRows=all.filter(lanChecked);
+  // У хранилища и сервера полоса говорит об отмеченных в текущем отборе: к ним применяются её режим и «Снять»
+  const selRows=(lanIsPlace(n)?all:found).filter(lanChecked);
   const nBind=selRows.filter(r=>lanAction(n,r).pri).length,nUnbind=selRows.filter(r=>lanAction(n,r).unbind).length;
   // Сперва выбирают, на что смотреть, и только потом ищут внутри этого —
   // поэтому чипы стоят выше строки поиска.
@@ -40202,6 +40219,8 @@ function bulkPeekCrumbHtml(){
 let bulkLastTab="gen";
 function bulkBack(){
   if(!bulkActive())return;
+  // Прототип 85: черновик карточки (режимы камер с вкладки хранилища) не уходит в карточку выборки молча
+  if(cardDraft&&cardDiff().length){cardLeaveAsk(()=>bulkBack());return}
   navMark();
   bulkPeek=false;tab=bulkTabFix(bulkLastTab);
   paint();

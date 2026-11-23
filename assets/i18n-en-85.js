@@ -1,5 +1,7 @@
 // Английский прототипа 85 (docs/TEXTS.md, «Как менять текст безопасно»): подключён после assets/i18n-en.js
 Object.assign(window.I18N_EN,{
+"Хранилище работает со всеми камерами сервера. Режим камеры здесь можно только читать.":"The storage works with all cameras of the server. Here the camera mode is read-only.",
+"Устройства, которых нет в системе, сначала попадают в план добавления.":"Devices that are not in the system go to the add plan first.",
 "свернуть":"collapse",
 "Показать все":"Show all",
 "видят движение.":"see motion.",
@@ -16,7 +18,7 @@ Object.assign(window.I18N_EN,{
 "Не пишет":"Not recording",
 "Не пишет сюда":"Not recording here",
 "Хранилище":"Storage",
-"В хранилище":"To storage",
+"В хранилище":"In storage",
 "Пишет всё время, без условий.":"Records all the time, with no conditions.",
 "Копирует записи с другого хранилища.":"Copies recordings from another storage.",
 "запускает запись, когда":"starts recording when",
