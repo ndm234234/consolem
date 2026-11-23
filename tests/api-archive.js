@@ -370,6 +370,34 @@
     assert.ok(!("preRecordSec" in plain.properties.extraArchives[0]), "строка без поля — своя предзапись снята, строка берёт значение камеры");
   }, { needs: ["patchUnit", "kind:camera"] });
 
+  test("Прореживание и дни записи (профиль 1.3): decimation своё у камеры и строки; depthDays пишет сервер и переносит с архивом", async () => {
+    const env = await makeEnv();
+    const d = FX.devices.find((x) => x.type === "camera" && x.depthDays != null && (x.extraArchives || []).some((y) => y.depthDays != null && !y.readOnly));
+    assert.ok(d, "в наборе есть камера с днями записи у основной записи и у строки");
+    const c = await get(env, d.id);
+    const row = c.properties.extraArchives.find((y) => y.depthDays != null && !y.readOnly);
+    const mainDays = c.status.observed.depthDays, rowDays = row.depthDays;
+    const rows = (over) => c.properties.extraArchives.filter((y) => !y.readOnly).map((y) => {
+      const r = Object.assign({}, y);
+      ["state", "reason", "replicaLagSec", "depthDays", "readOnly"].forEach((k) => delete r[k]);
+      return y.archiveId === row.archiveId ? Object.assign(r, over) : r;
+    });
+    const res = await set(env, c, { decimation: "keyframes", extraArchives: rows({ decimation: "60s", depthDays: 999 }) });
+    const r1 = res.properties.extraArchives.find((y) => y.archiveId === row.archiveId);
+    assert.eq([res.properties.decimation, r1.decimation, r1.depthDays, res.status.observed.depthDays], ["keyframes", "60s", rowDays, mainDays], "прореживание своё у камеры и строки; дни записи от клиента сервер не берёт");
+    field(await put(env, res, { decimation: "15s" }), "VALIDATION_FAILED", P("decimation"), "незнакомое прореживание — отказ");
+    assert.status(await put(env, res, { depthDays: 1 }), 422, "VALIDATION_FAILED", "дни записи — поле сервера, не свойство камеры");
+    const plain = await set(env, res, { decimation: null });
+    assert.ok(!("decimation" in plain.properties), "null — все кадры, поля нет");
+    // Основной архив и строка меняются местами: дни записи идут вместе со своим архивом
+    const oldMain = plain.properties.archiveId, back = plain.properties.extraArchives.find((y) => y.archiveId === row.archiveId);
+    const swapRows = plain.properties.extraArchives.filter((y) => !y.readOnly && y.archiveId !== row.archiveId).map((y) => ({ archiveId: y.archiveId, recordMode: y.recordMode, stream: y.stream }))
+      .concat([{ archiveId: oldMain, recordMode: plain.properties.recordMode === "replica" ? "always" : plain.properties.recordMode, stream: plain.properties.stream || "main" }]);
+    const sw = await set(env, plain, { archiveId: row.archiveId, recordMode: back.recordMode === "replica" ? "always" : back.recordMode, replicaFrom: null, extraArchives: swapRows });
+    const was = sw.properties.extraArchives.find((y) => y.archiveId === oldMain);
+    assert.eq([sw.status.observed.depthDays, was && was.depthDays], [rowDays, mainDays], "дни записи перешли вместе с архивом");
+  }, { needs: ["patchUnit", "kind:camera"] });
+
   test("Микрофон записи: запись mic этой камеры, null — первый", async () => {
     const env = await makeEnv();
     const c = FX.devices.find((d) => d.type === "camera" && FX.devices.filter((x) => x.type === "mic" && x.parentId === d.id).length > 1);

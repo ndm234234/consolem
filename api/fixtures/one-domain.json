@@ -2213,6 +2213,27 @@
          "type": "integer",
          "minimum": 0,
          "description": "Предзапись этой записи, с: сколько секунд до начала записи по событию она добавляет. Поля нет — preRecordSec камеры, как до 0.7.0"
+        },
+        "decimation": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "enum": [
+          "keyframes",
+          "20s",
+          "30s",
+          "60s",
+          "120s",
+          "240s",
+          null
+         ],
+         "description": "Прореживание записи этой строки, своё: значение камеры строка не берёт (профиль vms.camera/1 1.3)"
+        },
+        "depthDays": {
+         "type": "number",
+         "minimum": 0,
+         "description": "Только чтение: сколько дней записи камеры есть в этом архиве сейчас; поле сервера, консоль его не пишет (профиль vms.camera/1 1.3)"
         }
        },
        "additionalProperties": false
@@ -2356,6 +2377,27 @@
       },
       "type": "integer",
       "description": "Предзапись основного архива (archiveId), с. Строки extraArchives без своего preRecordSec берут это значение"
+     },
+     "decimation": {
+      "x-label": {
+       "key": "field.decimation",
+       "text": "Прореживание",
+       "lang": "ru"
+      },
+      "type": [
+       "string",
+       "null"
+      ],
+      "enum": [
+       "keyframes",
+       "20s",
+       "30s",
+       "60s",
+       "120s",
+       "240s",
+       null
+      ],
+      "description": "Прореживание записи основного архива: keyframes — только опорные кадры, 20s … 240s — 1 кадр за столько секунд; нет поля или null — все кадры (профиль vms.camera/1 1.3)"
      },
      "presetMax": {
       "type": "integer",
@@ -6922,7 +6964,7 @@
     "text": "Камера",
     "lang": "ru"
    },
-   "version": "1.2",
+   "version": "1.3",
    "uses": [
     {
      "id": "vms.archive/1",
@@ -6964,6 +7006,7 @@
     "azimuth",
     "codec",
     "configMode",
+    "decimation",
     "detectorOptions",
     "enabled",
     "extraArchives",
@@ -7004,6 +7047,7 @@
    "status": [
     "archiveJobs",
     "armed",
+    "depthDays",
     "detectorKinds",
     "direct",
     "disabledByRuleAt",
@@ -10082,7 +10126,8 @@
     ],
     "retentionDays": 45,
     "minDepthDays": 14,
-    "presetMax": 16
+    "presetMax": 16,
+    "decimation": "keyframes"
    },
    "status": {
     "link": "online",
@@ -10090,6 +10135,7 @@
      "faultText": "Запись остановлена: на сервере нет места",
      "recordState": "waiting",
      "recordReason": "На сервере нет места",
+     "depthDays": 3.0,
      "armed": true
     }
    }
@@ -10461,6 +10507,7 @@
     "link": "offline",
     "observed": {
      "fault": "auth",
+     "depthDays": 30.0,
      "armed": true
     }
    }
@@ -10572,6 +10619,7 @@
    "status": {
     "link": "online",
     "observed": {
+     "depthDays": 19.0,
      "armed": false,
      "disabledByRuleId": "70000007-0000-4000-8000-000000000000",
      "disabledByRuleAt": "2026-10-29T06:05:00Z"
@@ -10670,21 +10718,26 @@
       "replicaLagSec": 420,
       "state": "running",
       "retentionDays": 60,
-      "minDepthDays": 7
+      "minDepthDays": 7,
+      "depthDays": 15.0,
+      "decimation": "240s"
      },
      {
       "archiveId": "50000024-0000-4000-8000-000000000000",
       "recordMode": "backup",
-      "stream": "main"
+      "stream": "main",
+      "depthDays": 2.0
      }
     ],
-    "minDepthDays": 30
+    "minDepthDays": 30,
+    "decimation": "60s"
    },
    "status": {
     "link": "online",
     "observed": {
      "recordState": "running",
      "recordReason": "Глубина ниже наименьшей: 21 дн. из 30",
+     "depthDays": 30.0,
      "armed": false
     }
    }
@@ -10793,6 +10846,7 @@
    "status": {
     "link": "online",
     "observed": {
+     "depthDays": 30.0,
      "armed": false
     }
    }
@@ -10826,6 +10880,7 @@
     "link": "online",
     "observed": {
      "recordState": "running",
+     "depthDays": 1.0,
      "armed": false
     }
    }
@@ -10864,6 +10919,7 @@
     "link": "online",
     "observed": {
      "recordState": "running",
+     "depthDays": 0.6,
      "armed": false
     }
    }
@@ -10903,6 +10959,7 @@
     "link": "online",
     "observed": {
      "recordState": "running",
+     "depthDays": 3.0,
      "armed": false
     }
    }
@@ -10943,6 +11000,7 @@
     "link": "online",
     "observed": {
      "recordState": "running",
+     "depthDays": 0.8,
      "armed": false
     }
    }
@@ -10981,6 +11039,7 @@
     "link": "online",
     "observed": {
      "recordState": "running",
+     "depthDays": 2.0,
      "armed": false
     }
    }
@@ -11016,6 +11075,7 @@
      "fault": "auth",
      "recordState": "waiting",
      "recordReason": "Камера не отвечает",
+     "depthDays": 0.2,
      "armed": false
     }
    }
@@ -11056,6 +11116,7 @@
     "link": "online",
     "observed": {
      "recordState": "running",
+     "depthDays": 2.0,
      "armed": false
     }
    }
@@ -11095,6 +11156,7 @@
     "link": "online",
     "observed": {
      "recordState": "running",
+     "depthDays": 17.0,
      "armed": false
     }
    }
@@ -11133,6 +11195,7 @@
     "link": "online",
     "observed": {
      "recordState": "running",
+     "depthDays": 3.0,
      "armed": false
     }
    }
@@ -11172,6 +11235,7 @@
     "link": "online",
     "observed": {
      "recordState": "running",
+     "depthDays": 0.5,
      "armed": false
     }
    }
@@ -11208,6 +11272,7 @@
      "fault": "conn",
      "recordState": "waiting",
      "recordReason": "Камера не отвечает",
+     "depthDays": 0.2,
      "armed": false
     }
    }
@@ -11247,6 +11312,7 @@
     "link": "online",
     "observed": {
      "recordState": "running",
+     "depthDays": 21.0,
      "armed": false
     }
    }
@@ -11286,6 +11352,7 @@
     "link": "online",
     "observed": {
      "recordState": "running",
+     "depthDays": 16.0,
      "armed": false
     }
    }
@@ -11325,6 +11392,7 @@
     "link": "online",
     "observed": {
      "recordState": "running",
+     "depthDays": 27.0,
      "armed": false
     }
    }
@@ -11365,6 +11433,7 @@
     "link": "online",
     "observed": {
      "recordState": "running",
+     "depthDays": 7.0,
      "armed": false
     }
    }
@@ -11400,6 +11469,7 @@
     "link": "online",
     "observed": {
      "recordState": "running",
+     "depthDays": 30.0,
      "armed": false
     }
    }
@@ -11440,6 +11510,7 @@
      "fault": "drv",
      "recordState": "waiting",
      "recordReason": "Камера не отвечает",
+     "depthDays": 30.0,
      "armed": false
     }
    }
@@ -11480,6 +11551,7 @@
     "link": "online",
     "observed": {
      "recordState": "running",
+     "depthDays": 9.0,
      "armed": false
     }
    }
@@ -11520,6 +11592,7 @@
     "link": "online",
     "observed": {
      "recordState": "running",
+     "depthDays": 30.0,
      "armed": false
     }
    }
@@ -11560,6 +11633,7 @@
     "link": "online",
     "observed": {
      "recordState": "running",
+     "depthDays": 0.7,
      "armed": false
     }
    }
@@ -11594,6 +11668,7 @@
     "link": "online",
     "observed": {
      "recordState": "running",
+     "depthDays": 2.0,
      "armed": false
     }
    }
@@ -11635,6 +11710,7 @@
      "fault": "conn",
      "recordState": "waiting",
      "recordReason": "Камера не отвечает",
+     "depthDays": 10.0,
      "armed": false
     }
    }
@@ -11675,6 +11751,7 @@
     "link": "online",
     "observed": {
      "recordState": "running",
+     "depthDays": 13.0,
      "armed": false
     }
    }
@@ -12271,6 +12348,7 @@
     "link": "online",
     "observed": {
      "recordState": "running",
+     "depthDays": 29.0,
      "armed": false
     }
    }
@@ -12311,6 +12389,7 @@
     "link": "online",
     "observed": {
      "recordState": "running",
+     "depthDays": 13.0,
      "armed": false
     }
    }
@@ -12345,6 +12424,7 @@
     "link": "online",
     "observed": {
      "recordState": "running",
+     "depthDays": 19.0,
      "armed": false
     }
    }
@@ -12383,6 +12463,7 @@
     "link": "online",
     "observed": {
      "recordState": "running",
+     "depthDays": 4.0,
      "armed": false
     }
    }
@@ -12424,6 +12505,7 @@
      "fault": "conn",
      "recordState": "waiting",
      "recordReason": "Камера не отвечает",
+     "depthDays": 41.0,
      "armed": false
     }
    }
@@ -12464,6 +12546,7 @@
     "link": "online",
     "observed": {
      "recordState": "running",
+     "depthDays": 1.0,
      "armed": false
     }
    }
@@ -12502,6 +12585,7 @@
     "link": "online",
     "observed": {
      "recordState": "running",
+     "depthDays": 58.0,
      "armed": false
     }
    }
@@ -12535,6 +12619,7 @@
     "link": "online",
     "observed": {
      "recordState": "running",
+     "depthDays": 0.8,
      "armed": false
     }
    }
@@ -12576,6 +12661,7 @@
     "link": "online",
     "observed": {
      "recordState": "running",
+     "depthDays": 0.9,
      "armed": false
     }
    }
@@ -12617,6 +12703,7 @@
      "fault": "auth",
      "recordState": "waiting",
      "recordReason": "Камера не отвечает",
+     "depthDays": 0.9,
      "armed": false
     }
    }
@@ -12656,6 +12743,7 @@
     "link": "online",
     "observed": {
      "recordState": "running",
+     "depthDays": 59.0,
      "armed": false
     }
    }
@@ -12696,6 +12784,7 @@
     "link": "online",
     "observed": {
      "recordState": "running",
+     "depthDays": 33.0,
      "armed": false
     }
    }
@@ -12730,6 +12819,7 @@
     "link": "online",
     "observed": {
      "recordState": "running",
+     "depthDays": 22.0,
      "armed": false
     }
    }

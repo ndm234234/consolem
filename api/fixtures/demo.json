@@ -2571,6 +2571,27 @@
          "type": "integer",
          "minimum": 0,
          "description": "Предзапись этой записи, с: сколько секунд до начала записи по событию она добавляет. Поля нет — preRecordSec камеры, как до 0.7.0"
+        },
+        "decimation": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "enum": [
+          "keyframes",
+          "20s",
+          "30s",
+          "60s",
+          "120s",
+          "240s",
+          null
+         ],
+         "description": "Прореживание записи этой строки, своё: значение камеры строка не берёт (профиль vms.camera/1 1.3)"
+        },
+        "depthDays": {
+         "type": "number",
+         "minimum": 0,
+         "description": "Только чтение: сколько дней записи камеры есть в этом архиве сейчас; поле сервера, консоль его не пишет (профиль vms.camera/1 1.3)"
         }
        },
        "additionalProperties": false
@@ -2714,6 +2735,27 @@
       },
       "type": "integer",
       "description": "Предзапись основного архива (archiveId), с. Строки extraArchives без своего preRecordSec берут это значение"
+     },
+     "decimation": {
+      "x-label": {
+       "key": "field.decimation",
+       "text": "Прореживание",
+       "lang": "ru"
+      },
+      "type": [
+       "string",
+       "null"
+      ],
+      "enum": [
+       "keyframes",
+       "20s",
+       "30s",
+       "60s",
+       "120s",
+       "240s",
+       null
+      ],
+      "description": "Прореживание записи основного архива: keyframes — только опорные кадры, 20s … 240s — 1 кадр за столько секунд; нет поля или null — все кадры (профиль vms.camera/1 1.3)"
      },
      "presetMax": {
       "type": "integer",
@@ -12123,7 +12165,7 @@
     "text": "Камера",
     "lang": "ru"
    },
-   "version": "1.2",
+   "version": "1.3",
    "uses": [
     {
      "id": "vms.archive/1",
@@ -12165,6 +12207,7 @@
     "azimuth",
     "codec",
     "configMode",
+    "decimation",
     "detectorOptions",
     "enabled",
     "extraArchives",
@@ -12205,6 +12248,7 @@
    "status": [
     "archiveJobs",
     "armed",
+    "depthDays",
     "detectorKinds",
     "direct",
     "disabledByRuleAt",
@@ -16639,7 +16683,8 @@
     "audioDeviceId": "30000034-0000-4000-8000-000000000000",
     "retentionDays": 45,
     "minDepthDays": 14,
-    "presetMax": 16
+    "presetMax": 16,
+    "decimation": "keyframes"
    },
    "status": {
     "link": "online",
@@ -16647,7 +16692,8 @@
      "faultText": "Запись остановлена: на сервере нет места",
      "recordState": "waiting",
      "recordReason": "На сервере нет места",
-     "armed": true
+     "armed": true,
+     "depthDays": 3.0
     }
    }
   },
@@ -17328,7 +17374,8 @@
      "fault": "auth",
      "recordState": "waiting",
      "recordReason": "Камера не отвечает",
-     "armed": true
+     "armed": true,
+     "depthDays": 30.0
     }
    }
   },
@@ -17485,7 +17532,8 @@
      "armed": false,
      "disabledByRuleId": "70000007-0000-4000-8000-000000000000",
      "disabledByRuleAt": "2026-10-29T06:05:00Z",
-     "replicaLagSec": 240
+     "replicaLagSec": 240,
+     "depthDays": 19.0
     }
    }
   },
@@ -17616,15 +17664,19 @@
       "replicaLagSec": 420,
       "state": "running",
       "retentionDays": 60,
-      "minDepthDays": 7
+      "minDepthDays": 7,
+      "depthDays": 15.0,
+      "decimation": "240s"
      },
      {
       "archiveId": "50000024-0000-4000-8000-000000000000",
       "recordMode": "backup",
-      "stream": "main"
+      "stream": "main",
+      "depthDays": 2.0
      }
     ],
-    "minDepthDays": 30
+    "minDepthDays": 30,
+    "decimation": "60s"
    },
    "status": {
     "link": "online",
@@ -17632,7 +17684,8 @@
      "licenseExceeded": true,
      "recordState": "running",
      "recordReason": "Глубина ниже наименьшей: 21 дн. из 30",
-     "armed": false
+     "armed": false,
+     "depthDays": 30.0
     }
    }
   },
@@ -17743,7 +17796,8 @@
     "observed": {
      "recordState": "running",
      "replicaLagSec": 95,
-     "armed": false
+     "armed": false,
+     "depthDays": 30.0
     }
    }
   },
@@ -17910,7 +17964,8 @@
      "recordState": "running",
      "recordReason": "Потеряно 12 мин: источник стёр записи раньше, чем их забрали",
      "replicaLagSec": 5400,
-     "armed": false
+     "armed": false,
+     "depthDays": 13.0
     }
    }
   },
@@ -17945,7 +18000,8 @@
     "observed": {
      "licenseExceeded": true,
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 3.0
     }
    }
   },
@@ -17980,7 +18036,8 @@
     "observed": {
      "licenseExceeded": true,
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 28.0
     }
    }
   },
@@ -18017,7 +18074,8 @@
      "recordState": "running",
      "recordReason": "Записей у источника больше, чем вмещает архив назначения",
      "replicaLagSec": 1800,
-     "armed": false
+     "armed": false,
+     "depthDays": 23.0
     }
    }
   },
@@ -18257,7 +18315,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 30.0
     }
    }
   },
@@ -18288,7 +18347,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 30.0
     }
    }
   },
@@ -18319,7 +18379,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 7.0
     }
    }
   },
@@ -18350,7 +18411,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 0.3
     }
    }
   },
@@ -18381,7 +18443,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 11.0
     }
    }
   },
@@ -18409,7 +18472,8 @@
      "fault": "conn",
      "recordState": "waiting",
      "recordReason": "Камера не отвечает",
-     "armed": false
+     "armed": false,
+     "depthDays": 26.0
     }
    }
   },
@@ -19569,7 +19633,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 0.6
     }
    }
   },
@@ -19674,7 +19739,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 1.0
     }
    }
   },
@@ -19710,7 +19776,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 5.0
     }
    }
   },
@@ -19769,7 +19836,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 7.0
     }
    }
   },
@@ -19801,7 +19869,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 11.0
     }
    }
   },
@@ -19837,7 +19906,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 5.0
     }
    }
   },
@@ -19875,7 +19945,8 @@
      "fault": "auth",
      "recordState": "waiting",
      "recordReason": "Камера не отвечает",
-     "armed": false
+     "armed": false,
+     "depthDays": 14.0
     }
    }
   },
@@ -19934,7 +20005,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 2.0
     }
    }
   },
@@ -19971,7 +20043,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 14.0
     }
    }
   },
@@ -20003,7 +20076,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 13.0
     }
    }
   },
@@ -20041,7 +20115,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 8.0
     }
    }
   },
@@ -20098,7 +20173,8 @@
      "fault": "conn",
      "recordState": "waiting",
      "recordReason": "Камера не отвечает",
-     "armed": false
+     "armed": false,
+     "depthDays": 14.0
     }
    }
   },
@@ -20134,7 +20210,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 5.0
     }
    }
   },
@@ -20171,7 +20248,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 3.0
     }
    }
   },
@@ -20203,7 +20281,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 0.5
     }
    }
   },
@@ -20258,7 +20337,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 1.0
     }
    }
   },
@@ -20295,7 +20375,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 10.0
     }
    }
   },
@@ -20331,7 +20412,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 9.0
     }
    }
   },
@@ -20369,7 +20451,8 @@
      "fault": "drv",
      "recordState": "waiting",
      "recordReason": "Камера не отвечает",
-     "armed": false
+     "armed": false,
+     "depthDays": 0.2
     }
    }
   },
@@ -20424,7 +20507,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 10.0
     }
    }
   },
@@ -20461,7 +20545,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 1.0
     }
    }
   },
@@ -20497,7 +20582,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 0.9
     }
    }
   },
@@ -20534,7 +20620,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 0.6
     }
    }
   },
@@ -20591,7 +20678,8 @@
      "fault": "conn",
      "recordState": "waiting",
      "recordReason": "Камера не отвечает",
-     "armed": false
+     "armed": false,
+     "depthDays": 6.0
     }
    }
   },
@@ -20624,7 +20712,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 1.0
     }
    }
   },
@@ -20662,7 +20751,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 0.6
     }
    }
   },
@@ -20701,7 +20791,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 3.0
     }
    }
   },
@@ -20760,7 +20851,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 0.8
     }
    }
   },
@@ -20798,7 +20890,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 2.0
     }
    }
   },
@@ -20833,7 +20926,8 @@
      "fault": "auth",
      "recordState": "waiting",
      "recordReason": "Камера не отвечает",
-     "armed": false
+     "armed": false,
+     "depthDays": 0.2
     }
    }
   },
@@ -20873,7 +20967,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 2.0
     }
    }
   },
@@ -20931,7 +21026,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 17.0
     }
    }
   },
@@ -20969,7 +21065,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 3.0
     }
    }
   },
@@ -21008,7 +21105,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 0.5
     }
    }
   },
@@ -21044,7 +21142,8 @@
      "fault": "conn",
      "recordState": "waiting",
      "recordReason": "Камера не отвечает",
-     "armed": false
+     "armed": false,
+     "depthDays": 0.2
     }
    }
   },
@@ -21105,7 +21204,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 21.0
     }
    }
   },
@@ -21144,7 +21244,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 16.0
     }
    }
   },
@@ -21183,7 +21284,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 27.0
     }
    }
   },
@@ -21223,7 +21325,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 7.0
     }
    }
   },
@@ -21277,7 +21380,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 30.0
     }
    }
   },
@@ -21317,7 +21421,8 @@
      "fault": "drv",
      "recordState": "waiting",
      "recordReason": "Камера не отвечает",
-     "armed": false
+     "armed": false,
+     "depthDays": 30.0
     }
    }
   },
@@ -21357,7 +21462,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 9.0
     }
    }
   },
@@ -21397,7 +21503,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 30.0
     }
    }
   },
@@ -21456,7 +21563,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 0.7
     }
    }
   },
@@ -21490,7 +21598,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 2.0
     }
    }
   },
@@ -21531,7 +21640,8 @@
      "fault": "conn",
      "recordState": "waiting",
      "recordReason": "Камера не отвечает",
-     "armed": false
+     "armed": false,
+     "depthDays": 10.0
     }
    }
   },
@@ -21571,7 +21681,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 13.0
     }
    }
   },
@@ -22243,7 +22354,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 29.0
     }
    }
   },
@@ -22302,7 +22414,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 13.0
     }
    }
   },
@@ -22336,7 +22449,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 19.0
     }
    }
   },
@@ -22374,7 +22488,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 4.0
     }
    }
   },
@@ -22415,7 +22530,8 @@
      "fault": "conn",
      "recordState": "waiting",
      "recordReason": "Камера не отвечает",
-     "armed": false
+     "armed": false,
+     "depthDays": 41.0
     }
    }
   },
@@ -22477,7 +22593,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 1.0
     }
    }
   },
@@ -22515,7 +22632,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 58.0
     }
    }
   },
@@ -22548,7 +22666,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 0.8
     }
    }
   },
@@ -22589,7 +22708,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 0.9
     }
    }
   },
@@ -22649,7 +22769,8 @@
      "fault": "auth",
      "recordState": "waiting",
      "recordReason": "Камера не отвечает",
-     "armed": false
+     "armed": false,
+     "depthDays": 0.9
     }
    }
   },
@@ -22688,7 +22809,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 59.0
     }
    }
   },
@@ -22728,7 +22850,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 33.0
     }
    }
   },
@@ -22762,7 +22885,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 22.0
     }
    }
   },
@@ -22818,7 +22942,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 4.0
     }
    }
   },
@@ -22854,7 +22979,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 6.0
     }
    }
   },
@@ -22892,7 +23018,8 @@
      "fault": "conn",
      "recordState": "waiting",
      "recordReason": "Камера не отвечает",
-     "armed": false
+     "armed": false,
+     "depthDays": 26.0
     }
    }
   },
@@ -22970,7 +23097,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 13.0
     }
    }
   },
@@ -23002,7 +23130,8 @@
     "observed": {
      "licenseExceeded": true,
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 5.0
     }
    }
   },
@@ -23057,7 +23186,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 26.0
     }
    }
   },
@@ -23093,7 +23223,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 3.0
     }
    }
   },
@@ -23130,7 +23261,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 27.0
     }
    }
   },
@@ -23166,7 +23298,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 2.0
     }
    }
   },
@@ -23218,7 +23351,8 @@
      "fault": "drv",
      "recordState": "waiting",
      "recordReason": "Камера не отвечает",
-     "armed": false
+     "armed": false,
+     "depthDays": 18.0
     }
    }
   },
@@ -23256,7 +23390,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 30.0
     }
    }
   },
@@ -23293,7 +23428,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 30.0
     }
    }
   },
@@ -23329,7 +23465,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 14.0
     }
    }
   },
@@ -23386,7 +23523,8 @@
      "recordState": "running",
      "armed": false,
      "disabledByRuleId": "70000007-0000-4000-8000-000000000000",
-     "disabledByRuleAt": "2026-10-29T06:05:00Z"
+     "disabledByRuleAt": "2026-10-29T06:05:00Z",
+     "depthDays": 7.0
     }
    }
   },
@@ -23418,7 +23556,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 14.0
     }
    }
   },
@@ -23454,7 +23593,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 7.0
     }
    }
   },
@@ -23490,7 +23630,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 0.9
     }
    }
   },
@@ -23546,7 +23687,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 14.0
     }
    }
   },
@@ -23582,7 +23724,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 9.0
     }
    }
   },
@@ -23616,7 +23759,8 @@
      "fault": "conn",
      "recordState": "waiting",
      "recordReason": "Камера не отвечает",
-     "armed": false
+     "armed": false,
+     "depthDays": 11.0
     }
    }
   },
@@ -23653,7 +23797,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 0.2
     }
    }
   },
@@ -23708,7 +23853,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 6.0
     }
    }
   },
@@ -23744,7 +23890,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 0.7
     }
    }
   },
@@ -23781,7 +23928,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 16.0
     }
    }
   },
@@ -23812,7 +23960,8 @@
     "link": "online",
     "observed": {
      "recordState": "running",
-     "armed": false
+     "armed": false,
+     "depthDays": 14.0
     }
    }
   },
@@ -23870,7 +24019,8 @@
      "recordState": "waiting",
      "recordReason": "Камера не отвечает",
      "armed": false,
-     "archiveJobs": false
+     "archiveJobs": false,
+     "depthDays": 21.0
     }
    }
   },

@@ -89,7 +89,7 @@
   const tableOf = (kind) =>
     DEVICE_TYPES.has(kind) ? "devices" : String(kind).startsWith("archive.") ? "archives" : { domain: "domains", server: "servers", folder: "folders", volume: "volumes" }[kind] || null;
   const OBSERVED = {
-    devices: ["fault", "faultText", "licenseExceeded", "recordState", "recordReason", "replicaLagSec", "armed", "disabledByRuleId", "disabledByRuleAt", "archiveJobs",
+    devices: ["fault", "faultText", "licenseExceeded", "recordState", "recordReason", "replicaLagSec", "depthDays", "armed", "disabledByRuleId", "disabledByRuleAt", "archiveJobs",
       "direct", "recordingTarget", "detectorKinds", "derived"],
     servers: ["telemetry", "gpu", "disks", "class", "fingerprint", "webCertificate", "webReservedPorts"],
     domains: ["stateSummary"],

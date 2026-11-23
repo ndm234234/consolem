@@ -390,7 +390,8 @@
         const next = i >= 0 ? extra.splice(i, 1)[0] : null;
         if (next) Object.assign(d, { archiveId: next.archiveId, recordMode: next.recordMode, stream: next.stream });
         else Object.assign(d, { archiveId: null, recordMode: "none" });
-        ["replicaFrom", "replicaLagSec", "retentionDays", "minDepthDays"].forEach((k) => {
+        // Прореживание и дни записи (профиль 1.3) — свои у строки: переходят вместе с ней
+        ["replicaFrom", "replicaLagSec", "retentionDays", "minDepthDays", "decimation", "depthDays"].forEach((k) => {
           if (next && k in next) d[k] = next[k];
           else delete d[k];
         });
@@ -1033,18 +1034,39 @@
     ctx.changed("device", rec);
     return null;
   }
-  // Правка строк записи не стирает поля сервера (состояние, причина, отставание replica): они переходят из прежней строки
+  // Правка строк записи не стирает поля сервера (состояние, причина, отставание replica, дни записи): они переходят из прежней строки
   // того же архива; строку только для чтения (архив на весь сервер) не хранят
   function keepRows(rec, patch) {
-    if (!patch.extraArchives) return patch;
-    const rows = patch.extraArchives.map((x) => {
+    if (!patch.extraArchives && !("archiveId" in patch)) return patch;
+    const rows = (patch.extraArchives || []).map((x) => {
       const was = (rec.extraArchives || []).find((y) => y.archiveId === x.archiveId);
       const row = Object.assign({}, x);
-      ["state", "reason", "replicaLagSec", "readOnly"].forEach((k) => delete row[k]);
-      if (was) ["state", "reason", "replicaLagSec"].forEach((k) => { if (k in was) row[k] = was[k]; });
+      ["state", "reason", "replicaLagSec", "depthDays", "readOnly"].forEach((k) => delete row[k]);
+      if (was) ["state", "reason", "replicaLagSec", "depthDays"].forEach((k) => { if (k in was) row[k] = was[k]; });
       return row;
     });
-    return Object.assign({}, patch, { extraArchives: rows });
+    const out = patch.extraArchives ? Object.assign({}, patch, { extraArchives: rows }) : Object.assign({}, patch);
+    // Основная запись сменила архив: дни записи (профиль 1.3) идут вместе с архивом — из строки в камеру и из камеры в строку
+    if ("archiveId" in patch && patch.archiveId !== rec.archiveId) {
+      const row = (rec.extraArchives || []).find((y) => y.archiveId === patch.archiveId);
+      out.depthDays = row && row.depthDays != null ? row.depthDays : null;
+      const old = rows.find((y) => y.archiveId === rec.archiveId);
+      if (old && rec.depthDays != null) old.depthDays = rec.depthDays;
+    }
+    return out;
+  }
+  // Правка /units сменила основной архив: дни записи (профиль 1.3) идут вместе с архивом — из прежней строки нового
+  // основного в камеру, из камеры в строку прежнего основного. Путь applyPatch делает то же в keepRows (afterSet там нет)
+  function moveDepth(d, was) {
+    if (!("archiveId" in was) || was.archiveId === d.archiveId) return;
+    const old = d.depthDays;
+    const src = (was.extraArchives || d.extraArchives || []).find((y) => y.archiveId === d.archiveId);
+    if (src && src.depthDays != null) d.depthDays = src.depthDays;
+    else delete d.depthDays;
+    const row = (d.extraArchives || []).find((y) => y.archiveId === was.archiveId);
+    if (row && old != null) {
+      d.extraArchives = d.extraArchives.map((y) => (y === row ? Object.assign({}, y, { depthDays: old }) : y));
+    }
   }
   // Строки незнакомых видов под камерой (w2c.example/rows и потомки): уходят вместе с ней
   function cameraRows(u, ctx) {
@@ -1128,6 +1150,7 @@
           const st = edgeStorageOf(u, ctx);
           if (st) edgeChanged(st, ctx);
         }
+        moveDepth(d, was);
         return syncMain(d, was);
       }
       applyProfile(d, Object.assign({}, rowProps(u), { vendor: d.vendor, model: d.model }), ctx);

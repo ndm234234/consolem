@@ -19,7 +19,7 @@ DEVICE_TYPES = ("camera", "ipsrv", "channel", "mic", "spk", "sensor", "relay", "
 UNIT_FIELDS = {"id", "type", "kind", "parentId", "domainId", "name", "version"}
 # Состояние, которое система назначает или измеряет сама → status.observed (online → status.link)
 OBSERVED = {
-    "devices": ["fault", "faultText", "licenseExceeded", "recordState", "recordReason", "replicaLagSec", "armed", "disabledByRuleId",
+    "devices": ["fault", "faultText", "licenseExceeded", "recordState", "recordReason", "replicaLagSec", "depthDays", "armed", "disabledByRuleId",
                 "disabledByRuleAt", "archiveJobs", "direct", "recordingTarget", "detectorKinds", "derived"],
     "servers": ["telemetry", "gpu", "disks", "class", "fingerprint", "webCertificate", "webReservedPorts"],
     "domains": ["stateSummary"],

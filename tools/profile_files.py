@@ -283,7 +283,7 @@ def type_text(schema):
             parts.append(x)
     text = " | ".join(parts)
     if schema.get("enum"):
-        text += ": " + ", ".join(f"`{v}`" for v in schema["enum"])
+        text += ": " + ", ".join(f"`{'null' if v is None else v}`" for v in schema["enum"])
     ref = schema.get("x-ref")
     if isinstance(ref, dict):
         if ref.get("implements"):
