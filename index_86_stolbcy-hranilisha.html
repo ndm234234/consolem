@@ -992,12 +992,44 @@ tr.lan-net .dev-actions .btn{white-space:nowrap}
    строкой под именем, а не выдавливают её в горизонтальную прокрутку. */
 .lan-wrap table.lan-tbl{min-width:0;width:100%}
 @container (max-width: 900px){
-  .lan-wrap table.lan-tbl th:nth-child(5),.lan-wrap table.lan-tbl td:nth-child(5),
-  .lan-wrap table.lan-tbl th:nth-child(6),.lan-wrap table.lan-tbl td:nth-child(6){display:none}
+  .lan-wrap table.lan-tbl:not(.lan-tbl-rec) th:nth-child(5),.lan-wrap table.lan-tbl:not(.lan-tbl-rec) td:nth-child(5),
+  .lan-wrap table.lan-tbl:not(.lan-tbl-rec) th:nth-child(6),.lan-wrap table.lan-tbl:not(.lan-tbl-rec) td:nth-child(6){display:none}
   .lan-sub{display:block}
 }
 @container (max-width: 620px){
-  .lan-wrap table.lan-tbl th:nth-child(4),.lan-wrap table.lan-tbl td:nth-child(4){display:none}
+  .lan-wrap table.lan-tbl:not(.lan-tbl-rec) th:nth-child(4),.lan-wrap table.lan-tbl:not(.lan-tbl-rec) td:nth-child(4){display:none}
+}
+/* Прототип 86: столбцы записи у хранилища и сервера. Ширины заданы: правка значения и раскрытие пояснения не двигают соседей */
+.lan-wrap table.lan-tbl.lan-tbl-rec{min-width:640px}
+.lan-wrap:has(.lan-tbl-rec){overflow-x:auto;scrollbar-gutter:stable}
+table.lan-tbl-rec .lan-sub{display:block}
+table.lan-tbl-rec th.lan-th-name{width:24%}
+table.lan-tbl-rec th.lan-th-bind{width:220px}
+table.lan-tbl-rec th.lan-th-stream{width:104px}
+table.lan-tbl-rec th.lan-th-pre{width:92px}
+table.lan-tbl-rec th.lan-th-ret{width:92px}
+table.lan-tbl-rec th.lan-th-dec{width:124px}
+table.lan-tbl-rec th.lan-th-used{width:88px}
+table.lan-tbl-rec.lan-v-view th:last-child{width:78px}
+table.lan-tbl-rec.lan-v-edit th:last-child{width:4px;padding:0}
+.lan-wrap table.lan-tbl-rec th,.lan-wrap table.lan-tbl-rec td{padding-left:7px;padding-right:7px}
+table.lan-tbl-rec td{vertical-align:top}
+table.lan-tbl-rec .lan-cell-in{width:100%;max-width:100%;height:26px;padding-top:0;padding-bottom:0;box-sizing:border-box}
+table.lan-tbl-rec .lan-cell-num{width:52px}
+table.lan-tbl-rec .lan-unit{font-size:11.5px;color:var(--mu);margin-left:4px}
+table.lan-tbl-rec .lan-sub2{display:block;font-size:11px;color:var(--mu);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+table.lan-tbl-rec .lan-na{color:var(--mu)}
+table.lan-tbl-rec .lan-numc{white-space:nowrap}
+.lan-stub-note{font-size:11.5px}
+.lan-var{display:inline-flex;align-items:center;gap:0;border:1px dashed var(--one-selected-indicator);border-radius:6px;padding:2px;flex:none}
+.lan-var-l{font-size:11px;color:var(--mu);padding:0 6px}
+.lan-var button{border:0;background:transparent;color:var(--tx);font:inherit;font-size:12px;padding:3px 8px;border-radius:4px;cursor:pointer}
+.lan-var button.on{background:var(--one-selected-indicator);color:#fff}
+@container (max-width: 820px){
+  .lan-wrap table.lan-tbl-rec th:nth-child(8),.lan-wrap table.lan-tbl-rec td:nth-child(8){display:none}
+}
+@container (max-width: 720px){
+  .lan-wrap table.lan-tbl-rec th:nth-child(7),.lan-wrap table.lan-tbl-rec td:nth-child(7){display:none}
 }
 table.gtbl-cams{width:100%;min-width:980px;border-collapse:separate;border-spacing:0;table-layout:fixed}
 table.gtbl-cams tr.gtbl-h,table.gtbl-cams tr.gtbl-f,table.gtbl-cams tr.gtbl-r{display:table-row}
@@ -15170,6 +15202,11 @@ function camsCardHeadActions(){
 // и найденное в сети по отдельности. Смысл привязки задаёт объект, из
 // которого пришли: у папки это расположение, у сервера — запись в архив.
 const LAN_COLS=[["name","Название"],["ip","IP-адрес"],["mac","MAC"],["vendor","Производитель"],["model","Модель"],["bind","Привязка"]];
+// Прототип 86: у хранилища и сервера таблица отвечает на вопрос «как камера пишет сюда». Поэтому столбцы — параметры
+// записи пары «камера × хранилище», как список камер на странице архива в Axxon One. MAC, производитель и модель
+// не нужны для записи: IP и модель стоят второй строкой под именем, поиск по-прежнему находит камеру по MAC
+const LAN_REC_COLS=[["name","Камера"],["bind","Запись"],["stream","Поток"],["pre","Предзапись"],["ret","Срок"],["dec","Прореживание"],["used","Занято"]];
+function lanCols(n){return lanIsPlace(n)?LAN_COLS:LAN_REC_COLS}
 const LAN_CHIPS=[["all","Все"],["here","Здесь"],["free","Свободные"],["other","В другом месте"],["none","Нет в системе"]];
 const lan={owner:null,q:"",sort:"name",dir:1,chip:"all",sel:new Set(),arch:null,rec:"always",state:"idle",progress:0,net:[]};
 function lanIsFolder(n){return!!n&&handOf(n,"folder")}
@@ -15316,6 +15353,7 @@ function lanRows(n){
     .map(r=>({key:"n:"+r.id,kind:"net",id:r.id,node:null,name:r.name||r.ip,ip:r.ip||"",mac:r.mac||"",
       vendor:r.vendor||"",model:r.model||"",type:r.type||"camera",bind:"none",bindText:i18n("Нет в системе"),
       status:r.status,foreign:false}));
+  if(!lanIsPlace(n))sys.forEach(r=>Object.assign(r,lanRecVals(n,r)));
   return sys.concat(net);
 }
 function lanFilter(rows){
@@ -15352,9 +15390,9 @@ function lanNvrHeadHtml(n,nvrId,found){
   // когда узкая ширина прячет колонки производителя и модели.
   return`<tr class="lan-grp" data-lk="g:${escHtml(nvrId)}"><td class="lan-chk"><input type="checkbox" ${on?"checked":""} ${pk.length?"":"disabled"} aria-label="${i18n("Отметить камеры регистратора")}" ${onEv("change",["lanPickNvr",`${nvrId}`,onEv.checked])}></td>
     <td><span class="lan-grp-h">${ic("ipsrv")}<b>${escHtml(locName(nvr))}</b></span><span class="lan-sub lan-grp-sub">${mates.length} ${i18n(plural(mates.length,"камера|камеры|камер"))} ${i18n("на одном IP")}</span></td>
-    <td><span class="tag tag-ip" title="${i18n("Единственный IP. У камер регистратора нет своих адресов")}">${escHtml(nvr.ip||"—")}</span></td>
-    <td>${escHtml(nvr.mac||"")}</td><td>${escHtml(nvr.vendor||"")}</td><td>${escHtml(nvr.model||"")}</td>
-    <td><span class="sub">${mates.length} ${i18n(plural(mates.length,"камера|камеры|камер"))}${edge?` · ${i18n("архив")} ${escHtml(edge.size||"")}`:""}</span></td>
+    ${lanIsPlace(n)?`<td><span class="tag tag-ip" title="${i18n("Единственный IP. У камер регистратора нет своих адресов")}">${escHtml(nvr.ip||"—")}</span></td>
+    <td>${escHtml(nvr.mac||"")}</td><td>${escHtml(nvr.vendor||"")}</td><td>${escHtml(nvr.model||"")}</td>`:""}
+    <td${lanIsPlace(n)?"":` colspan="${lanCols(n).length-1}"`}><span class="sub">${mates.length} ${i18n(plural(mates.length,"камера|камеры|камер"))}${edge?` · ${i18n("архив")} ${escHtml(edge.size||"")}`:""}</span></td>
     <td class="lan-act"><button type="button" class="lk lk-act" ${onEv("click",["pick",`${nvrId}`])}>${i18n("Карточка")}</button></td></tr>`;
 }
 function lanPickNvr(nvrId,on){
@@ -15797,6 +15835,75 @@ function lanSelBarHtml(n,selRows,total){
     ${nets?`<button type="button" class="btn s" ${onEv("click",["lanBulk"])}>${i18n("В план")} (${nets})</button>`:""}
     <span class="lan-sel-note">${i18n(cams.length?"Режим сразу меняется в строках. Применить — кнопкой «Показать план» внизу.":"Устройства, которых нет в системе, сначала попадают в план добавления.")}</span></div>`;
 }
+// ── Прототип 86: параметры записи камеры в строке таблицы хранилища ──
+// Строка показывает запись пары «камера × хранилище строки» (lanRowArch): поток, предзапись, срок, прореживание, место.
+// Камера сюда не пишет — параметров нет, в ячейках прочерк. Вариант «edit» правит значения прямо в строке (черновик
+// хранилища, как режим записи), вариант «view» только показывает их, а «Изменить» открывает вкладку «Архив» камеры
+let lanVar=(()=>{try{return localStorage.getItem("p86.lanVar")||"edit"}catch(e){return"edit"}})();
+function lanVarSet(v){lanVar=v;try{localStorage.setItem("p86.lanVar",v)}catch(e){}gear()}
+function lanVarHtml(){
+  const b=(v,l)=>`<button type="button" class="${lanVar===v?"on":""}" aria-pressed="${lanVar===v}" ${onEv("click",["lanVarSet",v])}>${i18n(l)}</button>`;
+  return`<span class="lan-var" title="${escHtml(i18n("Переключатель прототипа: два варианта таблицы для сравнения"))}"><span class="lan-var-l">${i18n("Вариант")}</span>${b("edit","Правка в строке")}${b("view","Только показ")}</span>`;
+}
+const LAN_STUB_COLS=new Set(["dec","used"]);
+// Заглушка прототипа: прореживания и места камеры в хранилище нет в контракте. Значения — от id камеры, правка — только в памяти
+const lanStubDec=new Map();
+const LAN_DEC=[["","Нет"],["key","Ключевые кадры"],["1/30","1 кадр в 30 с"],["1/60","1 кадр в 60 с"]];
+function lanStubHash(s){let h=0;for(const ch of String(s))h=(h*31+ch.charCodeAt(0))>>>0;return h}
+function lanRowX(n,r){
+  if(!r.node||!handCam(r.node)||r.bind!=="here")return null;
+  const aid=lanRowArch(n,r);
+  return camArchs(r.node).find(y=>y.arch===aid&&y.rec&&y.rec!=="none")||null;
+}
+function lanRecVals(n,r){
+  const x=lanRowX(n,r);if(!x)return{stream:"",pre:"",ret:"",dec:"",used:""};
+  const c=r.node,a=archById(x.arch),h=lanStubHash(c.id+x.arch);
+  const pre=x.rec==="replica"?"":(x.pre??(x.main?5:c.pre??5));
+  const ret=x.retentionDays??a?.days??0;
+  const gb=ret?Math.round((h%9+2)*(String(x.stream||"main")==="main"?1:.25)*ret):0;
+  return{stream:camStreams(c).find(s=>s.id===(x.stream||camStreams(c)[0].id))?.name||x.stream||"",pre,ret,
+    dec:lanStubDec.get(c.id+":"+x.arch)??(h%5===0?"key":""),used:gb,usedDays:ret?Math.max(1,ret-(h%4)):0};
+}
+function lanRecRowCells(n,r){
+  const nameTd=`<td><span class="lan-name">${hlText(r.name,lan.q)}</span><span class="lan-sub">${r.nvr?`${i18n("канал")} ${escHtml(r.ch)} · ${escHtml(r.nvrName)} · ${hlText(r.ip,lan.q)}`:[hlText(r.ip,lan.q),escHtml(r.model)].filter(Boolean).join(" · ")}</span></td>`;
+  const recTd=`<td>${lanRecCellHtml(n,r)}</td>`;
+  const x=lanRowX(n,r),dash=`<span class="lan-na">—</span>`;
+  if(!x)return nameTd+recTd+`<td>${dash}</td><td>${dash}</td><td>${dash}</td><td>${dash}</td><td>${dash}</td>`;
+  const c=r.node,a=archById(x.arch),ro=x.ro||lanRowRo(n,r),edit=lanVar==="edit"&&!ro,k=`${r.key}`;
+  const stub=`<span class="tag lan-stub" title="${escHtml(i18n("Этого поля нет в API. Значения — заглушка прототипа."))}">${i18n("нет в API")}</span>`;
+  const used=r.used?`<span class="lan-num">${r.used} ${i18n("ГБ")}</span><span class="lan-sub2">${r.usedDays} ${i18n("дн. записи")}</span>`:dash;
+  const decName=i18n((LAN_DEC.find(d=>d[0]===r.dec)||LAN_DEC[0])[1]);
+  if(!edit){
+    return nameTd+recTd+`<td>${escHtml(r.stream)}</td>
+      <td class="lan-numc">${r.pre===""?dash:`${r.pre} ${i18n("с")}`}</td>
+      <td class="lan-numc">${r.ret?`${r.ret} ${i18n("дн.")}`:i18n("без огр.")}${x.retentionDays==null&&a?`<span class="lan-sub2">${i18n("как у хранилища")}</span>`:""}</td>
+      <td>${decName}</td><td class="lan-numc">${used}</td>`;
+  }
+  const streams=camStreams(c),cur=x.stream||streams[0].id;
+  const stop=onEv("click",onEv.stop);
+  const sel=`<select class="lan-cell-in" aria-label="${escHtml(i18n("Поток записи")+": "+r.name)}" ${x.rec==="replica"?"disabled":""} ${stop} ${onEv("change",["lanParamSet",k,"stream",onEv.value])}>${streams.map(s=>`<option value="${escHtml(s.id)}" ${s.id===cur?"selected":""}>${escHtml(s.name)}</option>`).join("")}</select>`;
+  const num=(f,v,ph,max,lab)=>`<input type="number" class="lan-cell-in lan-cell-num" min="0" ${max?`max="${max}"`:""} value="${v??""}" placeholder="${escHtml(ph)}" aria-label="${escHtml(i18n(lab)+": "+r.name)}" ${stop} ${onEv("change",["lanParamSet",k,f,onEv.value])}>`;
+  const unit=t=>`<span class="lan-unit">${i18n(t)}</span>`;
+  const pre=x.rec==="replica"?dash:num("pre",x.pre??"",String(x.main?5:c.pre??5),30,"Предзапись, с")+unit("с");
+  const ret=num("retentionDays",x.retentionDays,a?String(a.days??""):"","","Срок, дней")+unit("дн.")+(x.retentionDays==null&&a?`<span class="lan-sub2">${i18n("как у хранилища")}</span>`:"");
+  const dec=`<select class="lan-cell-in" aria-label="${escHtml(i18n("Прореживание")+": "+r.name)}" ${stop} ${onEv("change",["lanStubDecSet",`${c.id}:${x.arch}`,onEv.value])}>${LAN_DEC.map(([v,l])=>`<option value="${v}" ${v===r.dec?"selected":""}>${i18n(l)}</option>`).join("")}</select>`;
+  return nameTd+recTd+`<td>${sel}</td><td>${pre}</td><td>${ret}</td><td>${dec}</td><td class="lan-numc">${used}</td>`;
+}
+function lanStubDecSet(k,v){lanStubDec.set(k,v);gear();toast(i18n("Заглушка: прореживания нет в API, консоль не сохранит выбор."))}
+// Правка в строке — та же строка камеры, что в карточке камеры (camArchRowSet), но в черновик хранилища
+function lanParamSet(key,f,v){
+  const n=find(lan.owner)?.n;if(!n)return;
+  const r=lanRowByKey(n,key);if(!r)return;
+  const x=lanRowX(n,r);if(!x)return;
+  const c=r.node;
+  lanDraftCams([c],()=>{
+    const row=c.arch===x.arch?c:(c.archx||[]).find(y=>y.arch===x.arch);if(!row)return;
+    if(f==="stream")row.stream=v;
+    else if(v==="")delete row[f];
+    else row[f]=Math.max(0,Number(v)||0);
+  });
+}
+function lanCamRecGo(id){hwJumpFlash=true;pick(id,{tab:"rec"});hwJumpFlash=false}
 function lanSysRowHtml(n,r){
   const a=lanAction(n,r);
   const btn=a.off
@@ -15806,11 +15913,11 @@ function lanSysRowHtml(n,r){
     ?`<input type="checkbox" class="ts-chk" ${lanChecked(r)?"checked":""} aria-label="${escHtml(r.name)}" ${onEv("click",onEv.stop)} ${onEv("change",["lanPick",`${r.key}`,onEv.checked])}>`:"";
   return`<tr class="gtbl-r lan-r ${r.nvr?"lan-r-nvr":""} ${lanChecked(r)?"ts-on":""}" data-lk="${escHtml(r.key)}" ${onEv("click",["pick",`${r.id}`])}>
     <td class="lan-chk">${chk}</td>
-    <td><span class="lan-name">${hlText(r.name,lan.q)}</span><span class="lan-sub">${escHtml(r.nvr?`${i18n("канал")} ${r.ch} · ${r.nvrName}`:[r.vendor,r.model].filter(Boolean).join(" · "))}</span></td>
+    ${lanIsPlace(n)?"":lanRecRowCells(n,r)}${lanIsPlace(n)?`<td><span class="lan-name">${hlText(r.name,lan.q)}</span><span class="lan-sub">${escHtml(r.nvr?`${i18n("канал")} ${r.ch} · ${r.nvrName}`:[r.vendor,r.model].filter(Boolean).join(" · "))}</span></td>
     <td>${r.nvr?`<span class="tag tag-ch" title="${i18n("Своего IP нет. Видео идёт через регистратор")} ${escHtml(r.ip)}">${i18n("кан.")} ${escHtml(r.ch)}</span> <span class="lan-ip-via">${i18n("через")} ${hlText(r.ip,lan.q)}</span>`:hlText(r.ip,lan.q)}</td><td>${hlText(r.mac,lan.q)}</td>
     <td>${hlText(r.vendor,lan.q)}</td><td>${hlText(r.model,lan.q)}</td>
-    <td>${lanIsPlace(n)?`<span class="lan-bind lan-bind-${r.bind}">${escHtml(r.bindText)}</span>`:lanRecCellHtml(n,r)}</td>
-    <td class="lan-act">${lanIsPlace(n)?btn:""}</td></tr>`;
+    <td><span class="lan-bind lan-bind-${r.bind}">${escHtml(r.bindText)}</span></td>`:""}
+    <td class="lan-act">${lanIsPlace(n)?btn:lanVar==="view"&&r.node&&handCam(r.node)?`<button type="button" class="lk lk-act" ${onEv("click",onEv.stop,["lanCamRecGo",`${r.id}`])}>${i18n("Изменить")}</button>`:""}</td></tr>`;
 }
 function lanNetRowHtml(n,r){
   const src=lanNetRow(r.key);if(!src)return"";
@@ -15820,7 +15927,7 @@ function lanNetRowHtml(n,r){
     :a.off
     ?`<button type="button" class="btn s" disabled title="${escHtml(a.off)}">${lanBulkLabel(n)}</button>`
     :`<button type="button" class="btn pri s" ${onEv("click",a.fn)}>${a.label}</button>`;
-  return`<tr class="lan-net" data-lk="${escHtml(r.key)}"><td colspan="8">
+  return`<tr class="lan-net" data-lk="${escHtml(r.key)}"><td colspan="${lanCols(n).length+2}">
     <div class="dev-result"><div class="dev-result-main">
       <input type="checkbox" class="ts-chk" ${lan.sel.has(r.key)?"checked":""} ${a.off?`disabled title="${escHtml(a.off)}"`:""} aria-label="${escHtml(i18n("Выбрать")+" "+r.ip)}" ${onEv("click",onEv.stop)} ${onEv("change",["lanPick",`${r.key}`,onEv.checked])}>
       <span class="dev-dot ${escHtml(src.status||"")}" title="${escHtml(i18n(DEVICE_STATUS_LABELS[src.status]||""))}"></span>
@@ -15861,15 +15968,16 @@ function lanCardBuild(n){
       <button type="button" class="sq-clear ${lan.q.trim()?"":"hide"}" title="${i18n("Очистить")}" ${onEv("click",["lanSetQ",""])}>${lu("x")}</button>
     </div>
     ${lanIsPlace(n)||lanIsArch(n)?"":lanTargetHtml(n,true)}
+    ${lanIsPlace(n)?"":lanVarHtml()}
     <button type="button" class="btn s" ${onEv("click",["lanRefresh"])}>${i18n("Обновить")}</button>
     ${lanIsPlace(n)?`<button type="button" class="btn pri s" ${onEv("click",["lanBulk"])} ${nBind?"":"disabled"}>${lanBulkLabel(n)} (${nBind})</button>
     ${lanHasUnbind(n)?`<button type="button" class="btn s" ${onEv("click",["lanUnbindChecked"])} ${nUnbind?"":"disabled"}>${i18n(lanIsFolder(n)?"Убрать":"Отвязать")} (${nUnbind})</button>`:""}`:""}
   </div>${lanIsPlace(n)?"":lanSelBarHtml(n,selRows,allCk.length)}`;
-  const th=LAN_COLS.map(([k,l])=>`<th class="lan-th lan-th-${k} ${lan.sort===k?"on":""}" ${onEv("click",["lanSort",`${k}`])}><span class="gtbl-th-txt">${i18n(k==="bind"&&!lanIsPlace(n)?"Запись":l)}${lan.sort===k?(lan.dir>0?lu("arrow-up",12):lu("arrow-down",12)):""}</span></th>`).join("");
+  const th=lanCols(n).map(([k,l])=>`<th class="lan-th lan-th-${k} ${lan.sort===k?"on":""}" ${LAN_STUB_COLS.has(k)?`title="${escHtml(i18n("Этого поля нет в API. Значения — заглушка прототипа."))}"`:""} ${onEv("click",["lanSort",`${k}`])}><span class="gtbl-th-txt">${i18n(k==="bind"&&!lanIsPlace(n)?"Запись":l)}${LAN_STUB_COLS.has(k)?"*":""}${lan.sort===k?(lan.dir>0?lu("arrow-up",12):lu("arrow-down",12)):""}</span></th>`).join("");
   const body=rows.length?rows.map((r,i)=>(r.nvr&&r.nvr!==rows[i-1]?.nvr?lanNvrHeadHtml(n,r.nvr,found):"")+(r.kind==="net"?lanNetRowHtml(n,r):lanSysRowHtml(n,r))).join("")
     // Пока опрос идёт, пустая таблица — это не ответ «ничего нет», а «ещё не
     // дошло»; говорить об этом надо разными словами.
-    :`<tr><td class="empty" colspan="8">${lan.chip==="here"&&!lan.q.trim()&&!lanIsPlace(n)
+    :`<tr><td class="empty" colspan="${lanCols(n).length+2}">${lan.chip==="here"&&!lan.q.trim()&&!lanIsPlace(n)
       ?`${i18n("Пока никто не записывает сюда видео.")} ${i18n("Привязать:")} <button type="button" class="lk" ${onEv("click",["lanSetChip","free"])}>${i18n("свободные")} (${counts.free})</button> · <button type="button" class="lk" ${onEv("click",["lanSetChip","other"])}>${i18n("пишущие в другое хранилище")} (${counts.other})</button>`
       :lan.state==="searching"
       ?`${i18n("Идёт поиск в сети")}… ${lan.progress}%`
@@ -15877,11 +15985,12 @@ function lanCardBuild(n){
   const pageOn=pageCk.length>0&&pagePicked===pageCk.length;
   // У хранилища и сервера «Отмечено N из M» стоит в полосе над таблицей (lanSelBarHtml): отдельная строка сдвигала бы список
   const banner=lanIsPlace(n)?tsBannerHtml(allPicked,pageCk.length,allCk.length,pageOn,"lanPickAllOwner(true)","lanPickAllOwner(false)"):"";
-  const table=`${banner}<div class="lan-wrap"><table class="gtbl-cams lan-tbl">
+  const table=`${banner}<div class="lan-wrap"><table class="gtbl-cams lan-tbl ${lanIsPlace(n)?"":`lan-tbl-rec lan-v-${lanVar}`}">
     <thead><tr class="gtbl-h"><th class="lan-chk"><input type="checkbox" class="ts-chk" ${pageOn?"checked":""} ${pagePicked&&!pageOn?'data-ind="1"':""} ${pageCk.length?"":"disabled"} title="${i18n("Все на странице")}" aria-label="${i18n("Отметить все на странице")}" ${onEv("change",["lanPickPage",onEv.checked])}></th>${th}<th></th></tr></thead>
     <tbody>${body}</tbody></table></div>
   <div class="tfoot">
     ${pagerHtml(key,found.length,"lan","устройство|устройства|устройств")}
+    ${lanIsPlace(n)?"":`<span class="sub lan-stub-note">* ${i18n("Прореживания и места камеры в хранилище нет в API. Значения — заглушка прототипа.")}</span>`}
     ${lan.state==="searching"?`<span class="sub">${i18n("идёт поиск в сети")} ${lan.progress}%</span>`:""}
     <button type="button" class="btn s" ${onEv("click",["lanSetQ",""],["lanSetChip","all"])} ${lan.q.trim()||lan.chip!=="all"?"":"disabled"}>${i18n("Сбросить фильтр")}</button>
   </div>`;
