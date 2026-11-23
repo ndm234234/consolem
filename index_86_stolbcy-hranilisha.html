@@ -1010,8 +1010,7 @@ table.lan-tbl-rec th.lan-th-pre{width:92px}
 table.lan-tbl-rec th.lan-th-ret{width:92px}
 table.lan-tbl-rec th.lan-th-dec{width:136px}
 table.lan-tbl-rec th.lan-th-used{width:88px}
-table.lan-tbl-rec.lan-v-view th:last-child{width:78px}
-table.lan-tbl-rec.lan-v-edit th:last-child{width:4px;padding:0}
+table.lan-tbl-rec th:last-child{width:4px;padding:0}
 .lan-wrap table.lan-tbl-rec th,.lan-wrap table.lan-tbl-rec td{padding-left:7px;padding-right:7px}
 /* Флажок: своя узкая ячейка без отступа справа и без обрезки — иначе рядом с ним видно многоточие */
 .lan-wrap table.lan-tbl-rec th.lan-chk,.lan-wrap table.lan-tbl-rec td.lan-chk{padding-right:0;overflow:visible;text-overflow:clip}
@@ -1031,10 +1030,6 @@ table.lan-tbl-rec .lan-sub2{display:block;font-size:11px;color:var(--mu);white-s
 table.lan-tbl-rec .lan-na{color:var(--mu)}
 table.lan-tbl-rec .lan-numc{white-space:nowrap}
 .lan-stub-note{font-size:11.5px}
-.lan-var{display:inline-flex;align-items:center;gap:0;border:1px dashed var(--one-selected-indicator);border-radius:6px;padding:2px;flex:none}
-.lan-var-l{font-size:11px;color:var(--mu);padding:0 6px}
-.lan-var button{border:0;background:transparent;color:var(--tx);font:inherit;font-size:12px;padding:3px 8px;border-radius:4px;cursor:pointer}
-.lan-var button.on{background:var(--one-selected-indicator);color:#fff}
 @container (max-width: 820px){
   .lan-wrap table.lan-tbl-rec th:nth-child(8),.lan-wrap table.lan-tbl-rec td:nth-child(8){display:none}
   .lan-wrap table.lan-tbl-rec th.lan-th-bind{width:180px}
@@ -15400,14 +15395,15 @@ function lanNvrHeadHtml(n,nvrId,found){
   const nvr=find(nvrId)?.n;if(!nvr)return"";
   const mates=found.filter(r=>r.nvr===nvrId),pk=mates.filter(r=>lanCheckable(n,r)),on=pk.length&&pk.every(lanChecked);
   const edge=edgeStorage(nvr);
+  const nvrCard=`<button type="button" class="lk lk-act" ${onEv("click",["pick",`${nvrId}`])}>${i18n("Карточка")}</button>`;
   // Те же колонки, что у строк: объединённая ячейка ломала сетку таблицы,
   // когда узкая ширина прячет колонки производителя и модели.
   return`<tr class="lan-grp" data-lk="g:${escHtml(nvrId)}"><td class="lan-chk"><input type="checkbox" ${on?"checked":""} ${pk.length?"":"disabled"} aria-label="${i18n("Отметить камеры регистратора")}" ${onEv("change",["lanPickNvr",`${nvrId}`,onEv.checked])}></td>
     <td><span class="lan-grp-h">${ic("ipsrv")}<b>${escHtml(locName(nvr))}</b></span><span class="lan-sub lan-grp-sub">${mates.length} ${i18n(plural(mates.length,"камера|камеры|камер"))} ${i18n("на одном IP")}</span></td>
     ${lanIsPlace(n)?`<td><span class="tag tag-ip" title="${i18n("Единственный IP. У камер регистратора нет своих адресов")}">${escHtml(nvr.ip||"—")}</span></td>
     <td>${escHtml(nvr.mac||"")}</td><td>${escHtml(nvr.vendor||"")}</td><td>${escHtml(nvr.model||"")}</td>`:""}
-    <td${lanIsPlace(n)?"":` colspan="${lanCols(n).length-1}"`}><span class="sub">${mates.length} ${i18n(plural(mates.length,"камера|камеры|камер"))}${edge?` · ${i18n("архив")} ${escHtml(edge.size||"")}`:""}</span></td>
-    <td class="lan-act"><button type="button" class="lk lk-act" ${onEv("click",["pick",`${nvrId}`])}>${i18n("Карточка")}</button></td></tr>`;
+    <td${lanIsPlace(n)?"":` colspan="${lanCols(n).length-1}"`}><span class="sub">${mates.length} ${i18n(plural(mates.length,"камера|камеры|камер"))}${edge?` · ${i18n("архив")} ${escHtml(edge.size||"")}`:""}</span>${lanIsPlace(n)?"":` · ${nvrCard}`}</td>
+    <td class="lan-act">${lanIsPlace(n)?nvrCard:""}</td></tr>`;
 }
 function lanPickNvr(nvrId,on){
   const n=find(lan.owner)?.n;if(!n)return;
@@ -15851,14 +15847,8 @@ function lanSelBarHtml(n,selRows,total){
 }
 // ── Прототип 86: параметры записи камеры в строке таблицы хранилища ──
 // Строка показывает запись пары «камера × хранилище строки» (lanRowArch): поток, предзапись, срок, прореживание, место.
-// Камера сюда не пишет — параметров нет, в ячейках прочерк. Вариант «edit» правит значения прямо в строке (черновик
-// хранилища, как режим записи), вариант «view» только показывает их, а «Изменить» открывает вкладку «Архив» камеры
-let lanVar=(()=>{try{return localStorage.getItem("p86.lanVar")||"edit"}catch(e){return"edit"}})();
-function lanVarSet(v){lanVar=v;try{localStorage.setItem("p86.lanVar",v)}catch(e){}gear()}
-function lanVarHtml(){
-  const b=(v,l)=>`<button type="button" class="${lanVar===v?"on":""}" aria-pressed="${lanVar===v}" ${onEv("click",["lanVarSet",v])}>${i18n(l)}</button>`;
-  return`<span class="lan-var" title="${escHtml(i18n("Переключатель прототипа: два варианта таблицы для сравнения"))}"><span class="lan-var-l">${i18n("Вариант")}</span>${b("edit","Правка в строке")}${b("view","Только показ")}</span>`;
-}
+// Камера сюда не пишет — параметров нет, в ячейках прочерк. Значения правят прямо в строке: черновик хранилища,
+// как режим записи. Строку хранилища, которую задаёт сервер (ro), строка только показывает
 const LAN_STUB_COLS=new Set(["dec","used"]);
 // Заглушка прототипа: прореживания и места камеры в хранилище нет в контракте. Значения — от id камеры, правка — только в памяти
 const lanStubDec=new Map();
@@ -15883,7 +15873,7 @@ function lanRecRowCells(n,r){
   const recTd=`<td>${lanRecCellHtml(n,r)}</td>`;
   const x=lanRowX(n,r),dash=`<span class="lan-na">—</span>`;
   if(!x)return nameTd+recTd+`<td>${dash}</td><td>${dash}</td><td>${dash}</td><td>${dash}</td><td>${dash}</td>`;
-  const c=r.node,a=archById(x.arch),ro=x.ro||lanRowRo(n,r),edit=lanVar==="edit"&&!ro,k=`${r.key}`;
+  const c=r.node,a=archById(x.arch),ro=x.ro||lanRowRo(n,r),edit=!ro,k=`${r.key}`;
   const stub=`<span class="tag lan-stub" title="${escHtml(i18n("Этого поля нет в API. Значения — заглушка прототипа."))}">${i18n("нет в API")}</span>`;
   const used=r.used?`<span class="lan-num">${r.used} ${i18n("ГБ")}</span><span class="lan-sub2">${r.usedDays} ${i18n("дн. записи")}</span>`:dash;
   const decName=i18n((LAN_DEC.find(d=>d[0]===r.dec)||LAN_DEC[0])[1]);
@@ -15917,7 +15907,6 @@ function lanParamSet(key,f,v){
     else row[f]=Math.max(0,Number(v)||0);
   });
 }
-function lanCamRecGo(id){hwJumpFlash=true;pick(id,{tab:"rec"});hwJumpFlash=false}
 function lanSysRowHtml(n,r){
   const a=lanAction(n,r);
   const btn=a.off
@@ -15931,7 +15920,7 @@ function lanSysRowHtml(n,r){
     <td>${r.nvr?`<span class="tag tag-ch" title="${i18n("Своего IP нет. Видео идёт через регистратор")} ${escHtml(r.ip)}">${i18n("кан.")} ${escHtml(r.ch)}</span> <span class="lan-ip-via">${i18n("через")} ${hlText(r.ip,lan.q)}</span>`:hlText(r.ip,lan.q)}</td><td>${hlText(r.mac,lan.q)}</td>
     <td>${hlText(r.vendor,lan.q)}</td><td>${hlText(r.model,lan.q)}</td>
     <td><span class="lan-bind lan-bind-${r.bind}">${escHtml(r.bindText)}</span></td>`:""}
-    <td class="lan-act">${lanIsPlace(n)?btn:lanVar==="view"&&r.node&&handCam(r.node)?`<button type="button" class="lk lk-act" ${onEv("click",onEv.stop,["lanCamRecGo",`${r.id}`])}>${i18n("Изменить")}</button>`:""}</td></tr>`;
+    <td class="lan-act">${lanIsPlace(n)?btn:""}</td></tr>`;
 }
 function lanNetRowHtml(n,r){
   const src=lanNetRow(r.key);if(!src)return"";
@@ -15982,7 +15971,6 @@ function lanCardBuild(n){
       <button type="button" class="sq-clear ${lan.q.trim()?"":"hide"}" title="${i18n("Очистить")}" ${onEv("click",["lanSetQ",""])}>${lu("x")}</button>
     </div>
     ${lanIsPlace(n)||lanIsArch(n)?"":lanTargetHtml(n,true)}
-    ${lanIsPlace(n)?"":lanVarHtml()}
     <button type="button" class="btn s" ${onEv("click",["lanRefresh"])}>${i18n("Обновить")}</button>
     ${lanIsPlace(n)?`<button type="button" class="btn pri s" ${onEv("click",["lanBulk"])} ${nBind?"":"disabled"}>${lanBulkLabel(n)} (${nBind})</button>
     ${lanHasUnbind(n)?`<button type="button" class="btn s" ${onEv("click",["lanUnbindChecked"])} ${nUnbind?"":"disabled"}>${i18n(lanIsFolder(n)?"Убрать":"Отвязать")} (${nUnbind})</button>`:""}`:""}
@@ -15999,7 +15987,7 @@ function lanCardBuild(n){
   const pageOn=pageCk.length>0&&pagePicked===pageCk.length;
   // У хранилища и сервера «Отмечено N из M» стоит в полосе над таблицей (lanSelBarHtml): отдельная строка сдвигала бы список
   const banner=lanIsPlace(n)?tsBannerHtml(allPicked,pageCk.length,allCk.length,pageOn,"lanPickAllOwner(true)","lanPickAllOwner(false)"):"";
-  const table=`${banner}<div class="lan-wrap"><table class="gtbl-cams lan-tbl ${lanIsPlace(n)?"":`lan-tbl-rec lan-v-${lanVar}`}">
+  const table=`${banner}<div class="lan-wrap"><table class="gtbl-cams lan-tbl ${lanIsPlace(n)?"":"lan-tbl-rec"}">
     <thead><tr class="gtbl-h"><th class="lan-chk"><input type="checkbox" class="ts-chk" ${pageOn?"checked":""} ${pagePicked&&!pageOn?'data-ind="1"':""} ${pageCk.length?"":"disabled"} title="${i18n("Все на странице")}" aria-label="${i18n("Отметить все на странице")}" ${onEv("change",["lanPickPage",onEv.checked])}></th>${th}<th></th></tr></thead>
     <tbody>${body}</tbody></table></div>
   <div class="tfoot">
