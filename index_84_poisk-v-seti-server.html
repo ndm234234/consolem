@@ -1481,13 +1481,13 @@ select:not([multiple]){white-space:nowrap;overflow:hidden}:root select:not([mult
 .dev-search-progress{display:flex;flex-direction:column;justify-content:center;gap:2px;min-width:120px}
 /* Прототип 84: где искать (сервер, категория), итог поиска, ссылка на сервере без камер */
 .dev-where{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;margin:0 0 8px}
-.dev-where-f{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--mut,#6b7280);white-space:nowrap}
+.dev-where-f{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--mu);white-space:nowrap}
 .dev-where-f select{field-sizing:content;min-width:120px;max-width:100%}
-.dev-search-end{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:8px;padding:6px 10px;border-radius:6px;font-size:13px;background:var(--bg2,#f3f4f6)}
-.dev-search-end.done{background:var(--ok-bg,#ecfdf5);color:var(--ok-fg,#065f46)}
-.dev-search-end.err{background:var(--err-bg,#fef2f2);color:var(--err-fg,#991b1b)}
+.dev-search-end{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:8px;padding:6px 10px;border-radius:6px;font-size:13px;background:var(--one-surface-muted);color:var(--tx)}
+.dev-search-end.done{background:var(--one-success-bg);color:var(--one-success-text)}
+.dev-search-end.err{background:var(--one-danger-bg);color:var(--one-danger-text)}
 .dev-search-end svg{flex:none}
-.lan-nocam{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:0 0 10px;padding:8px 10px;border-radius:6px;background:var(--bg2,#f3f4f6);font-size:13px}
+.lan-nocam{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:0 0 10px;padding:8px 10px;border-radius:6px;background:var(--one-surface-muted);color:var(--tx);font-size:13px}
 .dev-search-progress-meta{font-size:11px;color:var(--mu);font-weight:600;white-space:nowrap;line-height:14px}
 .dev-search-bar{height:3px;background:var(--one-control-bg);border-radius:3px;overflow:hidden;width:100%;min-width:100px;flex-shrink:0}
 .dev-search-bar-fill{height:100%;background:var(--bl);border-radius:4px;transition:width .15s ease}
@@ -13753,10 +13753,13 @@ function discStart(did,where){
 }
 function discOnEvent(m){
   const did=m.entityId,c=m.payload.candidate,fin=m.type==="discovery.finished";
-  if(wizd&&wizd.devState==="searching"&&wizd.searchDomain===did){
+  // Прототип 84: события остановленного поиска (сервер или категория изменились) в новый список не попадают
+  if(wizd&&wizd.devStopping&&wizd.devStopping.did===did){if(fin)wizd.devStopping.done();return}
+  if(wizd&&wizd.devState==="searching"&&wizd.searchDomain===did&&devEventMine(m)){
     if(c&&!wizd.devResults.some(r=>r.id===c.id))wizd.devResults.push(wizFoundRow(c));
     wizd.devSearchProgress=m.payload.progress;
-    if(fin){wizd.devState="done";wizd.devEndState=m.payload.state||"done";devSearchReadEnd(did)}
+    // Конец — по ответу сервера: событие конца могло прийти от прежнего или чужого поиска
+    if(fin)devSearchCheckEnd(did);
     renderDeviceWizard();
   }
   const owner=lan.owner?find(lan.owner)?.n:null;
@@ -34856,7 +34859,7 @@ function abortDeviceSearch(){
   if(wizd.devState!=="searching")return;
   stopDeviceSearch();
   wizd.devState="done";wizd.devEndState="stopped";wizd.devFinishedAt=new Date().toISOString();
-  if(wizd.searchDomain){const did=wizd.searchDomain;API.del(`/units/${did}/discovery`).then(()=>devSearchReadEnd(did)).catch(()=>{})}
+  if(wizd.searchDomain){const did=wizd.searchDomain;devStopOnServer(wizd,did,()=>devSearchReadEnd(did))}
   renderDeviceWizard();
 }
 function deviceArchiveWarning(){
@@ -35082,12 +35085,14 @@ function deviceAddParamsHtml(){
 function updateBulkAuth(key,value){wizd[key]=value}
 function refreshDeviceSearch(){
   if(wizd.devState==="searching")return;
+  // Прототип 84: прежний поиск ещё останавливается — новый начнётся после события его конца
+  if(wizd.devStopping){wizd.devRestart=true;return}
   stopDeviceSearch();
   // Ищем в сети ТОГО домена, чей это список: иначе обновление в одном домене
   // приносило бы устройства, увиденные в другом.
   const did=wizd.foundDomain||wizd.domain||folderDomain(wizd.folder)||domains[0]?.id;
   wizd.devState="searching";wizd.devSearchProgress=0;wizd.devResults=[];wizd.devSelected.clear();wizd.devSelectedOnly=false;wizd.bulkEditOpen=false;
-  wizd.searchDomain=did;wizd.devStartedAt=null;wizd.devFinishedAt=null;wizd.devEndState="";wizd.devErr="";
+  wizd.searchDomain=did;wizd.devStartedAt=null;wizd.devFinishedAt=null;wizd.devEndState="";wizd.devErr="";wizd.devBuf=[];
   // Сервер поиска — только сервер этого домена: окно открыли с другого места — ищем на всех серверах
   if(wizd.searchServer&&!devSearchServers(did).some(x=>x.id===wizd.searchServer))wizd.searchServer="";
   if(wizd.foundDomain)found[wizd.foundDomain]=wizd.devResults; // список домена и есть результат поиска
@@ -35096,11 +35101,42 @@ function refreshDeviceSearch(){
   discStart(did,{serverId:wizd.searchServer,category:wizd.searchCat}).then(d=>{
     if(wizd!==owner)return;
     owner.devStartedAt=d.startedAt||new Date().toISOString();
+    // Идёт чужой поиск (409 BUSY, другой администратор или вкладка): окно показывает его сервер и категорию, а не выбранные
+    const dSrv=d.serverId||"",dCat=d.category||"ip";
+    if(dSrv!==(owner.searchServer||"")||dCat!==owner.searchCat){
+      owner.searchServer=devSearchServers(did).some(x=>x.id===dSrv)?dSrv:"";owner.searchCat=dCat;
+      toast(i18n("Другой поиск в сети домена уже идёт. Окно показывает его сервер и категорию."));
+    }
     d.candidates.forEach(c=>{if(!owner.devResults.some(r=>r.id===c.id))owner.devResults.push(wizFoundRow(c))});
     owner.devSearchProgress=Math.max(owner.devSearchProgress,d.progress);
     if(d.state!=="searching"){owner.devState="done";owner.devSearchProgress=100;owner.devEndState=d.state;owner.devFinishedAt=d.finishedAt||null}
+    // События, которые пришли до ответа, — теперь, с проверкой «наше ли»
+    const buf=owner.devBuf||[];owner.devBuf=null;
+    if(owner.devState==="searching")buf.forEach(discOnEvent);
     renderDeviceWizard();
   }).catch(e=>{if(wizd!==owner)return;owner.devState="error";owner.devErr=problemText(e);renderDeviceWizard()});
+}
+// Событие этого поиска, а не прежнего или чужого: до ответа на POST событие ждёт в очереди (devBuf);
+// событие раньше начала поиска и находка другой категории или другого сервера — не наши
+function devEventMine(m){
+  if(!wizd.devStartedAt){(wizd.devBuf||(wizd.devBuf=[])).push(m);return false}
+  if(m.at&&m.at<wizd.devStartedAt)return false;
+  const c=m.payload&&m.payload.candidate;
+  if(c&&(c.category||"ip")!==wizd.searchCat)return false;
+  if(c&&wizd.searchServer&&c.serverId&&c.serverId!==wizd.searchServer)return false;
+  return true;
+}
+// Поиск закончился, только если сервер так говорит, и это наш поиск (тот же сервер и категория)
+function devSearchCheckEnd(did){
+  const owner=wizd;
+  API.get(`/units/${did}/discovery?limit=1000`).then(d=>{
+    if(wizd!==owner||owner.searchDomain!==did||owner.devState!=="searching"||d.state==="searching")return;
+    // Сервер уже держит итог другого поиска: наш кто-то заменил — для окна он остановлен
+    if((d.serverId||"")!==(owner.searchServer||"")||(d.category||"ip")!==owner.searchCat){owner.devState="done";owner.devEndState="stopped";owner.devFinishedAt=d.startedAt||null;renderDeviceWizard();return}
+    d.candidates.forEach(c=>{if(!owner.devResults.some(r=>r.id===c.id))owner.devResults.push(wizFoundRow(c))});
+    owner.devState="done";owner.devSearchProgress=100;owner.devEndState=d.state;owner.devFinishedAt=d.finishedAt||null;
+    renderDeviceWizard();
+  }).catch(()=>{});
 }
 // Конец поиска: время окончания — из ответа сервера (Discovery.finishedAt)
 function devSearchReadEnd(did){
@@ -35120,10 +35156,20 @@ function setDeviceSearchWhere(key,value){
   if(wizd[key]===value)return;
   wizd[key]=value;
   if(wizd.devState!=="searching"){refreshDeviceSearch();return}
-  const did=wizd.searchDomain,owner=wizd;
-  stopDeviceSearch();wizd.devState="done";
+  stopDeviceSearch();wizd.devState="done";wizd.devEndState="";wizd.devRestart=true;
+  devStopOnServer(wizd,wizd.searchDomain);
   renderDeviceWizard();
-  API.del(`/units/${did}/discovery`).catch(()=>{}).then(()=>{if(wizd===owner)refreshDeviceSearch()});
+}
+// Остановить поиск на сервере. Новый поиск — только после события конца прежнего: иначе его находки
+// и «остановлен» попали бы в новый список. Пока остановка идёт, «Обновить» ждёт её (devRestart)
+function devStopOnServer(owner,did,after){
+  let timer=null;
+  const ended=new Promise(res=>{owner.devStopping={did,done:res};timer=setTimeout(res,2000)});
+  const finish=()=>{clearTimeout(timer);owner.devStopping=null};
+  API.del(`/units/${did}/discovery`)
+    .then(()=>ended)
+    .then(()=>{finish();if(after)after();if(wizd===owner&&owner.devRestart){owner.devRestart=false;refreshDeviceSearch()}})
+    .catch(e=>{finish();owner.devRestart=false;if(wizd!==owner)return;owner.devState="error";owner.devErr=problemText(e);renderDeviceWizard()});
 }
 // Строка «Где искать»: сервер домена и категория оборудования
 function deviceSearchWhereHtml(){
@@ -37260,10 +37306,11 @@ function deviceListStatusHtml(searching){
   if(!searching){
     if(wizd.devEndState!=="done"&&wizd.devEndState!=="stopped")return "";
     const at=devClock(wizd.devFinishedAt);
-    return `<div class="dev-search-end ${wizd.devEndState}" aria-live="polite">${lu(wizd.devEndState==="done"?"circle-check":"square")}<span>${i18n(wizd.devEndState==="done"?(at?"Поиск завершён в":"Поиск завершён"):(at?"Поиск остановлен в":"Поиск остановлен"))}${at?` ${at}`:""}. ${i18n("Найдено устройств:")} ${n}.</span></div>`;
+    const what=wizd.devEndState==="done"?(at?"Консоль закончила поиск в":"Консоль закончила поиск"):(at?"Консоль остановила поиск в":"Консоль остановила поиск");
+    return `<div class="dev-search-end ${wizd.devEndState}" aria-live="polite">${lu(wizd.devEndState==="done"?"circle-check":"square")}<span>${i18n(what)}${at?` ${at}`:""}. ${i18n("Устройств в списке:")} ${n}.</span></div>`;
   }
   const eta=devSearchEta();
-  return `<div class="dev-search-progress" aria-live="polite"><div class="dev-search-progress-meta">${i18n("Поиск…")} ${progress}% · ${i18n("Найдено:")} ${n}${eta?` · ${i18n("Окончание около")} ${eta}`:""}</div><div class="dev-search-bar" role="progressbar" aria-valuenow="${progress}" aria-valuemin="0" aria-valuemax="100"><div class="dev-search-bar-fill" style="width:${progress}%"></div></div></div>`;
+  return `<div class="dev-search-progress" aria-live="polite"><div class="dev-search-progress-meta">${i18n("Поиск…")} ${progress}% · ${i18n("Найдено:")} ${n}${eta?` · ${i18n("Консоль закончит поиск около")} ${eta}`:""}</div><div class="dev-search-bar" role="progressbar" aria-valuenow="${progress}" aria-valuemin="0" aria-valuemax="100"><div class="dev-search-bar-fill" style="width:${progress}%"></div></div></div>`;
 }
 function discoveredDeviceCount(){
   return (wizd.devResults||[]).length;
