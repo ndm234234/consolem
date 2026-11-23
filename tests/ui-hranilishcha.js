@@ -44,14 +44,14 @@ UiCheck(async ({ ok, until, confirmWith }) => {
 
   // Значки: сетевое и на диске различаются в дереве и в таблице
   const iconOf = (a) => (archAddr(a) === "disk" ? ".ici-asdisk" : ".ici-asnet");
-  const local = serverArchives(owner.id).find((a) => archAddr(a) === "disk");
+  const local = serverArchives(owner.id).find((a) => archAddr(a) === "disk" && !(typeof archNoCams === "function" && archNoCams(a)));
   ok(!!rowOf(local.id)?.querySelector(".ici-asdisk"), "дерево: хранилище на диске");
   open.add("as:net:" + dom.id);
   renderTree();
-  const shared = domainArchives(dom.id)[0];
+  const shared = domainArchives(dom.id).find((a) => !(typeof archNoCams === "function" && archNoCams(a)));
   ok(!!rowOf(shared.id)?.querySelector(".ici-asnet"), "дерево: сетевое хранилище");
   pick(dom.id, { force: true });
-  [...document.querySelectorAll(".as-tbl tbody tr")].slice(0, 3).forEach((tr, i) => ok(!!tr.querySelector(".ici-asdisk,.ici-asnet"), "таблица: значок вида, строка " + i));
+  [...document.querySelectorAll(".as-tbl tbody tr")].slice(0, 3).forEach((tr, i) => ok(!!tr.querySelector(".ici-asdisk,.ici-asnet,.ici-asinc"), "таблица: значок вида, строка " + i));
   ok(iconOf(local) !== iconOf(shared) && getComputedStyle(rowOf(local.id).querySelector(".ici")).color !== getComputedStyle(rowOf(shared.id).querySelector(".ici")).color, "цвета значков различаются");
 
   // «Камеры без архива»: внизу дерева, свёрнут, список от сервера
