@@ -865,7 +865,7 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   s3Key(s3Fg, "Enter");
   await until(() => !combo);
   ok(s3R.group === s3Other.id || !!folderById(s3R.group), "найденное: папка выбрана");
-  // Массовая правка найденных — только на страницах, где она осталась (в прототипе 87 её заменили групповые настройки плана)
+  // Массовая правка найденных — только на страницах, где она осталась (в index.html её заменили групповые настройки плана, из прототипа 87)
   if (typeof toggleBulkEdit === "function") {
     wizd.devSelected.add(s3R.id);
     toggleBulkEdit(true);
@@ -916,7 +916,7 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   const s3Got = addPlan.added.find((x) => x.ip === "10.8.1.2"), s3Made = s3Got && (await uiRec(s3Got.id));
   ok(s3Made && s3Made.vendor === "Bosch", "на сервере производитель из файла, регистр поправлен — " + (s3Made && s3Made.vendor));
 
-  // Групповые настройки строк плана (прототип 87): строки из файла, по адресу и из сети правятся одной панелью
+  // Групповые настройки строк плана (из прототипа 87): строки из файла, по адресу и из сети правятся одной панелью
   if (typeof planBulkApply === "function") {
     planClear();
     setDeviceTab("csv");
