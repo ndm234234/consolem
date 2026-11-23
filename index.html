@@ -14193,9 +14193,11 @@ function archSliceOpen(n){
 // ── Срез «Хранилища»: таблица хранилищ места, выбранного в дереве ─────────
 let archTbl={kind:"all",sort:"owner",desc:false};
 function archScope(n){return slice==="arch"&&!!n&&(handOf(n,"domain")||(handOf(n,"server")&&!isUnallocated(n.id)))}
-// Вкладка, которую пользователь выбрал у хранилища в срезе: переход к другому хранилищу её сохраняет
-let archSliceArchTab=null;
-function archSliceTab(n){return!n||slice!=="arch"?null:archScope(n)?"stor":n.type==="archive"?(tabMemPick(n,archSliceArchTab&&{id:archSliceArchTab})||"arch"):archNoLink(n)?"rec":null}
+// Вкладка, которую пользователь выбрал в срезе у хранилища или у камеры без привязки:
+// переход к другому объекту той же группы её сохраняет
+const archSliceMem={};
+function archSliceGroup(n){return!n||slice!=="arch"||archScope(n)?null:n.type==="archive"?"arch":archNoLink(n)?"rec":null}
+function archSliceTab(n){if(!n||slice!=="arch")return null;if(archScope(n))return"stor";const g=archSliceGroup(n);return g?(tabMemPick(n,archSliceMem[g]&&{id:archSliceMem[g]})||g):null}
 // Эти объекты остаются в срезе, даже когда их строки сейчас нет в дереве
 function archStaysInSlice(n){return!!n&&(typeIn(n,["domain","archive","vol"])||(handOf(n,"server")&&!isUnallocated(n.id))||archNoLink(n))}
 // Вошли с камеры или папки: показываем сервер этого объекта, иначе домен.
@@ -14544,7 +14546,7 @@ function tabGo(id){
   const m={id,label:t?t[1]:null};
   tabMemLast=m;
   if(n&&t)tabMemByType.set(tabMemKeyF(n),m);
-  if(n&&t&&slice==="arch"&&n.type==="archive")archSliceArchTab=id;
+  {const g=t&&archSliceGroup(n);if(g)archSliceMem[g]=id}
   gear();
 }
 // Первая вкладка без смены запомненной (пункт «Изменить выбранные» в меню дерева)
