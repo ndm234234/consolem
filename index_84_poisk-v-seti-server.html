@@ -13736,7 +13736,7 @@ function seedFound(disc){
   foundSeeded=true;
 }
 // Кандидат поиска (API) → строка, как её показывают мастер и вкладка «Сеть»
-function candRow(c){return{id:c.id,name:c.name,ip:c.ip,port:c.port,mac:c.mac,vendor:c.vendor,model:c.model,status:c.support,user:c.login||"",pass:c.password||"",type:c.type}}
+function candRow(c){return{id:c.id,name:c.name,ip:c.ip,port:c.port,mac:c.mac,vendor:c.vendor,model:c.model,status:c.support,user:c.login||"",pass:c.password||"",type:c.type,seenBy:c.serverId||null}}
 // Поиск в сети домена идёт на сервере (POST /units/{uid}/discovery), находки
 // приходят событиями: их слушают мастер и вкладка «Сеть» своего домена
 // Прототип 84: где и что искать — тело DiscoveryStart (контракт 0.36.0): serverId — сервер области, category — ip, acfa, textEvent.
@@ -35155,6 +35155,8 @@ const DEV_SEARCH_CATS=[["ip","IP-устройства"],["acfa","Устройс�
 function setDeviceSearchWhere(key,value){
   if(wizd[key]===value)return;
   wizd[key]=value;
+  // Сервер поиска — и сервер новых устройств: хранилища в строках находок сужаются до него
+  if(key==="searchServer"&&value&&planServerList().some(x=>x.id===value)){wizd.planServer=value;planSyncServer()}
   if(wizd.devState!=="searching"){refreshDeviceSearch();return}
   stopDeviceSearch();wizd.devState="done";wizd.devEndState="";wizd.devRestart=true;
   devStopOnServer(wizd,wizd.searchDomain);
@@ -35178,8 +35180,9 @@ function deviceSearchWhereHtml(){
   const srv=`<option value="" ${wizd.searchServer?"":"selected"}>${i18n("Все серверы домена")}</option>`+list.map(x=>`<option value="${escHtml(x.id)}" ${wizd.searchServer===x.id?"selected":""}>${escHtml(locName(x))}</option>`).join("");
   const cat=DEV_SEARCH_CATS.map(([k,l])=>`<option value="${k}" ${wizd.searchCat===k?"selected":""}>${i18n(l)}</option>`).join("");
   return `<div class="dev-where">
-    <label class="dev-where-f"><span>${i18n("Сервер поиска")}</span><select id="devWhereSrv" ${onEv("change",["setDeviceSearchWhere","searchServer",onEv.value])}>${srv}</select></label>
+    <label class="dev-where-f"><span>${i18n("Сервер")}</span><select id="devWhereSrv" ${onEv("change",["setDeviceSearchWhere","searchServer",onEv.value])}>${srv}</select></label>
     <label class="dev-where-f"><span>${i18n("Категория")}</span><select id="devWhereCat" ${onEv("change",["setDeviceSearchWhere","searchCat",onEv.value])}>${cat}</select></label>
+    <span class="sub dev-where-hint">${i18n(wizd.searchServer?"Консоль ищет в сети этого сервера и добавляет найденное на него.":"Консоль ищет в сети всех серверов. Каждое устройство встанет на сервер, который его нашёл.")}</span>
   </div>`;
 }
 // Текст отказа — отдельное предложение: с большой буквы и с точкой
@@ -38236,6 +38239,12 @@ function planFixArch(row){
 }
 // Адрес правят только в строках, набранных руками или из файла: найденное в сети отвечает по своему адресу
 function planShowsAddr(source){return source==="manual"||source==="csv"}
+// Прототип 84: находка вкладки «В сети» встаёт на сервер поиска; поиск на всех серверах — на сервер, который её видит
+function devFoundServer(r){
+  if(!wizd||wizd.deviceTab!=="search"||wizd.lanOwner)return undefined;
+  const list=planServerList(),sid=wizd.searchServer||r.seenBy;
+  return sid&&list.some(x=>x.id===sid)?sid:undefined;
+}
 function planPush(source,r0,x={}){
   if(addPlan.applying){toast(i18n("Идёт применение плана"));return null}
   const did0=x.domainId||wizd.foundDomain||wizd.domain;
@@ -38289,7 +38298,7 @@ function planAddFound(list,source="found"){
     if(r.planned||r.added)return;
     applyFoundAuth(r);
     if(addPlan.rows.some(x=>x.candidateId===r.id)){dup++;return}
-    if(planPush(source,r,{src:r,candidateId:r.id}))n++;
+    if(planPush(source,r,{src:r,candidateId:r.id,serverId:devFoundServer(r)}))n++;
     wizd.devSelected.delete(r.id);
   });
   planDone(n,dup);
@@ -38892,7 +38901,7 @@ function renderDeviceWizard(){
   document.getElementById("wizDr").classList.remove("server-add");
   const body=wizd.deviceTab==="manual"?deviceManualHtml():wizd.deviceTab==="csv"?deviceCsvHtml():wizd.deviceTab==="sys"?deviceSysHtml():deviceSearchHtml();
   // Слева — откуда берём (вкладки), справа — один план на все источники
-  wbd.innerHTML=step?`<aside class="plan-right wz-plan" id="planPanel" aria-label="План добавления">${planPanelHtml()}</aside>`:`${planFolderBarHtml()}${planServerBarHtml()}<div class="plan-split"><div class="plan-left">${planTabsHtml()}<div class="plan-left-body"><div class="dev-wrap${devWrapCls()}">${!target?`<div class="csv-error">Нет папок для размещения устройств</div>`:""}${body}</div></div>${wizd.deviceTab==="manual"?planManualFootHtml():""}</div></div>`;
+  wbd.innerHTML=step?`<aside class="plan-right wz-plan" id="planPanel" aria-label="План добавления">${planPanelHtml()}</aside>`:`${planFolderBarHtml()}${wizd.deviceTab==="search"?"":planServerBarHtml()}<div class="plan-split"><div class="plan-left">${planTabsHtml()}<div class="plan-left-body"><div class="dev-wrap${devWrapCls()}">${!target?`<div class="csv-error">Нет папок для размещения устройств</div>`:""}${body}</div></div>${wizd.deviceTab==="manual"?planManualFootHtml():""}</div></div>`;
   restoreView(wbd,wst);
   csvSyncAll();
   const allCb=document.getElementById("devSelectAll");

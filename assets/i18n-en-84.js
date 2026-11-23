@@ -1,7 +1,8 @@
 // Английский прототипа 84 (docs/TEXTS.md, «Как менять текст безопасно»): подключён после assets/i18n-en.js
 Object.assign(window.I18N_EN,{
 "Все серверы домена":"All servers of the domain",
-"Сервер поиска":"Search server",
+"Консоль ищет в сети этого сервера и добавляет найденное на него.":"The console searches the network of this server and adds the found devices to it.",
+"Консоль ищет в сети всех серверов. Каждое устройство встанет на сервер, который его нашёл.":"The console searches the networks of all servers. Each device goes to the server that found it.",
 "Категория":"Category",
 "IP-устройства":"IP devices",
 "Устройства СКУД":"Access control devices",
