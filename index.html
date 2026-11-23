@@ -4933,7 +4933,7 @@ function volNode(r){
 // id ↔ uid, type ↔ вид (экран), online ↔ status.link, status.observed — рядом со свойствами, secrets → hasPassword/
 // hasSecret, папки → folderIds; у хранилища serverId ↔ parentId, у тома archiveId ↔ parentId. Версия — в hwVer.
 function unitRec(u){
-  if(!u._brief&&u.properties)unitProps.set(u.uid,u.properties);
+  if(!u._brief&&u.properties){unitProps.set(u.uid,u.properties);unitAbsentMeta.set(u.uid,{obs:u.status?.observed||{},writable:Array.isArray(u.writable)?u.writable:null})}
   // Форма записи — по ручному экрану (handScreen), а не по коду: сервер или папка без своего профиля — запись формы по схеме
   const h=handScreen(u.kind),t=h||u.kind,p=u.properties||{},obs=u.status?.observed||{},sec=u.secrets||{};
   const link=u.status&&"link" in u.status?{online:u.status.link==="online"}:{};
@@ -5724,13 +5724,45 @@ function profHideCompute(){
   return out;
 }
 function kindFieldOff(kind,f){return profHideSet.size>0&&profHideSet.has(kind+" "+f)}
-function nodeFieldOff(n,f){return!!n&&profHideSet.size>0&&!isSchemaNode(n)&&kindFieldOff(nodeKind(n),f)}
+function nodeFieldOff(n,f){return!!n&&!isSchemaNode(n)&&(profHideSet.size>0&&kindFieldOff(nodeKind(n),f)||unitFieldAbsentOff(nodeKind(n),n.id,f))}
+// ── Поле без значения: у сервера нет такой возможности (ответ w2c на запрос 154325Z, п. 3.1) ──
+// Файл профиля помечает поле ключом absent: "unsupported" — «нет значения — у сервера нет такой возможности».
+// tools/build_api.py кладёт метки профилей в window.CONSOLEM_PROFILE_ABSENT ({профиль: [поля]}). Ручной экран прячет
+// такое поле у объекта, если сервер отдал объект целиком, поля нет ни в properties, ни в status.observed и править его
+// сейчас нельзя (Unit.writable; без него — схема вида без readOnly и x-immutable). Пустое поле, которое можно править
+// (маска приватности, которой ещё нет), экран показывает, как раньше. Метка pfa(n, поле) с узлом несёт uid объекта
+// (data-prof-node): общий проход profHidePass проверяет его тем же правилом
+const PROFILE_ABSENT=window.CONSOLEM_PROFILE_ABSENT||{};
+const PROFILE_ABSENT_ANY=Object.keys(PROFILE_ABSENT).length>0;
+// Полный объект: состояние и что правится — для правила выше (заполняет unitRec)
+const unitAbsentMeta=new Map();
+// Поле вида помечено absent: его помечают все профили вида, где оно есть (сервер объявил профиль в GET /kinds)
+function kindFieldAbsent(kind,f){
+  let any=false;
+  for(const id of KINDS.get(kind)?.implements||[]){
+    const srv=KIND_PROFILES.get(id);if(!srv)continue;
+    if(![...profileProps(srv),...profileStatusProps(srv)].includes(f))continue;
+    // Сервер старше консоли метку не обещал (у vms.edge/1 1.1 нет значения mediaOk — ещё true): поле не прячем
+    if(!(PROFILE_ABSENT[id]||[]).includes(f)||profileServerOlder(id))return false;
+    any=true;
+  }
+  return any;
+}
+function unitFieldAbsentOff(kind,id,f){
+  if(!PROFILE_ABSENT_ANY||!id||!kind)return false;
+  const p=unitProps.get(id),m=unitAbsentMeta.get(id);
+  if(!p||!m||f in p||f in m.obs||!kindFieldAbsent(kind,f))return false;
+  if(m.writable)return!m.writable.includes(f);
+  const sc=KINDS.get(kind)?.schema?.properties?.[f];
+  return!sc||!!sc.readOnly||!!sc["x-immutable"];
+}
 // Метка места поля: вид — по узлу (у вида плагина с ручным экраном — его вид, nodeKind) или строка вида
-function pfa(n,field){const k=typeof n==="string"?n:n?nodeKind(n):"";return k?` data-prof-field="${escHtml(k)} ${escHtml(field)}"`:""}
+function pfa(n,field){const k=typeof n==="string"?n:n?nodeKind(n):"";return k?` data-prof-field="${escHtml(k)} ${escHtml(field)}"${n&&typeof n==="object"&&n.id&&PROFILE_ABSENT_ANY?` data-prof-node="${escHtml(n.id)}"`:""}`:""}
 // Метка на первом теге готовой разметки: pfw(n,"short",fldRo("Короткое имя",n.short))
 function pfw(n,field,html){return String(html||"").replace(/^(\s*<[A-Za-z][\w-]*)/,"$1"+pfa(n,field))}
 function profHideApply(el){
-  const on=profHideSet.has(el.getAttribute("data-prof-field"));
+  const a=el.getAttribute("data-prof-field"),nd=el.getAttribute("data-prof-node"),sp=a?a.indexOf(" "):-1;
+  const on=profHideSet.has(a)||!!nd&&sp>0&&unitFieldAbsentOff(a.slice(0,sp),nd,a.slice(sp+1));
   if(on!==el.hasAttribute("hidden"))el.toggleAttribute("hidden",on);
 }
 function profHidePass(root){
@@ -5744,7 +5776,7 @@ function profHideRefresh(){
   if(was!==profHideKey&&document.body)profHidePass(document.body);
 }
 if(window.MutationObserver)new MutationObserver(ms=>{
-  if(!profHideSet.size)return;
+  if(!profHideSet.size&&!PROFILE_ABSENT_ANY)return;
   for(const m of ms)for(const n of m.addedNodes)if(n.nodeType===1)profHidePass(n);
 }).observe(document.documentElement,{childList:true,subtree:true});
 // Поля версии сервера, которых консоль не знает, когда сервер новее: {поле: версия сервера}. Сервер той же или старшей
@@ -7863,7 +7895,7 @@ function volDesc(v){
 function volStateText(v){
   // Правило 2 версии профиля: без поля state — нет и состояния, без usedPercent — состояние без доли
   if(kindFieldOff("volume","state"))return"";
-  if(kindFieldOff("volume","usedPercent"))return v.state&&v.state!=="ready"?i18n(VOL_STATES[v.state]||v.state):i18n("Готов");
+  if(kindFieldOff("volume","usedPercent")||unitFieldAbsentOff("volume",v.id,"usedPercent"))return v.state&&v.state!=="ready"?i18n(VOL_STATES[v.state]||v.state):i18n("Готов");
   const r=PROTO_REC.get(v.id);if(r&&(!v.state||v.state==="ready"||v.state==="unfmt"))return`${i18n("Готов")} (${v.used||"64%"}) · ${protoRecText(r)}`;return v.state&&v.state!=="ready"?i18n(VOL_STATES[v.state]||v.state):`${i18n("Готов")} (${v.used})`}
 function archVols(a){return a?.vols||[]}
 function volById(id){
@@ -10721,7 +10753,7 @@ function serverLoadHtml(s){
     <div class="mc"><span>${i18n("ОЗУ")}</span><b>${v(s.ram??s.cpu??0)}</b></div>
     <div class="mc"><span>${i18n("Сеть")}</span><b>${v(s.net??0)}</b></div>
     <div class="mc"><span>${i18n("Диск")}</span><b>${v(s.disk??0)}</b></div>
-  </div>${offline?`<p class="sub"${pfa(s,"telemetry")}>${i18n("Нет связи с сервером. Показатели недоступны.")}</p>`:""}`;
+  </div>${offline?`<p class="sub"${unitFieldAbsentOff(nodeKind(s),s.id,"telemetry")?"":pfa(s,"telemetry")}>${i18n("Нет связи с сервером. Показатели недоступны.")}</p>`:""}`;
 }
 // Запрос один на все разделы — тот, что набран в шапке.
 // Отбор ассистента сужает дерево, как запрос: дерево фильтрует по q. Пустой запрос при отборе — метка, а не слово
@@ -14187,6 +14219,8 @@ function archTblEnsure(n,list){
   });
 }
 function archUsedPct(a){return parseInt(archUsed(a),10)||0}
+// Доля занятого у хранилища не известна: у всех томов нет usedPercent (правило 2 или absent без значения)
+function archUsedOff(a){const v=archVols(a);return kindFieldOff("volume","usedPercent")||v.length>0&&v.every(x=>unitFieldAbsentOff("volume",x.id,"usedPercent"))}
 function archTrouble(a){return archVols(a).some(v=>v.state==="error"||v.online===false)}
 function archStateHtml(a){
   if(archTrouble(a))return`<span class="pf-st bad">${i18n("Ошибка тома")}</span>`;
@@ -14250,7 +14284,7 @@ function archTableCard(n){
         <td class="ts-td">${tsChk(a.id,locName(a))}</td>
         <td class="as-nm"><span class="as-name" title="${escHtml(locName(a))} · ${escHtml(archKindLabel(a))}">${archIcon(a)}<span>${escHtml(locName(a))}</span></span></td>
         <td title="${escHtml(locName(archOwner(a)||{name:""}))}">${archOwnerCell(a,n)}</td>
-        <td><span class="as-use"><span class="as-bar ${u>=90?"bad":u>=75?"warn":""}"><i style="width:${u}%"></i></span><span class="as-num">${u}% ${i18n("из")} ${archSize(a)}</span></span></td>
+        <td>${archUsedOff(a)?`<span class="as-num">${archSize(a)}</span>`:`<span class="as-use"><span class="as-bar ${u>=90?"bad":u>=75?"warn":""}"><i style="width:${u}%"></i></span><span class="as-num">${u}% ${i18n("из")} ${archSize(a)}</span></span>`}</td>
         <td class="as-num">${a.days!=null&&!nodeFieldOff(a,"retentionDays")?`${a.days} ${i18n("дн.")}`:"—"}</td>
         <td class="as-num">${archCameras(a.id).length}</td>
         <td>${archStateHtml(a)}</td>
@@ -24222,7 +24256,7 @@ function formBase(n){
         <button type="button" class="mc" ${onEv("click",["goTab","cams"])}><span>${i18n("Камер пишется")}</span><b>${cams.length}</b></button>
         <div class="mc"><span>${i18n("Томов")}</span><b>${vols.length}</b></div>
         <div class="mc"><span>${i18n("Объём")}</span><b>${archSize(n)}</b></div>
-        <div class="mc"${pfa("volume","usedPercent")}><span>${i18n("Занято")}</span><b>${archUsed(n)}</b></div>
+        ${archUsedOff(n)?"":`<div class="mc"${pfa("volume","usedPercent")}><span>${i18n("Занято")}</span><b>${archUsed(n)}</b></div>`}
       </div>
       <p class="sub" style="margin-top:10px">${net?i18n("Камеры сетевого хранилища не закреплены за сервером. Любой сервер домена может записывать их видео.")
         :`${i18n("Сервер:")} <b>${escHtml(sv?locName(sv):"—")}</b>.${spec.recordModes.some(m=>m!=="backup")?` ${i18n("Камера получает сервер только через хранилище.")}`:""}`}</p>`)+
@@ -24376,7 +24410,7 @@ function formBase(n){
         title:"Хранилища сервера",
         items:on,
         text:a=>[locName(a),...archVols(a).map(v=>v.disk),archSize(a)],
-        row:a=>`<div class="it" ${onEv("click",["pick",`${a.id}`])}><span>${archIcon(a)}</span><span>${escHtml(locName(a))}<small>${escHtml(archKindTag(a))} · ${escHtml(archDiskLabel(a))} · ${archSize(a)} · ${i18n("занято")} ${archUsed(a)}${nodeFieldOff(a,"retentionDays")?"":` · ${a.days} ${i18n("дн.")}`} · ${archCameras(a.id).length} ${i18n("камер")}</small></span></div>`,
+        row:a=>`<div class="it" ${onEv("click",["pick",`${a.id}`])}><span>${archIcon(a)}</span><span>${escHtml(locName(a))}<small>${escHtml(archKindTag(a))} · ${escHtml(archDiskLabel(a))} · ${archSize(a)}${archUsedOff(a)?"":` · ${i18n("занято")} ${archUsed(a)}`}${nodeFieldOff(a,"retentionDays")?"":` · ${a.days} ${i18n("дн.")}`} · ${archCameras(a.id).length} ${i18n("камер")}</small></span></div>`,
         empty:"Хранилищ нет. Камеры сервера не записывают видео",
         ph:"Имя или путь…",
         unit:"хранилище|хранилища|хранилищ",
@@ -35542,7 +35576,7 @@ function edgeChecksHtml(st){
     [st.profileG!==false,"Устройство отдаёт записи по ONVIF Profile G",st.profileG===false?"Устройство не отдаёт записи по ONVIF Profile G. Сервер ничего не заберёт.":""]];
   // Правило 2 версии профиля: строка проверки — поле mediaOk или profileG
   const ckF=["mediaOk","profileG"];
-  return`<div class="er-checks">${rows.map(([ok,t,why],i)=>`<div class="er-ck ${ok?"ok":"bad"}"${pfa(st,ckF[i])}><span class="er-mk" aria-hidden="true">${ok?"✓":"!"}</span><span>${i18n(t)}${why?`<small>${i18n(why)}</small>`:""}</span></div>`).join("")}</div>`;
+  return`<div class="er-checks">${rows.map(([ok,t,why],i)=>`<div class="er-ck ${ok?"ok":"bad"}"${i===0&&st.online===false&&unitFieldAbsentOff(nodeKind(st),st.id,"mediaOk")?"":pfa(st,ckF[i])}><span class="er-mk" aria-hidden="true">${ok?"✓":"!"}</span><span>${i18n(t)}${why?`<small>${i18n(why)}</small>`:""}</span></div>`).join("")}</div>`;
 }
 // Правка настройки: PATCH хранилища, затем камеры перечитываются — режим записи им ставит сервер
 const EDGE_SET_KEY={type:"mode",arch:"archiveId",speed:"speedLimitMbps"};

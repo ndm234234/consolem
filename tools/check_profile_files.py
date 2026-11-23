@@ -299,5 +299,18 @@ ok(says(history_problems(dict(GOOD, uses=[]), base), "uses"), "M6: uses изме
 ok(history_problems(bump(dict(GOOD, uses=[]), "1.6"), base) == [], "M6: uses изменён с новой младшей версией")
 ok(history_problems(dict(GOOD, uses=[dict(u) for u in reversed(GOOD["uses"])]), base) == [], "M6: тот же uses — без замечаний")
 
+# Ключ absent у поля (ответ w2c на запрос 154325Z, п. 3.1): только "unsupported", меняется с новой младшей версией
+from profile_files import profile_absent, profile_absent_js, render_md  # noqa: E402
+ok(profile_problems(bad_prop("privacyMasks", absent="unsupported")) == [], "absent: unsupported — без ошибок")
+ok(says(profile_problems(bad_prop("privacyMasks", absent="hide")), "absent"), "absent другого значения — ошибка")
+ok(says(history_problems(bad_prop("privacyMasks", absent="unsupported"), base), "absent"), "absent без новой младшей версии — ошибка")
+ok(history_problems(bump(bad_prop("privacyMasks", absent="unsupported"), "1.6"), base) == [], "absent с версией 1.6 — без замечаний")
+marked = bad_prop("privacyMasks", absent="unsupported")
+marked["status"]["recordState"]["absent"] = "unsupported"
+ok(profile_absent(marked) == ["privacyMasks", "recordState"] and profile_absent(GOOD) == [], "profile_absent: свойства, затем состояние")
+ok(profile_absent_js([GOOD, marked]) == 'window.CONSOLEM_PROFILE_ABSENT={"vms.camera/1":["privacyMasks","recordState"]};\n'
+   and profile_absent_js([GOOD]) == "window.CONSOLEM_PROFILE_ABSENT={};\n", "profile_absent_js: только профили с метками")
+ok("`absent`" in render_md(marked, ["camera"]) and "`absent`" not in render_md(GOOD, ["camera"]), "таблица .md называет absent у помеченного поля")
+
 print(f"RESULT {'fail' if failed else 'pass'}")
 sys.exit(1 if failed else 0)

@@ -1,6 +1,6 @@
 {
  "id": "vms.edge/1",
- "version": "1.1",
+ "version": "1.2",
  "label": "Встроенное хранилище устройства",
  "owner": "mockup",
  "reviewers": [
@@ -62,7 +62,8 @@
     "additionalProperties": false
    },
    "meaning": "Настройка репликации в архив сервера. `mode`: `off` — сервер сам не забирает (правила с `replicate` и ручной забор работают), `all` — забирает все записи и не держит живой поток. `archiveId` — хранилище сервера (вид с `replica` в `recordModes`); для `all` нужно, нет значения — хранилище записи камеры, нет и его — `422 VALIDATION_FAILED`, `/properties/replication`. `speedLimitMbps` — 0…1000, 0 без предела. `excludedCameras` — только у регистратора, камеры этого регистратора. Правка частичная",
-   "since": "1.0"
+   "since": "1.0",
+   "absent": "unsupported"
   },
   "enabled": {
    "schema": {
@@ -93,7 +94,8 @@
     "readOnly": true
    },
    "meaning": "«Короткое имя»: Номер для показа в дереве («3.3.1»)",
-   "since": "1.1"
+   "since": "1.1",
+   "absent": "unsupported"
   }
  },
  "status": {
@@ -197,24 +199,31 @@
     }
    },
    "meaning": "`state`: `off`, `waiting` (есть что забрать, нет связи), `planned` (ждёт правила, ручного забора или времени `nextTransferAt`), `running`, `ok`; у регистратора общее состояние — худшее из камер. `lagSec`, `timeLeftSec`, `lastTransferAt`, `nextTransferAt`, `bytesToday`, `gaps` за 7 дней (`queued` — ещё не забрано, `done`, `lost` — устройство записало поверх), у регистратора `cameras[]` (`cameraId`, `state`, `excluded`, `lastTransferAt`, `nextTransferAt`, `gaps`). Есть в каждом объекте перечня `GET /units?kind=storage`",
-   "since": "1.0"
+   "since": "1.0",
+   "absent": "unsupported"
   },
   "mediaOk": {
    "schema": {
     "type": "boolean"
    },
-   "meaning": "Носитель устройства на месте и пишет. Нет значения — true. false: хранилище ждёт, забор не идёт, сервер поднимает одно событие replication.failed (reason media)",
-   "since": "1.0"
+   "meaning": "Носитель устройства на месте и пишет. Нет значения — у сервера нет такой проверки, консоль её не показывает (раньше — true). false: хранилище ждёт, забор не идёт, сервер поднимает одно событие replication.failed (reason media)",
+   "since": "1.0",
+   "absent": "unsupported"
   },
   "profileG": {
    "schema": {
     "type": "boolean"
    },
-   "meaning": "Устройство отдаёт записи по ONVIF Profile G. Нет значения — true. false: хранилище ждёт, забор не идёт, сервер поднимает одно событие replication.failed (reason profile)",
-   "since": "1.0"
+   "meaning": "Устройство отдаёт записи по ONVIF Profile G. Нет значения — у сервера нет такой проверки, консоль её не показывает (раньше — true). false: хранилище ждёт, забор не идёт, сервер поднимает одно событие replication.failed (reason profile)",
+   "since": "1.0",
+   "absent": "unsupported"
   }
  },
  "changes": [
+  {
+   "version": "1.2",
+   "what": "Запрос 154325Z, ответ w2c, п. 3 и 3.1: `absent: unsupported` у полей, которых у w2c нет: replication, short, replicationStatus, mediaOk, profileG. Нет значения — у сервера нет такой возможности: особый экран прячет поле, если его нельзя править. Поля и типы не менялись. У `mediaOk` и `profileG` нет значения больше не значит true"
+  },
   {
    "version": "1.1",
    "what": "Профиль по особому экрану: добавлены enabled, recordMode, short — вкладка «Хранилище» их показывает. У replicationStatus описаны внутренние поля (properties без required и без additionalProperties:false, тип поля не менялся). Отчёт: docs/contract-layers/2026-11-19-profili-po-ekranam.md."

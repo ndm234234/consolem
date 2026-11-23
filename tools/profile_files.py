@@ -7,7 +7,10 @@ tools/check_profile_files.py.
 
 Формат файла: ключи id, version, label, owner, reviewers, uses, properties, status (необязательный),
 apis (необязательный), changes. Версия — «M.m», M равно номеру после «/» в id. В строке changes
-необязателен ключ removed — список снятых полей (решение владельца О2).
+необязателен ключ removed — список снятых полей (решение владельца О2). У поля необязателен ключ absent:
+"unsupported" — «нет значения — у сервера нет такой возможности»: особый экран консоли прячет такое поле у объекта
+без значения (ответ w2c на запрос 154325Z, п. 3.1). Метки знакомых профилей консоль получает из
+window.CONSOLEM_PROFILE_ABSENT в api/fixture.js (profile_absent_js).
 """
 import json
 import os
@@ -18,6 +21,8 @@ FILE_KEYS = ("id", "version", "label", "owner", "reviewers", "uses", "properties
 REQUIRED_KEYS = tuple(k for k in FILE_KEYS if k not in ("status", "apis"))
 SERVICE_KEYS = ("_file",)
 FIELD_KEYS = ("schema", "meaning", "since")
+OPTIONAL_FIELD_KEYS = ("absent",)
+ABSENT_VALUES = ("unsupported",)
 CHANGE_KEYS = ("version", "what", "removed")
 
 _VERSION = re.compile(r"^[0-9]+\.[0-9]+$")
@@ -103,7 +108,7 @@ def _field_problems(section, name, field, version, major, versions):
     if not isinstance(field, dict):
         return [f"{where}: нужен объект {{schema, meaning, since}}"]
     out = []
-    extra = sorted(set(field) - set(FIELD_KEYS))
+    extra = sorted(set(field) - set(FIELD_KEYS) - set(OPTIONAL_FIELD_KEYS))
     missing = [k for k in FIELD_KEYS if k not in field]
     if extra:
         out.append(f"{where}: незнакомые ключи {', '.join(extra)}")
@@ -114,6 +119,8 @@ def _field_problems(section, name, field, version, major, versions):
         out.append(f"{where}: schema — объект с type")
     if "meaning" in field and not _str(field["meaning"]):
         out.append(f"{where}: meaning пустой")
+    if "absent" in field and field["absent"] not in ABSENT_VALUES:
+        out.append(f"{where}: absent {field['absent']!r} — можно только {', '.join(ABSENT_VALUES)}")
     if "since" in field:
         since = _ver(field["since"])
         if since is None:
@@ -295,6 +302,18 @@ def table_name(pid):
     return file_name(pid)[:-len(".json")] + ".md"
 
 
+def profile_absent(doc):
+    """Поля профиля с absent: "unsupported" (свойства и состояние), в порядке файла."""
+    return [n for sec in ("properties", "status") for n, f in (doc.get(sec) or {}).items()
+            if isinstance(f, dict) and f.get("absent") == "unsupported"]
+
+
+def profile_absent_js(docs):
+    """Строка для api/fixture.js: window.CONSOLEM_PROFILE_ABSENT={профиль: [поля]} — только профили с метками."""
+    m = {d["id"]: profile_absent(d) for d in sorted(docs, key=lambda d: d["id"]) if profile_absent(d)}
+    return "window.CONSOLEM_PROFILE_ABSENT=" + json.dumps(m, ensure_ascii=False, separators=(",", ":")) + ";\n"
+
+
 def _cell(s):
     return str(s).replace("|", "\\|").replace("\n", " ")
 
@@ -304,7 +323,9 @@ def _table(fields):
         return ["Своих свойств нет.", ""]
     rows = ["| Свойство | Тип | Смысл | С версии |", "|---|---|---|---|"]
     for name, f in fields.items():
-        rows.append(f"| `{name}` | {_cell(type_text(f['schema']))} | {_cell(f['meaning'])} | {f['since']} |")
+        meaning = f["meaning"] + (" Нет значения — у сервера нет такой возможности: особый экран поле не показывает (`absent`)."
+                                  if f.get("absent") == "unsupported" else "")
+        rows.append(f"| `{name}` | {_cell(type_text(f['schema']))} | {_cell(meaning)} | {f['since']} |")
     return rows + [""]
 
 
@@ -448,6 +469,8 @@ def history_problems(cur, base):
                 out.append(f"профиль {pid}: у поля {name} поменялся тип при той же старшей версии")
             if new[name]["since"] != f["since"]:
                 out.append(f"профиль {pid}: у поля {name} поменялся since ({f['since']} → {new[name]['since']})")
+            if new[name].get("absent") != f.get("absent") and not grew:
+                out.append(f"профиль {pid}: у поля {name} поменялся absent без новой младшей версии (в origin/main {base['version']})")
         for name, f in new.items():
             if name in old:
                 continue

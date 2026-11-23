@@ -2,7 +2,7 @@
    (implements), а не по коду вида: ступень 1 — своя страница (screenPageStep, до части 05 — форма по схеме у вида с
    setupUi), ступень 2 — ручной экран по SCREEN_OF_PROFILE (handScreenOf), ступень 3 — форма по схеме. Раздел А — выбор
    экрана; раздел Г — профиль снят с вида при открытой карточке (kinds.changed); Г2 — то же у других кодов ручных экранов
-   (замок, сервер); Г3 — вкладка «Репликация» на состоянии без ожидаемых полей; Д — версия профиля от сервера (прототип 82); Е — сервер старше консоли прячет поля (правило 2, из прототипа 83). Виды теста ставятся в KINDS на время
+   (замок, сервер); Г3 — вкладка «Репликация» на состоянии без ожидаемых полей; Д — версия профиля от сервера (прототип 82); Е — сервер старше консоли прячет поля (правило 2, из прототипа 83); Ж — поле absent без значения (ответ w2c на 154325Z, п. 3.1). Виды теста ставятся в KINDS на время
    проверки и снимаются в finally с kindsApply(). Сценарий пришёл с прототипом 78 (index_78_ekran-po-profilyu.html, удалён), теперь проверяет index.html.
    Охрана screenFor — для прототипов, скопированных с index.html до переноса; на index.html она — сбой (absent). */
 UiCheck(async ({ ok, until, sleep, absent }) => {
@@ -564,6 +564,88 @@ UiCheck(async ({ ok, until, sleep, absent }) => {
         ok(tagged("ip").length > 0 && tagged("ip").every((e) => !e.hidden), "карточка нарисована заново после возврата версии: поле ip видно");
       } finally {
         restore();
+      }
+    }
+  }
+
+  // ── Ж. Поле absent без значения: у сервера нет такой возможности (ответ w2c на запрос 154325Z, п. 3.1) ──
+  // Файл профиля помечает поле absent: "unsupported" (window.CONSOLEM_PROFILE_ABSENT). Ручной экран прячет такое поле
+  // у объекта, если значения нет и править поле нельзя: mac камеры (x-immutable). Пустое поле, которое правится
+  // (privacyMasks без Unit.writable), остаётся. Поле без метки не меняется. Unit.writable без поля — поле скрыто
+  if (typeof unitFieldAbsentOff !== "function") absent("unitFieldAbsentOff");
+  else {
+    const marks = window.CONSOLEM_PROFILE_ABSENT || {};
+    ok((marks["vms.camera/1"] || []).includes("mac") && (marks["vms.camera/1"] || []).includes("privacyMasks"), "CONSOLEM_PROFILE_ABSENT: у vms.camera/1 помечены mac и privacyMasks");
+    let cam = null;
+    walkAll((n) => { if (!cam && !isSchemaNode(n) && nodeKind(n) === "camera" && handScreenOf("camera")) cam = n; });
+    if (!cam) ok(false, "нет камеры с ручным экраном: правило absent проверить не на чем");
+    else {
+      // Метка, как её ставит pfa(n, поле) с узлом: элемент в карточке, проход MutationObserver и profHidePass
+      const probe = (f) => { const d = document.createElement("div"); d.className = "absent-probe"; d.innerHTML = `<span${pfa(cam, f)}>x</span>`; main().appendChild(d); return d.firstChild; };
+      const tagged = (f) => [...main().querySelectorAll(`[data-prof-field="camera ${f}"][data-prof-node="${cam.id}"]`)];
+      await until(() => ![...treeBr.values()].some((b) => b.busy), 10000);
+      pick(cam.id, { force: true, tab: "gen" });
+      await until(() => sel === cam.id && unitProps.has(cam.id) && unitAbsentMeta.has(cam.id) && !!main().querySelector(".cs-cq, [data-schema-card]"), 10000);
+      // Карточка дочитывает объект после первого кадра: unitRec снова пишет unitProps — ждём, пока чтение стихнет
+      await until(() => ![...treeBr.values()].some((b) => b.busy), 10000);
+      await sleep(400);
+      const p0 = unitProps.get(cam.id), m0 = unitAbsentMeta.get(cam.id);
+      const setUnit = (drop, writable) => {
+        const p = Object.assign({}, p0); drop.forEach((f) => delete p[f]);
+        unitProps.set(cam.id, p); unitAbsentMeta.set(cam.id, { obs: m0.obs, writable: writable === undefined ? m0.writable : writable });
+        profHidePass(document.body);
+      };
+      try {
+        // 0. Значение mac есть — поле видно, метка несёт uid объекта
+        setUnit([], null); unitProps.set(cam.id, Object.assign({}, p0, { mac: "00:11:22:33:44:55" })); profHidePass(document.body);
+        const pm = probe("mac"), pp = probe("privacyMasks");
+        await sleep(30);
+        ok(pm.getAttribute("data-prof-node") === cam.id && !pm.hidden && !unitFieldAbsentOff("camera", cam.id, "mac"), "есть значение mac: метка с data-prof-node видна, поле не скрыто");
+        // 1. Нет mac, поле x-immutable — скрыто, и метки на карточке тоже
+        setUnit(["mac"], null);
+        ok(unitFieldAbsentOff("camera", cam.id, "mac") && nodeFieldOff(cam, "mac"), "нет mac, поле x-immutable: unitFieldAbsentOff и nodeFieldOff — да");
+        ok(tagged("mac").length > 0 && tagged("mac").every((e) => e.hidden), `метки mac скрыты (${tagged("mac").length})`);
+        // 2. Нет privacyMasks, Unit.writable нет, схема разрешает правку — поле остаётся
+        setUnit(["mac", "privacyMasks"], null);
+        ok(!unitFieldAbsentOff("camera", cam.id, "privacyMasks") && tagged("privacyMasks").every((e) => !e.hidden), "нет privacyMasks, поле правится: не скрыто");
+        // 3. Unit.writable без privacyMasks — скрыто
+        setUnit(["mac", "privacyMasks"], ["name", "enabled"]);
+        ok(unitFieldAbsentOff("camera", cam.id, "privacyMasks") && tagged("privacyMasks").every((e) => e.hidden), "Unit.writable без privacyMasks: поле скрыто");
+        // 4. Поле без метки не меняется
+        setUnit(["mac", "privacyMasks", "firmware"], ["name"]);
+        ok(!unitFieldAbsentOff("camera", cam.id, "firmware") && !nodeFieldOff(cam, "firmware"), "firmware без метки absent: не скрыто");
+        // 5. Узел формы по схеме правило не трогает
+        ok(!nodeFieldOff(Object.assign({}, cam, { _schema: true }), "mac"), "узел формы по схеме: nodeFieldOff — нет");
+      } finally {
+        unitProps.set(cam.id, p0); unitAbsentMeta.set(cam.id, m0); profHidePass(document.body);
+        main().querySelectorAll(".absent-probe").forEach((e) => e.remove());
+      }
+      ok(tagged("privacyMasks").every((e) => !e.hidden), "значения вернулись: метки privacyMasks видны");
+      // 6. Новая метка в DOM получает hidden сама (MutationObserver), без вызова profHidePass
+      setUnit(["mac"], null);
+      const late = probe("mac"); await sleep(30);
+      ok(late.hidden, "метка mac, добавленная позже, скрыта проходом MutationObserver");
+      unitProps.set(cam.id, p0); unitAbsentMeta.set(cam.id, m0); main().querySelectorAll(".absent-probe").forEach((e) => e.remove());
+      profHidePass(document.body);
+      // 7. Сервер старше консоли метку не обещал: поле не прячем
+      const wasCam = KIND_PROFILES.get("vms.camera/1"), kv = profileVer(profileKnown("vms.camera/1"));
+      if (kv && !/\.0$/.test(kv)) {
+        try {
+          setUnit(["mac"], null);
+          KIND_PROFILES.set("vms.camera/1", Object.assign({}, wasCam, { version: kv.replace(/\.(\d+)$/, (m, d) => "." + (Number(d) - 1)) }));
+          ok(!unitFieldAbsentOff("camera", cam.id, "mac"), "сервер старше консоли: метка absent у mac не действует");
+        } finally { KIND_PROFILES.set("vms.camera/1", wasCam); unitProps.set(cam.id, p0); unitAbsentMeta.set(cam.id, m0); profHidePass(document.body); }
+      }
+      // 8. Хранилище: у всех томов нет usedPercent — доли занятого нет (archUsedOff)
+      const ar = (typeof arch !== "undefined" ? arch : []).find((a) => archVols(a).length > 0 && archVols(a).every((v) => unitProps.has(v.id) && unitAbsentMeta.has(v.id)));
+      if (!ar) ok(true, "нет хранилища с прочитанными томами: archUsedOff не проверен");
+      else {
+        const saved = archVols(ar).map((v) => [v.id, unitProps.get(v.id), unitAbsentMeta.get(v.id)]);
+        try {
+          ok(!archUsedOff(ar), "у томов есть usedPercent: доля занятого видна");
+          saved.forEach(([id, p, m]) => { const q = Object.assign({}, p); delete q.usedPercent; const o = Object.assign({}, m.obs); delete o.usedPercent; unitProps.set(id, q); unitAbsentMeta.set(id, { obs: o, writable: m.writable }); });
+          ok(archUsedOff(ar), "у всех томов нет usedPercent: archUsedOff — да, «Занято» не рисуется");
+        } finally { saved.forEach(([id, p, m]) => { unitProps.set(id, p); unitAbsentMeta.set(id, m); }); }
       }
     }
   }

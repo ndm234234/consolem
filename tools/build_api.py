@@ -117,7 +117,9 @@ def render_fixtures():
     body = ",".join(f"{json.dumps(n)}:{compact(f'{API}/fixtures/{n}.json')}" for n in FIXTURES)
     return (f"/* Собрано tools/build_api.py из {API}/fixtures/{{{','.join(FIXTURES + OVERLAYS)}}}.json — руками не править */\n"
             f"window.CONSOLEM_FIXTURES={{{body}}};\n" + "".join(render_overlay(n) for n in OVERLAYS)
-            + "window.CONSOLEM_FIXTURE=window.CONSOLEM_FIXTURES.demo;\n")
+            + "window.CONSOLEM_FIXTURE=window.CONSOLEM_FIXTURES.demo;\n"
+            # Метки absent знакомых профилей: особый экран прячет поле без значения (profile_files.profile_absent)
+            + profile_files.profile_absent_js(profile_files.load_profiles(os.path.join(ROOT, API))))
 
 
 # Порядок важен: demo.json ← профили, затем наборы из demo.json (profile_fixture.py), затем openapi.js и fixture.js;
