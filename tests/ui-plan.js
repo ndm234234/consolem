@@ -865,14 +865,17 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   s3Key(s3Fg, "Enter");
   await until(() => !combo);
   ok(s3R.group === s3Other.id || !!folderById(s3R.group), "найденное: папка выбрана");
-  wizd.devSelected.add(s3R.id);
-  toggleBulkEdit(true);
-  ["updateBulkEditField|vendor", "updateBulkEditField|group", "updateBulkEditField|arch"].forEach((k) => ok(!!s3Cb(k), "массовая правка: поле с автокомплитом " + k));
-  comboClick(s3Cb("updateBulkEditField|group"));
-  ok(s3Opts()[0] === "— не менять —", "массовая правка: «не менять» на месте");
-  comboClose();
-  toggleBulkEdit(false);
-  wizd.devSelected.clear();
+  // Массовая правка найденных — только на страницах, где она осталась (в прототипе 87 её заменили групповые настройки плана)
+  if (typeof toggleBulkEdit === "function") {
+    wizd.devSelected.add(s3R.id);
+    toggleBulkEdit(true);
+    ["updateBulkEditField|vendor", "updateBulkEditField|group", "updateBulkEditField|arch"].forEach((k) => ok(!!s3Cb(k), "массовая правка: поле с автокомплитом " + k));
+    comboClick(s3Cb("updateBulkEditField|group"));
+    ok(s3Opts()[0] === "— не менять —", "массовая правка: «не менять» на месте");
+    comboClose();
+    toggleBulkEdit(false);
+    wizd.devSelected.clear();
+  }
 
   // Файл: регистр поправлен, производитель вне списка в план идёт и там же правится
   ok(Object.keys(DEVICE_MODELS).length > 300 && DEVICE_MODELS.RTSP && !Object.keys(DEVICE_MODELS).some((v) => /joystick|^Vendor Name$/i.test(v)), "драйвер-пак: весь список, без джойстиков — " + Object.keys(DEVICE_MODELS).length);
@@ -912,6 +915,112 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   ok(!addPlan.rows.length, "файл: план применён целиком");
   const s3Got = addPlan.added.find((x) => x.ip === "10.8.1.2"), s3Made = s3Got && (await uiRec(s3Got.id));
   ok(s3Made && s3Made.vendor === "Bosch", "на сервере производитель из файла, регистр поправлен — " + (s3Made && s3Made.vendor));
+
+  // Групповые настройки строк плана (прототип 87): строки из файла, по адресу и из сети правятся одной панелью
+  if (typeof planBulkApply === "function") {
+    planClear();
+    setDeviceTab("csv");
+    wizd.csvRows = parseCsvDeviceRows(["10.8.5.1,80,Hikvision,DS-2CD2143G2,,", "10.8.5.2,80,Axis,P3245-LV,,"].join(String.fromCharCode(10)));
+    toggleCsvAll(true);
+    planAddCsv();
+    setDeviceTab("manual");
+    s3Cam("10.8.5.3", { vendor: "Hikvision", model: "DS-2CD2143G2", user: "", pass: "" });
+    planAddManual();
+    const pbFound = selectableDeviceResults().find((r) => r.status !== "bad" && !r.planned && !r.added);
+    if (pbFound) planAddFound([pbFound]);
+    wizStepGo(1);
+    const pbRows = addPlan.rows.slice();
+    ok(pbRows.length >= 3 && new Set(pbRows.map((x) => x.source)).size >= 2, "группа: в плане строки из разных источников — " + pbRows.map((x) => x.source).join(","));
+    ok(!!document.querySelector(".plan-bulk-bar") && pbRows.every((x) => document.querySelector(`.plan-row[data-pid="${x.pid}"] .plan-chk`)), "группа: полоса и флажок у каждой строки");
+    const pbGo = () => document.querySelector(".plan-bulk-go .btn");
+    ok(pbGo().disabled, "группа: без отметок кнопка «Задать для отмеченных» неактивна");
+    planPickAll(true);
+    ok(addPlan.sel.size === pbRows.length && !pbGo().disabled, "группа: «Отметить все» отмечает все строки");
+    pbGo().click();
+    ok(!!document.getElementById("planBulk") && pbGo().getAttribute("aria-expanded") === "true", "группа: кнопка открывает панель");
+    pbGo().click();
+    await until(() => !addPlan.bulk && !document.getElementById("planBulk"));
+    ok(!document.getElementById("planBulk") && pbGo().getAttribute("aria-expanded") === "false", "группа: второе нажатие кнопки закрывает панель");
+    const pbNoCred = pbRows.filter((x) => missingDeviceCredentials(x.r));
+    ok(pbNoCred.length >= 3, "группа: строки без логина и пароля — " + pbNoCred.length);
+    planPickBy("cred");
+    ok(addPlan.sel.size === pbNoCred.length && !!document.getElementById("planBulk"), "группа: «Без логина или пароля» отмечает их и открывает панель");
+    ok(document.getElementById("planBulkApply").disabled, "группа: пустая панель ничего не задаёт");
+    const pbR0 = pbNoCred[0], pbOk = planAllowedArchives(pbR0.serverId, pbR0.domainId)[0];
+    const pbAlien = arch.find((a) => archMainOk(a) && pbNoCred.some((x) => !planAllowedArchives(x.serverId, x.domainId).some((y) => y.id === a.id)));
+    const pbFolder = flatFolders().find((f) => folderDomain(f.id) === pbR0.domainId);
+    const pbVendors = new Map(pbNoCred.map((x) => [x.pid, [x.r.vendor, x.r.model, x.r.name]]));
+    // «Отмена» закрывает панель и не меняет строки
+    planBulkSet("user", "zzz");
+    document.querySelector("#planBulk .plan-bulk-ft .btn:not(.pri)").click();
+    await until(() => !addPlan.bulk && !document.getElementById("planBulk"));
+    ok(!addPlan.bulk && pbNoCred.every((x) => x.r.user !== "zzz"), "группа: «Отмена» закрывает панель, строки не меняются");
+    planBulkOpen("user");
+    ok(!addPlan.bulk.user, "группа: после «Отмены» панель открывается пустой");
+    planBulkSet("user", "admin");
+    planBulkSet("pass", "pw");
+    if (pbOk) planBulkSet("arch", pbOk.id);
+    planBulkSet("record", "always");
+    planBulkSet("group", pbFolder.id);
+    ok(!document.getElementById("planBulkApply").disabled, "группа: после ввода кнопка «Задать» активна");
+    planBulkApply();
+    ok(!addPlan.bulk && !document.getElementById("planBulk"), "группа: после «Задать» панель закрыта");
+    ok(pbNoCred.every((x) => x.r.user === "admin" && x.r.pass === "pw" && !missingDeviceCredentials(x.r)), "группа: логин и пароль у всех отмеченных");
+    ok(pbNoCred.every((x) => { const v = pbVendors.get(x.pid); return x.r.vendor === v[0] && x.r.model === v[1] && x.r.name === v[2]; }), "группа: пустые поля (производитель, модель, название) значения не меняют");
+    ok(pbNoCred.every((x) => !planRowIssues(x).some((i) => /логина и пароля/i.test(i.text))), "группа: предупреждение «Нет логина и пароля» ушло");
+    const pbCams = pbNoCred.filter((x) => planIsCam(x));
+    ok(pbCams.every((x) => x.r.group === pbFolder.id), "группа: папка у всех камер");
+    if (pbOk) {
+      const pbHit = pbCams.filter((x) => planAllowedArchives(x.serverId, x.domainId).some((a) => a.id === pbOk.id));
+      ok(pbHit.length && pbHit.every((x) => x.r.arch === pbOk.id && x.r.record === "always"), "группа: архив и режим записи у камер, чьему серверу архив доступен — " + pbHit.length);
+    }
+    if (pbAlien) {
+      planPickAll(true);
+      planBulkOpen();
+      planBulkSet("arch", pbAlien.id);
+      const pbBefore = new Map(addPlan.rows.map((x) => [x.pid, x.r.arch]));
+      planBulkApply();
+      const pbSkip = addPlan.rows.filter((x) => planIsCam(x) && !planAllowedArchives(x.serverId, x.domainId).some((a) => a.id === pbAlien.id));
+      ok(pbSkip.length && pbSkip.every((x) => x.r.arch === pbBefore.get(x.pid) && x.archSkip), "группа: чужой архив строка не берёт и прежний оставляет");
+      ok(pbSkip.every((x) => planRowIssues(x).some((i) => /недоступен серверу/.test(i.text))), "группа: строка говорит, что архив не подошёл");
+      planEdit(pbSkip[0].pid, "arch", pbBefore.get(pbSkip[0].pid) || "");
+      ok(!pbSkip[0].archSkip, "группа: правка архива в строке снимает предупреждение");
+    }
+    // Без архива режим записи не задаётся; папку другого домена строка не берёт
+    const pbCam = addPlan.rows.find((x) => planIsCam(x));
+    planEdit(pbCam.pid, "arch", "");
+    planPickAll(false);
+    planPick(pbCam.pid, true);
+    planBulkOpen();
+    planBulkSet("record", "motion");
+    const pbFar = flatFolders().find((f) => folderDomain(f.id) && folderDomain(f.id) !== pbCam.domainId);
+    if (pbFar) planBulkSet("group", pbFar.id);
+    const pbGroupWas = pbCam.r.group;
+    planBulkApply();
+    ok(pbCam.r.record !== "motion", "группа: строке без архива режим записи не задан — " + pbCam.r.record);
+    if (pbFar) {
+      ok(pbCam.r.group === pbGroupWas && pbCam.groupSkip && planRowIssues(pbCam).some((i) => /в другом домене/.test(i.text)), "группа: папку другого домена строка не берёт и говорит об этом");
+      planEdit(pbCam.pid, "group", pbGroupWas || "");
+      ok(!pbCam.groupSkip, "группа: правка папки в строке снимает предупреждение");
+    }
+    if (pbOk) { planEdit(pbCam.pid, "arch", pbOk.id); planEdit(pbCam.pid, "record", "always"); }
+    planPickAll(false);
+    ok(!addPlan.sel.size && !addPlan.bulk, "группа: снятые отметки закрывают панель");
+    // С одной строкой отметок нет, и старая панель не возвращается со следующей строкой
+    planPickAll(true);
+    planBulkOpen();
+    planBulkSet("pass", "old");
+    addPlan.rows.slice(1).forEach((x) => planRemove(x.pid));
+    ok(addPlan.rows.length === 1 && !addPlan.sel.size && !addPlan.bulk && !document.querySelector(".plan-chk") && !document.querySelector(".plan-bulk-bar"), "группа: с одной строкой нет полосы, флажка и отметок");
+    // Отправляем только строки из файла: найденное устройство нужно сценариям ниже
+    const pbSend = addPlan.rows.filter((x) => x.source === "csv" && !planRowIssues(x).some((i) => i.err));
+    planSend(pbSend, false);
+    await until(() => !addPlan.applying);
+    const pbGot = addPlan.added.find((a) => a.ip === "10.8.5.1"), pbMade = pbGot && (await uiRec(pbGot.id));
+    ok(pbMade && pbMade.login === "admin" && pbMade.hasPassword && pbMade.recordMode === "always" && (pbMade.folderIds || []).includes(pbFolder.id) && (!pbOk || pbMade.archiveId === pbOk.id), "группа: на сервере значения из панели — " + JSON.stringify(pbMade && { login: pbMade.login, archiveId: pbMade.archiveId, recordMode: pbMade.recordMode, folderIds: pbMade.folderIds }));
+    planClear();
+    wizStepGo(0);
+  }
 
   // Находки ревью: положение списка, тот же выбор, Enter, адрес, которого не видно, найденное со своим текстом
   wizStepGo(0);
