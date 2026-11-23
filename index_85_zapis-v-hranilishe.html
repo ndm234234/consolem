@@ -15284,11 +15284,14 @@ function lanRows(n){
   const own=lanDomainOf(n);
   const sys=lanSysDevices(n).map(d=>{
     const b=lanBindOf(n,d);
+    // Прототип 85: чипы отбора («Пишут сюда», «Без записи»…) считают по применённому состоянию. Камера с
+    // неприменённой правкой остаётся в своём отборе до «Применить» — иначе она пропала бы со страницы
+    const snap=cardDraft?.cams?.get(d.id),fb=snap?lanBindOf(n,snap).k:b.k;
     // Камера регистратора: адрес — его, у неё только номер канала.
     const nvr=!lanIsPlace(n)&&handCam(d)&&!d.ip?ipsrvOwnerNode(d):null;
     return{key:"s:"+d.id,kind:"sys",id:d.id,node:d,name:locName(d),ip:nvr?nvr.ip||"":d.ip||"",mac:d.mac||"",
       nvr:nvr?.id||null,nvrName:nvr?locName(nvr):"",ch:nvr?ipsrvCameraVideoChannel(d,nvr):"",
-      vendor:d.vendor||"",model:d.model||"",type:d.type,bind:b.k,bindText:b.t,nested:b.nested||null,
+      vendor:d.vendor||"",model:d.model||"",type:d.type,bind:b.k,fbind:fb,bindText:b.t,nested:b.nested||null,
       foreign:deviceDomain(d.id)!==own};
   });
   // Устройство из сети, которое уже заведено (пусть и на другом сервере),
@@ -15303,7 +15306,7 @@ function lanRows(n){
 }
 function lanFilter(rows){
   const q=lan.q.trim();
-  let out=lan.chip==="all"?rows:rows.filter(r=>r.bind===lan.chip);
+  let out=lan.chip==="all"?rows:rows.filter(r=>(r.fbind||r.bind)===lan.chip);
   if(q){
     const ws=queryWords(q);
     out=out.filter(r=>ws.some(words=>matchWords(words,[r.name,r.ip,r.mac,r.vendor,r.model,r.bindText])));
@@ -15772,7 +15775,7 @@ function lanCardBuild(n){
   // Страницу режем только под таблицей: «выбрать все» и счётчик отмеченных
   // говорят про весь отбор, а не про текущую страницу.
   const rows=pageSlice(key,found);
-  const counts={};LAN_CHIPS.forEach(([k])=>counts[k]=k==="all"?all.length:all.filter(r=>r.bind===k).length);
+  const counts={};LAN_CHIPS.forEach(([k])=>counts[k]=k==="all"?all.length:all.filter(r=>(r.fbind||r.bind)===k).length);
   // Отмечают и тех, кого привязать, и тех, кого отвязать: кнопок две.
   // Отметка строк системы — та же, что в дереве: отмеченное здесь можно
   // править группой, а отмеченное в дереве — привязать здесь.
