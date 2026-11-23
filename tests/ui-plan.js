@@ -63,7 +63,7 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   planAddFound([good[0]]);
   ok(addPlan.rows.length === 2, "тот же адрес второй раз не добавляется");
   const sid = planServerId();
-  // Прототип 84: находка встаёт на сервер поиска или на сервер, который её нашёл (devFoundServer); index.html — на выбранный в строке «Сервер»
+  // Находка вкладки «В сети» встаёт на сервер поиска или на сервер, который её нашёл (devFoundServer, с переноса прототипа 84); страница без devFoundServer — на выбранный в строке «Сервер»
   const rowSrv = (x) => (typeof devFoundServer === "function" && devFoundServer(x.src || x.r)) || sid;
   ok(addPlan.rows.every((x) => x.serverId === rowSrv(x) && planAllowedArchives(x.serverId, x.domainId).some((a) => a.id === x.r.arch || !x.r.arch)), "строки на выбранном сервере, архив — из его списка");
   setDeviceTab("manual");
@@ -475,7 +475,7 @@ UiCheck(async ({ ok, until, confirmWith }) => {
     planSetServer(sB);
     planAddFound([fr0]);
     const fr1 = addPlan.rows[addPlan.rows.length - 1];
-    // Прототип 84: на вкладке «В сети» строки «Сервер» над вкладками нет — строка встаёт на сервер поиска или на тот, что её нашёл
+    // На вкладке «В сети» строки «Сервер» над вкладками нет (с переноса прототипа 84) — строка встаёт на сервер поиска или на тот, что её нашёл
     const wantB = (typeof devFoundServer === "function" && devFoundServer(fr0)) || sB;
     ok(fr1.serverId === wantB, "F7: строка встала на сервер из строки «Сервер»");
     ok(planAllowedArchives(wantB, fr1.domainId).some((x) => x.id === fr1.r.arch) || !fr1.r.arch, "F7: у строки архив, доступный серверу из строки «Сервер»");
