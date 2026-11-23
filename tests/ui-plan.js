@@ -1173,4 +1173,69 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "a", ctrlKey: true, bubbles: true, cancelable: true }));
   ok(treeSel.size > treeN, "Ctrl+A отмечает дерево: " + treeSel.size);
   clearTreeSel();
+
+  // Запись камер в хранилище — черновик и план (прототип 85). Охрана — пропуск, а не absent: в index.html этого ещё нет
+  if (typeof lanDraftMode === "function") {
+    const A = arch.find((a) => archMainOk(a) && lanTargets(a).length && archCameras(a.id).length);
+    pick(A.id);
+    goTab("cams");
+    await until(() => document.querySelector("#lanCard .lan-rec"));
+    const aN = find(A.id).n;
+    const rowOf = (id) => lanRows(aN).find((r) => r.id === id);
+    lanSetChip("free");
+    // Камеры с первой страницы таблицы: проверки ниже смотрят их строки на экране
+    const shown = new Set([...document.querySelectorAll('#lanCard tr.lan-r[data-lk^="s:"]')].map((t) => t.dataset.lk));
+    const free = lanRows(aN).filter((r) => r.kind === "sys" && r.bind === "free" && !lanAction(aN, r).off && handCam(r.node) && shown.has(r.key));
+    ok(free.length >= 3, "есть свободные камеры для черновика: " + free.length);
+    const [c1, c2, c3] = free.map((r) => r.node);
+    // B4: правки строк ничего не пишут на сервер до «Применить»
+    const writes = [];
+    const spy = ["post", "put", "patch", "del"].map((m) => [m, API[m]]);
+    spy.forEach(([m, f]) => { API[m] = (...a) => { writes.push(m + " " + a[0]); return f.apply(API, a); }; });
+    try {
+      const top0 = document.querySelector("#lanCard .lan-tbl").getBoundingClientRect().top;
+      lanRecSet(rowOf(c1.id).key, "motion");
+      const d = cardDiff();
+      ok(d.some((r) => r.node === c1 && r.key === "rec" && r.to === "motion") && d.some((r) => r.node === c1 && r.key === "arch" && r.to === A.id), "строка: режим и хранилище — строки плана");
+      ok(camRecMotionDets(c1).length > 0 && (d.some((r) => r.add) || camDetectors(c1).some((x) => hwVer.has(x.id))), "«По движению»: детектор камеры в плане или уже есть");
+      ok(!camRecMotionRules(c1).length ? d.some((r) => r.recRule && r.node === c1) : true, "«По движению»: правило записи — строка плана");
+      // B6: камера с неприменённой правкой остаётся в своём отборе
+      ok(lanFilter(lanRows(aN)).some((r) => r.id === c1.id) && rowOf(c1.id).bind === "here", "отбор «Без записи»: камера на месте до «Применить»");
+      ok(document.querySelector(`#lanCard tr[data-lk="${rowOf(c1.id).key}"] .plan-tag`), "строка с правкой помечена «в плане»");
+      // B5: отметка строк не сдвигает таблицу; режим в полосе сразу меняет режим отмеченных
+      lanSetRows([rowOf(c2.id), rowOf(c3.id)], true);
+      ok(Math.abs(document.querySelector("#lanCard .lan-tbl").getBoundingClientRect().top - top0) < 1, "отметка строк не сдвигает таблицу");
+      ok(document.querySelector("#lanCard .lan-sel:not(.lan-sel-idle) select.lan-rec"), "полоса отмеченных: список режима");
+      lanSelSet("sched");
+      ok(lanRowMode(aN, rowOf(c2.id)) === "sched" && lanRowMode(aN, rowOf(c3.id)) === "sched", "режим из полосы — у отмеченных камер");
+      lanSetRows([rowOf(c2.id), rowOf(c3.id)], false);
+      // Расписание в строке — тоже строка плана
+      const sch = recSchedules()[0];
+      ok(document.querySelector(`#lanCard tr[data-lk="${rowOf(c2.id).key}"] select.lan-sch`), "«По расписанию»: в строке список расписаний");
+      lanSchedPick(c2.id, sch.id);
+      ok(cardDiff().some((r) => r.node === c2 && r.key === "recordScheduleId" && r.to === sch.id), "расписание — строка плана");
+      ok(!writes.length, "до «Применить» запросов на запись нет: " + writes.join(", "));
+      // B3: «Сбросить» возвращает камеры
+      cardReset();
+      ok(!isRecording(c1) && !isRecording(c2) && !c2.recordScheduleId && !cardDiff().length, "«Сбросить»: камеры как до правки");
+    } finally {
+      spy.forEach(([m, f]) => { API[m] = f; });
+    }
+    // Одно «Применить»: камеры получают хранилище и режим одной операцией
+    lanRecSet(rowOf(c3.id).key, "always");
+    lanSchedPick(c2.id, recSchedules()[0].id);
+    lanRecSet(rowOf(c2.id).key, "sched");
+    cardApply();
+    await until(() => bq && bq.finished, 15000);
+    const u3 = await API.get(`/units/${c3.id}`), u2 = await API.get(`/units/${c2.id}`);
+    ok(u3.properties?.archiveId === A.id && u3.properties?.recordMode === "always", "«Применить»: сервер записал хранилище и режим: " + JSON.stringify(u3.properties?.recordMode));
+    ok(u2.properties?.recordMode === "sched" && !!u2.properties?.recordScheduleId, "«Применить»: режим и расписание — одной операцией");
+    ok(rowOf(c3.id).fbind === "here" && lanFilter(lanRows(aN)).every((r) => r.id !== c3.id), "после «Применить» камера ушла из «Без записи»");
+    // Вернуть камеры: «Не пишет» — тоже через план
+    lanDraftMode(aN, [rowOf(c2.id), rowOf(c3.id)], "");
+    cardApply();
+    await until(() => bq && bq.finished, 15000);
+    lanSetChip("all");
+    goTab("gen");
+  }
 });

@@ -15747,12 +15747,13 @@ function lanSelSet(v){
   lanDraftMode(n,lanRows(n).filter(lanChecked),v);
 }
 // Полоса над таблицей стоит всегда и одной высоты: отметка строк меняет только её содержимое, список не сдвигается
-function lanSelBarHtml(n,selRows){
+function lanSelBarHtml(n,selRows,total){
   if(!selRows.length)return`<div class="lan-sel lan-sel-idle">${lu("info",13)} ${i18n("Отметьте камеры, чтобы задать режим записи сразу нескольким. Изменения попадут в план.")}</div>`;
   const cams=selRows.filter(r=>r.kind==="sys"&&r.node&&handCam(r.node)),cur=cams.length?lanSelMode(n,cams):null;
   const aid=lanIsArch(n)?n.id:lan.arch,ar=archById(aid),modes=ar?recModesOf(ar):[];
   const opts=[...(cur===null?[["_mixed","Разные режимы"]]:[]),["","Не пишет"],...modes].map(([v,l])=>`<option value="${v}" ${(cur===null?v==="_mixed":v===cur)?"selected":""}>${i18n(l)}</option>`).join("");
-  return`<div class="lan-sel"><b>${i18n("Отмечено")}: ${selRows.length}</b>
+  const all=selRows.length<total?` · <button type="button" class="lk lk-act" ${onEv("click",["lanPickAllOwner",true])}>${i18n("Отметить все")} ${total}</button>`:"";
+  return`<div class="lan-sel"><span><b>${i18n("Отмечено")}: ${selRows.length}</b> ${i18n("из")} ${total}${all} · <button type="button" class="lk lk-act" ${onEv("click",["lanPickAllOwner",false])}>${i18n("Снять")}</button></span>
     <label class="lan-sel-l">${i18n("Режим записи")}</label><select class="lan-rec" ${cams.length?"":"disabled"} ${onEv("change",["lanSelSet",onEv.value])}>${opts}</select>
     <span class="lan-sel-note">${i18n("Режим сразу меняется в строках. Применить — кнопкой «Показать план» внизу.")}</span></div>`;
 }
@@ -15822,7 +15823,7 @@ function lanCardBuild(n){
     <button type="button" class="btn s" ${onEv("click",["lanRefresh"])}>${i18n("Обновить")}</button>
     ${lanIsPlace(n)?`<button type="button" class="btn pri s" ${onEv("click",["lanBulk"])} ${nBind?"":"disabled"}>${lanBulkLabel(n)} (${nBind})</button>
     ${lanHasUnbind(n)?`<button type="button" class="btn s" ${onEv("click",["lanUnbindChecked"])} ${nUnbind?"":"disabled"}>${i18n(lanIsFolder(n)?"Убрать":"Отвязать")} (${nUnbind})</button>`:""}`:""}
-  </div>${lanIsPlace(n)?"":lanSelBarHtml(n,selRows)}`;
+  </div>${lanIsPlace(n)?"":lanSelBarHtml(n,selRows,allCk.length)}`;
   const th=LAN_COLS.map(([k,l])=>`<th class="lan-th lan-th-${k} ${lan.sort===k?"on":""}" ${onEv("click",["lanSort",`${k}`])}><span class="gtbl-th-txt">${i18n(k==="bind"&&!lanIsPlace(n)?"Запись":l)}${lan.sort===k?(lan.dir>0?lu("arrow-up",12):lu("arrow-down",12)):""}</span></th>`).join("");
   const body=rows.length?rows.map((r,i)=>(r.nvr&&r.nvr!==rows[i-1]?.nvr?lanNvrHeadHtml(n,r.nvr,found):"")+(r.kind==="net"?lanNetRowHtml(n,r):lanSysRowHtml(n,r))).join("")
     // Пока опрос идёт, пустая таблица — это не ответ «ничего нет», а «ещё не
@@ -15833,7 +15834,8 @@ function lanCardBuild(n){
       ?`${i18n("Идёт поиск в сети")}… ${lan.progress}%`
       :i18n("Ничего не найдено")}</td></tr>`;
   const pageOn=pageCk.length>0&&pagePicked===pageCk.length;
-  const banner=tsBannerHtml(allPicked,pageCk.length,allCk.length,pageOn,"lanPickAllOwner(true)","lanPickAllOwner(false)");
+  // У хранилища и сервера «Отмечено N из M» стоит в полосе над таблицей (lanSelBarHtml): отдельная строка сдвигала бы список
+  const banner=lanIsPlace(n)?tsBannerHtml(allPicked,pageCk.length,allCk.length,pageOn,"lanPickAllOwner(true)","lanPickAllOwner(false)"):"";
   const table=`${banner}<div class="lan-wrap"><table class="gtbl-cams lan-tbl">
     <thead><tr class="gtbl-h"><th class="lan-chk"><input type="checkbox" class="ts-chk" ${pageOn?"checked":""} ${pagePicked&&!pageOn?'data-ind="1"':""} ${pageCk.length?"":"disabled"} title="${i18n("Все на странице")}" aria-label="${i18n("Отметить все на странице")}" ${onEv("change",["lanPickPage",onEv.checked])}></th>${th}<th></th></tr></thead>
     <tbody>${body}</tbody></table></div>
