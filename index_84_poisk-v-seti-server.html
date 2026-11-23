@@ -35200,7 +35200,7 @@ function devSearchEta(){
 // Найденное устройство → строка мастера с полями формы добавления
 function wizFoundRow(c){
   const x=candRow(c);
-  return{...x,added:false,addedId:null,user:"",pass:"",name:"",short:"",identifier:"",arch:wizd.defaultArch||wizArchList()[0]?.id||"",group:"",record:"motion",lat:"0",lon:"0",azimuth:"0",discoveredName:x.name};
+  return{...x,added:false,addedId:null,user:"",pass:"",name:"",short:"",identifier:"",arch:devFoundArch(x),group:"",record:"motion",lat:"0",lon:"0",azimuth:"0",discoveredName:x.name};
 }
 function applyFoundAuth(r){
   if(!r.user&&wizd.bulkUser)r.user=wizd.bulkUser;
@@ -38208,8 +38208,11 @@ function planSyncServer(){
   if(!ids.includes(wizd.manual.arch)){wizd.manual.arch=ids[0]||"";if(!wizd.manual.arch)wizd.manual.record="none"}
   // Находкам с хранилищем прежнего сервера — первое доступное новому, как при подстановке по умолчанию; строки плана не трогаем
   (wizd.devResults||[]).forEach(r=>{
-    if(r.planned||r.added||!r.arch||ids.includes(r.arch))return;
-    r.arch=ids[0]||"";if(!r.arch)r.record="none";
+    // Прототип 84: находка встанет на свой сервер (сервер поиска или тот, что её нашёл) — сверяем с его хранилищами
+    const own=typeof devFoundServer==="function"?devFoundServer(r):undefined;
+    const okIds=own&&own!==wizd.planServer?devArchIdsFor(own):ids;
+    if(r.planned||r.added||!r.arch||okIds.includes(r.arch))return;
+    r.arch=okIds[0]||"";if(!r.arch)r.record="none";
   });
 }
 function planSetServer(id){
@@ -38244,6 +38247,20 @@ function devFoundServer(r){
   if(!wizd||wizd.deviceTab!=="search"||wizd.lanOwner)return undefined;
   const list=planServerList(),sid=wizd.searchServer||r.seenBy;
   return sid&&list.some(x=>x.id===sid)?sid:undefined;
+}
+// Хранилище находки по умолчанию — из тех, что доступны серверу, на который она встанет
+function devFoundArch(r){
+  const sid=devFoundServer(r);
+  if(!sid)return wizd.defaultArch||wizArchList()[0]?.id||"";
+  // Как в index.html: первое хранилище сервера, затем хранилища домена; выбранное человеком по умолчанию — если серверу оно доступно
+  const ok=devArchIdsFor(sid);
+  return wizd.defaultArch&&ok.includes(wizd.defaultArch)?wizd.defaultArch:(ok[0]||"");
+}
+// Хранилища сервера sid для находки: список мастера (wizArchList), только те, куда камера пишет сама (archMainOk;
+// хранилище инцидентов с admits: false — нет)
+function devArchIdsFor(sid){
+  const keep=wizd.server;wizd.server=sid;
+  try{return wizArchList().filter(archMainOk).map(a=>a.id)}finally{wizd.server=keep}
 }
 function planPush(source,r0,x={}){
   if(addPlan.applying){toast(i18n("Идёт применение плана"));return null}
