@@ -957,10 +957,15 @@ table.lan-tbl td.lan-act{text-align:right;white-space:nowrap}
 .lan-why{font-size:11.5px;color:var(--mu);line-height:1.35}
 .lan-why .lk{font-size:inherit}
 .lan-why-warn{color:var(--one-warning-text);display:flex;gap:4px;align-items:flex-start}
-.lan-sel{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 10px;border-radius:8px;background:color-mix(in srgb,var(--bl) 10%,transparent);margin-bottom:8px}
+.lan-sel{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;height:38px;box-sizing:border-box;padding:0 10px;border-radius:8px;border:1px solid transparent;background:color-mix(in srgb,var(--bl) 10%,transparent);margin-bottom:8px;overflow:hidden;white-space:nowrap}
 .lan-sel b{font-weight:600}
-.lan-sel-idle{background:transparent;padding:0 2px;color:var(--mu);font-size:12px}
-.lan-sel-what{flex:1 1 100%;font-size:12px;color:var(--mu);display:flex;flex-direction:column;gap:2px}
+.lan-sel-l{margin:0;color:var(--mu)}
+.lan-sel select.lan-rec{field-sizing:content;width:auto;min-width:150px;height:28px;padding-top:0;padding-bottom:0}
+.lan-sel-note{font-size:12px;color:var(--mu);overflow:hidden;text-overflow:ellipsis;min-width:0}
+.lan-sel-idle{background:transparent;border:1px dashed var(--ln);color:var(--mu);font-size:12px}
+.lan-rec-line{display:flex;align-items:center;gap:6px}
+.lan-rec-cell select.lan-rec.pend{border-color:var(--one-selected-indicator);color:var(--x-link)}
+.lan-why-plan{color:var(--x-link)}
 table.lan-tbl th.lan-th-bind{width:300px}
 .lan-bind{font-size:11px;color:var(--mu);border:1px solid var(--ln);border-radius:4px;padding:1px 6px;white-space:nowrap}
 .lan-bind-here{color:var(--one-success-text);border-color:var(--one-success-icon)}
@@ -9458,6 +9463,9 @@ function cardDiff(){
       toT:[...del.map(x=>`${i18n("убрать из")} «${folderPathName(x)}»`),...add.map(x=>`${i18n("добавить в")} «${folderPathName(x)}»`)].join("; ")})});
   Object.entries(cardDraft.fields).forEach(([l,f])=>out.push({node:n,fld:l,prop:CARD_FLD_PROP[l]||null,from:f.from,to:f.to,label:i18n(l),fromT:f.from===""?"—":f.from,toT:f.to===""?"—":f.to}));
   Object.entries(edits).forEach(([k,v])=>{const[id,f]=splitEditKey(k);if(id!==n.id)return;out.push({node:n,edit:k,prop:f,from:n[f],to:v,label:i18n(CARD_PROP[f]||f),fromT:cardFmt(f,n[f]),toT:cardFmt(f,v)})});
+  // Прототип 85: записи камер, изменённые на вкладке «Устройства» хранилища или сервера
+  (cardDraft.cams||new Map()).forEach((snap,id)=>{const c=find(id)?.n;if(!c)return;const k=out.length;cardDiffNode(c,snap,n,out);
+    out.slice(k).forEach(r=>{if(r.add)r.label=`«${locName(c)}»: ${r.label}`});camRecRulePlanRows(c,out)});
   posMergeProto(out,n);
   camPlanRows(n,out);
   webPlanRows(n,out);
@@ -9481,6 +9489,7 @@ function cardRestore(){
   if(!cardDraft)return;
   const n=find(cardDraft.id)?.n;if(n){cardRestoreNode(n,cardDraft.snap);if(cardDraft.folders)cardSetFolders(n.id,cardDraft.folders)}
   cardDraft.kidFolders?.forEach((fs,id)=>cardSetFolders(id,fs));
+  cardDraft.cams?.forEach((snap,id)=>{const c=find(id)?.n;if(c)cardRestoreNode(c,snap)});
   Object.keys(edits).forEach(k=>{if(splitEditKey(k)[0]===cardDraft.id)delete edits[k]});
   // Значения в блоках камеры верны только для этого черновика: после «Сбросить» или «Применить» открытые блоки закрываются,
   // заглушки (параметры драйвера, кодек и битрейт потоков, туры) возвращаются к значениям до плана
@@ -9533,6 +9542,7 @@ function cardPlanOpen(){
      ${off?`<div class="nt bk-warn">${lu("triangle-alert")} ${i18n("сервер")} «${escHtml(locName(s))}» ${i18n("без связи. Консоль не применит изменения, в отчёте у них будет статус «не применено»")}</div>`:""}
      <p class="sub" style="margin:10px 0 0">${i18n(d.some(r=>!r.stub&&!camCallOf(r)&&!webCallOf(r))?"Как изменение выборки: консоль отправляет изменения на сервер одной операцией. Итог будет в отчёте. После применения можно нажать «Отменить».":"Итог будет в отчёте. «Отменить» после применения нет: на сервере нет операции, которую можно отменить.")}</p>
      ${handCam(n)&&d.some(r=>["arch","rec","archx","recDets","recordScheduleId"].includes(r.key))?camRecGaps(n).map(g=>`<div class="nt bk-warn" data-plan-rec-gap="${g.k}">${lu("triangle-alert")} ${escHtml(g.text)}</div>`).join(""):""}
+     ${[...(cardDraft.cams?.keys()||[])].map(id=>find(id)?.n).filter(Boolean).flatMap(c=>camRecGaps(c).map(g=>`<div class="nt bk-warn" data-plan-rec-gap="${g.k}">${lu("triangle-alert")} «${escHtml(locName(c))}»: ${escHtml(g.text)}</div>`)).join("")}
      ${d.some(r=>r.recRule)?`<p class="sub" data-plan-rule>${i18n("Правило записи по движению консоль создаст после операции, если все изменения применятся. «Отменить» после применения правило не удалит.")}</p>`:""}
      ${d.some(camCallOf)?`<p class="sub" data-plan-rt>${i18n("«Сервер записи» и потоки консоль запишет отдельными запросами до операции. «Отменить» после применения их не вернёт.")}</p>`:""}
      ${webPlanNote(n,d)}
@@ -15452,9 +15462,8 @@ function lanBind(key,opts={}){
   // Уже пишет в другое хранилище — это хранилище добавляется к нему.
   const cams=handOf(node,"ipsrv")?ipsrvCameras(node):[node];
   return devicesMutate([node,...cams.filter(c=>c!==node)],()=>{
-    const aid=lanIsArch(n)?n.id:lan.arch,want=opts.rec||lan.rec;
-    const modes=recModesOf(archById(aid)).map(x=>x[0]);
-    cams.forEach(c=>camAddArch(c,aid,modes.includes(want)?want:modes[0]));
+    const modes=recModesOf(archById(lan.arch)).map(x=>x[0]);
+    cams.forEach(c=>camAddArch(c,lan.arch,modes.includes(lan.rec)?lan.rec:modes[0]));
     if(handOf(n,"server")&&!node.srvId)setDevServer(node,n.id);
     bindArchServer(node);
   }).then(res=>{if(res.failed.length)toast(problemText(res.failed[0].code,node));return done(r.id)});
@@ -15480,20 +15489,10 @@ function lanSnap(ids){
   return()=>devicesMutate(was.map(w=>find(w.c.id)?.n).filter(Boolean),()=>{was.forEach(w=>{const c=find(w.c.id)?.n;if(c)Object.assign(c,{arch:w.arch,rec:w.rec,stream:w.stream,srvId:w.srvId,archx:w.archx})})})
     .then(()=>paint()).catch(e=>toast(problemText(e)));
 }
-// Прототип 85: групповое действие — режим для отмеченных. Кто ещё не пишет сюда — привязывается
-// в этом режиме, кто уже пишет — меняет режим.
-function lanBulk(){
-  const n=find(lan.owner)?.n;if(!n)return;
-  const keys=lanCheckedKeys(),here=keys.filter(k=>lanRowByKey(n,k)?.bind==="here"&&lanRowByKey(n,k)?.kind==="sys");
-  if(here.length)lanModeKeys(here,lan.rec);
-  const rest=keys.filter(k=>!here.includes(k));
-  if(rest.length)lanBindKeys(rest,lan.rec);
-}
-// Строка, которую отметка группы изменит: привязка или другой режим
-function lanBulkHits(n,r){return lanAction(n,r).pri||(r.kind==="sys"&&r.bind==="here"&&lanRowMode(n,r)!==lan.rec)}
+function lanBulk(){lanBindKeys(lanCheckedKeys())}
 // Привязка ничего не теряет — сразу, с «Отменить» в тосте.
-function lanBindKeys(keys,rec){
-  const n=find(lan.owner)?.n;if(!n)return;rec=rec||lan.rec;
+function lanBindKeys(keys){
+  const n=find(lan.owner)?.n;if(!n)return;
   let rows=keys.map(k=>lanRowByKey(n,k)).filter(r=>r&&lanAction(n,r).pri);
   if(!rows.length){toast("Нечего привязывать");return}
   const undo=lanSnap(rows.filter(r=>r.kind==="sys").map(r=>r.id));
@@ -15507,14 +15506,12 @@ function lanBindKeys(keys,rec){
     if(!rows.length){planRepaint();return}
   }
   keys.forEach(k=>lan.sel.delete(k));
-  const what=lanIsFolder(n)?i18n("Добавлено в папку"):`${i18n("Пишут в")} «${locName(lanIsArch(n)?n:archById(lan.arch)||n)}» · ${lanModeName(rec)}`;
+  const what=lanIsFolder(n)?i18n("Добавлено в папку"):`${i18n("Привязано к")} «${locName(lanIsArch(n)?n:archById(lan.arch)||n)}»`;
   // По одной: у папки каждая привязка меняет её состав, и следующей нужна свежая версия
-  rows.reduce((p,r)=>p.then(()=>lanBind(r.key,{rec})),Promise.resolve())
-    .then(()=>lanIsPlace(n)?[]:lanMotionRules(rec,rows.map(r=>find(r.id)?.n).filter(Boolean)))
-    .then(made=>{
-      toastAction("lanbind",`${what}: ${rows.length}${lanRulesNote(made)}`,i18n("Отменить"),()=>{undo();lanRulesDrop(made);toast(i18n("Привязка отменена"))},10000);
-      paint();
-    }).catch(e=>toast(problemText(e)));
+  rows.reduce((p,r)=>p.then(()=>lanBind(r.key)),Promise.resolve()).then(()=>{
+    toastAction("lanbind",`${what}: ${rows.length}`,i18n("Отменить"),()=>{undo();toast(i18n("Привязка отменена"))},8000);
+    paint();
+  }).catch(e=>toast(problemText(e)));
 }
 // Отвязка останавливает запись — сначала спрашиваем, потом даём «Отменить».
 function lanUnbindKeys(keys){
@@ -15612,8 +15609,9 @@ function lanRecCellHtml(n,r){
   const off=r.bind!=="here"&&a.off?a.off:"";
   const opts=[["",r.bind==="other"?"Не пишет сюда":"Не пишет"],...(ar?recModesOf(ar):[])]
     .map(([v,l])=>`<option value="${v}" ${v===cur?"selected":""}>${i18n(l)}</option>`).join("");
-  const sel=`<select class="lan-rec ${cur?"on":""}" ${off?`disabled title="${escHtml(off)}"`:""} aria-label="${escHtml(i18n("Режим записи")+": "+r.name)}" ${onEv("click",onEv.stop)} ${onEv("change",["lanRecSet",`${r.key}`,onEv.value])}>${opts}</select>`;
-  return`<div class="lan-rec-cell">${sel}${lanRecWhyHtml(n,r,cur,aid,off)}</div>`;
+  const sel=`<select class="lan-rec ${cur?"on":""} ${lanCamPending(r.node)?"pend":""}" ${off?`disabled title="${escHtml(off)}"`:""} aria-label="${escHtml(i18n("Режим записи")+": "+r.name)}" ${onEv("click",onEv.stop)} ${onEv("change",["lanRecSet",`${r.key}`,onEv.value])}>${opts}</select>`;
+  const pend=lanCamPending(r.node)?`<span class="tag plan-tag" title="${i18n("Изменение не применено. Применить — кнопкой «Показать план» внизу.")}">${i18n("в плане")}</span>`:"";
+  return`<div class="lan-rec-cell"><div class="lan-rec-line">${sel}${pend}</div>${lanRecWhyHtml(n,r,cur,aid,off)}</div>`;
 }
 function lanRuleLinks(rs){return rs.slice(0,2).map(x=>`<button type="button" class="lk" ${onEv("click",onEv.stop,["ruleGoRule",x.id])}>«${escHtml(x.name)}»</button>`).join(", ")+(rs.length>2?` ${i18n("и ещё")} ${rs.length-2}`:"")}
 function lanRecWhyHtml(n,r,cur,aid,off){
@@ -15624,7 +15622,9 @@ function lanRecWhyHtml(n,r,cur,aid,off){
   if(cur==="always")out.push(`<div class="lan-why">${i18n("Пишет всё время, без условий.")}</div>`);
   if(cur==="motion"){
     const g=camRecGap(c,"motion"),ds=camRecMotionDets(c),rr=camRecMotionRules(c);shown=rr.map(x=>x.id);
-    if(g&&g.k==="nodet")out.push(warn(g.text)+`<div class="lan-why"><button type="button" class="lk" ${onEv("click",onEv.stop,["lanDetsGo",c.id])}>${i18n("Открыть детекторы камеры")} →</button></div>`);
+    const newDet=ds.some(d=>!hwVer.has(d.id));
+    if(c._recRule||(!g&&newDet))out.push(`<div class="lan-why lan-why-plan">${i18n("После «Применить» консоль создаст")} ${[newDet?i18n("детектор движения"):"",c._recRule?`${i18n("правило")} «${escHtml(camRecRuleName(c))}»`:""].filter(Boolean).join(` ${i18n("и")} `)}.</div>`);
+    else if(g&&g.k==="nodet")out.push(warn(g.text)+`<div class="lan-why"><button type="button" class="lk" ${onEv("click",onEv.stop,["lanDetsGo",c.id])}>${i18n("Открыть детекторы камеры")} →</button></div>`);
     else if(g)out.push(warn(g.text)+(camRecRuleOk()?`<div class="lan-why"><button type="button" class="btn s" ${onEv("click",onEv.stop,["lanRuleFix",c.id])}>${lu("plus",13)} ${i18n("Создать правило записи")}</button></div>`:""));
     else out.push(`<div class="lan-why">${i18n("Правило")} ${lanRuleLinks(rr)} ${i18n("запускает запись, когда")} ${i18n(ds.length>1?"детекторы":"детектор")} ${ds.slice(0,1).map(d=>`<button type="button" class="lk" ${onEv("click",onEv.stop,["lanDetGo",c.id,d.id])}>«${escHtml(detTitle(d))}»</button>`).join("")}${ds.length>1?` ${i18n("и ещё")} ${ds.length-1}`:""} ${i18n("видит движение.")}</div>`);
   }
@@ -15641,61 +15641,64 @@ function lanRecWhyHtml(n,r,cur,aid,off){
   if(others.length)out.push(`<div class="lan-why">${i18n(cur?"Ещё пишет в":"Пишет в")} ${others.slice(0,2).map(x=>`«${escHtml(locName(archById(x.arch)))}» (${lanModeName(x.rec).toLowerCase()})`).join(", ")}${others.length>2?` ${i18n("и ещё")} ${others.length-2}`:""}${cur?"":`. ${i18n("Режим здесь добавит это хранилище, прежнее останется.")}`}</div>`);
   return out.join("");
 }
+// Все правки записи — черновик карточки хранилища (cardDraft.cams): строка «Не применено» внизу, «Показать план»,
+// одно «Применить» на всё. Снимок камеры снимается до первой правки, «Сбросить» возвращает его.
+function lanDraftCams(cams,mutate){
+  setD(true);
+  if(!cardDraft){toast(i18n("Консоль не может начать черновик на этой вкладке"));return false}
+  const m=cardDraft.cams||(cardDraft.cams=new Map());
+  cams.forEach(c=>{if(!m.has(c.id))m.set(c.id,cardClone(c))});
+  mutate();
+  hwIdxDrop();treeMatchCache.clear();searchMatchCache.clear();
+  paint();
+  return true;
+}
+// Камера в черновике и её записи отличаются от снимка
+function lanCamPending(c){
+  const snap=cardDraft?.cams?.get(c.id);if(!snap)return false;
+  return JSON.stringify(camArchs(c))!==JSON.stringify(camArchs(snap))||!!c._recRule||(c.devices||[]).length!==(snap.devices||[]).length;
+}
+// Режим v камер строк rows в хранилище строки; "" — не писать сюда
+function lanDraftMode(n,rows,v){
+  const jobs=rows.filter(r=>r.kind==="sys"&&r.node&&handCam(r.node)&&(r.bind==="here"||!lanAction(n,r).off)).map(r=>({c:r.node,aid:lanRowArch(n,r),here:r.bind==="here"}));
+  if(!jobs.length){gear();return}
+  lanDraftCams(jobs.map(j=>j.c),()=>jobs.forEach(({c,aid,here})=>{
+    if(!aid)return;
+    if(!v){if(here)camDropArch(c,aid)}
+    else if(here)lanSetCamMode(c,aid,v);
+    else{camAddArch(c,aid,v);if(handOf(n,"server")&&!c.srvId)setDevServer(c,n.id);bindArchServer(c)}
+    // «По движению» — детектор и правило, как в карточке камеры; ушли с режима — убрать то, что консоль добавила
+    camRecModeSet(c,{},v||"none");
+  }));
+}
 function lanRecSet(key,v){
   const n=find(lan.owner)?.n;if(!n)return;
   const r=lanRowByKey(n,key);if(!r)return;
-  if(!v){gear();if(r.bind==="here")lanUnbindKeys([key]);return}
-  if(r.bind==="here"){lanModeKeys([key],v);return}
-  lanBindKeys([key],v);
+  lanDraftMode(n,[r],v);
 }
 function lanSetCamMode(c,aid,v){
   if(c.arch===aid){c.rec=v;return}
   const x=(c.archx||[]).find(y=>y.arch===aid);if(x)x.rec=v;
 }
-// Сменить режим камер, которые уже пишут сюда
-function lanModeKeys(keys,v){
-  const n=find(lan.owner)?.n;if(!n)return;
-  const rows=keys.map(k=>lanRowByKey(n,k)).filter(r=>r&&r.kind==="sys"&&r.bind==="here"&&lanRowMode(n,r)!==v);
-  if(!rows.length){gear();return}
-  const undo=lanSnap(rows.map(r=>r.id)),jobs=rows.map(r=>({c:r.node,aid:lanRowArch(n,r)}));
-  devicesMutate(jobs.map(j=>j.c),()=>jobs.forEach(j=>lanSetCamMode(j.c,j.aid,v))).then(res=>{
-    if(res.failed.length)toast(problemText(res.failed[0].code));
-    return lanMotionRules(v,jobs.map(j=>find(j.c.id)?.n).filter(Boolean));
-  }).then(made=>{
-    toastAction("lanmode",`${i18n("Режим записи")} «${lanModeName(v)}»: ${rows.length}${lanRulesNote(made)}`,i18n("Отменить"),()=>{undo();lanRulesDrop(made);toast(i18n("Возвращено"))},10000);
-    paint();
-  }).catch(e=>toast(problemText(e)));
-}
-// «По движению»: правило «<камера> — запись по движению» каждой камере, у которой его нет (как карточка камеры)
-function lanMotionNeed(cams){return cams.filter(c=>!camRecMotionRules(c).length)}
-function lanMotionRules(v,cams){
-  if(v!=="motion"||!camRecRuleOk())return Promise.resolve([]);
-  return Promise.allSettled(lanMotionNeed(cams).map(c=>camRecRuleCreate([c.id],camRecRuleName(c)))).then(res=>{
-    const bad=res.find(x=>x.status==="rejected");if(bad)toast(problemText(bad.reason));
-    return res.filter(x=>x.status==="fulfilled").map(x=>x.value);
-  });
-}
-function lanRulesNote(made){return made&&made.length?`. ${i18n("Консоль создала правила записи по движению")}: ${made.length}`:""}
-// «Отменить» убирает и правила, которые создала привязка
-function lanRulesDrop(made){
-  const ids=(made||[]).map(x=>x.id).filter(id=>autoVer.has(id));if(!ids.length)return;
-  API.post("/objects/delete",{idempotencyKey:opKey(),items:ids.map(id=>({id,version:autoVer.get(id)}))}).then(res=>{res.done.forEach(ruleDrop);paint()}).catch(e=>toast(problemText(e)));
-}
-function lanRuleFix(id){const c=find(id)?.n;if(!c)return;lanMotionRules("motion",[c]).then(made=>{if(made.length)toastAction("recrule",`${i18n("Консоль создала правило")} «${made[0].name}»`,i18n("Открыть"),()=>ruleGoRule(made[0].id),10000);paint()})}
+function lanRuleFix(id){const c=find(id)?.n;if(c)lanDraftCams([c],()=>{camRecMotionBind(c,camMotionDetEnsure(c));camRecRuleEnsure(c)})}
 function lanDetsGo(id){pick(id);goTab("det");hwFlashLanding()}
 function lanDetGo(id,detId){pick(id);detSel=detId;goTab("det");hwFlashLanding()}
-// Полоса над таблицей появляется, когда отмечены строки: режим, «Применить», «Отвязать» и что консоль сделает
-function lanSelBarHtml(n,selRows,nBind,nUnbind){
-  if(!selRows.length)return`<div class="lan-sel lan-sel-idle">${i18n("Отметьте камеры, чтобы задать режим записи сразу нескольким. Режим одной камеры выбирают в её строке.")}</div>`;
-  const hits=selRows.filter(r=>lanBulkHits(n,r)),cams=hits.map(r=>r.node).filter(Boolean);
-  const need=lan.rec==="motion"&&camRecRuleOk()?lanMotionNeed(cams).length:0;
-  const nodet=lan.rec==="motion"?cams.filter(c=>!camRecMotionDets(c).length).length:0;
-  const what=[need?`${i18n("Консоль создаст правило «<камера> — запись по движению» для каждой камеры без такого правила")}: ${need}.`:"",
-    nodet?`${i18n("Камер без детектора движения")}: ${nodet}. ${i18n("Они не начнут запись, пока у них нет детектора.")}`:""].filter(Boolean);
-  return`<div class="lan-sel"><b>${i18n("Отмечено")}: ${selRows.length}</b>${lanTargetHtml(n)}
-    <button type="button" class="btn pri s" ${onEv("click",["lanBulk"])} ${nBind?"":"disabled"}>${i18n("Применить")} (${nBind})</button>
-    <button type="button" class="btn s" ${onEv("click",["lanUnbindChecked"])} ${nUnbind?"":"disabled"}>${i18n("Отвязать")} (${nUnbind})</button>
-    ${what.length?`<div class="lan-sel-what">${what.map(t=>`<div>${lu("info",12)} ${escHtml(t)}</div>`).join("")}</div>`:""}</div>`;
+// Режим отмеченных: общий, если у всех один, иначе null — «разные»
+function lanSelMode(n,rows){const ms=[...new Set(rows.map(r=>lanRowMode(n,r)))];return ms.length===1?ms[0]:null}
+function lanSelSet(v){
+  const n=find(lan.owner)?.n;if(!n)return;
+  if(v==="_mixed"){gear();return}
+  lanDraftMode(n,lanRows(n).filter(lanChecked),v);
+}
+// Полоса над таблицей стоит всегда и одной высоты: отметка строк меняет только её содержимое, список не сдвигается
+function lanSelBarHtml(n,selRows){
+  if(!selRows.length)return`<div class="lan-sel lan-sel-idle">${lu("info",13)} ${i18n("Отметьте камеры, чтобы задать режим записи сразу нескольким. Изменения попадут в план.")}</div>`;
+  const cams=selRows.filter(r=>r.kind==="sys"&&r.node&&handCam(r.node)),cur=cams.length?lanSelMode(n,cams):null;
+  const aid=lanIsArch(n)?n.id:lan.arch,ar=archById(aid),modes=ar?recModesOf(ar):[];
+  const opts=[...(cur===null?[["_mixed","Разные режимы"]]:[]),["","Не пишет"],...modes].map(([v,l])=>`<option value="${v}" ${(cur===null?v==="_mixed":v===cur)?"selected":""}>${i18n(l)}</option>`).join("");
+  return`<div class="lan-sel"><b>${i18n("Отмечено")}: ${selRows.length}</b>
+    <label class="lan-sel-l">${i18n("Режим записи")}</label><select class="lan-rec" ${cams.length?"":"disabled"} ${onEv("change",["lanSelSet",onEv.value])}>${opts}</select>
+    <span class="lan-sel-note">${i18n("Режим сразу меняется в строках. Применить — кнопкой «Показать план» внизу.")}</span></div>`;
 }
 function lanSysRowHtml(n,r){
   const a=lanAction(n,r);
@@ -15748,7 +15751,7 @@ function lanCardBuild(n){
   const pageCk=rows.filter(r=>lanCheckable(n,r)),allCk=found.filter(r=>lanCheckable(n,r));
   const pagePicked=pageCk.filter(lanChecked).length,allPicked=allCk.filter(lanChecked).length;
   const selRows=all.filter(lanChecked);
-  const nBind=selRows.filter(r=>lanIsPlace(n)?lanAction(n,r).pri:lanBulkHits(n,r)).length,nUnbind=selRows.filter(r=>lanAction(n,r).unbind).length;
+  const nBind=selRows.filter(r=>lanAction(n,r).pri).length,nUnbind=selRows.filter(r=>lanAction(n,r).unbind).length;
   // Сперва выбирают, на что смотреть, и только потом ищут внутри этого —
   // поэтому чипы стоят выше строки поиска.
   const rec=!lanIsPlace(n),REC_CHIP={here:"Пишут сюда",free:"Без записи",other:"Пишут в другое"};
@@ -15763,7 +15766,7 @@ function lanCardBuild(n){
     <button type="button" class="btn s" ${onEv("click",["lanRefresh"])}>${i18n("Обновить")}</button>
     ${lanIsPlace(n)?`<button type="button" class="btn pri s" ${onEv("click",["lanBulk"])} ${nBind?"":"disabled"}>${lanBulkLabel(n)} (${nBind})</button>
     ${lanHasUnbind(n)?`<button type="button" class="btn s" ${onEv("click",["lanUnbindChecked"])} ${nUnbind?"":"disabled"}>${i18n(lanIsFolder(n)?"Убрать":"Отвязать")} (${nUnbind})</button>`:""}`:""}
-  </div>${lanIsPlace(n)?"":lanSelBarHtml(n,selRows,nBind,nUnbind)}`;
+  </div>${lanIsPlace(n)?"":lanSelBarHtml(n,selRows)}`;
   const th=LAN_COLS.map(([k,l])=>`<th class="lan-th lan-th-${k} ${lan.sort===k?"on":""}" ${onEv("click",["lanSort",`${k}`])}><span class="gtbl-th-txt">${i18n(k==="bind"&&!lanIsPlace(n)?"Запись":l)}${lan.sort===k?(lan.dir>0?lu("arrow-up",12):lu("arrow-down",12)):""}</span></th>`).join("");
   const body=rows.length?rows.map((r,i)=>(r.nvr&&r.nvr!==rows[i-1]?.nvr?lanNvrHeadHtml(n,r.nvr,found):"")+(r.kind==="net"?lanNetRowHtml(n,r):lanSysRowHtml(n,r))).join("")
     // Пока опрос идёт, пустая таблица — это не ответ «ничего нет», а «ещё не
@@ -42205,6 +42208,12 @@ function cardApiItemsOwn(n,d){
   const xp=r=>({uid:(r.node||n).id,patch:{properties:{[r.schemaProp]:r.to===undefined?null:r.to}}});
   if(!isApiDevice(n)){
     for(const r of d){
+      // Прототип 85: камеры из черновика хранилища или сервера — шаги той же операции
+      if(r.node&&r.node!==n&&cardDraft?.cams?.has(r.node.id)&&isApiDevice(r.node)){
+        if(r.add){items.push({targetId:r.node.id,create:nodeCreate(r.add)});continue}
+        const set=keyToApi(r.node,r.key,r.to);if(!set)return null;
+        items.push({targetId:r.node.id,set});continue;
+      }
       if(r.node&&r.node!==n)return null;
       if(r.schemaProp){items.push(xp(r));continue}
       if(r.webKey){items.push(webItem(n,r));continue}

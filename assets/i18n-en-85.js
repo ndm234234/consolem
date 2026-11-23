@@ -1,11 +1,19 @@
 // Английский прототипа 85 (docs/TEXTS.md, «Как менять текст безопасно»): подключён после assets/i18n-en.js
 Object.assign(window.I18N_EN,{
+"Отметьте камеры, чтобы задать режим записи сразу нескольким. Изменения попадут в план.":"Select cameras to set the recording mode for several at a time. The changes go to the plan.",
+"Разные режимы":"Different modes",
+"Режим сразу меняется в строках. Применить — кнопкой «Показать план» внизу.":"The mode changes in the rows at once. To apply it, click «Show plan» at the bottom.",
+"Изменение не применено. Применить — кнопкой «Показать план» внизу.":"The change is not applied. To apply it, click «Show plan» at the bottom.",
+"в плане":"in the plan",
+"После «Применить» консоль создаст":"After «Apply», the console will create",
+"детектор движения":"a motion detector",
+"и":"and",
+"Консоль не может начать черновик на этой вкладке":"The console cannot start a draft on this tab",
 "Запись":"Recording",
 "Не пишет":"Not recording",
 "Не пишет сюда":"Not recording here",
 "Хранилище":"Storage",
 "В хранилище":"To storage",
-"Пишут в":"Recording to",
 "Пишет всё время, без условий.":"Records all the time, with no conditions.",
 "Копирует записи с другого хранилища.":"Copies recordings from another storage.",
 "запускает запись, когда":"starts recording when",
@@ -20,11 +28,5 @@ Object.assign(window.I18N_EN,{
 "Ещё пишет в":"Also records to",
 "Пишет в":"Records to",
 "Режим здесь добавит это хранилище, прежнее останется.":"A mode here adds this storage. The previous storage stays.",
-"Консоль создала правила записи по движению":"The console created motion recording rules",
-"Отмечено":"Selected",
-"Применить":"Apply",
-"Отметьте камеры, чтобы задать режим записи сразу нескольким. Режим одной камеры выбирают в её строке.":"Select cameras to set the recording mode for several at a time. Set the mode of one camera in its row.",
-"Консоль создаст правило «<камера> — запись по движению» для каждой камеры без такого правила":"The console will create the rule «<camera> — motion recording» for each camera without such a rule",
-"Камер без детектора движения":"Cameras without a motion detector",
-"Они не начнут запись, пока у них нет детектора.":"They will not start recording until they have a detector."
+"Отмечено":"Selected"
 });
