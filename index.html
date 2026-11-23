@@ -993,12 +993,52 @@ tr.lan-net .dev-actions .btn{white-space:nowrap}
    строкой под именем, а не выдавливают её в горизонтальную прокрутку. */
 .lan-wrap table.lan-tbl{min-width:0;width:100%}
 @container (max-width: 900px){
-  .lan-wrap table.lan-tbl th:nth-child(5),.lan-wrap table.lan-tbl td:nth-child(5),
-  .lan-wrap table.lan-tbl th:nth-child(6),.lan-wrap table.lan-tbl td:nth-child(6){display:none}
+  .lan-wrap table.lan-tbl:not(.lan-tbl-rec) th:nth-child(5),.lan-wrap table.lan-tbl:not(.lan-tbl-rec) td:nth-child(5),
+  .lan-wrap table.lan-tbl:not(.lan-tbl-rec) th:nth-child(6),.lan-wrap table.lan-tbl:not(.lan-tbl-rec) td:nth-child(6){display:none}
   .lan-sub{display:block}
 }
 @container (max-width: 620px){
-  .lan-wrap table.lan-tbl th:nth-child(4),.lan-wrap table.lan-tbl td:nth-child(4){display:none}
+  .lan-wrap table.lan-tbl:not(.lan-tbl-rec) th:nth-child(4),.lan-wrap table.lan-tbl:not(.lan-tbl-rec) td:nth-child(4){display:none}
+}
+/* Столбцы записи у хранилища и сервера. Ширины заданы: правка значения и раскрытие пояснения не двигают соседей */
+.lan-wrap table.lan-tbl.lan-tbl-rec{min-width:640px}
+.lan-wrap:has(.lan-tbl-rec){overflow-x:auto;scrollbar-gutter:stable}
+table.lan-tbl-rec .lan-sub{display:block}
+table.lan-tbl-rec th.lan-th-name{width:24%}
+table.lan-tbl-rec th.lan-th-bind{width:220px}
+table.lan-tbl-rec th.lan-th-stream{width:112px}
+table.lan-tbl-rec th.lan-th-pre{width:92px}
+table.lan-tbl-rec th.lan-th-ret{width:92px}
+table.lan-tbl-rec th.lan-th-dec{width:136px}
+table.lan-tbl-rec th.lan-th-days{width:88px}
+table.lan-tbl-rec th:last-child{width:4px;padding:0}
+.lan-wrap table.lan-tbl-rec th,.lan-wrap table.lan-tbl-rec td{padding-left:7px;padding-right:7px}
+/* Флажок: своя узкая ячейка без отступа справа и без обрезки — иначе рядом с ним видно многоточие */
+.lan-wrap table.lan-tbl-rec th.lan-chk,.lan-wrap table.lan-tbl-rec td.lan-chk{padding-right:0;overflow:visible;text-overflow:clip}
+/* Имя и вторая строка переносятся, а не обрезаются: на узком экране видно всё имя и весь IP */
+table.lan-tbl-rec td:nth-child(2){white-space:normal;overflow-wrap:anywhere}
+table.lan-tbl-rec td:nth-child(2) .lan-name{overflow:visible;text-overflow:clip}
+table.lan-tbl-rec .lan-grp-h{white-space:normal}
+/* Текст списка не заходит под стрелку; не влез — многоточие, полный текст — в подсказке */
+table.lan-tbl-rec select.lan-cell-in{padding-left:8px;padding-right:26px;text-overflow:ellipsis;white-space:nowrap;overflow:hidden}
+/* Ссылки на правила в пояснении — по левому краю, как обычный текст */
+.lan-why button.lk{text-align:left}
+table.lan-tbl-rec td{vertical-align:top}
+table.lan-tbl-rec .lan-cell-in{width:100%;max-width:100%;height:26px;padding-top:0;padding-bottom:0;box-sizing:border-box}
+table.lan-tbl-rec .lan-cell-num{width:52px}
+table.lan-tbl-rec .lan-unit{font-size:11.5px;color:var(--mu);margin-left:4px}
+table.lan-tbl-rec .lan-sub2{display:block;font-size:11px;color:var(--mu);white-space:normal;line-height:1.3}
+table.lan-tbl-rec .lan-na{color:var(--mu)}
+table.lan-tbl-rec .lan-numc{white-space:nowrap}
+@container (max-width: 820px){
+  .lan-wrap table.lan-tbl-rec th:nth-child(8),.lan-wrap table.lan-tbl-rec td:nth-child(8){display:none}
+  .lan-wrap table.lan-tbl-rec th.lan-th-bind{width:180px}
+  .lan-wrap table.lan-tbl-rec th.lan-th-stream{width:100px}
+  .lan-wrap table.lan-tbl-rec th.lan-th-pre{width:94px}
+  .lan-wrap table.lan-tbl-rec th.lan-th-ret{width:80px}
+}
+@container (max-width: 720px){
+  .lan-wrap table.lan-tbl-rec th:nth-child(7),.lan-wrap table.lan-tbl-rec td:nth-child(7){display:none}
 }
 table.gtbl-cams{width:100%;min-width:980px;border-collapse:separate;border-spacing:0;table-layout:fixed}
 table.gtbl-cams tr.gtbl-h,table.gtbl-cams tr.gtbl-f,table.gtbl-cams tr.gtbl-r{display:table-row}
@@ -4909,7 +4949,7 @@ function devNode(r){
     else if(k==="sizeBytes"){n.size=bytesText(v);n.bytes=v}
     else if(k==="lat"||k==="lon")n[k]=v==null?"":v.toFixed(6);
     else if(k==="azimuth")n[k]=v==null?"":String(v);
-    else if(k==="extraArchives")n.archx=v.map(x=>({arch:x.archiveId,rec:x.recordMode,stream:x.stream,...(x.labels?{labels:x.labels}:{}),...(x.state?{state:x.state}:{}),...(x.reason?{reason:x.reason}:{}),...(x.readOnly?{ro:true}:{}),...("replicaFrom" in x?{replicaFrom:x.replicaFrom}:{}),...(x.replicaLagSec!=null?{lag:x.replicaLagSec}:{}),...(x.retentionDays!=null?{retentionDays:x.retentionDays}:{}),...(x.minDepthDays!=null?{minDepthDays:x.minDepthDays}:{}),...(x.preRecordSec!=null?{pre:x.preRecordSec}:{})}));
+    else if(k==="extraArchives")n.archx=v.map(x=>({arch:x.archiveId,rec:x.recordMode,stream:x.stream,...(x.labels?{labels:x.labels}:{}),...(x.state?{state:x.state}:{}),...(x.reason?{reason:x.reason}:{}),...(x.readOnly?{ro:true}:{}),...("replicaFrom" in x?{replicaFrom:x.replicaFrom}:{}),...(x.replicaLagSec!=null?{lag:x.replicaLagSec}:{}),...(x.retentionDays!=null?{retentionDays:x.retentionDays}:{}),...(x.minDepthDays!=null?{minDepthDays:x.minDepthDays}:{}),...(x.preRecordSec!=null?{pre:x.preRecordSec}:{}),...(x.decimation!=null?{decimation:x.decimation}:{}),...(x.depthDays!=null?{depthDays:x.depthDays}:{})}));
     else if(k==="mode"&&handOf(r,"email"))n.mode=EMAIL_MODE_RU[v]||v;
     else if(k==="norm")n.norm=NORM_RU[v]||v;
     else if(k==="disabledByRuleAt")n.ruleOffAt=v?clockText(v,true):"";
@@ -8051,7 +8091,7 @@ function isRecording(n){return handCam(n)&&!!n.arch&&n.rec&&n.rec!=="none"}
 function camArchs(n){
   if(!n||!handCam(n))return[];
   if(!n.arch)return(n.archx||[]).map(x=>({...x}));
-  return[{arch:n.arch,rec:n.rec||"none",stream:n.stream||"main",main:true,state:n.recordState,reason:n.recordReason,replicaFrom:n.replicaFrom,lag:n.replicaLagSec,retentionDays:n.retentionDays,minDepthDays:n.minDepthDays,pre:n.pre},...(n.archx||[]).map(x=>({...x}))];
+  return[{arch:n.arch,rec:n.rec||"none",stream:n.stream||"main",main:true,state:n.recordState,reason:n.recordReason,replicaFrom:n.replicaFrom,lag:n.replicaLagSec,retentionDays:n.retentionDays,minDepthDays:n.minDepthDays,pre:n.pre,decimation:n.decimation,depthDays:n.depthDays},...(n.archx||[]).map(x=>({...x}))];
 }
 function camWritesTo(n,aid){return camArchs(n).some(x=>x.arch===aid&&x.rec&&x.rec!=="none")}
 // Камеры хранилища: у строки кэша записи нет, поэтому — и то, что прочитано дверью archiveId
@@ -9393,7 +9433,7 @@ function cancelEdits(){editClear();setD(false);paint();toast("Отменено")
 // внизу — «Сбросить · Показать план». План перечисляет «было → станет», дальше
 // та же очередь и отчёт: сервер без связи не примет правку, и это будет видно.
 let cardBase=null,cardDraft=null,cardFootRaf=0;
-const CARD_SKIP=new Set(["devices","online","cpu","ram","net","disk","bytes","shrink","replicaLagSec","recordState","recordReason","writableFields","web","webCert","webRes"]);
+const CARD_SKIP=new Set(["devices","online","cpu","ram","net","disk","bytes","shrink","replicaLagSec","depthDays","recordState","recordReason","writableFields","web","webCert","webRes"]);
 function cardClone(n){try{return JSON.parse(JSON.stringify(n))}catch(e){return{}}}
 function cardEnsureBase(n){
   if(cardDraft&&cardDraft.id!==n.id){
@@ -9424,7 +9464,7 @@ function cardFld(el){
 const CARD_PROP={overlays:"Камеры титров",overlayFont:"Шрифт титров",overlayFontSize:"Размер шрифта титров",overlayColor:"Цвет текста титров",overlayBg:"Цвет фона титров",overlayBgTransparency:"Прозрачность фона титров",
   receiptStartWords:"Слова начала чека",receiptEndWords:"Слова конца чека",receiptSplit:"Как делить строки на чеки",ignoreCase:"Не учитывать регистр слов начала и конца",billsOnly:"Показывать только строки чека",eraseOnEnd:"Убирать строки после конца чека",
   protocol:"Протокол",comPort:"COM-порт",baudRate:"Скорость, бит/с",parity:"Чётность",udpMaxPacket:"Наибольший пакет, байт",encoding:"Кодировка",terminalType:"Тип терминала",parserFile:"Файл парсера",processing:"Обработка строк",timeoutMs:"Таймаут, мс",timeOffsetMs:"Сдвиг времени, мс",retalix:"Касса Retalix",words:"Подсветка слов",
-  recordScheduleId:"Расписание записи",retentionDays:"Срок записи, дней",minDepthDays:"Глубина не меньше, дней",audioDeviceId:"Микрофон записи",replicaFrom:"Откуда забирать",size:"Объём",recordMode:"Когда писать",admits:"Принимает записи",zone:"Зона",labels:"Метки",alarmKinds:"Тревожные виды",enabled:"Включено",rec:"Режим записи",arch:"Архив",archx:"Дополнительные архивы",pre:"Предзапись, с",srvId:"Сервер",
+  decimation:"Прореживание",recordScheduleId:"Расписание записи",retentionDays:"Срок записи, дней",minDepthDays:"Глубина не меньше, дней",audioDeviceId:"Микрофон записи",replicaFrom:"Откуда забирать",size:"Объём",recordMode:"Когда писать",admits:"Принимает записи",zone:"Зона",labels:"Метки",alarmKinds:"Тревожные виды",enabled:"Включено",rec:"Режим записи",arch:"Архив",archx:"Дополнительные архивы",pre:"Предзапись, с",srvId:"Сервер",
   recDets:"Запись по детекторам",name:"Имя",short:"Короткое имя",ip:"IP",port:"Порт",vendor:"Производитель",model:"Модель",
   days:"Глубина, дней",enc:"Шифрование",storage:"Тип хранения",vols:"Тома",kind:"Тип",sens:"Чувствительность",license:"Лицензия",
   codec:"Кодек",res:"Разрешение",fps:"к/с",stream:"Поток",recordingTarget:"Сервер записи",lat:"Широта",lon:"Долгота",azimuth:"Азимут",user:"Имя пользователя",pass:"Пароль"};
@@ -9436,6 +9476,7 @@ function cardFmt(k,v){
   const pf=typeof posFmt==="function"&&v!==undefined&&v!==null?posFmt(k,v):null;if(pf!==null)return pf;
   if(k==="zone"&&!v)return zoneText(v);
   if(k==="enabled")return v===false?i18n("выкл"):i18n("вкл");
+  if(k==="decimation")return i18n((LAN_DEC.find(d=>d[0]===(v||""))||[v,v])[1]);
   if(v===undefined||v===null||v==="")return"—";
   if(k==="enabled"||k==="enc"||k==="ssl")return v===false?i18n("выкл"):i18n("вкл");
   if(k==="rec")return i18n(recordModeLabel(v));
@@ -9453,6 +9494,23 @@ function cardFmt(k,v){
   if(typeof v==="object")return"…";
   return String(v);
 }
+// Что изменилось в строках дополнительных архивов камеры — по архивам и полям, а не «2 шт. → 2 шт.»
+const ARCHX_DIFF_F=[["rec","Когда писать"],["stream","Поток"],["replicaFrom","Откуда забирать"],["pre","Предзапись, с"],["retentionDays","Срок записи, дней"],["minDepthDays","Глубина не меньше, дней"],["decimation","Прореживание"]];
+function archxDiffText(from,to){
+  const a=new Map((from||[]).filter(x=>!x.ro).map(x=>[x.arch,x])),b=new Map((to||[]).filter(x=>!x.ro).map(x=>[x.arch,x]));
+  const f=[],t=[],name=id=>`«${locName(archById(id)||{name:String(id)})}»`;
+  [...new Set([...a.keys(),...b.keys()])].forEach(id=>{
+    const x=a.get(id),y=b.get(id);
+    if(!x){f.push(`${name(id)}: —`);t.push(`${name(id)}: ${i18n("добавлено")}`);return}
+    if(!y){f.push(`${name(id)}: ${i18n("есть")}`);t.push(`${name(id)}: ${i18n("убрано")}`);return}
+    ARCHX_DIFF_F.forEach(([k,l])=>{
+      if(JSON.stringify(x[k]??null)===JSON.stringify(y[k]??null))return;
+      const fk=k==="rec"?"rec":k;
+      f.push(`${name(id)}, ${i18n(l)}: ${cardFmt(fk,x[k])}`);t.push(`${name(id)}, ${i18n(l)}: ${cardFmt(fk,y[k])}`);
+    });
+  });
+  return f.length?{from:f.join("; "),to:t.join("; ")}:{from:cardFmt("archx",from),to:cardFmt("archx",to)};
+}
 function cardDiffNode(live,snap,owner,out){
   const keys=new Set([...Object.keys(live),...Object.keys(snap)]);
   keys.forEach(k=>{
@@ -9462,8 +9520,10 @@ function cardDiffNode(live,snap,owner,out){
     if(k==="streams"&&handCam(live)){camStreamsDiff(live,snap,out);return}
     if(JSON.stringify(live[k])===JSON.stringify(snap[k]))return;
     const from=snap[k]===undefined?undefined:cardClone({v:snap[k]}).v,to=live[k]===undefined?undefined:cardClone({v:live[k]}).v;
+    // Строки дополнительных архивов — одна строка плана (одна правка extraArchives), но со словами: архив, поле, значения
+    const rows=k==="archx"&&handCam(live)?archxDiffText(from,to):null;
     out.push({node:live,key:k,from,to,label:(live!==owner?`«${locName(live)}»: `:"")+i18n(CARD_PROP[k]||k),
-      fromT:cardFmt(k,from),toT:cardFmt(k,to)});
+      fromT:rows?rows.from:cardFmt(k,from),toT:rows?rows.to:cardFmt(k,to)});
   });
   const sk=new Map((snap.devices||[]).map(d=>[d.id,d]));
   (live.devices||[]).forEach(d=>{const o=sk.get(d.id);if(o)cardDiffNode(d,o,owner,out);
@@ -15189,6 +15249,11 @@ function camsCardHeadActions(){
 // и найденное в сети по отдельности. Смысл привязки задаёт объект, из
 // которого пришли: у папки это расположение, у сервера — запись в архив.
 const LAN_COLS=[["name","Название"],["ip","IP-адрес"],["mac","MAC"],["vendor","Производитель"],["model","Модель"],["bind","Привязка"]];
+// У хранилища и сервера таблица отвечает на вопрос «как камера пишет сюда». Поэтому столбцы — параметры
+// записи пары «камера × хранилище», как список камер на странице архива в Axxon One. MAC, производитель и модель
+// не нужны для записи: IP и модель стоят второй строкой под именем, поиск по-прежнему находит камеру по MAC
+const LAN_REC_COLS=[["name","Камера"],["bind","Запись"],["stream","Поток"],["pre","Предзапись"],["ret","Срок"],["dec","Прореживание"],["days","Дней записи"]];
+function lanCols(n){return lanIsPlace(n)?LAN_COLS:LAN_REC_COLS}
 const LAN_CHIPS=[["all","Все"],["here","Здесь"],["free","Свободные"],["other","В другом месте"],["none","Нет в системе"]];
 const lan={owner:null,q:"",sort:"name",dir:1,chip:"all",sel:new Set(),arch:null,rec:"always",state:"idle",progress:0,net:[]};
 function lanIsFolder(n){return!!n&&handOf(n,"folder")}
@@ -15336,6 +15401,8 @@ function lanRows(n){
     .map(r=>({key:"n:"+r.id,kind:"net",id:r.id,node:null,name:r.name||r.ip,ip:r.ip||"",mac:r.mac||"",
       vendor:r.vendor||"",model:r.model||"",type:r.type||"camera",bind:"none",bindText:i18n("Нет в системе"),
       status:r.status,foreign:false}));
+  // Значения записи нужны всем строкам только для сортировки по ним; ячейки страницы считают свои сами (lanRecRowCells)
+  if(!lanIsPlace(n)&&LAN_REC_SORT.has(lan.sort))sys.forEach(r=>Object.assign(r,lanRecVals(n,r)));
   return sys.concat(net);
 }
 function lanFilter(rows){
@@ -15348,6 +15415,12 @@ function lanFilter(rows){
   const dir=lan.dir,k=lan.sort;
   out=out.slice().sort((a,b)=>{
     if((a.kind==="net")!==(b.kind==="net"))return a.kind==="net"?1:-1;
+    // Столбцы записи — по своему ключу; камеры, которые сюда не пишут, — всегда в конце
+    if(LAN_REC_SORT.has(k)){
+      const x=a.sk?.[k],y=b.sk?.[k];
+      if(x==null||y==null)return x==null&&y==null?0:x==null?1:-1;
+      return(x===y?0:typeof x==="number"?(x<y?-1:1):String(x).localeCompare(String(y),"ru",{numeric:true}))*dir;
+    }
     const x=String((k==="bind"?a.fbind:null)??a[k]??""),y=String((k==="bind"?b.fbind:null)??b[k]??"");
     return x.localeCompare(y,"ru",{numeric:true})*dir;
   });
@@ -15368,14 +15441,15 @@ function lanNvrHeadHtml(n,nvrId,found){
   const nvr=find(nvrId)?.n;if(!nvr)return"";
   const mates=found.filter(r=>r.nvr===nvrId),pk=mates.filter(r=>lanCheckable(n,r)),on=pk.length&&pk.every(lanChecked);
   const edge=edgeStorage(nvr);
+  const nvrCard=`<button type="button" class="lk lk-act" ${onEv("click",["pick",`${nvrId}`])}>${i18n("Карточка")}</button>`;
   // Те же колонки, что у строк: объединённая ячейка ломала сетку таблицы,
   // когда узкая ширина прячет колонки производителя и модели.
   return`<tr class="lan-grp" data-lk="g:${escHtml(nvrId)}"><td class="lan-chk"><input type="checkbox" ${on?"checked":""} ${pk.length?"":"disabled"} aria-label="${i18n("Отметить камеры регистратора")}" ${onEv("change",["lanPickNvr",`${nvrId}`,onEv.checked])}></td>
     <td><span class="lan-grp-h">${ic("ipsrv")}<b>${escHtml(locName(nvr))}</b></span><span class="lan-sub lan-grp-sub">${mates.length} ${i18n(plural(mates.length,"камера|камеры|камер"))} ${i18n("на одном IP")}</span></td>
-    <td><span class="tag tag-ip" title="${i18n("Единственный IP. У камер регистратора нет своих адресов")}">${escHtml(nvr.ip||"—")}</span></td>
-    <td>${escHtml(nvr.mac||"")}</td><td>${escHtml(nvr.vendor||"")}</td><td>${escHtml(nvr.model||"")}</td>
-    <td><span class="sub">${mates.length} ${i18n(plural(mates.length,"камера|камеры|камер"))}${edge?` · ${i18n("архив")} ${escHtml(edge.size||"")}`:""}</span></td>
-    <td class="lan-act"><button type="button" class="lk lk-act" ${onEv("click",["pick",`${nvrId}`])}>${i18n("Карточка")}</button></td></tr>`;
+    ${lanIsPlace(n)?`<td><span class="tag tag-ip" title="${i18n("Единственный IP. У камер регистратора нет своих адресов")}">${escHtml(nvr.ip||"—")}</span></td>
+    <td>${escHtml(nvr.mac||"")}</td><td>${escHtml(nvr.vendor||"")}</td><td>${escHtml(nvr.model||"")}</td>`:""}
+    <td><span class="sub">${mates.length} ${i18n(plural(mates.length,"камера|камеры|камер"))}${edge?` · ${i18n("архив")} ${escHtml(edge.size||"")}`:""}</span>${lanIsPlace(n)?"":` · ${nvrCard}`}</td>${lanIsPlace(n)?"":"<td></td>".repeat(lanCols(n).length-2)}
+    <td class="lan-act">${lanIsPlace(n)?nvrCard:""}</td></tr>`;
 }
 function lanPickNvr(nvrId,on){
   const n=find(lan.owner)?.n;if(!n)return;
@@ -15822,6 +15896,78 @@ function lanSelBarHtml(n,selRows,total){
     ${nets?`<button type="button" class="btn s" ${onEv("click",["lanBulk"])}>${i18n("В план")} (${nets})</button>`:""}
     <span class="lan-sel-note">${i18n(cams.length?"Режим сразу меняется в строках. Применить — кнопкой «Показать план» внизу.":"Устройства, которых нет в системе, сначала попадают в план добавления.")}</span></div>`;
 }
+// ── Параметры записи камеры в строке таблицы хранилища ──
+// Строка показывает запись пары «камера × хранилище строки» (lanRowArch): поток, предзапись, срок, прореживание, дни записи.
+// Камера сюда не пишет — параметров нет, в ячейках прочерк. Значения правят прямо в строке: черновик хранилища,
+// как режим записи. Строку хранилища, которую задаёт сервер (ro), строка только показывает.
+// Прореживание — decimation камеры и строки extraArchives, дни записи — depthDays (профиль vms.camera/1 1.3)
+const LAN_REC_SORT=new Set(["stream","pre","ret","dec","days"]);
+// Значения — как прореживание привязки камеры к архиву в Axxon One: по опорным кадрам или 1 кадр в 20–240 с
+const LAN_DEC=[["","Нет"],["keyframes","Ключевые кадры"],...[20,30,60,120,240].map(n=>[`${n}s`,`1 кадр / ${n} с`])];
+function lanRowX(n,r){
+  if(!r.node||!handCam(r.node)||r.bind!=="here")return null;
+  const aid=lanRowArch(n,r);
+  return camArchs(r.node).find(y=>y.arch===aid&&y.rec&&y.rec!=="none")||null;
+}
+function lanRecVals(n,r){
+  const x=lanRowX(n,r);if(!x)return{stream:"",pre:"",ret:"",dec:"",days:null,sk:null};
+  const c=r.node,a=archById(x.arch);
+  const pre=x.rec==="replica"?"":(x.pre??(x.main?5:c.pre??5));
+  const ret=x.retentionDays??a?.days??0;
+  const stream=camStreams(c).find(s=>s.id===(x.stream||camStreams(c)[0].id))?.name||x.stream||"";
+  const dec=x.decimation||"",days=x.depthDays??null;
+  // Ключи сортировки: срок 0 — без ограничения, то есть больше любого числа; прореживание — по силе, от «Нет»;
+  // дней записи сервер не назвал — в конце, как камера без записи
+  const sk={stream,pre:pre===""?null:pre,ret:ret||Infinity,dec:LAN_DEC.findIndex(d=>d[0]===dec),days};
+  return{stream,pre,ret,dec,days,sk};
+}
+function lanRecRowCells(n,r){
+  if(!r.sk&&r.sk!==null)Object.assign(r,lanRecVals(n,r));
+  const nameTd=`<td><span class="lan-name">${hlText(r.name,lan.q)}</span><span class="lan-sub">${r.nvr?`${i18n("канал")} ${escHtml(r.ch)} · ${escHtml(r.nvrName)} · ${hlText(r.ip,lan.q)}`:[hlText(r.ip,lan.q),escHtml(r.model)].filter(Boolean).join(" · ")}</span></td>`;
+  const recTd=`<td>${lanRecCellHtml(n,r)}</td>`;
+  const x=lanRowX(n,r),dash=`<span class="lan-na">—</span>`;
+  if(!x)return nameTd+recTd+`<td>${dash}</td><td>${dash}</td><td>${dash}</td><td>${dash}</td><td>${dash}</td>`;
+  const c=r.node,a=archById(x.arch),ro=x.ro||lanRowRo(n,r),edit=!ro,k=`${r.key}`;
+  // Меньше суток — «меньше суток», дальше — целые дни
+  const d=r.days,days=d==null?dash:`<span class="lan-num">${d<1?i18n("меньше суток"):`${Math.floor(d)} ${i18n(plural(Math.floor(d),"день|дня|дней"))}`}</span>`;
+  const decName=i18n((LAN_DEC.find(d=>d[0]===r.dec)||LAN_DEC[0])[1]);
+  // Профиль камеры ниже 1.3 прореживания не знает: ячейка пустая, правки нет
+  const decOff=nodeFieldOff(c,"decimation");
+  if(!edit){
+    return nameTd+recTd+`<td>${escHtml(r.stream)}</td>
+      <td class="lan-numc">${r.pre===""?dash:`${r.pre} ${i18n("с")}`}</td>
+      <td class="lan-numc">${r.ret?`${r.ret} ${i18n("дн.")}`:i18n("без огр.")}${x.retentionDays==null&&a?`<span class="lan-sub2">${i18n("как у хранилища")}</span>`:""}</td>
+      <td>${decOff?dash:decName}</td><td class="lan-numc">${days}</td>`;
+  }
+  const streams=camStreams(c),cur=x.stream||streams[0].id;
+  const stop=onEv("click",onEv.stop);
+  const sel=`<select class="lan-cell-in" title="${escHtml(r.stream)}" aria-label="${escHtml(i18n("Поток записи")+": "+r.name)}" ${x.rec==="replica"?"disabled":""} ${stop} ${onEv("change",["lanParamSet",k,"stream",onEv.value])}>${streams.map(s=>`<option value="${escHtml(s.id)}" ${s.id===cur?"selected":""}>${escHtml(s.name)}</option>`).join("")}</select>`;
+  const num=(f,v,ph,max,lab)=>`<input type="number" class="lan-cell-in lan-cell-num" min="0" step="1" ${max?`max="${max}"`:""} value="${v??""}" placeholder="${escHtml(ph)}" aria-label="${escHtml(i18n(lab)+": "+r.name)}" ${stop} ${onEv("change",["lanParamSet",k,f,onEv.value])}>`;
+  const unit=t=>`<span class="lan-unit">${i18n(t)}</span>`;
+  const pre=x.rec==="replica"?dash:num("pre",x.pre??"",String(x.main?5:c.pre??5),30,"Предзапись, с")+unit("с");
+  const ret=num("retentionDays",x.retentionDays,a?String(a.days??""):"","","Срок, дней")+unit("дн.")+(x.retentionDays==null&&a?`<span class="lan-sub2">${i18n("как у хранилища")}</span>`:"");
+  const dec=`<select class="lan-cell-in" title="${escHtml(decName)}" aria-label="${escHtml(i18n("Прореживание")+": "+r.name)}" ${stop} ${onEv("change",["lanParamSet",k,"decimation",onEv.value])}>${LAN_DEC.map(([v,l])=>`<option value="${v}" ${v===r.dec?"selected":""}>${i18n(l)}</option>`).join("")}</select>`;
+  // Промах мимо поля в ячейке правки не открывает камеру: клик по ячейке остаётся в ней
+  const td=h=>`<td class="lan-edit-td" ${stop}>${h}</td>`;
+  return nameTd+recTd+td(sel)+td(pre)+td(ret)+(decOff?`<td>${dash}</td>`:td(dec))+`<td class="lan-numc">${days}</td>`;
+}
+// Правка в строке — та же строка камеры, что в карточке камеры (camArchRowSet), но в черновик хранилища
+function lanParamSet(key,f,v){
+  const n=find(lan.owner)?.n;if(!n)return;
+  const r=lanRowByKey(n,key);if(!r)return;
+  const x=lanRowX(n,r);if(!x)return;
+  const c=r.node;
+  // Значение не изменилось — черновика нет
+  const val=f==="stream"||f==="decimation"||v===""?v:Math.max(0,Math.round(Number(v))||0);
+  if(String(x[f]??"")===String(val))return;
+  lanDraftCams([c],()=>{
+    const row=c.arch===x.arch?c:(c.archx||[]).find(y=>y.arch===x.arch);if(!row)return;
+    if(val==="")delete row[f];
+    else row[f]=val;
+    // Копия с этого хранилища забирает его поток — как camArchRowSet в карточке камеры
+    if(f==="stream")camReplicaSync(c);
+  });
+}
 function lanSysRowHtml(n,r){
   const a=lanAction(n,r);
   const btn=a.off
@@ -15831,10 +15977,10 @@ function lanSysRowHtml(n,r){
     ?`<input type="checkbox" class="ts-chk" ${lanChecked(r)?"checked":""} aria-label="${escHtml(r.name)}" ${onEv("click",onEv.stop)} ${onEv("change",["lanPick",`${r.key}`,onEv.checked])}>`:"";
   return`<tr class="gtbl-r lan-r ${r.nvr?"lan-r-nvr":""} ${lanChecked(r)?"ts-on":""}" data-lk="${escHtml(r.key)}" ${onEv("click",["pick",`${r.id}`])}>
     <td class="lan-chk">${chk}</td>
-    <td><span class="lan-name">${hlText(r.name,lan.q)}</span><span class="lan-sub">${escHtml(r.nvr?`${i18n("канал")} ${r.ch} · ${r.nvrName}`:[r.vendor,r.model].filter(Boolean).join(" · "))}</span></td>
+    ${lanIsPlace(n)?"":lanRecRowCells(n,r)}${lanIsPlace(n)?`<td><span class="lan-name">${hlText(r.name,lan.q)}</span><span class="lan-sub">${escHtml(r.nvr?`${i18n("канал")} ${r.ch} · ${r.nvrName}`:[r.vendor,r.model].filter(Boolean).join(" · "))}</span></td>
     <td>${r.nvr?`<span class="tag tag-ch" title="${i18n("Своего IP нет. Видео идёт через регистратор")} ${escHtml(r.ip)}">${i18n("кан.")} ${escHtml(r.ch)}</span> <span class="lan-ip-via">${i18n("через")} ${hlText(r.ip,lan.q)}</span>`:hlText(r.ip,lan.q)}</td><td>${hlText(r.mac,lan.q)}</td>
     <td>${hlText(r.vendor,lan.q)}</td><td>${hlText(r.model,lan.q)}</td>
-    <td>${lanIsPlace(n)?`<span class="lan-bind lan-bind-${r.bind}">${escHtml(r.bindText)}</span>`:lanRecCellHtml(n,r)}</td>
+    <td><span class="lan-bind lan-bind-${r.bind}">${escHtml(r.bindText)}</span></td>`:""}
     <td class="lan-act">${lanIsPlace(n)?btn:""}</td></tr>`;
 }
 function lanNetRowHtml(n,r){
@@ -15845,7 +15991,7 @@ function lanNetRowHtml(n,r){
     :a.off
     ?`<button type="button" class="btn s" disabled title="${escHtml(a.off)}">${lanBulkLabel(n)}</button>`
     :`<button type="button" class="btn pri s" ${onEv("click",a.fn)}>${a.label}</button>`;
-  return`<tr class="lan-net" data-lk="${escHtml(r.key)}"><td colspan="8">
+  return`<tr class="lan-net" data-lk="${escHtml(r.key)}"><td colspan="${lanCols(n).length+2}">
     <div class="dev-result"><div class="dev-result-main">
       <input type="checkbox" class="ts-chk" ${lan.sel.has(r.key)?"checked":""} ${a.off?`disabled title="${escHtml(a.off)}"`:""} aria-label="${escHtml(i18n("Выбрать")+" "+r.ip)}" ${onEv("click",onEv.stop)} ${onEv("change",["lanPick",`${r.key}`,onEv.checked])}>
       <span class="dev-dot ${escHtml(src.status||"")}" title="${escHtml(i18n(DEVICE_STATUS_LABELS[src.status]||""))}"></span>
@@ -15890,11 +16036,11 @@ function lanCardBuild(n){
     ${lanIsPlace(n)?`<button type="button" class="btn pri s" ${onEv("click",["lanBulk"])} ${nBind?"":"disabled"}>${lanBulkLabel(n)} (${nBind})</button>
     ${lanHasUnbind(n)?`<button type="button" class="btn s" ${onEv("click",["lanUnbindChecked"])} ${nUnbind?"":"disabled"}>${i18n(lanIsFolder(n)?"Убрать":"Отвязать")} (${nUnbind})</button>`:""}`:""}
   </div>${lanIsPlace(n)?"":lanSelBarHtml(n,selRows,allCk.length)}`;
-  const th=LAN_COLS.map(([k,l])=>`<th class="lan-th lan-th-${k} ${lan.sort===k?"on":""}" ${onEv("click",["lanSort",`${k}`])}><span class="gtbl-th-txt">${i18n(k==="bind"&&!lanIsPlace(n)?"Запись":l)}${lan.sort===k?(lan.dir>0?lu("arrow-up",12):lu("arrow-down",12)):""}</span></th>`).join("");
+  const th=lanCols(n).map(([k,l])=>`<th class="lan-th lan-th-${k} ${lan.sort===k?"on":""}" ${k==="days"?`title="${escHtml(i18n("Сколько дней записи камеры есть в этом хранилище сейчас"))}"`:""} ${onEv("click",["lanSort",`${k}`])}><span class="gtbl-th-txt">${i18n(k==="bind"&&!lanIsPlace(n)?"Запись":l)}${lan.sort===k?(lan.dir>0?lu("arrow-up",12):lu("arrow-down",12)):""}</span></th>`).join("");
   const body=rows.length?rows.map((r,i)=>(r.nvr&&r.nvr!==rows[i-1]?.nvr?lanNvrHeadHtml(n,r.nvr,found):"")+(r.kind==="net"?lanNetRowHtml(n,r):lanSysRowHtml(n,r))).join("")
     // Пока опрос идёт, пустая таблица — это не ответ «ничего нет», а «ещё не
     // дошло»; говорить об этом надо разными словами.
-    :`<tr><td class="empty" colspan="8">${lan.chip==="here"&&!lan.q.trim()&&!lanIsPlace(n)
+    :`<tr><td class="empty" colspan="${lanCols(n).length+2}">${lan.chip==="here"&&!lan.q.trim()&&!lanIsPlace(n)
       ?`${i18n("Пока никто не записывает сюда видео.")} ${i18n("Привязать:")} <button type="button" class="lk" ${onEv("click",["lanSetChip","free"])}>${i18n("свободные")} (${counts.free})</button> · <button type="button" class="lk" ${onEv("click",["lanSetChip","other"])}>${i18n("пишущие в другое хранилище")} (${counts.other})</button>`
       :lan.state==="searching"
       ?`${i18n("Идёт поиск в сети")}… ${lan.progress}%`
@@ -15902,7 +16048,7 @@ function lanCardBuild(n){
   const pageOn=pageCk.length>0&&pagePicked===pageCk.length;
   // У хранилища и сервера «Отмечено N из M» стоит в полосе над таблицей (lanSelBarHtml): отдельная строка сдвигала бы список
   const banner=lanIsPlace(n)?tsBannerHtml(allPicked,pageCk.length,allCk.length,pageOn,"lanPickAllOwner(true)","lanPickAllOwner(false)"):"";
-  const table=`${banner}<div class="lan-wrap"><table class="gtbl-cams lan-tbl">
+  const table=`${banner}<div class="lan-wrap"><table class="gtbl-cams lan-tbl ${lanIsPlace(n)?"":"lan-tbl-rec"}">
     <thead><tr class="gtbl-h"><th class="lan-chk"><input type="checkbox" class="ts-chk" ${pageOn?"checked":""} ${pagePicked&&!pageOn?'data-ind="1"':""} ${pageCk.length?"":"disabled"} title="${i18n("Все на странице")}" aria-label="${i18n("Отметить все на странице")}" ${onEv("change",["lanPickPage",onEv.checked])}></th>${th}<th></th></tr></thead>
     <tbody>${body}</tbody></table></div>
   <div class="tfoot">
@@ -42510,7 +42656,7 @@ function keyToApi(node,key,v){
   if(key==="size")return{sizeBytes:v===undefined?null:Math.round(sizeTb(v)*TB)};
   if(key==="kind"&&handOf(node,"det"))return{detectorKind:v===undefined?null:DET_KIND_CODE[v]||v};
   if(key==="sens")return{sensitivity:apiVal("sensitivity",v)};
-  if(key==="archx")return{extraArchives:v===undefined?null:v.filter(x=>!x.ro).map(x=>({archiveId:x.arch,recordMode:x.rec??null,stream:x.stream??null,...(x.labels?.length?{labels:x.labels}:{}),...(x.rec==="replica"?{replicaFrom:x.replicaFrom??null}:{}),...(x.retentionDays!=null?{retentionDays:x.retentionDays}:{}),...(x.minDepthDays!=null?{minDepthDays:x.minDepthDays}:{}),...(x.pre!=null?{preRecordSec:x.pre}:{})}))};
+  if(key==="archx")return{extraArchives:v===undefined?null:v.filter(x=>!x.ro).map(x=>({archiveId:x.arch,recordMode:x.rec??null,stream:x.stream??null,...(x.labels?.length?{labels:x.labels}:{}),...(x.rec==="replica"?{replicaFrom:x.replicaFrom??null}:{}),...(x.retentionDays!=null?{retentionDays:x.retentionDays}:{}),...(x.minDepthDays!=null?{minDepthDays:x.minDepthDays}:{}),...(x.pre!=null?{preRecordSec:x.pre}:{}),...(x.decimation!=null?{decimation:x.decimation}:{})}))};
   if(key==="mode"&&handOf(node,"email"))return{mode:v===undefined?null:EMAIL_MODE_CODE[v]||v};
   if(key==="pass")return{password:v===undefined?null:v};
   if(key==="norm")return{norm:v===undefined?null:NORM_CODE[v]||v};
