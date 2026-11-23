@@ -4369,4 +4369,5 @@ window.I18N_EN={
 "Другой поиск в сети домена уже идёт. Окно показывает его сервер и категорию.":"Another search in the domain network is already running. The window shows its server and category.",
 "На сервере нет камер.":"The server has no cameras.",
 "Найти камеры в сети":"Find cameras in the network",
+"камера не может писать в это хранилище":"the camera cannot record to this storage",
 };

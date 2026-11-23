@@ -35272,11 +35272,13 @@ function hasLinkedArchive(arch){return!!arch}
 // Нового устройства на сервере ещё нет, поэтому выбор архива — среди хранилищ
 // его домена; если мастер открыт на сервере — только хранилища этого сервера
 // и сетевые хранилища домена. Сервер камера получит от выбранного хранилища.
+// Хранилища, куда мастер может направить запись камеры: резерв без основной записи и хранилище
+// инцидентов (admits:false) сервер для archiveId не примет — их в списке нет
 function wizArchList(){
   const scope=lanArchScope();if(scope)return scope;
-  if(!wizd)return arch;
-  if(wizd.server)return[...serverArchives(wizd.server),...domainArchives(SERVER_DOMAIN[wizd.server])];
-  return wizd.domain?arch.filter(a=>archDomainId(a)===wizd.domain):arch;
+  if(!wizd)return arch.filter(archMainOk);
+  if(wizd.server)return[...serverArchives(wizd.server),...domainArchives(SERVER_DOMAIN[wizd.server])].filter(archMainOk);
+  return(wizd.domain?arch.filter(a=>archDomainId(a)===wizd.domain):arch).filter(archMainOk);
 }
 // Какие архивы вообще можно выбрать в карточке найденного. В мастере — любые,
 // а в закладке объекта выбор сужен до того, о чём эта закладка: у сервера его
@@ -37777,7 +37779,8 @@ function csvRowFrom(cols,index,colMap){
   if(identifier&&identifier!=="Авто"&&!/^[A-Za-z0-9_]+$/.test(identifier))errors.push("некорректный ID");
   if(legacy&&cols.length<4)errors.push("недостаточно столбцов");
   const a=arch.find(x=>x.name===archiveName||x.id===archiveName);
-  if(a&&!wizArchList().includes(a))errors.push("архив другого домена или сервера");
+  if(a&&!archMainOk(a))errors.push("камера не может писать в это хранилище");
+  else if(a&&!wizArchList().includes(a))errors.push("архив другого домена или сервера");
   row.arch=a&&wizArchList().includes(a)?a.id:"";
   const recMap={Нет:"none",Всегда:"always","По движению":"motion","По детектору":"motion","По событию":"motion",none:"none",always:"always",motion:"motion"};
   row.record=recMap[recordName]||(row.arch?"motion":"none");
@@ -38267,7 +38270,7 @@ function planServerBarHtml(){
   else ctl=`<select id="planSrv" ${onEv("change",["planSetServer",onEv.value])}>${list.map(s=>`<option value="${s.id}" ${s.id===cur?"selected":""} ${s.online===false?"disabled":""}>${nm(s)}</option>`).join("")}</select>`;
   return`<div class="plan-srv"><label for="planSrv">${i18n("Сервер")}:</label>${ctl}<span class="sub">${i18n("Действует на строки, которые вы добавите потом")}</span></div>`;
 }
-function planAllowedArchives(sid,did){return[...serverArchives(sid),...domainArchives(did)]}
+function planAllowedArchives(sid,did){return[...serverArchives(sid),...domainArchives(did)].filter(archMainOk)}
 // Сервер, к которому привязано хранилище; у сетевого хранилища домена его нет
 function planArchServer(archId){return(archId&&archById(archId)?.server)||null}
 // Архив строки должен быть доступен её серверу: иначе первый из доступных, иначе пусто — и строка об этом скажет
@@ -38298,7 +38301,7 @@ function devFoundArch(r){
 // хранилище инцидентов с admits: false — нет)
 function devArchIdsFor(sid){
   const keep=wizd.server;wizd.server=sid;
-  try{return wizArchList().filter(archMainOk).map(a=>a.id)}finally{wizd.server=keep}
+  try{return wizArchList().map(a=>a.id)}finally{wizd.server=keep}
 }
 function planPush(source,r0,x={}){
   if(addPlan.applying){toast(i18n("Идёт применение плана"));return null}

@@ -372,7 +372,7 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   pick(d1.id);
   goTab("cams");
   await until(() => lan.state === "done" && lan.net.length > 0);
-  const localArch = arch.find((a) => a.server && SERVER_DOMAIN[a.server] === d1.id && planServerList(d1.id).some((s) => s.id === a.server && s.online !== false));
+  const localArch = arch.find((a) => a.server && archMainOk(a) && SERVER_DOMAIN[a.server] === d1.id && planServerList(d1.id).some((s) => s.id === a.server && s.online !== false));
   const netRow = lan.net.find((r) => r.status !== "bad" && r.vendor);
   if (localArch && netRow) {
     lanPrefill(find(lan.owner).n, netRow);
