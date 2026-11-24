@@ -3678,6 +3678,7 @@ body.dw-resizing,body.dw-resizing *{cursor:col-resize!important;user-select:none
 <!-- ONE PSIM: мост по ONE.PSIM.PrototypeKit, подключён после стилей прототипа -->
 <link rel="stylesheet" href="assets/one-psim/bridge.css">
 <script src="assets/i18n-en.js"></script>
+<script src="assets/i18n-en-89.js"></script>
 <!-- API: контракт, эталонный набор, встроенный сервер и клиент (api/README.md) -->
 <script src="api/openapi.js"></script>
 <script src="api/fixture.js"></script>
@@ -37879,17 +37880,74 @@ function gbtUseRef(){
   renderDeviceWizard();
   document.getElementById("devManIp")?.focus();
 }
+// ── Ручной ввод: проверка IP-адреса и порта ──
+// Как в Axxon One: IPv4 — четыре числа от 0 до 255, порт — от 1 до 65535, диапазон адресов — не больше 500.
+// У источника событий адрес может быть именем хоста. У ACFA адрес и порт не вводят.
+const MANUAL_RANGE_MAX=500;
+function ipv4Num(v){const p=String(v).trim().split(".");if(p.length!==4||!p.every(x=>/^\d{1,3}$/.test(x)&&+x<=255))return null;return p.reduce((a,x)=>a*256+(+x),0)}
+function ipv4Str(n){return[n>>>24&255,n>>>16&255,n>>>8&255,n&255].join(".")}
+function manualHostOk(v){return!/^[\d.]+$/.test(v)&&/^(?=.{1,253}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/i.test(v)}
+// Поле IP формы: адрес или диапазон «первый-последний». Ответ — {ips:[…], range} или {err}
+function manualAddrParse(m){
+  const v=String(m.ip||"").trim();
+  if(!v)return{ips:[]};
+  if(/^[\d.\s]+-[\d.\s]+$/.test(v)){
+    const [a0,b0]=v.split("-"),a=ipv4Num(a0),b=ipv4Num(b0);
+    if(a===null||b===null)return{err:"Ввести диапазон как два IPv4-адреса через дефис, например 192.168.1.10-192.168.1.50"};
+    if(b<a)return{err:"Последний адрес диапазона должен быть больше первого"};
+    if(b-a+1>MANUAL_RANGE_MAX)return{err:"Ввести диапазон не больше 500 адресов"};
+    return{ips:Array.from({length:b-a+1},(_,i)=>ipv4Str(a+i)),range:true};
+  }
+  if(ipv4Num(v)!==null)return{ips:[v]};
+  const ev=handOf(m,"eventsrc");
+  if(ev&&manualHostOk(v))return{ips:[v]};
+  return{err:ev?"Ввести IPv4-адрес из четырёх чисел от 0 до 255 или имя хоста":"Ввести IPv4-адрес из четырёх чисел от 0 до 255, например 192.168.1.100"};
+}
+function manualPortErr(m){const v=String(m.port??"").trim();return/^\d+$/.test(v)&&+v>=1&&+v<=65535?"":"Ввести порт от 1 до 65535"}
+// Поля IP и порта проверяет форма; у RTSP и GB/T28181 — свои поля и проверки, у ACFA полей нет
+function manualAddrChecked(m){return!manualIsRtsp(m)&&!manualIsGbt(m)&&!handOf(m,"acfa")}
+function manualAddrErr(m){if(!manualAddrChecked(m))return"";return manualAddrParse(m).err||manualPortErr(m)}
+// Ошибку не показывают, пока адрес набирают: только после ухода из поля, Enter или «В план»
+function manualAddrNoteHtml(m){
+  const p=manualAddrParse(m),pe=manualPortErr(m),show=wizd.manualAddrShow;
+  const bad=t=>`<span class="gbt-st err">${lu("triangle-alert",14)} ${escHtml(i18n(t))}</span>`;
+  const out=[];
+  if(show&&p.err&&String(m.ip||"").trim())out.push(bad(p.err));
+  if(show&&pe)out.push(bad(pe));
+  if(!p.err&&p.range)out.push(`<span class="gbt-st">${i18n("Адресов в диапазоне")}: ${p.ips.length}. ${i18n("«В план» добавит строку на каждый адрес")}</span>`);
+  if(!out.length)out.push(`<span class="gbt-st">${i18n("Ввести один адрес или диапазон через дефис, до 500 адресов")}</span>`);
+  return out.join("");
+}
+function manualAddrPaint(){
+  const m=wizd?.manual,el=document.getElementById("manAddrNote");
+  if(!el||!m||!manualAddrChecked(m))return;
+  el.innerHTML=manualAddrNoteHtml(m);
+  const p=manualAddrParse(m),show=wizd.manualAddrShow;
+  document.getElementById("devManIp")?.classList.toggle("gbt-bad",!!(show&&p.err&&String(m.ip||"").trim()));
+  document.getElementById("devManPort")?.classList.toggle("gbt-bad",!!(show&&manualPortErr(m)));
+}
+function manualAddrBlur(){wizd.manualAddrShow=true;manualAddrPaint()}
+// Enter в поле IP или порта — «Определить», как в Axxon One: нужен один верный адрес и порт больше 0
+function manualAddrKey(e){
+  if(e.key!=="Enter")return;
+  e.preventDefault();
+  const m=wizd.manual,p=manualAddrParse(m);
+  wizd.manualAddrShow=true;manualAddrPaint();
+  if(p.err||manualPortErr(m)||p.ips.length!==1)return;
+  detectManualModel();
+}
 function updateManual(key,value){
   wizd.manual[key]=value;
   if(key==="rtsp")rtspChPreview();
   // Модель N_channel_device, набранную руками, консоль понимает так же, как выбор в поле «Каналы»
   if(key==="model"&&manualIsRtsp(wizd.manual)){const n=rtspModelChannels(value);if(n&&n!==rtspChannelsOf(wizd.manual)){changeManualChannels(n);return}}
   if((key==="ip"||key==="port")&&manualIsGbt(wizd.manual))gbtNotePaint();
+  if((key==="ip"||key==="port")&&manualAddrChecked(wizd.manual)){if(!manualAddrErr(wizd.manual))wizd.manualAddrShow=false;manualAddrPaint()}
   if(key==="arch"&&!hasLinkedArchive(value))wizd.manual.record="none";
   if(key==="arch"||key==="record")renderDeviceWizard();
 }
 function changeManualType(type){
-  wizd.manual.type=type;wizd.manualAddedId=null;renderDeviceWizard();
+  wizd.manual.type=type;wizd.manualAddedId=null;wizd.manualAddrShow=false;renderDeviceWizard();
 }
 function changeManualVendor(vendor){
   const m=wizd.manual,was=isGbtVendor(m.vendor);
@@ -37903,6 +37961,9 @@ function changeManualVendor(vendor){
 function detectManualModel(){
   const m=wizd.manual;
   if(!m.ip||!m.port||!m.vendor){toast("Указать IP, порт и производителя");return}
+  const pa=manualAddrParse(m),ae=pa.err||manualPortErr(m);
+  if(ae){wizd.manualAddrShow=true;manualAddrPaint();toast(i18n(ae));return}
+  if(pa.range){toast(i18n("Консоль определяет модель только по одному адресу. Ввести один адрес"));return}
   // Модель сообщает само устройство: спрашиваем через сервер. Определить модель может только драйвер: вместе с адресом
   // уходят логин и пароль, если введены. Команда probe вида камеры (ipsrv): устройства ещё нет — POST /kinds/{kind}/actions/probe
   const kind=handOf(m,"ipsrv")?"ipsrv":"camera";
@@ -37920,7 +37981,9 @@ function addManualDevice(){
   const gbtErr=gbtBlock(m);
   if(gbtErr){toast(i18n(gbtErr));document.getElementById("devManIp")?.focus();return}
   if(m.type==="camera"&&!m.rtsp&&(!m.vendor||!m.model)){toast("Указать производителя и модель или адрес RTSP");return}
-  if(m.type!=="camera"&&(!m.ip||!m.vendor||!m.model)){toast("Заполните IP, производителя и модель");return}
+  if(m.type!=="camera"&&!handOf(m,"acfa")&&(!m.ip||!m.vendor||!m.model)){toast("Заполните IP, производителя и модель");return}
+  const ae=manualAddrErr(m)||(manualAddrChecked(m)&&manualAddrParse(m).range?"Ввести один адрес":"");
+  if(ae){wizd.manualAddrShow=true;manualAddrPaint();toast(i18n(ae));return}
   if(missingManualCredentials(m)){askAddWithoutCredentials(()=>commitManualDevice(true));return}
   commitManualDevice(false);
 }
@@ -37931,7 +37994,7 @@ function manualNode(m,s,disabled,prof){
   const autoName=isDefaultDeviceName(m.name.trim())?(LB[m.type]||"Камера"):m.name.trim();
   const configMode=prof?prof.devMode:(wizd.devMode||"current");
   const template=configMode==="template"?(prof?find(prof.templateId)?.n:deviceTemplates().find(x=>x.id===wizd.templateId)):null;
-  const common={id:"obj"+Date.now()+Math.floor(Math.random()*1000),name:autoName,identifier,short:m.short??"",ip:m.ip,port:+m.port||gbtDefPort(m.vendor,m.type),vendor:m.vendor,model:m.model,user:m.user&&m.user!=="Авто"&&!manualIsGbt(m)?m.user:"",pass:manualIsGbt(m)?"":m.pass||"",online:true,devices:[],configMode};
+  const common={id:"obj"+Date.now()+Math.floor(Math.random()*1000),name:autoName,identifier,short:m.short??"",ip:handOf(m,"acfa")?"":m.ip,port:handOf(m,"acfa")?80:+m.port||gbtDefPort(m.vendor,m.type),vendor:m.vendor,model:m.model,user:m.user&&m.user!=="Авто"&&!manualIsGbt(m)?m.user:"",pass:manualIsGbt(m)?"":m.pass||"",online:true,devices:[],configMode};
   if(m.rtsp)common._f={RTSP:m.rtsp};
   if(disabled)common.enabled=false;
   if(configMode==="template"&&template){
@@ -37976,6 +38039,8 @@ function deviceManualHtml(){
   if(gbt&&wizd.gbtPeers===undefined)gbtPeersLoad();
   const idLocked=!!wizd.manualAddedId;
   const idVal=idLocked?deviceIdentifierValue(cam(wizd.manualAddedId))||"—":m.identifier;
+  const acfa=handOf(m,"acfa"),addrShow=wizd.manualAddrShow&&manualAddrChecked(m),pa=manualAddrParse(m);
+  const addrBad=!!(addrShow&&pa.err&&String(m.ip||"").trim()),portBad=!!(addrShow&&manualPortErr(m));
   return `${deviceArchiveWarning()}<div class="dev-manual">
     <div class="dev-grid">
       <div class="full"><label>Тип устройства</label><select ${onEv("change",["changeManualType",onEv.value])}>
@@ -37992,9 +38057,12 @@ function deviceManualHtml(){
       :gbt?`<div class="full"><label>${i18n("Адрес GB/T28181")}</label><input id="devManIp" class="${String(m.ip||"").trim()&&gbtBlock(m)&&gbtBlock(m)!==GBT_WAIT?"gbt-bad":""}" value="${escHtml(m.ip)}" placeholder="34020000001320000008@34020000002000000001" spellcheck="false" autocomplete="off" ${onEv("input",["updateManual","ip",onEv.value])}></div>
       <div class="gbt-note" id="gbtNote" aria-live="polite">${gbtNoteHtml(m)}</div>
       <div><label>${i18n("Порт SIP")}</label><input type="number" value="${m.port}" title="${escHtml(i18n("Локальный порт, на который сервер принимает сообщения SIP от устройства. По умолчанию 5060"))}" ${onEv("input",["updateManual","port",onEv.value])}></div>`
-      :`<div><label>${handOf(m,"eventsrc")?"Адрес кассы или сервера":"IP-адрес"}</label><input id="devManIp" value="${escHtml(m.ip)}" placeholder="192.168.1.100" ${onEv("input",["updateManual","ip",onEv.value])}></div>
+      :acfa?`<div><label>IP-адрес</label><input id="devManIp" disabled placeholder="${escHtml(i18n("Не нужен для ACFA"))}" title="${escHtml(i18n("Устройство ACFA подключается без IP-адреса и порта"))}"></div>
+      <div><label>Порт</label><input id="devManPort" disabled placeholder="${escHtml(i18n("Не нужен для ACFA"))}"></div>`
+      :`<div><label>${handOf(m,"eventsrc")?"Адрес кассы или сервера":"IP-адрес"}</label><input id="devManIp" class="${addrBad?"gbt-bad":""}" value="${escHtml(m.ip)}" placeholder="192.168.1.100" spellcheck="false" autocomplete="off" title="${escHtml(i18n("Ввести один адрес или диапазон через дефис, до 500 адресов"))}" ${onEv("input",["updateManual","ip",onEv.value])} ${onEv("keydown",["manualAddrKey",onEv.event])} ${onEv("blur",["manualAddrBlur"])}></div>
       ${handOf(m,"eventsrc")?`<div><label>Сервер</label><select ${onEv("change",["updateManual","server",onEv.value])}><option value="">Выберет система</option>${allocatedServers(wizd.domain).map(x=>`<option value="${x.id}" ${x.id===m.server?"selected":""}>${escHtml(locName(x))}</option>`).join("")}</select></div>`:""}
-      <div><label>Порт</label><input type="number" value="${m.port}" ${onEv("input",["updateManual","port",onEv.value])}></div>`}
+      <div><label>Порт</label><input id="devManPort" class="${portBad?"gbt-bad":""}" type="number" min="1" max="65535" value="${m.port}" ${onEv("input",["updateManual","port",onEv.value])} ${onEv("keydown",["manualAddrKey",onEv.event])} ${onEv("blur",["manualAddrBlur"])}></div>
+      <div class="gbt-note" id="manAddrNote" aria-live="polite">${manualAddrNoteHtml(m)}</div>`}
       ${gbt?`<div><label>Имя пользователя</label><input disabled placeholder="${escHtml(i18n("Не нужно для GB/T"))}"></div>
       <div><label>Пароль</label><input disabled placeholder="${escHtml(i18n("Не нужно для GB/T"))}"></div>`
       :`<div><label>Имя пользователя</label><input value="${escHtml(m.user)}" placeholder="Авто" ${onEv("input",["updateManual","user",onEv.value])}></div>
@@ -38693,21 +38761,33 @@ function planAddManual(){
   if(rtsp&&chN<2&&!String(m.rtsp||"").trim()){toast(i18n("Укажите адрес RTSP"));return}
   const gbtErr=gbtBlock(m);
   if(gbtErr){toast(i18n(gbtErr));document.getElementById("devManIp")?.focus();return}
+  const acfa=handOf(m,"acfa");
   if(m.type==="camera"&&!rtsp&&!m.ip){toast(i18n("Укажите IP-адрес"));return}
   if(m.type==="camera"&&!rtsp&&(!m.vendor||!m.model)){toast(i18n("Заполните производителя и модель"));return}
-  if(m.type!=="camera"&&(!m.ip||!m.vendor||!m.model)){toast(i18n("Заполните IP, производителя и модель"));return}
+  if(acfa&&(!m.vendor||!m.model)){toast(i18n("Заполните производителя и модель"));return}
+  if(m.type!=="camera"&&!acfa&&(!m.ip||!m.vendor||!m.model)){toast(i18n("Заполните IP, производителя и модель"));return}
+  const ae=manualAddrErr(m);
+  if(ae){wizd.manualAddrShow=true;manualAddrPaint();toast(i18n(ae));document.getElementById(manualPortErr(m)&&!manualAddrParse(m).err?"devManPort":"devManIp")?.focus();return}
   // Уходит только адрес, который виден в форме: набранный раньше другой адрес в строку не попадает
-  const r={...m,ip:rtsp?"":m.ip,port:rtsp?80:m.port,rtsp:rtsp?m.rtsp:"",rtspUrl:rtsp?m.rtsp:"",channels:chN,chUrls:chN>1?{...(m.chUrls||{})}:{},status:"ok",...(manualIsGbt(m)?{user:"",pass:""}:{})};
-  const sid=planServerId();
-  if(planAddrKey(r,"")!=="|:80"&&planFindByAddr(r,SERVER_DOMAIN[sid]||wizd.domain)){planDone(0,1);return}
-  const row=planPush("manual",r);
-  if(!row)return;
-  // Профиль, под которым набрали строку, остаётся за ней, что бы потом ни выбрали в окне
-  row.devMode=wizd.devMode||"current";row.templateId=wizd.templateId||"";
+  const r0={...m,ip:rtsp||acfa?"":m.ip,port:rtsp||acfa?80:m.port,rtsp:rtsp?m.rtsp:"",rtspUrl:rtsp?m.rtsp:"",channels:chN,chUrls:chN>1?{...(m.chUrls||{})}:{},status:"ok",...(manualIsGbt(m)?{user:"",pass:""}:{})};
+  // Диапазон адресов — строка на каждый адрес; ID и короткое имя у них свои, их задаёт система
+  const ips=manualAddrChecked(m)?manualAddrParse(m).ips:[r0.ip];
+  const sid=planServerId(),did=SERVER_DOMAIN[sid]||wizd.domain;
+  let n=0,dup=0;
+  for(const ip of ips){
+    const r={...r0,ip,...(ips.length>1?{identifier:"",short:""}:{})};
+    if(planAddrKey(r,"")!=="|:80"&&planFindByAddr(r,did)){dup++;continue}
+    const row=planPush("manual",r);
+    if(!row)break;
+    // Профиль, под которым набрали строку, остаётся за ней, что бы потом ни выбрали в окне
+    row.devMode=wizd.devMode||"current";row.templateId=wizd.templateId||"";
+    n++;
+  }
+  if(!n){planDone(0,dup);return}
   // Следующую камеру вводят с теми же производителем, учётными данными и архивом
   Object.assign(m,{ip:"",name:"",short:"",identifier:"",rtsp:"",chUrls:{}});
-  wizd.manualAddedId=null;
-  planDone(1,0);
+  wizd.manualAddedId=null;wizd.manualAddrShow=false;
+  planDone(n,dup);
   document.getElementById("devManIp")?.focus();
 }
 function planAddCsv(){
@@ -38856,7 +38936,9 @@ function planConnError(row){
     if(!r.model)return"Указать производителя и модель";
     return"";
   }
+  if(r.type==="acfa"&&row.source==="manual")return r.vendor&&r.model?"":"Указать производителя и модель";
   if(!r.ip)return"Укажите IP-адрес";
+  if(row.source==="manual"){const e=manualAddrParse({...r,ip:r.ip}).err||manualPortErr(r);if(e)return e}
   if(!r.vendor||!r.model)return"Указать производителя и модель";
   return"";
 }
