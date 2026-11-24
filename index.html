@@ -2566,7 +2566,6 @@ html[data-theme="light"] .busy-chip{background:var(--one-control-hover);color:va
 .cp-det-tag{flex:none;font-size:10px;line-height:1.2;color:var(--x-link);border:1px solid var(--one-selected-indicator);border-radius:99px;padding:2px 7px;margin-top:1px;white-space:nowrap}
 .cp-det-tag.bi{color:var(--one-warning-text);border-color:var(--one-warning-icon)}
 .bk-hint-inline{font-size:10px;color:var(--one-warning-text);font-weight:400}
-.cp-col-list .bk-chips{flex:none;margin-bottom:0}
 .cp-sq{margin:8px 0 4px;flex:none}
 .cp-tools{display:flex;align-items:center;gap:12px;margin:4px 0 6px;font-size:12px;flex:none}
 .cp-all{display:flex;align-items:center;gap:6px;cursor:pointer}
@@ -2579,6 +2578,12 @@ html[data-theme="light"] .busy-chip{background:var(--one-control-hover);color:va
 .cp-meta{grid-area:m;color:var(--mu);font-size:11px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cp-note{grid-area:note;font-size:10px;color:var(--one-warning-text);max-width:200px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cp-list .empty{padding:20px;text-align:center;color:var(--mu)}
+/* Фильтр «Кому» по образцу .bk-scope; Shift + щелчок не выделяет текст строк */
+.cp-scope{flex:none;max-height:216px;overflow:auto;margin:0 0 8px;padding:8px 12px;scrollbar-width:thin}
+.cp-scope .bk-facet{padding-left:0}
+.cp-pick{user-select:none}
+.cp-hint{flex:none;margin:4px 0 0;font-size:11px;line-height:16px}
+.cp-hid{margin:0 0 8px}
 /* Мастер: ширина — от шага, высота — по содержимому (dcFit). Верх окна стоит на месте, чтобы полоса шагов не прыгала */
 .bbox.bbox-copy.dc-box{width:min(1040px,96vw);height:auto;max-height:92vh;transition:width .26s cubic-bezier(.2,.7,.2,1),height .26s cubic-bezier(.2,.7,.2,1)}
 .bbox.bbox-copy.dc-box.dc-w-what{width:min(820px,96vw)}
@@ -35109,7 +35114,8 @@ function pjbMoreSet(f,on){pjbMore={...pjbMore,[f]:on};pjbListSet(f)}
 function pjbFindSet(f,v){pjbFind={...pjbFind,[f]:v};pjbListSet(f);const c=document.getElementById("pjaConds");if(c)c.outerHTML=pjaCondsHtml()}
 function pjbListSet(f){const el=document.getElementById("pjbL-"+f);if(!el)return;const sn=pjbSnap();el.innerHTML=pjbRows(f);pjbFlip(sn)}
 // Плавность фасетов (правило фильтров): строки, что остались, съезжают на новые места, новые проявляются.
-// bulkScopeSnap и bulkScopeFlip работают только с «Применить к» в #main, поэтому у панели слева свои функции.
+// bulkScopeSnap и bulkScopeFlip работают с одним блоком .bk-scope (по умолчанию «Применить к» в #main), а у панели слева
+// фасетов несколько и строки, а не чипы, поэтому у неё свои функции.
 // Перерисовка панели заменяет разметку: фокус возвращается на тот же флажок, кнопку или поле.
 function pjbSnap(){
   const t=document.getElementById("tree");if(!t||!t.querySelector(".pjb-sec"))return null;
@@ -40994,14 +41000,14 @@ function bulkFiltLabel(){
 // «Применить к» перестраивается при каждом фильтре и каждой галочке: чипы,
 // что остались, плавно съезжают на новые места, пропавшие гаснут там, где
 // стояли, новые вырастают, блок меняет высоту без скачка (FLIP).
-function bulkScopeSnap(){
-  const sc=document.querySelector("#main .bk-scope");if(!sc)return null;
+function bulkScopeSnap(sel="#main .bk-scope"){
+  const sc=document.querySelector(sel);if(!sc)return null;
   const m=new Map();
   sc.querySelectorAll("[data-fk]").forEach(el=>m.set(el.dataset.fk,{r:el.getBoundingClientRect(),html:el.outerHTML}));
   return{m,h:sc.offsetHeight};
 }
-function bulkScopeFlip(snap){
-  const sc=snap&&document.querySelector("#main .bk-scope");if(!sc)return;
+function bulkScopeFlip(snap,sel="#main .bk-scope"){
+  const sc=snap&&document.querySelector(sel);if(!sc)return;
   if(matchMedia("(prefers-reduced-motion: reduce)").matches||!sc.animate)return;
   const ease="cubic-bezier(.2,.8,.3,1)",now=new Map(),sr=sc.getBoundingClientRect();
   sc.querySelectorAll("[data-fk]").forEach(el=>now.set(el.dataset.fk,el));
@@ -43504,38 +43510,47 @@ function cpCandidates(src){
   walkAll(n=>{if(seen.has(n.id))return;seen.add(n.id);if(n.id!==src.id&&n.type===src.type&&cpKind(n)===k&&!blockedId(n.id))out.push(n)});
   return out;
 }
-function cpChips(src){
-  if(handCam(src))return[...(ipsrvOwnerNode(src)?[["nvr","Камеры этого регистратора"]]:[]),["model","Та же модель"],["server","Тот же сервер"],["folder","Та же папка"],["all","Все камеры"]];
-  const own=cpOwner(src);
-  return[...(own?[["model",handCam(own)?"Камеры той же модели":"Устройства той же модели"]]:[]),["server","Тот же сервер"],["domain","Тот же домен"],["all","Все"]];
+// «Кому» — фильтр по образцу «Применить к» (docs/design-rules.md, «Фильтры — по одному образцу»):
+// строка на измерение, чипы со счётчиком при остальных выбранных значениях, второй клик снимает чип.
+// Папки — прямое вхождение объекта в папку; карта папок строится один раз на окно.
+function cpFolderNames(n){
+  if(!cp.folderOf){const m=cp.folderOf=new Map();walkFolders(fd=>fd.items.forEach(x=>(m.get(x)||m.set(x,[]).get(x)).push(folderPathName(fd.id))))}
+  return cp.folderOf.get(n.id)||[];
 }
-function cpMatch(n,k){
-  const src=cp.src;
-  if(k==="model")return handCam(src)?modelOf(n)===modelOf(src):!!cpOwnModel(src)&&cpOwnModel(n)===cpOwnModel(src);
-  if(k==="nvr")return!!ipsrvOwnerNode(src)&&ipsrvOwnerNode(n)===ipsrvOwnerNode(src);
-  if(k==="server")return srv(n.id)?.id===srv(src.id)?.id;
-  if(k==="folder")return foldersOfDevice(src.id).some(f=>f.items.includes(n.id));
-  if(k==="domain")return nodeDomainId(n)===nodeDomainId(src);
-  return true;
+function cpDomainName(n){const d=find(nodeDomainId(n))?.n;return d?locName(d):""}
+function cpDims(src){
+  if(handCam(src))return[["model","модели",n=>modelOf(n)],["srv","серверы",n=>serverNameOf(n)],["nvr","регистраторы",n=>{const o=ipsrvOwnerNode(n);return o?locName(o):""}],["folder","папки",cpFolderNames]];
+  return[["model","модели",n=>cpOwnModel(n)],["srv","серверы",n=>serverNameOf(n)],["domain","домены",cpDomainName]];
 }
-function cpFiltered(){
-  const q=cp.q.trim().toLowerCase();
-  return cpCandidates(cp.src).filter(n=>{
-    if(!cpMatch(n,cp.filter))return false;
-    if(!q)return true;
-    const o=cpOwner(n);
-    return[locName(n),n.ip,modelOf(n),serverNameOf(n),o?locName(o):"",o?modelOf(o):""].join(" ").toLowerCase().includes(q);
-  });
+// Список «Кому» показывает только тех, кто получит хоть что-то из отмеченного в «Что копировать».
+// Видео и встроенные детекторы — только та же модель, привязка к архиву — только камеры, которым доступен архив.
+// Пока ничего не отмечено, показаны все. Скрытые отметки остаются, но в план и счётчик не идут.
+function cpCanGet(n){
+  const src=cp.src,g=cp.groups;
+  if(!handCam(src)||!g.size&&!cp.dets.size)return true;
+  const same=modelOf(n)===modelOf(src),a=g.has("arch")?archById(src.arch):null;
+  return g.has("rec")||g.has("enabled")||g.has("folders")||g.has("creds")||g.has("video")&&same||!!a&&!archForeignReason(n,a)
+    ||camDetectors(src).some(d=>cp.dets.has(d.id)&&(!d.builtin||same));
 }
+function cpPickedIds(){return[...cp.picked].filter(id=>{const n=find(id)?.n;return n&&cpCanGet(n)})}
+// Все списки окна за один проход по складу: кандидаты → кто получит (all) → поиск (found) → чипы (list)
+function cpLists(){
+  const cands=cpCandidates(cp.src),all=cands.filter(cpCanGet),q=cp.q.trim().toLowerCase(),dims=cpDims(cp.src);
+  const found=!q?all:all.filter(n=>{const o=cpOwner(n);return[locName(n),n.ip,modelOf(n),serverNameOf(n),o?locName(o):"",o?modelOf(o):""].join(" ").toLowerCase().includes(q)});
+  return{cands,all,found,list:found.filter(n=>facetHit(dims,n,cp.f))};
+}
+function cpFiltered(){return cpLists().list}
+function cpFiltOn(){return Object.values(cp.f).some(Boolean)}
 function openCopyDialog(id){
   const f=find(id);if(!f||!cpCanCopy(f.n))return;
   if(busyIds().size){toast("Групповая операция ещё не закончена. Подождать её конца");return}
   const src=f.n,all=cpCandidates(src);
   if(!all.length){toast(handCam(src)?"Других камер нет":"Других устройств этого типа нет");return}
-  cp={src,groups:new Set(),dets:new Set(),picked:new Set(),filter:"all",q:""};
-  // Чип по умолчанию — самый узкий непустой: у камеры та же модель, у
-  // начинки — та же модель камеры, у службы — тот же сервер.
-  cp.filter=(cpChips(src).find(([k])=>all.some(n=>cpMatch(n,k)))||["all"])[0];
+  cp={src,groups:new Set(),dets:new Set(),picked:new Set(),f:{},more:new Set(),q:"",anchor:null};
+  // Фильтр по умолчанию — та же модель (у начинки — модель её камеры), если такие есть; иначе тот же сервер.
+  const dims=cpDims(src),mv=dims[0][2](src),sv=serverNameOf(src);
+  if(mv&&all.some(n=>dims[0][2](n)===mv))cp.f.model=mv;
+  else if(!handCam(src)&&sv&&all.some(n=>serverNameOf(n)===sv))cp.f.srv=sv;
   renderCopyDialog();
 }
 // Чем объект-получатель не подходит под выбранное: другая модель, другой сервер.
@@ -43550,23 +43565,30 @@ function cpRowNote(n){
   if(a&&archForeignReason(n,a))bits.push(i18n("архив"));
   return bits.length?`${i18n("не получит")}: ${bits.join(", ")}`:"";
 }
-function cpFilterSet(k){cp.filter=k;renderCopyDialog()}
+// Чип перерисовывает окно — чипы съезжают плавно, как в «Применить к» (bulkScopeSnap / bulkScopeFlip)
+function cpPaintScope(){const sel="#bmBody .bk-scope",snap=bulkScopeSnap(sel);renderCopyDialog(true);bulkScopeFlip(snap,sel)}
+function cpFacet(d,v){if(!cp)return;if(cp.f[d]===v)delete cp.f[d];else cp.f[d]=v;cpPaintScope()}
+function cpFacetClear(){if(!cp)return;cp.f={};cpPaintScope()}
+function cpFacetMore(d){if(!cp)return;cp.more.add(d);cpPaintScope()}
 // Поиск перерисовывает диалог — поле возвращает фокус себе
 // Курсор в поле поиска — только если человек из него не ушёл: renderCopyDialog(noFocus) его тогда не ставит
 function cpQ(el){cp.q=el.value;typeLater("cp",late=>{const back=typeFocused(late,el);renderCopyDialog(!back);if(back&&el.isConnected)el.focus()},!cp.q.trim())}
 function cpCancel(){closeBulkModal();cp=null}
 function renderCopyDialog(noFocus){
   if(!cp)return;
-  const src=cp.src,cam=handCam(src),all=cpCandidates(src),list=cpFiltered();
+  const src=cp.src,cam=handCam(src),{cands,all,found,list}=cpLists(),hidden=cands.length-all.length,picked=cpPickedIds(),dims=cpDims(src),fOn=cpFiltOn();
   // Окно перерисовывается целиком — прокрутку списков возвращаем на место.
   const keep={};document.querySelectorAll("#bmBody [data-cp-scroll]").forEach(el=>keep[el.dataset.cpScroll]=el.scrollTop);
   const groups=cpGroups(src).map(g=>`<label class="cp-group ${g.off?"off":""}" title="${escHtml(g.value)}"><input type="checkbox" ${cp.groups.has(g.key)?"checked":""} ${g.off?"disabled":""} ${onEv("change",["cpToggleGroup",`${g.key}`,onEv.checked])}><span><b>${i18n(g.label)}</b>${g.tag?` <span class="bk-hint-inline">${escHtml(g.tag)}</span>`:""}<small>${escHtml(g.value)}</small></span></label>`).join("");
-  const chips=cpChips(src).map(([k,l])=>`<button type="button" class="stchip ${cp.filter===k?"on":""}" ${onEv("click",["cpFilterSet",k])}><span class="stchip-lab">${i18n(l)}</span><span class="stchip-cnt">${all.filter(n=>cpMatch(n,k)).length}</span></button>`).join("");
+  // Счётчики чипов и итог учитывают поиск
+  const facets=facetRowsHtml(dims,found,cp.f,"cpFacet",cp.more,"cpFacetMore",4);
+  const said=dims.filter(([d])=>cp.f[d]).map(([d])=>cp.f[d]).join(" · ");
+  const scope=`<div class="bk-sum bk-scope cp-scope" data-cp-scroll="f"><div class="bk-scope-h"><span class="bk-scope-l">${i18n("Показать")}</span><button type="button" data-fk="all" class="stchip ${fOn?"":"on"}" ${onEv("click",["cpFacetClear"])}><span class="stchip-lab">${i18n("все")}</span><span class="stchip-cnt">${found.length}</span></button>${facets?`<span class="sub bk-scope-or" data-fk="or">${i18n("или уточните")}:</span>`:""}</div>${facets}${fOn||cp.q.trim()?`<div class="bk-scope-sum on" data-fk="sum">${i18n("Показано")} <b>${list.length} ${i18n("из")} ${all.length}</b>${said?`: ${escHtml(said)}`:""}</div>`:""}</div>${hidden?`<p class="sub cp-hint cp-hid">${i18n("Консоль скрыла")} ${hidden} ${i18n(plural(hidden,"камеру|камеры|камер"))}: ${i18n("эти камеры не получат ничего из того, что отмечено в «Что копировать».")}</p>`:""}`;
   const allOn=list.length>0&&list.every(n=>cp.picked.has(n.id));
   const rows=list.map(n=>{
     const s=srv(n.id),o=cam?null:cpOwner(n),note=cpRowNote(n);
     const meta=cam?[serverNameOf(n),modelOf(n)||"—",n.ip||""]:[o?`${locName(o)}${modelOf(o)?" · "+modelOf(o):""}`:"",serverNameOf(n)];
-    return`<label class="cp-row"><input type="checkbox" ${cp.picked.has(n.id)?"checked":""} ${onEv("change",["cpPick",`${n.id}`,onEv.checked])}><span class="cp-name">${treeIconHtml(n)} ${crumbTitle(n)}</span><span class="cp-meta">${meta.filter(Boolean).map(escHtml).join(" · ")}${s&&hasNoSignal(s)?` · <span class="bk-bad">${i18n("сервер без связи")}</span>`:""}</span>${note?`<span class="cp-note">${escHtml(note)}</span>`:""}</label>`;
+    return`<label class="cp-row cp-pick" ${onEv("pointerdown",["cpRowDown",`${n.id}`,onEv.event])}><input type="checkbox" ${cp.picked.has(n.id)?"checked":""} ${onEv("change",["cpPick",`${n.id}`,onEv.checked])}><span class="cp-name">${treeIconHtml(n)} ${crumbTitle(n)}</span><span class="cp-meta">${meta.filter(Boolean).map(escHtml).join(" · ")}${s&&hasNoSignal(s)?` · <span class="bk-bad">${i18n("сервер без связи")}</span>`:""}</span>${note?`<span class="cp-note">${escHtml(note)}</span>`:""}</label>`;
   }).join("")||`<div class="empty">${i18n("Ничего не найдено")}</div>`;
   const dets=cam?camDetectors(src):[];
   const hasDets=dets.length>0;
@@ -43580,14 +43602,18 @@ function renderCopyDialog(noFocus){
         <p class="sub cp-src">${i18n("Источник")}: ${escHtml(cam?(modelOf(src)||"—"):(LB[src.type]||src.type))}, ${escHtml(serverNameOf(src))}.${cam?" "+i18n("Привязать к хранилищу сервера можно только камеры этого сервера. Консоль пропустит другие камеры и укажет причину."):" "+i18n("Получить настройки могут только устройства того же типа.")}</p></section>
       ${hasDets?cpDetsColHtml(src,dets):""}
       <section class="cp-col cp-col-list"><div class="cp-h"><span class="cp-step">${hasDets?3:2}</span>${i18n("Кому")}</div>
-        <div class="bk-chips">${chips}</div>
         <div class="sq lan-sq cp-sq"><input value="${escHtml(cp.q)}" placeholder="${i18n(cam?"Имя, IP, модель, сервер…":"Имя, устройство, модель, сервер…")}" ${onEv("input",["cpQ",onEv.el])}></div>
-        <div class="cp-tools"><label class="cp-all"><input type="checkbox" ${allOn?"checked":""} ${list.length?"":"disabled"} ${onEv("change",["cpPickAll",onEv.checked])}><span>${allOn?i18n("Снять выделение"):i18n("Выбрать всё")} (${list.length})</span></label><span class="sel-cnt">${i18n("Выбрано")}: <b>${cp.picked.size}</b></span></div>
-        <div class="cp-list" data-cp-scroll="l">${rows}</div></section>
+        ${scope}
+        <div class="cp-tools"><label class="cp-all"><input type="checkbox" ${allOn?"checked":""} ${list.length?"":"disabled"} ${onEv("change",["cpPickAll",onEv.checked])}><span>${allOn?i18n("Снять выделение"):i18n(fOn||cp.q.trim()?"Выбрать показанные":"Выбрать всё")} (${list.length})</span></label><span class="sel-cnt">${i18n("Выбрано")}: <b>${picked.length}</b></span></div>
+        <div class="cp-list" data-cp-scroll="l">${rows}</div>
+        <p class="sub cp-hint">${i18n("Чтобы отметить строки подряд, нажать первую строку, затем последнюю с клавишей Shift")}</p></section>
     </div>`,
-    `<button type="button" class="btn" ${onEv("click",["cpCancel"])}>${i18n("Отмена")}</button>${foot?`<span class="cp-foot-note">${lu("triangle-alert")} ${foot}</span>`:""}<span class="tfoot-gap"></span><button type="button" class="btn pri" ${onEv("click",["cpShowPlan"])} ${cp.picked.size&&what?"":"disabled"} title="${what?"":i18n("Отметить, что копировать")}">${i18n("Показать план")} (${cp.picked.size})</button>`,"bbox-wide bbox-copy");
+    `<button type="button" class="btn" ${onEv("click",["cpCancel"])}>${i18n("Отмена")}</button>${foot?`<span class="cp-foot-note">${lu("triangle-alert")} ${foot}</span>`:""}<span class="tfoot-gap"></span><button type="button" class="btn pri" ${onEv("click",["cpShowPlan"])} ${picked.length&&what?"":"disabled"} title="${what?"":i18n("Отметить, что копировать")}">${i18n("Показать план")} (${picked.length})</button>`,"bbox-wide bbox-copy");
+  // Прокрутку возвращаем сразу: плавность чипов (cpPaintScope) меряет их новые места после этой строки
+  const back=()=>document.querySelectorAll("#bmBody [data-cp-scroll]").forEach(el=>{if(keep[el.dataset.cpScroll])el.scrollTop=keep[el.dataset.cpScroll]});
+  back();
   requestAnimationFrame(()=>{
-    document.querySelectorAll("#bmBody [data-cp-scroll]").forEach(el=>{if(keep[el.dataset.cpScroll])el.scrollTop=keep[el.dataset.cpScroll]});
+    back();
     const i=document.querySelector(".cp-sq input");if(i&&cp?.q&&!noFocus){i.focus();i.setSelectionRange(i.value.length,i.value.length)}
     const h=document.querySelector(".cp-dets-all");if(h)h.indeterminate=h.dataset.part==="1";
   });
@@ -43595,7 +43621,7 @@ function renderCopyDialog(noFocus){
 // Предупреждение в подвале: сколько выбранных получателей что-то не получат.
 function cpFootNote(){
   if(!handCam(cp.src))return"";
-  const picked=[...cp.picked].map(id=>find(id)?.n).filter(Boolean),bits=[];
+  const picked=cpPickedIds().map(id=>find(id)?.n).filter(Boolean),bits=[];
   const loss=cpModelLoss(),other=loss?picked.filter(n=>modelOf(n)!==modelOf(cp.src)).length:0;
   if(other)bits.push(`${other} ${i18n(plural(other,"камера|камеры|камер"))} ${i18n("другой модели:")} ${loss} ${i18n("к ним не применятся")}`);
   const a=cp.groups.has("arch")?archById(cp.src.arch):null;
@@ -43628,14 +43654,27 @@ function cpDetsColHtml(src,dets){
 function cpToggleDet(id,on){if(!cp)return;on?cp.dets.add(id):cp.dets.delete(id);renderCopyDialog()}
 function cpAllDets(on){if(!cp)return;cp.dets.clear();if(on)camDetectors(cp.src).forEach(d=>cp.dets.add(d.id));renderCopyDialog()}
 function cpToggleGroup(k,on){if(!cp)return;if(on)cp.groups.add(k);else cp.groups.delete(k);renderCopyDialog()}
-function cpPick(id,on){if(!cp)return;if(on)cp.picked.add(id);else cp.picked.delete(id);renderCopyDialog()}
+// Shift + щелчок — строки подряд от прошлой нажатой строки до этой, в порядке показанного списка; все получают
+// состояние нажатой строки. Shift берётся из pointerdown строки: у события change его нет.
+// Флажок Shift годен только для той строки, где нажали левую кнопку: нажатие без щелчка или правый щелчок не
+// превращают следующий Space с клавиатуры в диапазон.
+let cpShift=null;
+function cpRowDown(id,e){cpShift=e?.shiftKey&&e.button===0?id:null}
+function cpPick(id,on){
+  if(!cp)return;
+  const sh=cpShift===id;cpShift=null;
+  const ids=sh&&cp.anchor?cpFiltered().map(n=>n.id):null,a=ids?ids.indexOf(cp.anchor):-1,b=ids?ids.indexOf(id):-1;
+  const range=a>=0&&b>=0?ids.slice(Math.min(a,b),Math.max(a,b)+1):[id];
+  range.forEach(x=>on?cp.picked.add(x):cp.picked.delete(x));
+  cp.anchor=id;renderCopyDialog(true);
+}
 function cpPickAll(on){if(!cp)return;cpFiltered().forEach(n=>on?cp.picked.add(n.id):cp.picked.delete(n.id));renderCopyDialog()}
 // Камеры: выбранные становятся выборкой, группы — черновиком: дальше тот же
 // план, та же очередь и тот же отчёт, что у карточки выборки.
 // Остальные устройства в выборку дерева не попадают (у служб нет галочек),
 // поэтому для них план собирается здесь же и идёт в ту же очередь.
 function cpShowPlan(){
-  if(!cp||!cp.picked.size)return;
+  if(!cp||!cpPickedIds().length)return;
   if(!handCam(cp.src)){cpShowPlanGeneric();return}
   const src=cp.src,g=cp.groups,d={};
   if(g.has("arch")&&src.arch)d.arch=src.arch;
@@ -43647,7 +43686,7 @@ function cpShowPlan(){
   const dets=camDetectors(src).filter(x=>cp.dets.has(x.id));
   if(dets.length){d.copyDets=dets.map(x=>({name:locName(x),kind:x.kind||DET_TYPES[0],sens:x.sens||"12",builtin:!!x.builtin,template:x.template}));d.detModel=modelOf(src)}
   if(g.has("video"))d.onlyModel=modelOf(src);
-  const ids=[...cp.picked];
+  const ids=cpPickedIds();
   cp=null;closeBulkModal();
   treeSel.clear();ids.forEach(id=>treeSel.add(id));
   selMode=true;bulkPeek=false;bulkDraft=d;
@@ -43679,7 +43718,7 @@ function cpChangesGeneric(src,nodes,groups){
   return out;
 }
 function cpShowPlanGeneric(){
-  const src=cp.src,nodes=[...cp.picked].map(id=>find(id)?.n).filter(Boolean);
+  const src=cp.src,nodes=cpPickedIds().map(id=>find(id)?.n).filter(Boolean);
   const ch=cpChangesGeneric(src,nodes,new Set([...cp.groups]));
   if(!ch.length){toast("У выбранных устройств уже такие настройки");return}
   cpPlan={ch,nodes};
