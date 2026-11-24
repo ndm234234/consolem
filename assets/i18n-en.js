@@ -4449,4 +4449,17 @@ window.I18N_EN={
 "Консоль не принимает другие знаки.":"The console does not accept other characters.",
 "уже используется. Ввести другой ID или очистить поле: консоль назначит ID сама.":"is already in use. Enter a different ID or clear the field: the console will assign an ID itself.",
 "Консоль назначит имя источника событий сама.":"The console will assign the event source name itself.",
+// Из прототипа 90: форма «По адресу» — диапазон IP, проверка адреса и порта
+"Сколько устройств добавить":"How many devices to add","Одно устройство":"One device","Несколько устройств":"Several devices",
+"Первый IP-адрес":"First IP address","Последний IP-адрес":"Last IP address","Ввести первый и последний IP-адрес":"Enter the first and the last IP address",
+"Ввести адрес IPv4, например 192.168.1.100":"Enter an IPv4 address, for example 192.168.1.100","Ввести адрес IPv4, например 192.168.1.150":"Enter an IPv4 address, for example 192.168.1.150",
+"Ввести порт от 1 до 65535":"Enter a port from 1 to 65535","Последний адрес меньше первого":"The last address is lower than the first address",
+"Адресов в диапазоне":"Addresses in the range","Консоль добавляет не больше 500 адресов за один раз":"The console adds no more than 500 addresses at one time",
+"Консоль добавит в план строку для каждого адреса.":"The console adds a plan row for each address.","Консоль не добавит их снова.":"The console does not add them again.",
+"Консоль назначит ID каждому устройству диапазона":"The console gives an ID to each device of the range",
+// Из прототипа 90 (объединён с 89): имя хоста у источника событий, ACFA без адреса, «Определить» по одному адресу
+"Ввести адрес IPv4 или имя хоста":"Enter an IPv4 address or a host name",
+"Консоль определяет модель только по одному адресу. Ввести один адрес":"The console finds the model for one address only. Enter one address",
+"Ввести один адрес":"Enter one address","Не нужен для ACFA":"Not necessary for ACFA",
+"Устройство ACFA подключается без IP-адреса и порта":"An ACFA device connects without an IP address and port",
 };
