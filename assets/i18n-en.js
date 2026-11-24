@@ -500,7 +500,7 @@ window.I18N_EN={
 "в избранном":"added to favorites","убрано из избранного":"removed from favorites",
 "В избранном":"Added to favorites","Уже в избранном":"Already in favorites",
 "удалён":"deleted","Объект удалён — ярлык можно убрать":"The object is gone — the shortcut can be removed",
-"ещё":"more","свернуть список":"show fewer"
+"ещё":"more","свернуть список":"show fewer","Скрытые уведомления":"Hidden notifications"
 ,
 // Все устройства сети
 "Все устройства сети":"All network devices","Привязка":"Binding",

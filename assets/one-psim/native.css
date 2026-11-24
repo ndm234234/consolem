@@ -7,7 +7,7 @@
  * elements wins property by property; the agent then checks the screenshots and drops or overrides
  * (RESTYLE-RULES.md §2.13). The kit's own classes (.check, .radio, .switch, select.field) are listed in the
  * same selectors, so this file is the single source for both modes; tailwind.css imports it.
- * Values from one-psim.css only (--one-*), never Tailwind names — bridges do not load tailwind.
+ * Kit theme overrides fall back to one-psim.css values so bridges also work without Tailwind.
  */
 
 /* ---- Checkbox / Radio (MuiCheckbox / MuiRadio) ---------------------------------------------------- */
@@ -18,6 +18,7 @@
   vertical-align: middle;
 }
 :where(input[type="radio"], .radio) { border-radius: var(--one-radius-pill); }
+:where(input[type="checkbox"]:not([role="switch"]):not(.switch), .check) { border-color: var(--kit-checkbox-border, var(--one-selection-outline)); }
 :where(input[type="checkbox"]:not([role="switch"]):not(.switch), input[type="radio"], .check, .radio):hover:not(:disabled) { background-color: var(--one-editor-hover); }
 :where(input[type="checkbox"]:not([role="switch"]):not(.switch), input[type="radio"], .check, .radio):active:not(:disabled) { background-color: var(--one-editor-pressed); }
 :where(input[type="checkbox"]:not([role="switch"]):not(.switch), input[type="radio"], .check, .radio):is(:checked, :indeterminate) { background-color: var(--one-accent); border-color: var(--one-accent); }
@@ -47,8 +48,8 @@
 /* ---- Switch (MuiSwitch): a checkbox with role="switch", or the kit's .switch ----------------------- */
 :where(input[type="checkbox"][role="switch"], .switch) {
   appearance: none; flex: none; position: relative; box-sizing: border-box; margin: 0; cursor: pointer;
-  width: 2.375rem; height: 1.25rem; border: 1px solid var(--one-editor-border); border-radius: var(--one-radius-pill);
-  background-color: var(--one-surface-muted); transition: background-color 120ms, border-color 120ms;
+  width: 2.375rem; height: 1.25rem; border: 1px solid var(--kit-switch-off-border, var(--one-editor-border)); border-radius: var(--one-radius-pill);
+  background-color: var(--kit-off-track, var(--one-surface-muted)); transition: background-color 120ms, border-color 120ms;
   --switch-thumb: 1rem; --switch-travel: 1.125rem; vertical-align: middle;
 }
 /* Выключенный тумблер поднят по видимости (D-080, заказчик: «кажется задисейбленным»): бегунок
@@ -65,18 +66,53 @@
    Разница с `:disabled` теперь в бегунке: у него `fg-disabled`, и перепутать их больше нельзя.
    Рамка у включённого НЕ красится: она общая для обоих состояний, как у группы переключателей, а
    «включено» несёт бегунок и подложка (правка владельца 27.10.2026). */
-:where(input[type="checkbox"][role="switch"], .switch)::before { content: ""; position: absolute; top: 1px; left: 1px; width: var(--switch-thumb); height: var(--switch-thumb); border-radius: var(--one-radius-pill); background: var(--one-fg-muted); transition: transform 120ms, background-color 120ms; }
-:where(input[type="checkbox"][role="switch"], .switch):hover:not(:disabled) { background-color: var(--one-control-hover); }
-:where(input[type="checkbox"][role="switch"], .switch):active:not(:disabled) { background-color: var(--one-control-pressed); }
+:where(input[type="checkbox"][role="switch"], .switch)::before { content: ""; position: absolute; top: 1px; left: 1px; width: var(--switch-thumb); height: var(--switch-thumb); border-radius: var(--one-radius-pill); background: var(--kit-icon-tone, var(--one-fg-muted)); transition: transform 120ms, background-color 120ms; }
+:where(input[type="checkbox"][role="switch"], .switch):hover:not(:disabled) { background-color: var(--kit-switch-off-hover, var(--one-control-hover)); }
+:where(input[type="checkbox"][role="switch"], .switch):active:not(:disabled) { background-color: var(--kit-switch-off-pressed, var(--one-control-pressed)); }
 /* Включённый тумблер заливается ПЛАШКОЙ ВЫБРАННОГО, а не сплошным акцентом (D-080, заказчик:
    «во включённом режиме синий слишком активный»): дорожка `accent-soft` — та же, что у выбранной
    строки, пункта и сегмента, — рамка и бегунок в ярком синем, под курсором и нажатием
    `nav-selected-hover`. Сигнал «включено» несёт теперь не площадь заливки, а цвет бегунка и рамки;
    сплошной акцент остался у `primary`, то есть у главного действия экрана. */
-:where(input[type="checkbox"][role="switch"], .switch):checked { background-color: var(--one-accent-soft); }
-:where(input[type="checkbox"][role="switch"], .switch):checked::before { background: var(--one-link-hover); transform: translateX(var(--switch-travel)); }
-:where(input[type="checkbox"][role="switch"], .switch):checked:hover:not(:disabled) { background-color: var(--one-nav-selected-hover); }
-:where(input[type="checkbox"][role="switch"], .switch):checked:active:not(:disabled) { background-color: var(--one-nav-selected-hover); }
+/* Плашка здесь подмешана прямо из токенов DS, а не взята из `--color-accent-soft`: этот файл
+   работает и в мосте-рестайле, где словаря Tailwind нет вовсе. Формула одна и та же (D-083). */
+/* Включённый тумблер: БЕГУНОК — самое светлое в контроле, а дорожка обязана быть достаточно
+   тёмной, чтобы он читался (D-085, решение владельца 30.10.2026 по снимку пяти вариантов светлой
+   темы). Правило одно на обе схемы, развилка — следствие замера, а не вкуса: на ТЁМНОЙ плашка
+   выделения уже тёмная, светлый бегунок даёт на ней 9.43; на СВЕТЛОЙ та же плашка бледная, и белый
+   бегунок на ней — 1.67, то есть его нет (вариант L2 лаборатории). Поэтому в светлой дорожка берёт
+   сплошной `accent` (бегунок 4.73, привычный вид, заодно совпадает с контрактом DS), а наведение и
+   нажатие — ступени `primary`, как у залитой кнопки; рамка там равна заливке, иначе вокруг синей
+   пилюли остаётся серое кольцо. Выключенный и `:disabled` не меняются ни в одной теме. */
+:root {
+  /* Monitor archive signal roles (KIT-03, TL-19). Separate interval and flag inks. */
+  --kit-archive-alarm-interval: #d00000;
+  --kit-archive-alarm-flag: #ff1f1f;
+  --kit-switch-on-track: var(--one-accent);
+  --kit-switch-on-track-hover: var(--one-primary-hover);
+  --kit-switch-on-border: var(--one-accent);
+  --kit-switch-on-border-hover: var(--one-primary-hover);
+  --kit-switch-on-thumb: var(--one-accent-on);
+}
+[data-theme="dark"] {
+  --kit-switch-on-track: color-mix(in srgb, var(--one-accent) 25%, var(--one-accent-soft));
+  /* D-094: на ступень ярче плашки наведения выбранного (`accent` 25 % поверх `accent-soft-hover`, D-093),
+     а не сама эта плашка. Собрано из токенов DS явно: `nav-selected-hover` DS уже содержит подмес. */
+  --kit-switch-on-track-hover: color-mix(in srgb, var(--one-accent) 25%, color-mix(in srgb, var(--one-accent) 25%, var(--one-accent-soft-hover)));
+  --kit-switch-on-border: var(--one-editor-border);
+  --kit-switch-on-border-hover: var(--one-editor-border);   /* в тёмной рамка одна на все состояния (D-081) */
+  --kit-switch-on-thumb: var(--one-fg);
+}
+:where(input[type="checkbox"][role="switch"], .switch):checked { background-color: var(--kit-switch-on-track); border-color: var(--kit-switch-on-border); }
+/* Бегунок включённого идёт за подписью выделенного (D-084, просьба владельца 30.10.2026 —
+   «пимпочка белой по аналогии с текстом»): `fg` вместо яркого синего. Лестница тумблера стала
+   одной величиной с двух концов: выключенный — `fg-muted`, включённый — `fg`, ровно как
+   невыбранная и выбранная подписи. В светлой теме «белое» читается как `fg`, то есть тёмный
+   бегунок на светлой плашке (9.47), а `:disabled` остаётся на `fg-disabled` и ни с чем не
+   путается. */
+:where(input[type="checkbox"][role="switch"], .switch):checked::before { background: var(--kit-switch-on-thumb); transform: translateX(var(--switch-travel)); }
+:where(input[type="checkbox"][role="switch"], .switch):checked:hover:not(:disabled) { background-color: var(--kit-switch-on-track-hover); border-color: var(--kit-switch-on-border-hover); }
+:where(input[type="checkbox"][role="switch"], .switch):checked:active:not(:disabled) { background-color: var(--kit-switch-on-track-hover); border-color: var(--kit-switch-on-border-hover); }
 :where(input[type="checkbox"][role="switch"], .switch):disabled { cursor: not-allowed; background-color: var(--one-control-disabled); border-color: var(--one-selection-outline-disabled); }
 :where(input[type="checkbox"][role="switch"], .switch):disabled::before { background: var(--one-fg-disabled); }
 
@@ -99,10 +135,18 @@
   :where(select, select.field) selectedcontent { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   :where(select, select.field)::picker-icon { display: none; }
   :where(select, select.field)::picker(select) { border: 1px solid var(--one-border); border-radius: var(--one-radius-container); background: var(--one-popup); padding: 4px; margin-top: 4px; box-shadow: var(--one-shadow); }
-  :where(select, select.field) option { padding: 6px 10px; border-radius: var(--one-radius-control); color: var(--one-fg); }
+  :where(select, select.field) option { padding: 6px 10px; border-radius: var(--one-radius-control); color: var(--color-fg, var(--one-fg)); }
   :where(select, select.field) option::checkmark { display: none; }
-  :where(select, select.field) option:is(:hover, :focus) { background: var(--one-control-hover); outline: none; }
-  :where(select, select.field) option:checked { background: var(--one-accent); color: var(--one-accent-on); }
-  :where(select, select.field) option:checked:hover { background: var(--one-primary-hover); }
+  :where(select, select.field) option:is(:hover, :focus):where(:not(:disabled)) { background: var(--color-control-hover, var(--one-control-hover)); outline: none; }
+  /* D-092: a checked option uses the same plate and foreground as a selected menu item. */
+  :where(select, select.field) option:checked {
+    --kit-option-plate: var(--color-accent-soft, color-mix(in srgb, var(--one-accent) 25%, var(--one-accent-soft)));
+    background: var(--kit-option-plate);
+    color: var(--color-nav-selected, var(--one-fg));
+    box-shadow: inset 0 0 0 1px var(--color-selected-edge, color-mix(in srgb, var(--one-accent-indicator) 20%, var(--kit-option-plate)));
+  }
+  :where(select, select.field) option:checked:hover:not(:disabled) {
+    background: var(--color-accent-soft-hover, color-mix(in srgb, var(--one-accent) 25%, var(--one-accent-soft-hover)));
+  }
   :where(select, select.field) option:disabled { color: var(--one-fg-disabled); }
 }
