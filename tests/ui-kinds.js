@@ -70,7 +70,7 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   const cvModes = typeof cvCfgOf === "function";
   const resCtl = () => document.querySelector('[data-df="Разрешение"]');
   // «Параметры потоков» с «Изменить» (cvEditStart): поля — после «Изменить»
-  const toConsole = (id) => { if (cvModes) { cvCfgOf(find(id).n).mode = "console"; if (typeof cvEditStart === "function") cvEditStart(id); mainSeen.html = null; gear(); } };
+  const toConsole = (id) => { if (cvModes) { { const n = find(id).n; if (typeof streamsModeWrite === "function") streamsModeWrite(n, "console"); else cvCfgOf(n).mode = "console"; } if (typeof cvEditStart === "function") cvEditStart(id); mainSeen.html = null; gear(); } };
   if (cvModes) ok(!resCtl(), "режим «Настройки камеры»: разрешение только для чтения");
   toConsole(video.id);
   const resVals = [...(resCtl()?.options || [])].map((o) => o.value).filter(Boolean);

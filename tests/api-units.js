@@ -966,6 +966,42 @@
     if (ips) assert.ok(shown(await env.ok("GET", `/units/${ips.uid}/schema`)).length > 0, "у регистратора есть параметры драйвера");
   }, { needs: ["getUnitSchema", "patchUnit", "kind:camera"] });
 
+  // Режим настроек устройства streamsMode (ответ владельца на запрос mockup 174207Z, п. 1; профиль vms.camera/1 1.4):
+  // device (и нет поля) — поля x-dev только для чтения в схеме объекта и в правке; console — правятся
+  test("Камера: streamsMode device — поля x-dev только для чтения, console — правятся", async () => {
+    const env = await makeEnv();
+    const cam = ofKind("camera").find((u) => u.properties.driver === "native" && u.properties.streamsMode !== "console");
+    assert.ok(cam, "в наборе есть камера нативного драйвера в режиме device");
+    const s = await env.ok("GET", `/units/${cam.uid}/schema`);
+    const dev = Object.keys(s.properties).filter((f) => s.properties[f]["x-dev"]);
+    assert.ok(dev.length > 0, "у камеры есть параметры x-dev");
+    assert.eq(dev.filter((f) => !s.properties[f].readOnly), [], "device: все поля x-dev только для чтения");
+    assert.ok(!s.properties.streamsMode.readOnly, "сам флажок правится");
+    const f = dev.find((x) => s.properties[x].type === "boolean");
+    assert.ok(f, "есть логическое поле x-dev");
+    const v = !(cam.properties[f] ?? s.properties[f].default);
+    invalid(await patch(env, cam.uid, { properties: { [f]: v } }), `/properties/${f}`, "readOnly", "device: правка поля x-dev");
+    assert.status(await patch(env, cam.uid, { properties: { streamsMode: "console", [f]: v } }), 200, null, "флажок и поле x-dev одной правкой");
+    const s2 = await env.ok("GET", `/units/${cam.uid}/schema`);
+    assert.eq(dev.filter((x) => s2.properties[x].readOnly), [], "console: поля x-dev правятся");
+    assert.status(await patch(env, cam.uid, { properties: { [f]: !v } }), 200, null, "console: правка поля x-dev");
+    assert.status(await patch(env, cam.uid, { properties: { streamsMode: "device" } }), 200, null, "назад в device");
+    invalid(await patch(env, cam.uid, { properties: { [f]: v } }), `/properties/${f}`, "readOnly", "device снова: правка поля x-dev");
+    invalid(await patch(env, cam.uid, { properties: { streamsMode: "camera" } }), "/properties/streamsMode", "enum", "незнакомое значение флажка");
+    // Вложенные ветки: переключатели x-dev открывают свои поля x-dev — и они только для чтения в режиме device
+    const sw = dev.filter((x) => s.properties[x].type === "boolean");
+    assert.status(await patch(env, cam.uid, { properties: Object.assign({ streamsMode: "console" }, Object.fromEntries(sw.map((x) => [x, true]))) }), 200, null, "console: переключатели x-dev включены");
+    assert.status(await patch(env, cam.uid, { properties: { streamsMode: "device" } }), 200, null, "снова device");
+    const s3 = await env.ok("GET", `/units/${cam.uid}/schema`);
+    const dev3 = Object.keys(s3.properties).filter((x) => s3.properties[x]["x-dev"]);
+    const nested = dev3.filter((x) => !dev.includes(x));
+    assert.ok(nested.length > 0, "переключатели открыли вложенные поля x-dev");
+    assert.eq(dev3.filter((x) => !s3.properties[x].readOnly), [], "device: вложенные поля x-dev тоже только для чтения");
+    const nf = nested[0], np = s3.properties[nf];
+    const nv = np.type === "boolean" ? true : Array.isArray(np.enum) ? np.enum[np.enum.length - 1] : np.minimum !== undefined ? np.minimum : np.default;
+    invalid(await patch(env, cam.uid, { properties: { [nf]: nv } }), `/properties/${nf}`, "readOnly", "device: правка вложенного поля x-dev");
+  }, { needs: ["getUnitSchema", "patchUnit", "kind:camera"] });
+
   test("запись ядром: вид без описания и вид с профилем vms.* — 422 NOT_SUPPORTED, field=/kind", async () => {
     const odd = { uid: "30009003-0000-4000-8000-000000000000", kind: "vendor.gone/THING", parentId: null, domainId: dom1(), name: "Объект без описания", version: "1", properties: { a: 1 } };
     const env = await makeEnv({ fixturePatch: { units: units().concat(odd) } });

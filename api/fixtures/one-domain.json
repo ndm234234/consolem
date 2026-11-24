@@ -3455,6 +3455,32 @@
      "cacheUpdatePeriod": {
       "type": "integer",
       "x-hidden": true
+     },
+     "streamsMode": {
+      "x-label": {
+       "key": "field.streamsMode",
+       "text": "Режим настроек устройства",
+       "lang": "ru"
+      },
+      "type": "string",
+      "enum": [
+       "device",
+       "console"
+      ],
+      "default": "device",
+      "x-enum-labels": {
+       "device": {
+        "key": "enum.streamsMode.device",
+        "text": "Использовать настройки устройства",
+        "lang": "ru"
+       },
+       "console": {
+        "key": "enum.streamsMode.console",
+        "text": "Отправлять настройки устройству",
+        "lang": "ru"
+       }
+      },
+      "description": "Чьи настройки у параметров x-dev: device — консоль показывает то, что сообщило устройство, поля x-dev только для чтения; console — консоль передаёт значения в устройство. Нет поля — device. Axxon One: blockingConfiguration (device — «Использовать настройки устройства»). Профиль vms.camera/1 1.4"
      }
     },
     "allOf": [
@@ -5282,6 +5308,222 @@
             "default": 100,
             "x-dev": true,
             "x-hidden": false
+           }
+          }
+         }
+        }
+       ]
+      }
+     },
+     {
+      "if": {
+       "properties": {
+        "driver": {
+         "enum": [
+          "onvif",
+          "native",
+          "onvif-channel",
+          "native-channel"
+         ]
+        },
+        "streamsMode": {
+         "const": "device"
+        }
+       },
+       "required": [
+        "driver"
+       ]
+      },
+      "then": {
+       "properties": {
+        "brightness": {
+         "readOnly": true
+        },
+        "contrast": {
+         "readOnly": true
+        },
+        "saturation": {
+         "readOnly": true
+        },
+        "sharpness": {
+         "readOnly": true
+        },
+        "flickerfree": {
+         "readOnly": true
+        },
+        "imageFlip": {
+         "readOnly": true
+        },
+        "micEnabled": {
+         "readOnly": true
+        }
+       },
+       "allOf": [
+        {
+         "if": {
+          "properties": {
+           "micEnabled": {
+            "const": true
+           }
+          },
+          "required": [
+           "micEnabled"
+          ]
+         },
+         "then": {
+          "properties": {
+           "audioCodec": {
+            "readOnly": true
+           },
+           "micVolume": {
+            "readOnly": true
+           }
+          }
+         }
+        }
+       ]
+      }
+     },
+     {
+      "if": {
+       "properties": {
+        "driver": {
+         "enum": [
+          "native",
+          "native-channel"
+         ]
+        },
+        "streamsMode": {
+         "const": "device"
+        }
+       },
+       "required": [
+        "driver"
+       ]
+      },
+      "then": {
+       "properties": {
+        "digitalPtz": {
+         "readOnly": true
+        },
+        "camMotion": {
+         "readOnly": true
+        }
+       },
+       "allOf": [
+        {
+         "if": {
+          "properties": {
+           "digitalPtz": {
+            "const": true
+           }
+          },
+          "required": [
+           "digitalPtz"
+          ]
+         },
+         "then": {
+          "properties": {
+           "maxZoom": {
+            "readOnly": true
+           }
+          }
+         }
+        },
+        {
+         "if": {
+          "properties": {
+           "camMotion": {
+            "const": true
+           }
+          },
+          "required": [
+           "camMotion"
+          ]
+         },
+         "then": {
+          "properties": {
+           "camMotionSens": {
+            "readOnly": true
+           },
+           "camMotionThr": {
+            "readOnly": true
+           },
+           "camMotionDelay": {
+            "readOnly": true
+           }
+          }
+         }
+        }
+       ]
+      }
+     },
+     {
+      "if": {
+       "properties": {
+        "driver": {
+         "enum": [
+          "onvif",
+          "native",
+          "onvif-channel",
+          "native-channel"
+         ]
+        },
+        "ptz": {
+         "const": true
+        },
+        "streamsMode": {
+         "const": "device"
+        }
+       },
+       "required": [
+        "driver",
+        "ptz"
+       ]
+      },
+      "then": {
+       "properties": {
+        "defaultEnablePatrol": {
+         "readOnly": true
+        },
+        "homePreset": {
+         "readOnly": true
+        },
+        "homePresetTimeout": {
+         "readOnly": true
+        },
+        "savePresetsOnDevice": {
+         "readOnly": true
+        },
+        "useDevicePresets": {
+         "readOnly": true
+        },
+        "enableMultipleControl": {
+         "readOnly": true
+        },
+        "discreteOverContinous": {
+         "readOnly": true
+        }
+       },
+       "allOf": [
+        {
+         "if": {
+          "properties": {
+           "defaultEnablePatrol": {
+            "const": true
+           }
+          },
+          "required": [
+           "defaultEnablePatrol"
+          ]
+         },
+         "then": {
+          "properties": {
+           "patrolTimeout": {
+            "readOnly": true
+           },
+           "patrolSpeed": {
+            "readOnly": true
            }
           }
          }
@@ -8824,7 +9066,7 @@
     "text": "Камера",
     "lang": "ru"
    },
-   "version": "1.3",
+   "version": "1.4",
    "uses": [
     {
      "id": "vms.archive/1",
@@ -8899,6 +9141,7 @@
     "serverId",
     "short",
     "stream",
+    "streamsMode",
     "templateId",
     "unitOptions",
     "vendor",
