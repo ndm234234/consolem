@@ -4445,4 +4445,8 @@ window.I18N_EN={
 "1 кадр / 60 с":"1 frame / 60 s",
 "1 кадр / 120 с":"1 frame / 120 s",
 "1 кадр / 240 с":"1 frame / 240 s",
+"ID может содержать до 50 знаков: цифры, латинские буквы и «_».":"The ID can contain up to 50 characters: digits, Latin letters and «_».",
+"Консоль не принимает другие знаки.":"The console does not accept other characters.",
+"уже используется. Ввести другой ID или очистить поле: консоль назначит ID сама.":"is already in use. Enter a different ID or clear the field: the console will assign an ID itself.",
+"Консоль назначит имя источника событий сама.":"The console will assign the event source name itself.",
 };

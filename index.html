@@ -1611,6 +1611,12 @@ select:not([multiple]){white-space:nowrap;overflow:hidden}:root select:not([mult
 .dev-conflict{grid-column:1/-1;color:var(--one-warning-text);font-size:11px;margin:2px 0 0}
 .dev-pass-wrap{position:relative;display:flex;align-items:center;min-width:0}
 .dev-pass-wrap .dev-inline-input{padding-right:28px;width:100%}
+/* Поле ID — допустимые знаки и занятый ID подсвечены у самого поля, как в Axxon One (IdNameView) */
+.dev-id-bad,.dev-id-bad:focus{border-color:var(--rd)!important;box-shadow:0 0 0 1px var(--rd)}
+label.dev-id-bad-lb,.dev-grid label.dev-id-bad-lb,.dev-field label.dev-id-bad-lb,.plan-edit label.dev-id-bad-lb{color:var(--rd)}
+.dev-id-note{margin:4px 0 0;font-size:12px;line-height:1.35;color:var(--mu)}
+.dev-id-note:empty{display:none}
+.dev-id-note.err{color:var(--rd)}
 .dev-pass-toggle{position:absolute;right:2px;top:50%;transform:translateY(-50%);width:22px;height:22px;border:0;background:transparent;color:var(--mu);cursor:pointer;padding:0;display:inline-flex;align-items:center;justify-content:center;border-radius:4px;flex:none}
 .dev-pass-toggle:hover{color:var(--tx);background:var(--one-control-hover)}
 .dev-pass-toggle:disabled{opacity:.45;cursor:default;pointer-events:none}
@@ -37434,6 +37440,89 @@ function identifierConflict(list,server){
   }
   return"";
 }
+// ── ID и имя добавляемого устройства ──
+// ID устройства — до 50 знаков: цифры, латинские буквы и «_» (Axxon One: IdNameView.idValue_KeyPress).
+// Поле не принимает другие знаки, а занятый ID подсвечивает у самого поля, не тостом
+const DEV_ID_MAX=50;
+const DEV_ID_RULE="ID может содержать до 50 знаков: цифры, латинские буквы и «_».";
+function devIdClean(v){return String(v??"").replace(/[^A-Za-z0-9_]/g,"").slice(0,DEV_ID_MAX)}
+// Чистит значение в самом поле и сохраняет место курсора. Возвращает {value, cut}: cut — консоль убрала знаки
+function devIdFilter(el){
+  const raw=el.value,clean=devIdClean(raw);
+  if(clean===raw)return{value:clean,cut:false};
+  const pos=el.selectionStart??raw.length,before=devIdClean(raw.slice(0,pos)).length;
+  el.value=clean;try{el.setSelectionRange(before,before)}catch(e){}
+  return{value:clean,cut:true};
+}
+// Текст под полем: занятый ID — ошибка, убранные знаки — правило
+function devIdNoteText(taken,cut){
+  if(taken)return{err:true,text:`${i18n("ID")} «${taken}» ${i18n("уже используется. Ввести другой ID или очистить поле: консоль назначит ID сама.")}`};
+  if(cut)return{err:false,text:i18n(DEV_ID_RULE)+" "+i18n("Консоль не принимает другие знаки.")};
+  return{err:false,text:""};
+}
+function devIdMark(el,note){
+  if(!el)return;
+  el.classList.toggle("dev-id-bad",!!note.err);
+  el.setAttribute("aria-invalid",note.err?"true":"false");
+  const box=el.closest(".dev-field")||el.parentElement;
+  const lb=box&&box.querySelector("label");if(lb)lb.classList.toggle("dev-id-bad-lb",!!note.err);
+  let p=box&&box.querySelector(".dev-id-note");
+  if(!p&&box){p=document.createElement("p");p.className="dev-id-note";p.setAttribute("aria-live","polite");box.appendChild(p)}
+  if(p){p.textContent=note.text;p.classList.toggle("err",!!note.err)}
+}
+// Фокус в поле ID и выделение текста, как HighlightId в Axxon One
+function devIdFocus(el){if(!el)return;el.focus();try{el.select()}catch(e){}}
+function devIdAttrs(){return`maxlength="${DEV_ID_MAX}" spellcheck="false" autocomplete="off" title="${escHtml(i18n(DEV_ID_RULE))}"`}
+// Форма «По адресу»
+function manualIdTaken(){
+  const m=wizd.manual,s=deviceTarget(),id=isAutoIdentifier(m.identifier)?"":String(m.identifier).trim();
+  return id&&s&&identifierTaken(s,id)?id:"";
+}
+function manualIdInput(el){
+  const f=devIdFilter(el);
+  wizd.manual.identifier=f.value;
+  devIdMark(el,devIdNoteText(manualIdTaken(),f.cut));
+}
+// Строка найденного устройства
+function foundIdTaken(r){
+  const id=isAutoIdentifier(r.identifier)?"":String(r.identifier||"").trim(),s=deviceTarget();
+  if(!id)return"";
+  if(s&&identifierTaken(s,id))return id;
+  // Тот же ID у другой отмеченной строки — тоже повтор: консоль не добавит обе
+  return wizd.devResults.some(x=>x!==r&&!x.added&&!isAutoIdentifier(x.identifier)&&String(x.identifier||"").trim()===id)?id:"";
+}
+function foundIdInput(id,el){
+  const r=wizd.devResults.find(x=>x.id===id);if(!r)return;
+  const f=devIdFilter(el);
+  r.identifier=f.value;
+  devIdMark(el,devIdNoteText(foundIdTaken(r),f.cut));
+}
+function foundIdHighlight(r){
+  const el=document.querySelector(`[data-found-id="${CSS.escape(r.id)}"]`);
+  if(!el){toast(`ID «${foundIdTaken(r)}» уже используется`);return}
+  devIdMark(el,devIdNoteText(foundIdTaken(r),false));devIdFocus(el);
+}
+// Строка плана: повтор ID план и так называет в списке причин, поле подсвечено рядом
+function planIdBad(row){
+  const r=row.r,id=isAutoIdentifier(r.identifier)?"":String(r.identifier||"").trim();
+  if(!id)return"";
+  if(addPlan.rows.some(x=>x!==row&&!isAutoIdentifier(x.r.identifier)&&String(x.r.identifier).trim()===id))return id;
+  return planIdTaken(id)?id:"";
+}
+function planIdInput(pid,el){
+  const f=devIdFilter(el);
+  planEdit(pid,"identifier",f.value);
+  const row=planByPid(pid);if(!row)return;
+  devIdMark(el,planIdBad(row)?{err:true,text:""}:devIdNoteText("",f.cut));
+  // Повтор ID в плане касается и другой строки: её поле подсвечено или снято тоже
+  for(const x of addPlan.rows){
+    if(x===row)continue;
+    const o=document.querySelector(`.plan-row[data-pid="${x.pid}"] [data-pf="identifier"]`);
+    if(o)devIdMark(o,{err:!!planIdBad(x),text:""});
+  }
+}
+// Источник событий: имя задаёт консоль, как в Axxon One (IdNameView.Bind: TextEventDevice — имя только для чтения)
+const EVENTSRC_NAME_HINT="Консоль назначит имя источника событий сама.";
 function nextDeviceIdentifier(server){
   let max=0;
   walk(n=>{
@@ -37474,6 +37563,7 @@ function addFoundDevice(id,bulk=false,opts={}){
   applyFoundAuth(r);
   const conn=foundConnectionError(r);
   if(conn){if(!bulk)toast(conn);return false}
+  if(!bulk&&foundIdTaken(r)){foundIdHighlight(r);return false}
   const noCred=missingDeviceCredentials(r);
   if(noCred&&!opts.allowNoCredentials){
     if(!bulk)askAddWithoutCredentials(()=>addFoundDevice(id,false,{allowNoCredentials:true,disabled:true}));
@@ -37536,7 +37626,7 @@ function addSelectedFoundDevices(){
   const list=selectedDeviceResults();if(!list.length){toast("Выберите устройства");return}
   list.forEach(applyFoundAuth);
   const idErr=identifierConflict(list);
-  if(idErr){toast(idErr);return}
+  if(idErr){const bad=list.find(foundIdTaken);if(bad)foundIdHighlight(bad);else toast(idErr);return}
   const connErr=list.find(r=>foundConnectionError(r));
   if(connErr){toast(foundConnectionError(connErr));return}
   if(list.some(missingDeviceCredentials)){
@@ -37553,7 +37643,7 @@ function finishBulkDevices(list,disableWithoutCreds=false){
   });
 }
 function devCardFieldHtml(r,lock,type){
-  const id=lock?`<div class="dev-ro">${escHtml(deviceIdentifierPreview(r)||"—")}</div>`:`<input class="dev-inline-input" value="${escHtml(r.identifier||"")}" placeholder="Авто" ${onEv("click",onEv.stop)} ${onEv("input",["updateFoundDevice",`${r.id}`,"identifier",onEv.value])}>`;
+  const id=lock?`<div class="dev-ro">${escHtml(deviceIdentifierPreview(r)||"—")}</div>`:`${(()=>{const t=foundIdTaken(r),nt=devIdNoteText(t,false);return`<input class="dev-inline-input${nt.err?" dev-id-bad":""}" data-found-id="${escHtml(r.id)}" aria-invalid="${nt.err?"true":"false"}" value="${escHtml(r.identifier||"")}" placeholder="Авто" ${devIdAttrs()} ${onEv("click",onEv.stop)} ${onEv("input",["foundIdInput",`${r.id}`,onEv.el])}><p class="dev-id-note${nt.err?" err":""}" aria-live="polite">${escHtml(nt.text)}</p>`})()}`;
   switch(type){
     case"name":return `<label>Название</label><input class="dev-inline-input" value="${escHtml(isDefaultDeviceName(r.name)?"":(r.name||""))}" placeholder="По умолчанию" ${lock?"disabled":""} ${onEv("click",onEv.stop)} ${onEv("input",["updateFoundDevice",`${r.id}`,"name",onEv.value])}>`;
     case"group":return `<label>Папка</label>${comboGroupHtml(r.group,["updateFoundDevice",`${r.id}`,"group"],{lock})}`;
@@ -37563,7 +37653,7 @@ function devCardFieldHtml(r,lock,type){
       return `<label>Привязать к архиву</label>${comboArchHtml(r.arch,["updateFoundDevice",`${r.id}`,"arch"],{lock})}`;
     }
     case"record":return foundRecordFieldHtml(r,lock);
-    case"id":return `<label>ID</label>${id}`;
+    case"id":return `<label class="${!lock&&foundIdTaken(r)?"dev-id-bad-lb":""}">ID</label>${id}`;
     case"lat":return `<label>Широта</label><input class="dev-inline-input" value="${escHtml(r.lat??"0")}" ${lock?"disabled":""} ${onEv("click",onEv.stop)} ${onEv("input",["updateFoundDevice",`${r.id}`,"lat",onEv.value])}>`;
     case"lon":return `<label>Долгота</label><input class="dev-inline-input" value="${escHtml(r.lon??"0")}" ${lock?"disabled":""} ${onEv("click",onEv.stop)} ${onEv("input",["updateFoundDevice",`${r.id}`,"lon",onEv.value])}>`;
     case"azimuth":return `<label>Азимут</label><input class="dev-inline-input" value="${escHtml(r.azimuth||"0")}" ${lock?"disabled":""} ${onEv("click",onEv.stop)} ${onEv("input",["updateFoundDevice",`${r.id}`,"azimuth",onEv.value])}>`;
@@ -37928,7 +38018,7 @@ function addManualDevice(){
 // prof — профиль, снятый со строки плана ({devMode, templateId}); без него — тот, что выбран в окне
 function manualNode(m,s,disabled,prof){
   const identifier=isAutoIdentifier(m.identifier)?"":String(m.identifier).trim();
-  const autoName=isDefaultDeviceName(m.name.trim())?(LB[m.type]||"Камера"):m.name.trim();
+  const autoName=handOf(m,"eventsrc")||isDefaultDeviceName(m.name.trim())?(LB[m.type]||"Камера"):m.name.trim();
   const configMode=prof?prof.devMode:(wizd.devMode||"current");
   const template=configMode==="template"?(prof?find(prof.templateId)?.n:deviceTemplates().find(x=>x.id===wizd.templateId)):null;
   const common={id:"obj"+Date.now()+Math.floor(Math.random()*1000),name:autoName,identifier,short:m.short??"",ip:m.ip,port:+m.port||gbtDefPort(m.vendor,m.type),vendor:m.vendor,model:m.model,user:m.user&&m.user!=="Авто"&&!manualIsGbt(m)?m.user:"",pass:manualIsGbt(m)?"":m.pass||"",online:true,devices:[],configMode};
@@ -37960,7 +38050,7 @@ function manualNode(m,s,disabled,prof){
 function commitManualDevice(disabled){
   const m=wizd.manual,s=deviceTarget();
   if(!s)return;
-  if(!isAutoIdentifier(m.identifier)&&identifierTaken(s,String(m.identifier).trim())){toast("ID уже используется");return}
+  if(manualIdTaken()){const el=document.getElementById("devManId");if(el){devIdMark(el,devIdNoteText(manualIdTaken(),false));devIdFocus(el)}else toast("ID уже используется");return}
   const node=manualNode(m,s,disabled);
   // Регистратор — IP-сервер, но папку в форме выбирают: её сохраняют, как у IP-сервера из файла
   const fid=node.type==="camera"||rtspChannelsOf(m)>1?(m.group||wizd.folder||null):null;
@@ -37999,9 +38089,10 @@ function deviceManualHtml(){
       <div><label>Пароль</label><input disabled placeholder="${escHtml(i18n("Не нужно для GB/T"))}"></div>`
       :`<div><label>Имя пользователя</label><input value="${escHtml(m.user)}" placeholder="Авто" ${onEv("input",["updateManual","user",onEv.value])}></div>
       <div><label>Пароль</label>${devPassFieldHtml(m.pass,false,"updateManual('pass',this.value)")}</div>`}
-      <div><label>ID</label><input value="${escHtml(idVal)}" placeholder="Авто" ${idLocked?"readonly disabled":""} ${onEv("input",["updateManual","identifier",onEv.value])}></div>
+      ${(()=>{const t=idLocked?"":manualIdTaken(),nt=devIdNoteText(t,false);return`<div class="dev-field"><label class="${nt.err?"dev-id-bad-lb":""}">ID</label><input id="devManId" class="${nt.err?"dev-id-bad":""}" aria-invalid="${nt.err?"true":"false"}" value="${escHtml(idVal)}" placeholder="Авто" ${devIdAttrs()} ${idLocked?"readonly disabled":""} ${onEv("input",["manualIdInput",onEv.el])}><p class="dev-id-note${nt.err?" err":""}" aria-live="polite">${escHtml(nt.text)}</p></div>`})()}
       <div><label>Короткое имя</label><input value="${escHtml(m.short)}" placeholder="Авто" ${onEv("input",["updateManual","short",onEv.value])}></div>
-      <div><label>Название</label><input value="${escHtml(m.name)}" placeholder="По умолчанию" ${onEv("input",["updateManual","name",onEv.value])}></div>
+      ${handOf(m,"eventsrc")?`<div><label>Название</label><input disabled placeholder="${escHtml(i18n("Авто"))}" title="${escHtml(i18n(EVENTSRC_NAME_HINT))}" aria-describedby="devManNameNote"><p class="dev-id-note" id="devManNameNote">${i18n(EVENTSRC_NAME_HINT)}</p></div>`
+      :`<div><label>Название</label><input value="${escHtml(m.name)}" placeholder="По умолчанию" ${onEv("input",["updateManual","name",onEv.value])}></div>`}
       ${camera?`<div><label>Архив</label>${comboArchHtml(m.arch,["updateManual","arch"],{inline:false})}</div>
       <div>${hasLinkedArchive(m.arch)?`<label>Запись</label><select class="dev-inline-select" ${onEv("change",["updateManual","record",onEv.value])}><option value="none" ${(!m.record||m.record==="none")?"selected":""}>Нет</option><option value="always" ${m.record==="always"?"selected":""}>Всегда</option><option value="motion" ${m.record==="motion"?"selected":""}>По движению</option></select>`:devDisabledFieldHtml("Запись")}</div>
       <div><label>Папка</label>${comboGroupHtml(m.group,["updateManual","group"],{inline:false})}</div>
@@ -39036,12 +39127,12 @@ function planRowHtml(row){
   let body="";
   if(row.open){
     body=`<div class="plan-edit"><div class="plan-issues">${planIssuesHtml(row)}</div>
-      ${inp("name","Название",isDefaultDeviceName(r.name)?"":r.name,i18n("По умолчанию"))}
+      ${row.source==="manual"&&handOf(r,"eventsrc")?`<div class="dev-field"><label>${i18n("Название")}</label><input class="dev-inline-input" aria-label="${al("Название")}" disabled placeholder="${escHtml(i18n("Авто"))}" title="${escHtml(i18n(EVENTSRC_NAME_HINT))}"><p class="dev-id-note">${i18n(EVENTSRC_NAME_HINT)}</p></div>`:inp("name","Название",isDefaultDeviceName(r.name)?"":r.name,i18n("По умолчанию"))}
       <div class="plan-two"><div class="dev-field"><label>${i18n("Производитель")}</label>${comboVendorHtml(r.vendor,["planEdit",row.pid,"vendor"],{lock,pf:"vendor",aria:al("Производитель")})}</div>
       <div class="dev-field"><label>${i18n("Модель")}</label>${comboModelHtml(r.vendor,r.model,["planEdit",row.pid,"model"],{lock,pf:"model",aria:al("Модель")})}</div></div>
       ${row.source==="manual"&&rtsp?inp("channels","Каналы",r.channels||1,"1"):""}
       ${planShowsAddr(row.source)?`${rtsp?inp("rtspUrl",chN>1?"Шаблон адреса RTSP":"RTSP",r.rtspUrl||r.rtsp,chN>1?"rtsp://адрес:554/ch{канал}":"rtsp://адрес:554/поток"):""}${!rtsp||r.ip?`<div class="plan-two">${inp("ip","IP-адрес",r.ip)}${inp("port","Порт",r.port)}</div>`:""}`:""}
-      ${inp("identifier","ID",isAutoIdentifier(r.identifier)?"":r.identifier,i18n("Авто"))}
+      ${(()=>{const bad=planIdBad(row);return`<div class="dev-field"><label class="${bad?"dev-id-bad-lb":""}">${i18n("ID")}</label><input class="dev-inline-input${bad?" dev-id-bad":""}" data-pf="identifier" aria-label="${al("ID")}" aria-invalid="${bad?"true":"false"}" value="${escHtml(isAutoIdentifier(r.identifier)?"":r.identifier??"")}" placeholder="${escHtml(i18n("Авто"))}" ${devIdAttrs()} ${dis} ${onEv("input",["planIdInput",row.pid,onEv.el])}><p class="dev-id-note" aria-live="polite"></p></div>`})()}
       <div class="plan-two">${inp("user","Имя пользователя",r.user,i18n("Авто"))}
       <div class="dev-field"><label>${i18n("Пароль")}</label>${devPassFieldHtml(r.pass||"",lock,`planEdit('${row.pid}','pass',this.value)`,`${i18n("Пароль")} · ${who}`,"pass")}</div></div>
       ${planIsCam(row)?`<div class="dev-field"><label>${i18n("Архив")}</label>${comboArchHtml(r.arch,["planEdit",row.pid,"arch"],{ctx:{sid:row.serverId,did:row.domainId},lock,pf:"arch",aria:al("Архив")})}</div>
