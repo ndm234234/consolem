@@ -154,16 +154,17 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   if (realRaw) API.raw = realRaw;
   cardReset();
 
-  // Известный вид: свойства сверх профилей были бы на вкладке «Дополнительно». У камеры их нет (configMode и templateId —
-  // в профиле vms.camera/1), вкладки нет — как в базе
+  // Известный вид: свойства сверх профилей были бы на вкладке «Дополнительно». У камеры такие свойства — только параметры
+  // драйвера (схема объекта): их показывают блоки по x-ui-tab и x-ui-group или скрывает x-hidden. Вкладки нет — как в базе
   const camKind = kindOf("camera");
   const camProfiles = new Set((await API.get("/kinds")).profiles.filter((p) => camKind.implements.includes(p.id)).flatMap((p) => p.properties || []));
-  const camExtra = Object.keys(camKind.schema.properties).filter((x) => !camProfiles.has(x));
+  const camExtra = Object.keys(camKind.schema.properties).filter((x) => !camProfiles.has(x))
+    .filter((x) => { const p = camKind.schema.properties[x]; return !p["x-hidden"] && p["x-ui-tab"] == null && p["x-ui-group"] == null; });
   const cam = (await API.get("/units", { kind: "camera", limit: 20 })).items[0];
   pick(cam.uid, { force: true });
   await until(() => sel === cam.uid && !find(cam.uid)?.n._row);
   const camTabs = tabsFor(find(cam.uid).n);
-  ok(!camExtra.length && !camTabs.some(([id]) => id === "extra"), "у камеры вкладки «Дополнительно» нет, как в базе: сверх профиля — " + (camExtra.join(", ") || "ничего"));
+  ok(!camExtra.length && !camTabs.some(([id]) => id === "extra"), "у камеры вкладки «Дополнительно» нет, как в базе: сверх профиля без блока — " + (camExtra.join(", ") || "ничего"));
   // Действие только для правил (ruleOnly) кнопкой не показывается: вызов ответил бы 404
   ok(camKind.actions.some((a) => a.ruleOnly) && !camKind.actions.filter((a) => a.ruleOnly).some((a) => new RegExp(`data-act="${a.id}"`).test(unitActionsHtml(find(cam.uid).n))),
     "действия ruleOnly — без кнопок");

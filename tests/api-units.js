@@ -935,6 +935,37 @@
     assert.status(await patch(env, a.uid, { properties: { bufferMs: 500 } }), 200, null, "tp-100: буфер в пределах");
   }, { needs: ["getUnitSchema", "patchUnit"] });
 
+  // Параметры драйвера камеры — данные стенда в схеме вида (ответ на запрос mockup о параметрах драйвера, п. 6)
+  test("Камера со своей схемой: параметры драйвера по driver, зависимое поле после PATCH, пределы ветки", async () => {
+    const env = await makeEnv();
+    const shown = (s) => Object.keys(s.properties).filter((f) => !s.properties[f]["x-hidden"] && (s.properties[f]["x-ui-tab"] || s.properties[f]["x-ui-group"])).sort();
+    const cams = ofKind("camera"), by = (d) => cams.find((u) => u.properties.driver === d);
+    // Набор one-domain несёт не все драйверы: сравнение — с теми, что есть
+    const nat = by("native"), onv = by("onvif"), ch = by("native-channel");
+    assert.ok(nat, "в наборе есть камера нативного драйвера");
+    const sn = await env.ok("GET", `/units/${nat.uid}/schema`);
+    assert.eq([sn.allOf, sn.if], [undefined, undefined], "в схеме объекта нет ни allOf, ни if");
+    if (onv) assert.ok(JSON.stringify(shown(sn)) !== JSON.stringify(shown(await env.ok("GET", `/units/${onv.uid}/schema`))), "у нативного драйвера и ONVIF разные наборы");
+    // У набора с регистраторами (demo) есть и камера канала: потеря её ветки не пройдёт молча
+    if (ofKind("ipsrv").length) assert.ok(ch, "в наборе с регистраторами есть камера канала");
+    if (ch) { const sc = shown(await env.ok("GET", `/units/${ch.uid}/schema`)); assert.ok(shown(sn).some((f) => !sc.includes(f)), "у камеры канала нет параметров устройства, которые задаёт регистратор"); }
+    // Зависимое поле: часть allOf открывает его, когда главный переключатель включён
+    const parts = (kindOf("camera").schema.allOf || []).flatMap(function all(p) { return [p].concat(((p.then || {}).allOf || []).flatMap(all)); });
+    const opens = (f) => parts.some((p) => p.if && p.if.properties && p.if.properties[f] && p.if.properties[f].const === true && Object.keys(p.if.properties).length === 1);
+    const sw = shown(sn).find((f) => sn.properties[f].type === "boolean" && !sn.properties[f].readOnly && opens(f) && nat.properties[f] !== true);
+    assert.ok(sw, "есть переключатель с зависимыми полями");
+    const before = shown(sn);
+    assert.status(await patch(env, nat.uid, { properties: { [sw]: true } }), 200, null, "переключатель включён");
+    const after = shown(await env.ok("GET", `/units/${nat.uid}/schema`));
+    const opened = after.filter((f) => !before.includes(f));
+    assert.ok(opened.length > 0, "схема объекта открыла зависимые поля");
+    const s2 = await env.ok("GET", `/units/${nat.uid}/schema`), num = opened.find((f) => s2.properties[f].maximum !== undefined);
+    if (num) invalid(await patch(env, nat.uid, { properties: { [num]: s2.properties[num].maximum + 1 } }), `/properties/${num}`, "maximum", "предел поля ветки");
+    // Регистратор — та же схема объекта
+    const ips = ofKind("ipsrv").find((u) => u.properties.driver);
+    if (ips) assert.ok(shown(await env.ok("GET", `/units/${ips.uid}/schema`)).length > 0, "у регистратора есть параметры драйвера");
+  }, { needs: ["getUnitSchema", "patchUnit", "kind:camera"] });
+
   test("запись ядром: вид без описания и вид с профилем vms.* — 422 NOT_SUPPORTED, field=/kind", async () => {
     const odd = { uid: "30009003-0000-4000-8000-000000000000", kind: "vendor.gone/THING", parentId: null, domainId: dom1(), name: "Объект без описания", version: "1", properties: { a: 1 } };
     const env = await makeEnv({ fixturePatch: { units: units().concat(odd) } });

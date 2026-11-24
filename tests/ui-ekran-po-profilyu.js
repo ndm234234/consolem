@@ -218,7 +218,7 @@ UiCheck(async ({ ok, until, sleep, absent }) => {
       ok(handScreenFields("acfa_lock").length > 0 && profileProps(KIND_PROFILES.get("vms.acs/1")).every((f) => handScreenFields("acfa_lock").includes(f)), "поля vms.acs/1 — у экрана СКУД, чей код входит в массив");
       ok(handScreenFields("acme.acs").length === 0, "вид СКУД с чужим кодом — экрана нет, полей нет");
       const c = screenCoverage("test.camera-like", handScreenFields("test.camera-like"));
-      ok(c.total === Object.keys(likeV.schema.properties).length && c.missing.includes("covProbe") && c.unknown.length === 0 && c.shown.length === c.total - c.missing.length, "счёт покрытия: всего, показаны, не показаны");
+      ok(c.total === Object.values(likeV.schema.properties).filter((p) => !p["x-hidden"]).length && c.missing.includes("covProbe") && c.unknown.length === 0 && c.shown.length === c.total - c.missing.length, "счёт покрытия: всего (без x-hidden), показаны, не показаны");
       ok(screenCoverage("camera", ["fps", "nope"]).unknown.join() === "nope", "поле, которого нет в схеме, — отдельно");
       ok(kindExtraProps("test.camera-like").includes("covProbe") && !kindExtraProps("acme.campos").includes("fps"), "«сверх профиля» — по полям своего экрана");
       ok(profileProps({ properties: ["a", "b"] }).join() === "a,b" && profileProps({ properties: { a: {}, b: {} } }).join() === "a,b" && profileProps({}).length === 0, "имена профиля — из массива или из объекта (часть 02)");
