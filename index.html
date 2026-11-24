@@ -16288,7 +16288,7 @@ function camConnHtml(n){
   </div>`;
 }
 // Поле карточки с подписью, которая отличается от ключа черновика (ключ «IP», подпись «IP-адрес»)
-function fldLbl(k,l,v,ph,tp="text"){v=cardFldOrig(k,v);const d=cardFldVal(k,v);return `<div><label>${i18n(l)}</label><input type="${tp}" value="${escHtml(d??"")}" ${ph?`placeholder="${escHtml(ph)}"`:""} data-df="${escHtml(k)}" data-orig="${escHtml(v??"")}" ${onEv("input",["cardFld",onEv.el])}></div>`}
+function fldLbl(k,l,v,ph,tp="text",ext=""){v=cardFldOrig(k,v);const d=cardFldVal(k,v);return `<div><label>${i18n(l)}</label><input type="${tp}" value="${escHtml(d??"")}" ${ph?`placeholder="${escHtml(ph)}"`:""} ${ext} data-df="${escHtml(k)}" data-orig="${escHtml(v??"")}" ${onEv("input",["cardFld",onEv.el])}></div>`}
 function camConnSet(id,l,v){
   const n=find(id)?.n;if(!n)return;
   const orig=l==="Производитель"?n.vendor||"":l==="Модель"?n.model||"":"";
@@ -16316,7 +16316,19 @@ function camConnDetect(id){
 // Вариант «Просмотр, затем правка»: значения — текстом, поля появляются по «Изменить» у блока.
 // Правка идёт в тот же черновик карточки: «Добавить в план» закрывает поля, правку применяет «Применить» внизу; «Отменить» снимает правки блока
 const csEdit=new Set();
-const CS_SEC_FIELDS={ident:["Имя","Короткое имя"],conn:["Производитель","Модель","IP","Порт","RTSP","Имя пользователя","Пароль"]};
+const CS_SEC_FIELDS={ident:["Имя","Короткое имя"],conn:["Производитель","Модель","IP","Порт","RTSP","Имя пользователя","Пароль"],geo:["Широта","Долгота","Азимут"]};
+// «Геолокация» камеры и регистратора — свойства записи lat, lon, azimuth: значения с сервера, правка — в черновик карточки,
+// «Применить» пишет их через PATCH (CARD_FLD_PROP). Axxon One: GeoLocationLatitude, GeoLocationLongitude, GeoLocationAzimuth
+function csGeoHtml(n){
+  const val=(l,v)=>camConnVal(n,l,v),txt=v=>v===""||v==null?`<span class="cs-empty">—</span>`:escHtml(String(v));
+  const lat=n.lat??"",lon=n.lon??"",az=n.azimuth??"";
+  let h;
+  if(!csEditOn(n.id,"geo")){const a=val("Азимут",az);
+    h=card("Геолокация",csDl([["Широта",txt(val("Широта",lat)),csChanged("Широта")],["Долгота",txt(val("Долгота",lon)),csChanged("Долгота")],
+      ["Азимут",a===""||a==null?txt(a):`${escHtml(String(a))}°`,csChanged("Азимут")]]));
+  }else h=card("Геолокация",`<div class="g">${fldLbl("Широта","Широта",lat,"","number",'min="-90" max="90" step="any"')}${fldLbl("Долгота","Долгота",lon,"","number",'min="-180" max="180" step="any"')}${fldLbl("Азимут","Азимут, °",az,"","number",'min="0" max="360" step="any"')}</div>`);
+  return csHead(csWrap("geo",h),csEditBtns(n,"geo"));
+}
 function csEditOn(id,k){return csEdit.has(id+":"+k)}
 // Фокус: после «Изменить» — первое поле блока (поле ввода, список, переключатель), после закрытия — кнопка «Изменить»
 function csSecOf(k){return k.startsWith("blk:")?k.split(":").slice(2).join(":"):k}
@@ -16422,16 +16434,13 @@ const ipsSchemaMemo=new Map();
 function ipsDrvSchema(o){
   const k=o.id+"|"+(o.vendor||""),c=ipsSchemaMemo.get(k);if(c)return c;
   const d=isRtspVendor(o.vendor||"")?"rtsp":/onvif|generic/i.test(o.vendor||"")?"onvif":"native",P={};
-  const G=DRV_IDENT,C="Обмен с устройством",GEO="Геолокация";
+  const G=DRV_IDENT,C="Обмен с устройством";
   P.firmware=drvP("gen",G,10,"Прошивка","string",{readOnly:true,default:d==="rtsp"?"":o.subtype==="io"?"1.9":"V4.51.006"});
   P.driverVersion=drvP("gen",G,11,"Версия драйвера","string",{readOnly:true,default:d==="rtsp"?"1.4":"3.0.0"});
   if(d==="native")P.deviceSerialNumber=drvP("gen",G,12,"Серийный номер устройства","string",{readOnly:true,default:o.subtype==="nvr"?"6L0B2E8PAZ1F4C7":""});
   P.comment=drvP("gen",G,13,"Комментарий","string",{"x-ui-widget":"textarea",default:""});
   P.breakUnusedConnections=drvP("gen",C,20,"Прервать неиспользуемое соединение","boolean",{default:false});
   if(d!=="rtsp"&&o.subtype!=="io"&&o.subtype!=="sip")P.lowGop=drvP("gen",C,21,"Low GOP","boolean",{default:false});
-  P.geoLocationLatitude=drvP("gen",GEO,40,"Широта","number",{minimum:-90,maximum:90,default:o.lat??0});
-  P.geoLocationLongitude=drvP("gen",GEO,41,"Долгота","number",{minimum:-180,maximum:180,default:o.lon??0});
-  P.geoLocationAzimuth=drvP("gen",GEO,42,"Азимут","number",{minimum:0,maximum:360,default:o.azimuth??0,"x-ui-unit":"°"});
   const sc={type:"object",properties:P,allOf:[]};ipsSchemaMemo.set(k,sc);return sc;
 }
 function ipsKids(o,t){return(o.devices||[]).filter(d=>typeIn(d,[].concat(t)))}
@@ -16465,7 +16474,7 @@ function ipsGenHtml(n){
   const sum=[cams.length?`${cams.length} ${i18n(plural(cams.length,"камера|камеры|камер"))}`:"",ch.length?`${ch.length} ${i18n(plural(ch.length,"канал|канала|каналов"))}`:""].filter(Boolean).join(", ");
   const comp=`<div class="card" data-sec="comp" data-cs-sum="${escHtml(sum)}"><div class="ch">${i18n("Каналы устройства")}</div><div class="cb">${tiles?`<div class="mx">${tiles}</div>`:`<p class="sub">${i18n("Устройство не сообщило о каналах.")}</p>`}
     <p class="sub" style="margin-top:8px">${i18n("Настроить канал в его окне. Регистратор задаёт всем каналам адрес, учётные данные и прошивку, а признак «Отправлять настройки устройству» они берут от него.")}</p></div></div>`;
-  return ident+conn+drvSecsHtml(n,"gen")+comp+csWrap("folders",deviceFoldersCardHtml(n));
+  return ident+conn+csGeoHtml(n)+drvSecsHtml(n,"gen")+comp+csWrap("folders",deviceFoldersCardHtml(n));
 }
 // Вкладка «Каналы»: видеоканалы — таблицей с отметкой строк (отметка общая с деревом: treeSel), фильтр — по образцу
 const IPS_DIMS=[["st","состояние",c=>c.enabled===false?"Выключена":devErr(c)?"Нет сигнала":"Работает",i18n],["loc","расположение",c=>{const fs=foldersOfDevice(c.id);return fs.length?locName(fs[0]):i18n("Без расположения")}],["rec","запись",c=>isRecording(c)?recordModeLabel(c.rec):"Не пишется",i18n],["res","разрешение",c=>c.res||""]];
@@ -16641,7 +16650,7 @@ function camGenLayout(n,p,ips){
   place=csHead(csWrap("place",place),csEditBtns(n,"place"));
   // Частые блоки выше: «Расположение» и «Размещение и тревоги» нужны при каждой установке, параметры драйвера — реже
   // «Периферия» — на своей вкладке, здесь её нет
-  return ident+conn+csWrap("folders",p.folders)+place+drvSecsHtml(n,"gen")+csWrap("rules",p.rules);
+  return ident+conn+csWrap("folders",p.folders)+place+csGeoHtml(n)+drvSecsHtml(n,"gen")+csWrap("rules",p.rules);
 }
 // ── Параметры драйвера камеры (ЗАГЛУШКА до ответа на запрос api/requests/2026-11-09-182805Z-mockup-camera-driver-params-request.md) ─────────────────────────────────────────────────────
 // Набор параметров зависит от драйвера: RTSP, ONVIF или нативная интеграция. В контракте 0.2.0 такой набор отдаёт
@@ -16667,8 +16676,8 @@ function camDrvSchema(n){
 function camDrvSchema0(n){
   const d=camDriver(n),P={},allOf=[],when=(cond,props)=>allOf.push({if:{properties:cond,required:Object.keys(cond)},then:{properties:props}}),on=(f,v,props)=>when({[f]:{const:v}},props);
   // Группы по смыслу: то, что называет камеру, — в «Идентификации» (DRV_IDENT, блок рисует camGenLayout);
-  // как консоль обменивается данными с камерой — «Обмен с камерой»; «Геолокация» — отдельно; «Резервное отображение» — на «Видео»
-  const G=DRV_IDENT,C="Обмен с камерой",B=C,GEO="Геолокация",O=C,ALT="Резервное отображение";
+  // как консоль обменивается данными с камерой — «Обмен с камерой»; «Геолокация» — свойства записи lat, lon, azimuth (csGeoHtml), не параметры драйвера; «Резервное отображение» — на «Видео»
+  const G=DRV_IDENT,C="Обмен с камерой",B=C,O=C,ALT="Резервное отображение";
   // Что сообщает камера или драйвер (Axxon One: DeviceIpint): только для чтения, кроме типа камеры
   P.cameraType=drvP("gen",G,9,"Тип камеры","string",drvE({"":"Не определено",bullet:"Bullet",speed_dome:"PTZ/SpeedDome",fix_dome:"FixDome"},""));
   P.firmware=drvP("gen",G,10,"Прошивка","string",{readOnly:true,default:d==="rtsp"?"":d==="onvif"?"2.6.1":"V5.7.3 build 220112"});
@@ -16684,9 +16693,6 @@ function camDrvSchema0(n){
   // Буферизация видео (Axxon One: isVideoBufferOn, videoBufferSize)
   P.isVideoBufferOn=drvP("gen",B,30,"Буферизация видео","boolean",{default:false});
   on("isVideoBufferOn",true,{videoBufferSize:drvP("gen",B,31,"Размер буфера","integer",{minimum:50,maximum:3000,default:50,"x-ui-unit":"мс"})});
-  P.geoLocationLatitude=drvP("gen",GEO,40,"Широта","number",{minimum:-90,maximum:90,default:0});
-  P.geoLocationLongitude=drvP("gen",GEO,41,"Долгота","number",{minimum:-180,maximum:180,default:0});
-  P.geoLocationAzimuth=drvP("gen",GEO,42,"Азимут","number",{minimum:0,maximum:360,default:0,"x-ui-unit":"°"});
   // Резервное отображение: до двух камер своего домена, кроме самой камеры (Axxon One: AssociatedCameraEditor и
   // CameraDataSource — список камер домена; NodeName список не сужает)
   const dom=nodeDomainId(n),alt={"":"Не выбрано"};

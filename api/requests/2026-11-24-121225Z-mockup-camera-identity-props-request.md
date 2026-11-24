@@ -18,7 +18,7 @@
 - `BlockingConfiguration` «соответствует чекбоксу "отправлять настройки устройству" в клиенте» — DevDep Confluence, «RSG HTTP API», «ipint» (doc 103984). Имя свойства в gRPC — «Preserve device settings», в `ListUnitsStream` — «Использовать настройки устройства» (doc 119000).
 
 Что уже решено и в запрос не входит:
-- **Широта, долгота, азимут.** В контракте они есть: `lat`, `lon`, `azimuth` у вида `camera`. Заглушка `geoLocationLatitude`… на карточке — ошибка интерфейса. Её исправит mockup в `index.html`.
+- **Широта, долгота, азимут.** В контракте они есть: `lat`, `lon`, `azimuth` у вида `camera`. Карточка показывала их из заглушки `geoLocationLatitude`…: это была ошибка интерфейса. mockup исправил её в `index.html` 2026-11-24 (`csGeoHtml`).
 - **Группы камер** контракт даёт папками: `Unit.folders`.
 - **Параметры драйвера** (буфер, RTSP, резервное отображение и другие) — данные стенда по [ответу о параметрах драйвера камеры](2026-11-09-182805Z-mockup-camera-driver-params-response.md), п. 6. `schemaPerUnit: true` у камеры mockup ещё не сделал.
 
