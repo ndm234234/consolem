@@ -4379,7 +4379,13 @@ const STATUS_FILTERS=[...STATUS_FILTERS_RU];
 const tblFilt={cams:{},acfa:{}};
 const CAMS_TBL_COLS=[["ip","IP-адрес",112],["port","Порт",48],["vendor","Производитель",108],["model","Модель",108],["name","Название",180],["id","ID",68],["lat","Широта",78],["lon","Долгота",78],["azimuth","Азимут",72]];
 const DEVICE_CSV_SPEC=[["ip","IP-адрес"],["port","Порт"],["vendor","Производитель"],["model","Модель"],["user","Логин"],["pass","Пароль"],["identifier","ID"],["short","Короткое имя"],["name","Имя объекта"],["lat","Широта"],["lon","Долгота"],["azimuth","Азимут"],["archive","Имя архива"],["record","Режим записи"],["group","Папка"],["rtspUrl","Адрес RTSP"]];
-const CSV_HEADER_TO_KEY=(()=>{const m={};DEVICE_CSV_SPEC.forEach(([k,l])=>{m[l.toLowerCase()]=k;m[k.toLowerCase()]=k});m["название"]="name";m["азимут"]="azimuth";m["тип строки"]="rowKind";m["импорт"]="importFlag";return m})();
+const CSV_HEADER_TO_KEY=(()=>{const m={};DEVICE_CSV_SPEC.forEach(([k,l])=>{m[l.toLowerCase()]=k;m[k.toLowerCase()]=k});m["название"]="name";m["азимут"]="azimuth";m["тип строки"]="rowKind";m["импорт"]="importFlag";
+  // Заголовки Axxon One: из справки («IP address, Port, …, Recording mode») и из журнала клиента («LANAddress,Port,…,BindingMode»)
+  Object.assign(m,{"ip address":"ip",lanaddress:"ip",login:"user",password:"pass",displayid:"identifier","object name":"name",displayname:"name",latitude:"lat",longitude:"lon","archive name":"archive",archivename:"archive","recording mode":"record",bindingmode:"record"});
+  return m})();
+// Режим записи из файла: значения консоли и Axxon One («No», «Always», «On motion»), без учёта регистра
+const CSV_RECORD_KEY={"нет":"none","всегда":"always","по движению":"motion","по детектору":"motion","по событию":"motion",none:"none",always:"always",motion:"motion",no:"none","on motion":"motion"};
+function csvRecordKey(v){return CSV_RECORD_KEY[String(v||"").trim().toLowerCase()]||""}
 let camsColWidths=CAMS_TBL_COLS.map(([, ,w])=>w);
 let camsColDrag=null;
 const tblOpen=new Set();
@@ -38052,16 +38058,30 @@ function csvRowFrom(cols,index,colMap){
   const user=legacy?cols[4]:csvPick(cols,colMap,"user",4);
   const pass=legacy?cols[5]:csvPick(cols,colMap,"pass",5);
   const identifier=legacy?(cols[6]||""):csvPick(cols,colMap,"identifier",6);
-  const oldLegacy=legacy&&cols.length<=13&&cols[7]&&!/^-?\d/.test(String(cols[8]||""));
-  const shortName=legacy?(oldLegacy?"":(cols[7]||"")):csvPick(cols,colMap,"short",7);
-  const name=legacy?((oldLegacy?cols[7]:cols[8])||""):csvPick(cols,colMap,"name",8);
-  const lat=legacy?(oldLegacy?cols[8]:cols[9]):csvPick(cols,colMap,"lat",9);
-  const lon=legacy?(oldLegacy?cols[9]:cols[10]):csvPick(cols,colMap,"lon",10);
-  const azimuth=legacy?(oldLegacy?cols[10]:cols[11]):csvPick(cols,colMap,"azimuth",11);
-  const archiveName=legacy?(oldLegacy?cols[11]:cols[12]):csvPick(cols,colMap,"archive",12);
-  const recordName=legacy?(oldLegacy?cols[12]:cols[13]):csvPick(cols,colMap,"record",13);
-  const groupName=legacy?"":csvPick(cols,colMap,"group");
-  const rtspUrl=legacy?"":String(csvPick(cols,colMap,"rtspUrl")||"").trim();
+  // Файл без заголовка: до 13 столбцов — порядок Axxon One (…, ID, «Имя объекта», широта, долгота, азимут, архив, режим записи),
+  // 14 и больше — порядок консоли: «Короткое имя» после ID, в конце «Папка» и «Адрес RTSP».
+  // Пустые ячейки после 13-й (лишняя запятая в конце строки) порядок не меняют
+  let len=cols.length;while(len>13&&!String(cols[len-1]||"").trim())len--;
+  const ao=legacy&&len<=13;
+  const L=(aoIdx,conIdx)=>(ao?cols[aoIdx]:cols[conIdx])??"";
+  const shortName=legacy?(ao?"":L(7,7)):csvPick(cols,colMap,"short",7);
+  const name=legacy?L(7,8):csvPick(cols,colMap,"name",8);
+  const lat=legacy?L(8,9):csvPick(cols,colMap,"lat",9);
+  const lon=legacy?L(9,10):csvPick(cols,colMap,"lon",10);
+  let azimuth=legacy?L(10,11):csvPick(cols,colMap,"azimuth",11);
+  let archiveName=legacy?L(11,12):csvPick(cols,colMap,"archive",12);
+  let recordName=legacy?L(12,13):csvPick(cols,colMap,"record",13);
+  // Пример в справке Axxon One теряет одну запятую: на столбец меньше, в последнем режим записи.
+  // Число перед ним — азимут (пропала запятая архива), иначе — архив (пропала запятая азимута)
+  const recAt=legacy?(ao?12:-1):colMap.record;
+  const azAt=legacy?(ao?10:-1):colMap.azimuth;
+  if(recAt>0&&azAt===recAt-2&&(legacy||colMap.archive===recAt-1)&&cols.length===recAt&&csvRecordKey(cols[recAt-1])){
+    recordName=cols[recAt-1];
+    const prev=String(cols[recAt-2]??"").trim();
+    if(/^-?\d+(\.\d+)?$/.test(prev)){azimuth=prev;archiveName=""}else{archiveName=prev;azimuth=""}
+  }
+  const groupName=legacy?(ao?"":L(14,14)):csvPick(cols,colMap,"group");
+  const rtspUrl=String(legacy?(ao?"":L(15,15)):csvPick(cols,colMap,"rtspUrl")||"").trim();
   const row={id:"csv"+index,ip,port:+port||gbtDefPort(vendor),vendor,model,user,pass,identifier,short:shortName,name,lat,lon,azimuth,arch:"",record:"motion",group:"",rtspUrl,errors:[],skipImport:false};
   if(!csvRowHasImportRequired(row)){row.skipImport=true;return row;}
   const kind=inferCsvDeviceKind(row);
@@ -38082,8 +38102,7 @@ function csvRowFrom(cols,index,colMap){
   if(a&&!archMainOk(a))errors.push("камера не может писать в это хранилище");
   else if(a&&!wizArchList().includes(a))errors.push("архив другого домена или сервера");
   row.arch=a&&wizArchList().includes(a)?a.id:"";
-  const recMap={Нет:"none",Всегда:"always","По движению":"motion","По детектору":"motion","По событию":"motion",none:"none",always:"always",motion:"motion"};
-  row.record=recMap[recordName]||(row.arch?"motion":"none");
+  row.record=csvRecordKey(recordName)||(row.arch?"motion":"none");
   row.group=resolveGroupIdFromName(groupName);
   if(groupName&&!row.group)errors.push("неизвестная группа");
   return row;
