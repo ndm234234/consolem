@@ -4445,4 +4445,11 @@ window.I18N_EN={
 "1 кадр / 60 с":"1 frame / 60 s",
 "1 кадр / 120 с":"1 frame / 120 s",
 "1 кадр / 240 с":"1 frame / 240 s",
-};
+// Прототип 90: форма «По адресу» — диапазон IP, проверка адреса и порта
+"Добавить":"Add","Сколько устройств добавить":"How many devices to add","Одно устройство":"One device","Несколько устройств":"Several devices",
+"Первый IP-адрес":"First IP address","Последний IP-адрес":"Last IP address","Ввести первый и последний IP-адрес":"Enter the first and the last IP address",
+"Ввести адрес IPv4, например 192.168.1.100":"Enter an IPv4 address, for example 192.168.1.100","Ввести адрес IPv4, например 192.168.1.150":"Enter an IPv4 address, for example 192.168.1.150",
+"Ввести порт от 1 до 65535":"Enter a port from 1 to 65535","Последний адрес меньше первого":"The last address is lower than the first address",
+"Адресов в диапазоне":"Addresses in the range","Консоль добавляет не больше 500 адресов за один раз":"The console adds no more than 500 addresses at one time",
+"Консоль добавит в план строку для каждого адреса.":"The console adds a plan row for each address.","Консоль не добавит их снова.":"The console does not add them again.",
+"Консоль назначит ID каждому устройству диапазона":"The console gives an ID to each device of the range",};

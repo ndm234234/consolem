@@ -1643,6 +1643,16 @@ select:not([multiple]){white-space:nowrap;overflow:hidden}:root select:not([mult
 .rtsp-ch-list input.own{border-color:var(--ac)}
 .inline-field{display:flex;gap:7px}.inline-field>*:first-child{flex:1}.inline-field .btn{flex:none}
 .motion-note{grid-column:1/-1;margin:0;color:var(--mu);font-size:12px}
+/* Форма «По адресу»: режим «Несколько устройств», диапазон IP, ошибки полей */
+.dev-ipmode{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.dev-ipmode-lb{font-size:12px;color:var(--mu)}
+.dev-ipmode .vw-segb{white-space:nowrap;padding:5px 12px}
+.dev-range{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:0 8px;align-items:start}
+.dev-range-dash{padding-top:26px;color:var(--mu)}
+.dev-range-sum{grid-column:1/-1;margin:-4px 0 0;font-size:12px;color:var(--tx)}.dev-range-wait{color:var(--mu)}.dev-range-dup{color:var(--one-warning-text,#a15c00)}
+.manual-to-plan{white-space:nowrap}
+.dev-grid input.dev-bad{border-color:var(--one-danger)}
+.dev-err{margin:3px 0 0;font-size:12px;color:var(--one-danger)}.dev-err:empty{display:none}
+@media (max-width:520px){.dev-range{grid-template-columns:1fr}.dev-range-dash{display:none}}
 /* Подсказка и проверка адреса GB/T28181 под полем */
 .gbt-note{grid-column:1/-1;margin:-4px 0 0;font-size:12px;color:var(--mu);display:flex;flex-direction:column;gap:4px}
 .gbt-note code{font-size:11.5px}
@@ -35244,7 +35254,7 @@ function initDeviceWizard(c){
     devMode:"current",templateId:"",devResults:[],devFieldsPop:false,devViewMode:defaultDevViewMode(),devSelected:new Set(),
     tplPop:false,modePop:false,tplFilter:"",
     bulkUser:"",bulkPass:"",
-    manual:{type:"camera",ip:"",port:80,vendor:Object.keys(DEVICE_MODELS)[0]||"",model:Object.values(DEVICE_MODELS)[0]?.[0]||"",rtsp:"",user:"",pass:"",name:"",short:"",identifier:"",arch:"",group:"",record:"motion",lat:"0",lon:"0",azimuth:"0"},
+    manual:{type:"camera",ip:"",port:80,vendor:Object.keys(DEVICE_MODELS)[0]||"",model:Object.values(DEVICE_MODELS)[0]?.[0]||"",rtsp:"",user:"",pass:"",name:"",short:"",identifier:"",arch:"",group:"",record:"motion",lat:"0",lon:"0",azimuth:"0",ipMode:"one",ipTo:""},
     csvRows:[],csvName:"",csvError:"",csvSel:new Set(),csvFilter:"",csvFiltPop:false,csvSelOnly:false,csvStatuses:{ok:true,manual:true,bad:true}
   };
   // Архив по умолчанию — первый из доступных в этом мастере (домен, сервер),
@@ -37887,6 +37897,7 @@ function updateManual(key,value){
   if((key==="ip"||key==="port")&&manualIsGbt(wizd.manual))gbtNotePaint();
   if(key==="arch"&&!hasLinkedArchive(value))wizd.manual.record="none";
   if(key==="arch"||key==="record")renderDeviceWizard();
+  else if(key==="ip"||key==="ipTo"||key==="port")manualCheckPaint();
 }
 function changeManualType(type){
   wizd.manual.type=type;wizd.manualAddedId=null;renderDeviceWizard();
@@ -37971,13 +37982,97 @@ function commitManualDevice(disabled){
     paint();renderDeviceWizard();
   }).catch(e=>toast(problemText(e)));
 }
+// ── Форма «По адресу»: диапазон IP и проверка адреса и порта ──
+// Как в Axxon One (web-configurator manually-add-camera): «Одно устройство» или «Несколько устройств» с первым и последним адресом,
+// не больше 500 адресов за один раз, порт 1–65535. Параметр Axxon One «Break Unused Connections» в форму не взят: редкая настройка (решение владельца макета). Диапазон есть только у IP-устройства (с хранилищем или без): у RTSP, GB/T28181,
+// источника событий и ACFA адрес другого вида
+const IP_RANGE_MAX=500;
+// Разбор и запись IPv4 — те же, что у опроса сети (ipToInt, intToIp): ведущие нули и пробелы по краям допустимы
+function ipv4Num(s){return ipToInt(s)}
+function ipv4Str(n){return intToIp(n)}
+// Адрес и порт в строке плана — в одном виде: «192.168.1.010» и «192.168.1.10», «080» и «80» — один адрес
+function manualNormIp(s){const n=ipv4Num(s);return n==null?String(s||"").trim():ipv4Str(n)}
+function manualNormPort(p){const t=String(p??"").trim();return/^\d+$/.test(t)?String(+t):t}
+function manualRangeAllowed(m){return!manualIsRtsp(m)&&!manualIsGbt(m)&&(m.type==="camera"||handOf(m,"storage"))}
+function manualIsRange(m){return m.ipMode==="range"&&manualRangeAllowed(m)}
+// Ошибки полей формы: пустое поле — не ошибка, о нём скажет «В план»
+function manualFieldErrors(m){
+  const e={};
+  if(manualIsRtsp(m))return e;
+  const addrCheck=!manualIsGbt(m)&&!handOf(m,"eventsrc");
+  const ipT=String(m.ip||"").trim(),toT=String(m.ipTo||"").trim(),portT=String(m.port??"").trim();
+  if(addrCheck&&ipT&&ipv4Num(ipT)==null)e.ip=i18n("Ввести адрес IPv4, например 192.168.1.100");
+  if(portT&&!(/^\d+$/.test(portT)&&+portT>=1&&+portT<=65535))e.port=i18n("Ввести порт от 1 до 65535");
+  if(manualIsRange(m)){
+    const a=ipv4Num(ipT),b=ipv4Num(toT);
+    if(toT&&b==null)e.ipTo=i18n("Ввести адрес IPv4, например 192.168.1.150");
+    else if(a!=null&&b!=null&&b<a)e.ipTo=i18n("Последний адрес меньше первого");
+    else if(a!=null&&b!=null&&b-a+1>IP_RANGE_MAX)e.ipTo=`${i18n("Адресов в диапазоне")}: ${b-a+1}. ${i18n("Консоль добавляет не больше 500 адресов за один раз")}.`;
+  }
+  return e;
+}
+// Адреса диапазона; null — диапазон не задан или с ошибкой
+function manualRangeIps(m){
+  const a=ipv4Num(m.ip),b=ipv4Num(m.ipTo);
+  if(a==null||b==null||b<a||b-a+1>IP_RANGE_MAX)return null;
+  const out=[];for(let n=a;n<=b;n++)out.push(ipv4Str(n));
+  return out;
+}
+function manualRangeSumHtml(m){
+  const ips=manualRangeIps(m);
+  if(!ips){const fe=manualFieldErrors(m);return fe.ip||fe.ipTo?"":`<span class="dev-range-wait">${i18n("Ввести первый и последний IP-адрес")}</span>`}
+  const did=SERVER_DOMAIN[planServerId()]||wizd.domain;
+  const dup=ips.filter(ip=>planFindByAddr({ip,port:manualNormPort(m.port)},did)).length;
+  return`${i18n("Адресов в диапазоне")}: <b>${ips.length}</b>. ${i18n("Консоль добавит в план строку для каждого адреса.")}${dup?` <span class="dev-range-dup">${i18n("Уже в плане")}: ${dup}. ${i18n("Консоль не добавит их снова.")}</span>`:""}`;
+}
+// «В план» неактивна, пока в полях есть ошибка, а в режиме диапазона — пока диапазон не задан
+function manualPlanBlocked(m){return Object.keys(manualFieldErrors(m)).length>0||manualIsRange(m)&&!manualRangeIps(m)}
+// Ввод не перерисовывает форму (фокус и курсор остаются в поле): правим только подсказки, рамки и кнопку
+function manualCheckPaint(){
+  const m=wizd?.manual;if(!m)return;
+  const e=manualFieldErrors(m);
+  [["ip","devManIp"],["ipTo","devManIpTo"],["port","devManPort"]].forEach(([k,id])=>{
+    if(k==="ip"&&manualIsGbt(m))return;   // у адреса GB/T своя проверка и своя рамка (gbtBlock, gbt-bad)
+    const inp=document.getElementById(id),msg=document.getElementById(id+"Err");
+    if(inp){inp.classList.toggle("dev-bad",!!e[k]);inp.setAttribute("aria-invalid",e[k]?"true":"false")}
+    if(msg)msg.textContent=e[k]||"";
+  });
+  const sum=document.getElementById("devRangeSum");if(sum)sum.innerHTML=manualRangeSumHtml(m);
+  const st=manualToPlanState();
+  document.querySelectorAll(".manual-to-plan").forEach(b=>{b.disabled=st.disabled;b.textContent=st.label});
+}
+// Кнопка «В план» формы «По адресу» одна и та же в ящике мастера и на панели «Найденных»: состояние и подпись — отсюда
+function manualToPlanState(){
+  const m=wizd.manual,ips=manualIsRange(m)&&manualRangeIps(m);
+  return{disabled:(wizd.devMode==="template"&&!wizd.templateId)||manualPlanBlocked(m),label:ips?`${i18n("В план")}: ${ips.length}`:i18n("В план")};
+}
+function manualToPlanBtnHtml(id){
+  const st=manualToPlanState();
+  return`<button class="btn pri manual-to-plan"${id?` id="${id}"`:""} ${onEv("click",["planAddManual"])} ${st.disabled?"disabled":""}>${escHtml(st.label)}</button>`;
+}
+function setManualIpMode(mode){
+  const m=wizd.manual;
+  m.ipMode=mode==="range"?"range":"one";
+  // Как в Axxon One: последний адрес начинается с первого — остаётся поправить последнюю цифру
+  if(m.ipMode==="range"&&!String(m.ipTo||"").trim())m.ipTo=m.ip||"";
+  renderDeviceWizard();
+  document.getElementById(m.ipMode==="range"?"devManIpTo":"devManIp")?.focus();
+}
+function manualErrHtml(id,msg){return`<p class="dev-err" id="${id}Err" aria-live="polite">${escHtml(msg||"")}</p>`}
+function manualIpModeHtml(m){
+  if(!manualRangeAllowed(m))return"";
+  const r=manualIsRange(m);
+  return`<div class="full dev-ipmode"><span class="dev-ipmode-lb">${i18n("Добавить")}:</span><span class="vw-seg" role="group" aria-label="${escHtml(i18n("Сколько устройств добавить"))}"><button type="button" class="vw-segb" aria-pressed="${!r}" ${onEv("click",["setManualIpMode","one"])}>${i18n("Одно устройство")}</button><button type="button" class="vw-segb" aria-pressed="${r}" ${onEv("click",["setManualIpMode","range"])}>${i18n("Несколько устройств")}</button></span></div>`;
+}
 function deviceManualHtml(){
   const m=wizd.manual,camera=m.type==="camera",rtsp=manualIsRtsp(m),gbt=manualIsGbt(m),chN=rtspChannelsOf(m);
   if(gbt&&wizd.gbtPeers===undefined)gbtPeersLoad();
   const idLocked=!!wizd.manualAddedId;
   const idVal=idLocked?deviceIdentifierValue(cam(wizd.manualAddedId))||"—":m.identifier;
+  const range=manualIsRange(m),fe=manualFieldErrors(m),bad=k=>fe[k]?` class="dev-bad" aria-invalid="true"`:"";
   return `${deviceArchiveWarning()}<div class="dev-manual">
     <div class="dev-grid">
+      ${manualIpModeHtml(m)}
       <div class="full"><label>Тип устройства</label><select ${onEv("change",["changeManualType",onEv.value])}>
         <option value="camera" ${m.type==="camera"?"selected":""}>IP-устройство</option>
         ${canAdd("storage")?`<option value="storage" ${handOf(m,"storage")?"selected":""}>IP-устройство с хранилищем</option>`:""}
@@ -37991,15 +38086,20 @@ function deviceManualHtml(){
       ${chN>1?rtspChannelsHtml(m,chN):""}`
       :gbt?`<div class="full"><label>${i18n("Адрес GB/T28181")}</label><input id="devManIp" class="${String(m.ip||"").trim()&&gbtBlock(m)&&gbtBlock(m)!==GBT_WAIT?"gbt-bad":""}" value="${escHtml(m.ip)}" placeholder="34020000001320000008@34020000002000000001" spellcheck="false" autocomplete="off" ${onEv("input",["updateManual","ip",onEv.value])}></div>
       <div class="gbt-note" id="gbtNote" aria-live="polite">${gbtNoteHtml(m)}</div>
-      <div><label>${i18n("Порт SIP")}</label><input type="number" value="${m.port}" title="${escHtml(i18n("Локальный порт, на который сервер принимает сообщения SIP от устройства. По умолчанию 5060"))}" ${onEv("input",["updateManual","port",onEv.value])}></div>`
-      :`<div><label>${handOf(m,"eventsrc")?"Адрес кассы или сервера":"IP-адрес"}</label><input id="devManIp" value="${escHtml(m.ip)}" placeholder="192.168.1.100" ${onEv("input",["updateManual","ip",onEv.value])}></div>
+      <div><label>${i18n("Порт SIP")}</label><input id="devManPort" type="number"${bad("port")} aria-describedby="devManPortErr" value="${m.port}" title="${escHtml(i18n("Локальный порт, на который сервер принимает сообщения SIP от устройства. По умолчанию 5060"))}" ${onEv("input",["updateManual","port",onEv.value])}>${manualErrHtml("devManPort",fe.port)}</div>`
+      :range?`<div class="full dev-range"><div><label>${i18n("Первый IP-адрес")}</label><input id="devManIp"${bad("ip")} aria-describedby="devManIpErr" value="${escHtml(m.ip)}" placeholder="192.168.1.100" ${onEv("input",["updateManual","ip",onEv.value])}>${manualErrHtml("devManIp",fe.ip)}</div>
+        <span class="dev-range-dash" aria-hidden="true">—</span>
+        <div><label>${i18n("Последний IP-адрес")}</label><input id="devManIpTo"${bad("ipTo")} aria-describedby="devManIpToErr" value="${escHtml(m.ipTo||"")}" placeholder="192.168.1.150" ${onEv("input",["updateManual","ipTo",onEv.value])}>${manualErrHtml("devManIpTo",fe.ipTo)}</div></div>
+      <p class="dev-range-sum" id="devRangeSum" aria-live="polite">${manualRangeSumHtml(m)}</p>
+      <div><label>Порт</label><input id="devManPort" type="number"${bad("port")} aria-describedby="devManPortErr" value="${m.port}" ${onEv("input",["updateManual","port",onEv.value])}>${manualErrHtml("devManPort",fe.port)}</div>`
+      :`<div><label>${handOf(m,"eventsrc")?"Адрес кассы или сервера":"IP-адрес"}</label><input id="devManIp"${bad("ip")} aria-describedby="devManIpErr" value="${escHtml(m.ip)}" placeholder="192.168.1.100" ${onEv("input",["updateManual","ip",onEv.value])}>${manualErrHtml("devManIp",fe.ip)}</div>
       ${handOf(m,"eventsrc")?`<div><label>Сервер</label><select ${onEv("change",["updateManual","server",onEv.value])}><option value="">Выберет система</option>${allocatedServers(wizd.domain).map(x=>`<option value="${x.id}" ${x.id===m.server?"selected":""}>${escHtml(locName(x))}</option>`).join("")}</select></div>`:""}
-      <div><label>Порт</label><input type="number" value="${m.port}" ${onEv("input",["updateManual","port",onEv.value])}></div>`}
+      <div><label>Порт</label><input id="devManPort" type="number"${bad("port")} aria-describedby="devManPortErr" value="${m.port}" ${onEv("input",["updateManual","port",onEv.value])}>${manualErrHtml("devManPort",fe.port)}</div>`}
       ${gbt?`<div><label>Имя пользователя</label><input disabled placeholder="${escHtml(i18n("Не нужно для GB/T"))}"></div>
       <div><label>Пароль</label><input disabled placeholder="${escHtml(i18n("Не нужно для GB/T"))}"></div>`
       :`<div><label>Имя пользователя</label><input value="${escHtml(m.user)}" placeholder="Авто" ${onEv("input",["updateManual","user",onEv.value])}></div>
       <div><label>Пароль</label>${devPassFieldHtml(m.pass,false,"updateManual('pass',this.value)")}</div>`}
-      <div><label>ID</label><input value="${escHtml(idVal)}" placeholder="Авто" ${idLocked?"readonly disabled":""} ${onEv("input",["updateManual","identifier",onEv.value])}></div>
+      <div><label>ID</label><input value="${escHtml(range?"":idVal)}" placeholder="Авто" ${idLocked||range?"readonly disabled":""} ${range?`title="${escHtml(i18n("Консоль назначит ID каждому устройству диапазона"))}"`:""} ${onEv("input",["updateManual","identifier",onEv.value])}></div>
       <div><label>Короткое имя</label><input value="${escHtml(m.short)}" placeholder="Авто" ${onEv("input",["updateManual","short",onEv.value])}></div>
       <div><label>Название</label><input value="${escHtml(m.name)}" placeholder="По умолчанию" ${onEv("input",["updateManual","name",onEv.value])}></div>
       ${camera?`<div><label>Архив</label>${comboArchHtml(m.arch,["updateManual","arch"],{inline:false})}</div>
@@ -38261,8 +38361,7 @@ function renderDeviceWizardFooter(){
 }
 // «В план» формы «По адресу» — под самой формой: она прокручивается, кнопка видна всегда
 function planManualFootHtml(){
-  const templateMissing=wizd.devMode==="template"&&!wizd.templateId;
-  return`<div class="plan-left-ft dev-footer-manual">${wizd.manualAddedId?`<div class="dev-action-btns dev-action-btns-inline">${devAddedActionsHtml(wizd.manualAddedId)}</div>`:`${deviceAddParamsHtml()}<button class="btn pri" id="manualToPlan" ${onEv("click",["planAddManual"])} ${templateMissing?"disabled":""}>${i18n("В план")}</button>`}</div>`;
+  return`<div class="plan-left-ft dev-footer-manual">${wizd.manualAddedId?`<div class="dev-action-btns dev-action-btns-inline">${devAddedActionsHtml(wizd.manualAddedId)}</div>`:`${deviceAddParamsHtml()}${manualToPlanBtnHtml("manualToPlan")}`}</div>`;
 }
 // Список прокручивается сам, а строка управления над ним остаётся на месте; форма и пустая вкладка файла прокручиваются целиком
 function devWrapCls(){return wizd.deviceTab==="search"||(wizd.deviceTab==="csv"&&wizd.csvRows.length)?"":" dev-wrap-scroll"}
@@ -38301,7 +38400,7 @@ function foundFootHtml(){
   if(wizd.deviceTab!=="search")
     return`${devTabBackHtml()}
       <span style="flex:1"></span>
-      ${wizd.deviceTab==="manual"?`${wizd.manualAddedId?devAddedActionsHtml(wizd.manualAddedId):`<button class="btn pri" ${onEv("click",["planAddManual"])}>В план</button>`}`:""}`;
+      ${wizd.deviceTab==="manual"?`${wizd.manualAddedId?devAddedActionsHtml(wizd.manualAddedId):manualToPlanBtnHtml("")}`:""}`;
   // Всё управление списком — в его же строке, подвалу здесь делать нечего.
   return"";
 }
@@ -38693,12 +38792,16 @@ function planAddManual(){
   if(rtsp&&chN<2&&!String(m.rtsp||"").trim()){toast(i18n("Укажите адрес RTSP"));return}
   const gbtErr=gbtBlock(m);
   if(gbtErr){toast(i18n(gbtErr));document.getElementById("devManIp")?.focus();return}
+  const fe=manualFieldErrors(m),feKey=["ip","ipTo","port"].find(k=>fe[k]);
+  if(feKey){toast(fe[feKey]);document.getElementById({ip:"devManIp",ipTo:"devManIpTo",port:"devManPort"}[feKey])?.focus();return}
   if(m.type==="camera"&&!rtsp&&!m.ip){toast(i18n("Укажите IP-адрес"));return}
   if(m.type==="camera"&&!rtsp&&(!m.vendor||!m.model)){toast(i18n("Заполните производителя и модель"));return}
   if(m.type!=="camera"&&(!m.ip||!m.vendor||!m.model)){toast(i18n("Заполните IP, производителя и модель"));return}
   // Уходит только адрес, который виден в форме: набранный раньше другой адрес в строку не попадает
-  const r={...m,ip:rtsp?"":m.ip,port:rtsp?80:m.port,rtsp:rtsp?m.rtsp:"",rtspUrl:rtsp?m.rtsp:"",channels:chN,chUrls:chN>1?{...(m.chUrls||{})}:{},status:"ok",...(manualIsGbt(m)?{user:"",pass:""}:{})};
+  const addrNorm=!rtsp&&!manualIsGbt(m)&&!handOf(m,"eventsrc");
+  const r={...m,ip:rtsp?"":addrNorm?manualNormIp(m.ip):m.ip,port:rtsp?80:manualNormPort(m.port),rtsp:rtsp?m.rtsp:"",rtspUrl:rtsp?m.rtsp:"",channels:chN,chUrls:chN>1?{...(m.chUrls||{})}:{},status:"ok",...(manualIsGbt(m)?{user:"",pass:""}:{})};
   const sid=planServerId();
+  if(manualIsRange(m)){planAddManualRange(m,r,sid);return}
   if(planAddrKey(r,"")!=="|:80"&&planFindByAddr(r,SERVER_DOMAIN[sid]||wizd.domain)){planDone(0,1);return}
   const row=planPush("manual",r);
   if(!row)return;
@@ -38708,6 +38811,26 @@ function planAddManual(){
   Object.assign(m,{ip:"",name:"",short:"",identifier:"",rtsp:"",chUrls:{}});
   wizd.manualAddedId=null;
   planDone(1,0);
+  document.getElementById("devManIp")?.focus();
+}
+// Диапазон: строка плана на каждый адрес с общими полями формы; адрес, который уже в плане, консоль пропускает
+function planAddManualRange(m,r,sid){
+  const ips=manualRangeIps(m);
+  if(!ips){toast(i18n("Ввести первый и последний IP-адрес"));document.getElementById("devManIpTo")?.focus();return}
+  const did=SERVER_DOMAIN[sid]||wizd.domain;
+  let n=0,dup=0;
+  for(const ip of ips){
+    const ri={...r,ip,identifier:"",ipMode:"one",ipTo:""};
+    if(planFindByAddr(ri,did)){dup++;continue}
+    const row=planPush("manual",ri);
+    // Строку не взяли (нет сервера, идёт применение): planPush уже сказал почему; набранный диапазон остаётся в форме
+    if(!row){if(n)planDone(n,dup);return}
+    row.devMode=wizd.devMode||"current";row.templateId=wizd.templateId||"";
+    n++;
+  }
+  // Поля очищаем, только если что-то легло в план: диапазон целиком из повторов остаётся в форме
+  if(n){Object.assign(m,{ip:"",ipTo:"",name:"",short:"",identifier:""});wizd.manualAddedId=null}
+  planDone(n,dup);
   document.getElementById("devManIp")?.focus();
 }
 function planAddCsv(){
