@@ -2,6 +2,9 @@
    Axxon One: web-configurator manually-add-camera — переключатель Single / Bulk, ip_address {min, max}, maxRange 500,
    порт 1–65535). Проверка адреса и порта под полем, строка плана на каждый адрес, повтор
    адреса не попадает в план. Флажка «Break Unused Connections» в форме нет: редкая настройка, решение владельца макета.
+   Из прототипа 89 (объединён с 90): ошибка видна после ухода из поля, Enter или «В план», а верное значение её снимает;
+   у источника событий адрес может быть именем хоста; у ACFA полей адреса нет; Enter в поле адреса — «Определить»;
+   вставка «первый-последний» включает «Несколько устройств»; строка плана проверяет адрес и порт.
    Функции нет в index.html: там сценарий только отмечает пропуск. Запуск — tools/check_ui.py. */
 UiCheck(async ({ ok, until }) => {
   if (typeof manualRangeIps !== "function") {
@@ -19,14 +22,26 @@ UiCheck(async ({ ok, until }) => {
   m.model = (DEVICE_MODELS[m.vendor] || [])[0] || "X";
   ok(!!document.querySelector(".dev-ipmode"), "у IP-устройства есть переключатель «Одно устройство / Несколько устройств»");
   const set = (id, v) => { const e = document.getElementById(id); e.value = v; e.dispatchEvent(new Event("input", { bubbles: true })); };
+  const blur = (id) => document.getElementById(id).dispatchEvent(new FocusEvent("blur"));
+  // Значение и уход из поля: ошибку форма показывает только после ухода
+  const put = (id, v) => { set(id, v); blur(id); };
+  const paste = (id, text) => {
+    const dt = new DataTransfer(); dt.setData("text", text);
+    const e = new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true });
+    document.getElementById(id).dispatchEvent(e);
+    return e.defaultPrevented;
+  };
 
-  // Одно устройство: проверка адреса и порта под полем
-  set("devManIp", "192.168.1.300");
+  // Одно устройство: пока адрес набирают, ошибки нет; после ухода из поля — есть
+  set("devManIp", "192.168.");
+  ok(document.getElementById("devManIpErr").textContent === "" && !document.getElementById("manualToPlan").disabled, "адрес набирают — ошибки нет, «В план» активна");
+  put("devManIp", "192.168.1.300");
   ok(/IPv4/.test(document.getElementById("devManIpErr").textContent), "неверный адрес — текст ошибки под полем");
   ok(document.getElementById("devManIp").classList.contains("dev-bad"), "неверный адрес — красная рамка");
   ok(document.getElementById("manualToPlan").disabled, "с ошибкой «В план» неактивна");
   set("devManIp", "192.168.1.12");
-  set("devManPort", "70000");
+  ok(document.getElementById("devManIpErr").textContent === "" && !document.getElementById("devManIp").classList.contains("dev-bad"), "верный адрес сразу снимает ошибку");
+  put("devManPort", "70000");
   ok(/65535/.test(document.getElementById("devManPortErr").textContent), "порт вне 1–65535 — ошибка под полем");
   set("devManPort", "80");
   ok(!document.getElementById("manualToPlan").disabled, "без ошибок «В план» активна");
@@ -42,7 +57,7 @@ UiCheck(async ({ ok, until }) => {
   setManualIpMode("range");
   ok(!!document.getElementById("devManIpTo"), "режим диапазона: поле «Последний IP-адрес»");
   set("devManIp", "192.168.1.10");
-  set("devManIpTo", "192.168.1.5x");
+  put("devManIpTo", "192.168.1.5x");
   ok(/IPv4/.test(document.getElementById("devManIpToErr").textContent), "неверный последний адрес — ошибка под полем");
   set("devManIpTo", "192.168.1.5");
   ok(/меньше первого/.test(document.getElementById("devManIpToErr").textContent), "последний адрес меньше первого — ошибка");
@@ -65,6 +80,13 @@ UiCheck(async ({ ok, until }) => {
   ok(m.ip === "" && m.ipTo === "", "после «В план» поля диапазона пусты");
   ok(!document.querySelector(".dev-break"), "флажка «Прервать неиспользуемое соединение» в форме нет");
 
+  // Нажатие «В план» с ошибкой, которую ещё не показывали: ошибка появляется, строк нет
+  set("devManIp", "192.168.1.70");
+  set("devManIpTo", "192.168.1.6x");
+  const nH = addPlan.rows.length;
+  planAddManual();
+  ok(addPlan.rows.length === nH && /IPv4/.test(document.getElementById("devManIpToErr").textContent), "«В план» показывает скрытую ошибку и не добавляет строк");
+
   // Диапазон целиком из повторов: в план ничего не легло — набранный диапазон остаётся в форме
   setManualIpMode("range");
   set("devManIp", "192.168.1.20");
@@ -78,6 +100,54 @@ UiCheck(async ({ ok, until }) => {
   ok(!document.getElementById("devManIpTo") && !manualIsRange(m), "режим «Одно устройство»: одно поле адреса");
   ok(document.getElementById("manualToPlan").textContent === "В план", "кнопка без числа адресов");
 
+  // Набранный руками дефис диапазон не раскладывает: только вставка
+  set("devManIp", "10.0.0.1-10.0.0.2");
+  ok(!manualIsRange(m), "набранный «10.0.0.1-10.0.0.2» не раскладывается, пока его набирают");
+  set("devManIp", "");
+  // Вставка «первый-последний» в поле адреса включает «Несколько устройств»
+  ok(paste("devManIp", "10.0.0.1-10.0.0.9"), "вставка диапазона перехвачена");
+  ok(manualIsRange(m) && m.ip === "10.0.0.1" && m.ipTo === "10.0.0.9" && document.activeElement?.id === "devManIpTo", "вставка диапазона разложена по двум полям, фокус в последнем");
+  ok(document.activeElement.selectionStart === document.activeElement.value.length, "курсор в конце поля «Последний IP-адрес»");
+  paste("devManIp", "10.0.1.1-10.0.1.5");
+  ok(m.ip === "10.0.1.1" && m.ipTo === "10.0.1.5", "в режиме диапазона вставка тоже раскладывается");
+  // Перерисовка, пока поле с фокусом, не показывает его ошибку
+  setManualIpMode("one");
+  wizd.manualShow = new Set();
+  set("devManIp", "1.2.3");
+  renderDeviceWizard();
+  manualFieldBlur("ip", document.createElement("input"));   // так приходит blur поля, которое перерисовка убрала из документа
+  ok(!wizd.manualShow.has("ip") && document.getElementById("devManIpErr").textContent === "", "перерисовка не считается уходом из поля");
+  set("devManIp", "");
+  // «В план» не забирает фокус у поля: иначе blur выключит кнопку раньше click
+  const md = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+  document.getElementById("manualToPlan").dispatchEvent(md);
+  ok(md.defaultPrevented, "mousedown на «В план» не уводит фокус из поля");
+  // Пустой порт: «В план» показывает ошибку порта
+  set("devManIp", "192.168.1.98");
+  set("devManPort", "");
+  const nP = addPlan.rows.length;
+  planAddManual();
+  ok(addPlan.rows.length === nP && /65535/.test(document.getElementById("devManPortErr").textContent), "пустой порт — «В план» показывает ошибку и не добавляет строку");
+  set("devManPort", "80");
+  ok(document.getElementById("devManPortErr").textContent === "", "введённый порт снимает ошибку");
+
+  // Enter в поле адреса: один верный адрес — «Определить»
+  let detected = 0;
+  const realDetect = window.detectManualModel;
+  window.detectManualModel = () => { detected++; };
+  set("devManIp", "192.168.1.99");
+  document.getElementById("devManIp").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+  ok(detected === 1, "Enter в поле адреса запускает «Определить»");
+  put("devManIp", "192.168.1.999");
+  document.getElementById("devManIp").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+  ok(detected === 1, "Enter с неверным адресом «Определить» не запускает");
+  window.detectManualModel = realDetect;
+  set("devManIp", "");
+
+  // Строка плана проверяет адрес и порт так же, как форма
+  const rowBad = { source: "manual", r: { type: "camera", ip: "10.0.0.300", port: 80, vendor: m.vendor, model: m.model } };
+  ok(/IPv4/.test(planConnError(rowBad)), "строка плана с неверным адресом — ошибка: " + planConnError(rowBad));
+
   // У RTSP и GB/T диапазона нет
   changeManualVendor("GBT28181");
   ok(!document.querySelector(".dev-ipmode") && !manualIsRange(wizd.manual), "у GB/T28181 переключателя нет");
@@ -85,6 +155,18 @@ UiCheck(async ({ ok, until }) => {
     if (!canAdd(t)) continue;
     changeManualType(t);
     ok(!document.querySelector(".dev-ipmode"), "у типа " + t + " переключателя нет");
+  }
+  // Источник событий: адрес — IPv4 или имя хоста
+  const ev = { type: "eventsrc", ip: "pos-01.shop.local", port: 80 };
+  ok(!manualFieldErrors(ev).ip, "у источника событий имя хоста проходит");
+  ok(/имя хоста/.test(manualFieldErrors({ ...ev, ip: "плохой адрес" }).ip || ""), "у источника событий неверный адрес — ошибка с именем хоста");
+  ok(!!manualFieldErrors({ ...ev, ip: "10.0.0.1-10.0.0.5" }).ip, "у источника событий диапазон — не имя хоста, ошибка");
+  // ACFA: адреса и порта нет, проверять нечего
+  ok(Object.keys(manualFieldErrors({ type: "acfa", ip: "x", port: "0" })).length === 0, "у ACFA адрес и порт не проверяются");
+  if (canAdd("acfa")) {
+    changeManualType("acfa");
+    ok(document.getElementById("devManIp")?.disabled && document.getElementById("devManPort")?.disabled, "у ACFA поля адреса и порта заблокированы");
+    ok(![...document.querySelectorAll(".dev-grid button")].some((b) => /Определить/.test(b.textContent)), "у ACFA кнопки «Определить» нет");
   }
   closeWizard();
   addPlan.rows = [];
