@@ -8944,8 +8944,13 @@
        "lang": "ru"
       },
       "type": "string",
-      "description": "Только чтение: что отдаёт устройство",
-      "readOnly": true
+      "x-dev": true,
+      "description": "Кодек потока. Набор зависит от устройства; examples — подсказки. Сервер записывает его в устройство, когда камера передаёт свои настройки устройству (x-dev); иначе значение сообщает устройство",
+      "examples": [
+       "H.264",
+       "H.265",
+       "MJPEG"
+      ]
      },
      "width": {
       "x-label": {
@@ -8974,6 +8979,145 @@
       },
       "description": "Допустимые разрешения этого потока. Нет поля — ввод руками",
       "readOnly": true
+     },
+     "codecProfile": {
+      "x-label": {
+       "key": "field.codecProfile",
+       "text": "Профиль кодека",
+       "lang": "ru"
+      },
+      "type": "string",
+      "enum": [
+       "baseline",
+       "main",
+       "high"
+      ],
+      "x-enum-labels": {
+       "baseline": {
+        "key": "enum.codecProfile.baseline",
+        "text": "Baseline",
+        "lang": "ru"
+       },
+       "main": {
+        "key": "enum.codecProfile.main",
+        "text": "Main",
+        "lang": "ru"
+       },
+       "high": {
+        "key": "enum.codecProfile.high",
+        "text": "High",
+        "lang": "ru"
+       }
+      },
+      "x-dev": true,
+      "description": "Профиль H.264 или H.265. У MJPEG профиля нет: поле не учитывается"
+     },
+     "bitrateMode": {
+      "x-label": {
+       "key": "field.bitrateMode",
+       "text": "Режим битрейта",
+       "lang": "ru"
+      },
+      "type": "string",
+      "enum": [
+       "vbr",
+       "cbr"
+      ],
+      "x-enum-labels": {
+       "vbr": {
+        "key": "enum.bitrateMode.vbr",
+        "text": "Переменный (VBR)",
+        "lang": "ru"
+       },
+       "cbr": {
+        "key": "enum.bitrateMode.cbr",
+        "text": "Постоянный (CBR)",
+        "lang": "ru"
+       }
+      },
+      "x-dev": true,
+      "description": "vbr — переменный битрейт, cbr — постоянный"
+     },
+     "bitrateKbps": {
+      "x-label": {
+       "key": "field.bitrateKbps",
+       "text": "Битрейт",
+       "lang": "ru"
+      },
+      "type": "integer",
+      "minimum": 64,
+      "x-ui-unit": "кбит/с",
+      "x-dev": true,
+      "description": "cbr — битрейт потока, vbr — наибольший битрейт, кбит/с"
+     },
+     "quality": {
+      "x-label": {
+       "key": "field.quality",
+       "text": "Качество",
+       "lang": "ru"
+      },
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 6,
+      "x-dev": true,
+      "description": "Качество изображения при vbr: 1 — низкое, 6 — наивысшее. Это и «Сжатие» (Compression Rate) Axxon One. При cbr не учитывается"
+     },
+     "gopFrames": {
+      "x-label": {
+       "key": "field.gopFrames",
+       "text": "Опорный кадр каждые",
+       "lang": "ru"
+      },
+      "type": "integer",
+      "minimum": 1,
+      "x-ui-unit": "кадров",
+      "x-dev": true,
+      "description": "Расстояние между опорными кадрами (GOP), в кадрах"
+     },
+     "smartCodec": {
+      "x-label": {
+       "key": "field.smartCodec",
+       "text": "Умный кодек",
+       "lang": "ru"
+      },
+      "type": "boolean",
+      "x-dev": true,
+      "description": "H.264+, H.265+ и подобные режимы устройства. Поля нет — выключен"
+     },
+     "deviceProfile": {
+      "x-label": {
+       "key": "field.deviceProfile",
+       "text": "Профиль потока камеры",
+       "lang": "ru"
+      },
+      "type": "string",
+      "description": "Какой профиль устройства (например, профиль ONVIF) отдаёт этот поток. Значение — из deviceProfileOptions. Поля нет — профиль выбирает драйвер"
+     },
+     "deviceProfileOptions": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "readOnly": true,
+      "description": "Профили потоков, которые сообщает устройство. Нет поля — выбора профиля нет"
+     },
+     "enabled": {
+      "x-label": {
+       "key": "field.enabled",
+       "text": "Включён",
+       "lang": "ru"
+      },
+      "type": "boolean",
+      "description": "false — сервер не берёт этот поток с камеры: нет видео, записи и детекторов на нём. Поля нет — включён"
+     },
+     "liveUse": {
+      "x-label": {
+       "key": "field.liveUse",
+       "text": "В просмотре",
+       "lang": "ru"
+      },
+      "type": "boolean",
+      "description": "Поток можно выбрать над видео. Поля нет — можно. Поле консоли: в устройство не уходит"
      }
     }
    }
@@ -9408,7 +9552,7 @@
     "text": "Поток",
     "lang": "ru"
    },
-   "version": "1.1",
+   "version": "1.2",
    "uses": [
     {
      "id": "vms.camera/1",
@@ -9416,11 +9560,21 @@
     }
    ],
    "properties": [
+    "bitrateKbps",
+    "bitrateMode",
     "codec",
+    "codecProfile",
+    "deviceProfile",
+    "deviceProfileOptions",
+    "enabled",
     "fps",
+    "gopFrames",
     "height",
+    "liveUse",
+    "quality",
     "res",
     "resOptions",
+    "smartCodec",
     "streamId",
     "width"
    ]

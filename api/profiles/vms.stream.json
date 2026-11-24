@@ -1,6 +1,6 @@
 {
  "id": "vms.stream/1",
- "version": "1.1",
+ "version": "1.2",
  "label": "Поток",
  "owner": "mockup",
  "reviewers": [
@@ -13,13 +13,77 @@
   }
  ],
  "properties": {
+  "bitrateKbps": {
+   "schema": {
+    "type": "integer",
+    "minimum": 64,
+    "x-dev": true
+   },
+   "meaning": "«Битрейт»: cbr — битрейт потока, vbr — наибольший битрейт, кбит/с",
+   "since": "1.2"
+  },
+  "bitrateMode": {
+   "schema": {
+    "type": "string",
+    "enum": [
+     "vbr",
+     "cbr"
+    ],
+    "x-dev": true
+   },
+   "meaning": "«Режим битрейта»: vbr — переменный битрейт, cbr — постоянный",
+   "since": "1.2"
+  },
   "codec": {
    "schema": {
     "type": "string",
+    "x-dev": true,
+    "examples": [
+     "H.264",
+     "H.265",
+     "MJPEG"
+    ]
+   },
+   "meaning": "«Кодек»: Кодек потока. Набор зависит от устройства; examples — подсказки. Сервер записывает его в устройство, когда камера передаёт свои настройки устройству (x-dev); иначе значение сообщает устройство",
+   "since": "1.0"
+  },
+  "codecProfile": {
+   "schema": {
+    "type": "string",
+    "enum": [
+     "baseline",
+     "main",
+     "high"
+    ],
+    "x-dev": true
+   },
+   "meaning": "«Профиль кодека»: Профиль H.264 или H.265. У MJPEG профиля нет: поле не учитывается",
+   "since": "1.2"
+  },
+  "deviceProfile": {
+   "schema": {
+    "type": "string"
+   },
+   "meaning": "«Профиль потока камеры»: Какой профиль устройства (например, профиль ONVIF) отдаёт этот поток. Значение — из deviceProfileOptions. Поля нет — профиль выбирает драйвер",
+   "since": "1.2"
+  },
+  "deviceProfileOptions": {
+   "schema": {
+    "type": "array",
+    "items": {
+     "type": "string"
+    },
     "readOnly": true
    },
-   "meaning": "«Кодек»: Что отдаёт устройство (только чтение)",
-   "since": "1.0"
+   "meaning": "Профили потоков, которые сообщает устройство. Нет поля — выбора профиля нет (только чтение)",
+   "since": "1.2"
+  },
+  "enabled": {
+   "schema": {
+    "type": "boolean"
+   },
+   "meaning": "«Включён»: false — сервер не берёт этот поток с камеры: нет видео, записи и детекторов на нём. Поля нет — включён",
+   "since": "1.2"
   },
   "fps": {
    "schema": {
@@ -29,6 +93,15 @@
    "meaning": "«к/с»",
    "since": "1.0"
   },
+  "gopFrames": {
+   "schema": {
+    "type": "integer",
+    "minimum": 1,
+    "x-dev": true
+   },
+   "meaning": "«Опорный кадр каждые»: Расстояние между опорными кадрами (GOP), в кадрах",
+   "since": "1.2"
+  },
   "height": {
    "schema": {
     "type": "integer",
@@ -36,6 +109,23 @@
    },
    "meaning": "«Высота» (только чтение)",
    "since": "1.0"
+  },
+  "liveUse": {
+   "schema": {
+    "type": "boolean"
+   },
+   "meaning": "«В просмотре»: Поток можно выбрать над видео. Поля нет — можно. Поле консоли: в устройство не уходит",
+   "since": "1.2"
+  },
+  "quality": {
+   "schema": {
+    "type": "integer",
+    "minimum": 1,
+    "maximum": 6,
+    "x-dev": true
+   },
+   "meaning": "«Качество»: Качество изображения при vbr: 1 — низкое, 6 — наивысшее. Это и «Сжатие» (Compression Rate) Axxon One. При cbr не учитывается",
+   "since": "1.2"
   },
   "res": {
    "schema": {
@@ -56,6 +146,14 @@
    "meaning": "Допустимые разрешения этого потока или общий список разрешений устройства. Поток может принять не все: такое значение `res` отвергает само устройство. Нет поля — ввод руками (только чтение)",
    "since": "1.0"
   },
+  "smartCodec": {
+   "schema": {
+    "type": "boolean",
+    "x-dev": true
+   },
+   "meaning": "«Умный кодек»: H.264+, H.265+ и подобные режимы устройства. Поля нет — выключен",
+   "since": "1.2"
+  },
   "streamId": {
    "schema": {
     "type": "string",
@@ -74,6 +172,10 @@
   }
  },
  "changes": [
+  {
+   "version": "1.2",
+   "what": "Пробел F34 и запрос 2026-11-08-174207Z, п. 2: `codec` правится; добавлены `codecProfile`, `bitrateMode`, `bitrateKbps`, `quality`, `gopFrames`, `smartCodec`, `deviceProfile`, `deviceProfileOptions`, `enabled`, `liveUse`. Параметры устройства — с `x-dev`"
+  },
   {
    "version": "1.1",
    "what": "Запрос 154325Z, ответ w2c, п. 3.1: `resOptions` может быть общим списком устройства. Поля и типы не менялись"

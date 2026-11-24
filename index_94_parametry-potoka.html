@@ -3715,6 +3715,7 @@ body:has(.ttu) #tst:not(.in-fs){bottom:144px}
 <!-- ONE PSIM: мост по ONE.PSIM.PrototypeKit, подключён после стилей прототипа -->
 <link rel="stylesheet" href="assets/one-psim/bridge.css">
 <script src="assets/i18n-en.js"></script>
+<script src="assets/i18n-en-94.js"></script>
 <!-- API: контракт, эталонный набор, встроенный сервер и клиент (api/README.md) -->
 <script src="api/openapi.js"></script>
 <script src="api/fixture.js"></script>
@@ -9758,7 +9759,7 @@ function cardApply(ok){
   const set=(o,k,v)=>{if(v===undefined)delete o[k];else o[k]=cardClone({v}).v};
   const ops=d.map(r=>{
     if(r.stub)return mkOp(n,`${r.label}: ${r.toT}`,"param",()=>{});
-    if(r.streamSet)return mkOp(n,`${r.label}: ${r.toT}`,"param",()=>{const x=(n.streams||[]).find(y=>y.uid===r.streamSet.uid);if(x)Object.assign(x,r.streamSet.props)});
+    if(r.streamSet)return mkOp(n,`${r.label}: ${r.toT}`,"param",()=>{const x=(n.streams||[]).find(y=>y.uid===r.streamSet.uid);if(x){Object.entries(r.streamSet.props).forEach(([k,v])=>{if(v===null)delete x[k];else x[k]=v});if(r.streamSet.name!=null)x.name=r.streamSet.name}});
     if(r.streamAdd)return mkOp(n,r.label,"param",()=>{(n.streams||(n.streams=[])).push(cardClone(r.streamAdd))},null,()=>{n.streams=(n.streams||[]).filter(x=>x.id!==r.streamAdd.id)});
     if(r.streamDel)return mkOp(n,r.label,"param",()=>{n.streams=(n.streams||[]).filter(x=>x.id!==r.streamDel.id)});
     if(r.folders){const t=r.node||n;return mkOp(t,`${r.label}: ${r.toT}`,"folder",()=>cardSetFolders(t.id,r.folders),null,()=>cardSetFolders(t.id,r.fromFolders))}
@@ -16932,10 +16933,12 @@ function camPlanTouch(n,part){
   if(part==="tt"&&!b.tt)b.tt=JSON.parse(JSON.stringify(ttOf(n)));
   camPlanBase.set(n.id,b);
 }
-const CV_KEY_RU={codec:"Кодек",profile:"Профиль кодека",brc:"Режим битрейта",kbps:"Битрейт",quality:"Качество",gop:"Опорный кадр каждые",live:"В просмотре"};
+const CV_KEY_RU={codec:"Кодек",profile:"Профиль кодека",brc:"Режим битрейта",kbps:"Битрейт",quality:"Качество",gop:"Опорный кадр каждые",smart:"Умный кодек",dprof:"Профиль потока камеры",on:"Поток включён",live:"В просмотре"};
 function cvValText(k,v){
+  if(k==="dprof"&&!v)return i18n("выбирает драйвер");
   if(v===undefined||v===null||v==="")return"—";
   if(k==="live")return i18n(v?"да":"нет");
+  if(k==="on"||k==="smart")return i18n(v?"включён":"выключен");
   if(k==="brc")return i18n(v==="cbr"?"постоянный":"переменный");
   if(k==="kbps")return cvKbpsText(v);
   if(k==="quality")return i18n((CV_QUALITY.find(([x])=>x===String(v))||[,String(v)])[1]);
@@ -16943,17 +16946,22 @@ function cvValText(k,v){
   return String(v);
 }
 function drvValText(p,v){return p.type==="boolean"?i18n(v?"включено":"выключено"):sfText(p,v)||"—"}
-function camStreamText(s,keys){return keys.map(k=>k==="res"?(s.res||"—").replace("x","×"):`${s.fps??"—"} ${i18n("к/с")}`).join(", ")}
+function cvSrvKey(f){return Object.keys(CV_SRV).find(k=>CV_SRV[k]===f)}
+function camStreamText(s,keys){return keys.map(k=>k==="res"?(s.res||"—").replace("x","×"):k==="fps"?`${s.fps??"—"} ${i18n("к/с")}`:k==="name"?`«${s.name}»`
+  :cvValText(cvSrvKey(k),s[k]===undefined?CV_SRV_DEF[k]:cvFromSrv(cvSrvKey(k),s[k]))).join(", ")}   // поля нет — значение по умолчанию
+function camStreamKeyRu(k){return i18n(k==="res"?"разрешение":k==="fps"?"к/с":k==="name"?"имя":CV_KEY_RU[cvSrvKey(k)]).toLowerCase()}
 // Потоки камеры в плане: строка на поток — разрешение и к/с одним PATCH потока, новый поток — POST /units, удалённый — DELETE
 function camStreamsDiff(live,snap,out){
   const was=new Map((snap.streams||[]).map(x=>[x.id,x])),now=live.streams||[];
   now.forEach(x=>{
     const w=was.get(x.id);
-    if(!w){const ks=["res","fps"].filter(k=>x[k]!=null&&x[k]!=="");
+    if(!w){const ks=["res","fps",...Object.values(CV_SRV)].filter(k=>x[k]!=null&&x[k]!=="");
       if(x._new)out.push({node:live,streamAdd:x,label:`${i18n("Добавить")}: ${i18n("поток")} «${x.name}»`,fromT:"—",toT:i18n("консоль добавит")+(ks.length?`: ${camStreamText(x,ks)}`:"")});return}
     if(!x.uid)return;
-    const keys=["res","fps"].filter(k=>JSON.stringify(x[k])!==JSON.stringify(w[k]));if(!keys.length)return;
-    out.push({node:live,streamSet:{uid:x.uid,props:Object.fromEntries(keys.map(k=>[k,x[k]]))},label:`«${x.name}»: ${keys.map(k=>i18n(k==="res"?"разрешение":"к/с")).join(", ")}`,fromT:camStreamText(w,keys),toT:camStreamText(x,keys)});
+    const keys=["name","res","fps",...Object.values(CV_SRV)].filter(k=>JSON.stringify(cvSrvNorm(k,x[k]))!==JSON.stringify(cvSrvNorm(k,w[k])));if(!keys.length)return;
+    // Снятое поле (профиль потока камеры «выбирает драйвер») — null: правка слиянием снимает его на сервере
+    const props=Object.fromEntries(keys.filter(k=>k!=="name").map(k=>[k,x[k]===undefined?null:x[k]]));
+    out.push({node:live,streamSet:{uid:x.uid,props,...(keys.includes("name")?{name:x.name}:{})},label:`«${w.name}»: ${keys.map(camStreamKeyRu).join(", ")}`,fromT:camStreamText(w,keys),toT:camStreamText(x,keys)});
   });
   const ids=new Set(now.map(x=>x.id));
   (snap.streams||[]).forEach(w=>{if(!ids.has(w.id)&&w.uid)out.push({node:live,streamDel:w,label:`${i18n("Удалить")}: ${i18n("поток")} «${w.name}»`,fromT:"—",toT:i18n("будет удалён")})});
@@ -16964,9 +16972,10 @@ function camStreamsDiff(live,snap,out){
 function camCallOf(r){return r.key==="recordingTarget"||!!(r.streamSet||r.streamAdd||r.streamDel)}
 function camCallRun(n,r){
   if(r.key==="recordingTarget")return API.put(`/units/${n.id}/recording-target`,{serverId:r.to?.serverId||null,copies:r.to?.copies||[]}).then(u=>{hwApplyUnit(u);treeMatchCache.clear();searchMatchCache.clear();renderTreeSoon()});
-  if(r.streamSet){const uid=r.streamSet.uid;return API.patch(`/units/${uid}`,{properties:r.streamSet.props},hwVer.get(uid)).then(u=>{if(u?.version!=null)hwVer.set(uid,u.version)})}
+  if(r.streamSet){const{uid,props,name}=r.streamSet,body={...(Object.keys(props).length?{properties:props}:{}),...(name!=null?{name}:{})};
+    return API.patch(`/units/${uid}`,body,hwVer.get(uid)).then(u=>{if(u?.version!=null)hwVer.set(uid,u.version)})}
   if(r.streamAdd){
-    const x=r.streamAdd,props=Object.fromEntries(["res","fps"].filter(k=>x[k]!=null&&x[k]!=="").map(k=>[k,x[k]]));
+    const x=r.streamAdd,props=Object.fromEntries(["res","fps",...Object.values(CV_SRV)].filter(k=>x[k]!=null&&x[k]!=="").map(k=>[k,x[k]]));
     return unitsCreate([{kind:kindToCreate("stream",nodeKind(n)),parentId:n.id,name:x.name,properties:props}]).then(([u])=>{
       const c=cvCfg.get(n.id),sid=u&&streamRec(u).id;if(c&&sid&&c.streams[x.id]){c.streams[sid]=c.streams[x.id];delete c.streams[x.id]}});
   }
@@ -16984,8 +16993,9 @@ function camPlanRows(n,out){
     toT:i18n(b.act==="reset"?"консоль запишет значения в камеру":"консоль возьмёт значения камеры")});
   if(b?.cv){
     const cur=cvCfgOf(n).streams,names=new Map(camStreams(n).map(x=>[x.id,x.name]));
+    const srv=new Set((n.streams||[]).map(x=>x.id));   // объект потока: поля, которые сервер принимает, идут строкой PATCH потока (camStreamsDiff)
     Object.entries(cur).forEach(([sid,o])=>{const w=b.cv[sid];if(!w||!names.has(sid))return;   // новый поток — строка «Добавить: поток»
-      Object.keys(CV_KEY_RU).forEach(k=>{if(JSON.stringify(o[k])!==JSON.stringify(w[k]))out.push({node:n,stub:"cv",label:`«${names.get(sid)}»: ${i18n(CV_KEY_RU[k])}`,fromT:cvValText(k,w[k]),toT:cvValText(k,o[k])})})});
+      Object.keys(CV_KEY_RU).forEach(k=>{if(srv.has(sid)&&cvSrvOk(CV_SRV[k]))return;if(JSON.stringify(o[k])!==JSON.stringify(w[k]))out.push({node:n,stub:"cv",label:`«${names.get(sid)}»: ${i18n(CV_KEY_RU[k])}`,fromT:cvValText(k,w[k]),toT:cvValText(k,o[k])})})});
   }
   if(b?.tours){
     const st=cvToursOf(n),was=new Map(b.tours.tours.map(t=>[t.id,t])),now=new Map(st.tours.map(t=>[t.id,t])),lb=t=>`${i18n("Тур")} «${t.name}»`;
@@ -17081,7 +17091,7 @@ function camTargetRows(n,t){
       rows.push({label:`«${s.name}»: ${i18n(k==="res"?"разрешение":"к/с")}`,fromT:camStreamText(cur,[k]),toT:camStreamText(ts,[k]),set:()=>camStreamPut(n,s.id,k,ts[k])})});
     const tc=t.cv[s.id],cc=c.streams[s.id]||{};
     if(tc)CAM_CV_KEYS.forEach(k=>{if(tc[k]!==undefined&&JSON.stringify(tc[k])!==JSON.stringify(cc[k]))
-      rows.push({stub:true,label:`«${s.name}»: ${i18n(CV_KEY_RU[k])}`,fromT:cvValText(k,cc[k]),toT:cvValText(k,tc[k]),set:()=>{camPlanTouch(n,"cv");cvCfgOf(n).streams[s.id][k]=tc[k]}})});
+      rows.push({stub:true,label:`«${s.name}»: ${i18n(CV_KEY_RU[k])}`,fromT:cvValText(k,cc[k]),toT:cvValText(k,tc[k]),set:()=>{camPlanTouch(n,"cv");cvParamPut(n,s.id,k,tc[k])}})});
   });
   const props=new Map(camDevFields(n));
   // Параметры драйвера — правка черновика карточки (шаг patch при «Применить»). При загрузке их значения пока строит
@@ -17120,8 +17130,8 @@ async function camActOpen(id,act){
     +(reset&&all.length?`<div class="nt bk-warn">${lu("triangle-alert",14)} ${i18n("После сброса камера может перезапустить потоки. Тогда видео и запись прервутся на несколько секунд.")}</div>`:"")
     +`<p class="sub" style="margin:10px 0 0">${i18n("Не изменятся: имя, адрес, учётные данные, архив, детекторы, папки и права.")}</p>`
     +(all.length?`<p class="sub" style="margin:6px 0 0">${i18n(reset?"Консоль изменит камеру, только когда вы нажмёте «Применить» в плане карточки.":"Консоль заменит значения, только когда вы нажмёте «Применить» в плане карточки.")}</p>`:"")
-    +(all.some(r=>r.stub)?`<p class="sub" data-cam-act-stub style="margin:6px 0 0">${i18n(reset?"Заглушка: разрешение и к/с потоков сообщает сервер, а кодек и битрейт пока строит страница. Их нет в контракте."
-      :"Заглушка: разрешение и к/с потоков сообщает сервер, а кодек, битрейт и параметры драйвера пока строит страница. Их нет в контракте.")}</p>`:"");
+    +(all.some(r=>r.stub)?`<p class="sub" data-cam-act-stub style="margin:6px 0 0">${i18n(reset?"Заглушка: команда defaults сообщает только разрешение и к/с потоков. Умолчания кодека и битрейта строит страница."
+      :"Заглушка: команда readConfig сообщает только разрешение и к/с потоков. Значения кодека, битрейта и параметров драйвера строит страница.")}</p>`:"");
   const title=`${i18n(reset?"Сбросить к умолчаниям":"Загрузить настройки с устройства")}: «${escHtml(locName(n2))}»`;
   const foot=all.length?`<button type="button" class="btn" ${onEv("click",["closeBulkModal"])}>${i18n("Отменить")}</button><button type="button" class="btn pri" data-cam-act-ok ${onEv("click",["camActAdd",`${id}`,act])}>${i18n("Добавить в план")} (${all.length})</button>`
     :`<button type="button" class="btn" ${onEv("click",["closeBulkModal"])}>${i18n("Закрыть")}</button>`;
@@ -22555,8 +22565,32 @@ function cvCfgOf(n){
   }
   const c=cvCfg.get(n.id);
   camStreams(n).forEach((s,i)=>{if(!c.streams[s.id])c.streams[s.id]={codec:s.codec||"H.264",profile:"Main",brc:"vbr",kbps:1024,quality:"5",gop:2*(s.fps||12),live:true}});
+  // Поток — объект сервера: его свойства (вид stream, профиль vms.stream/1 1.2) поверх значений страницы. Правка пишет
+  // и в cvCfg, и в запись потока (cvParamPut), поэтому здесь значения всегда совпадают с черновиком карточки
+  // Поле, которое сервер принимает, но не хранит у потока, — значение по умолчанию (cvDefOf), а не прежнее значение страницы:
+  // иначе после отказа PATCH окно показало бы то, чего на сервере нет
+  camStreams(n).forEach((s,i)=>{const p=c.streams[s.id],d=s.uid?cvDefOf(n,s,i):null;
+    Object.entries(CV_SRV).forEach(([k,f])=>{if(s[f]!==undefined)p[k]=cvFromSrv(k,s[f]);else if(d&&cvSrvOk(f))p[k]=d[k]})});
   const o=handCam(n)&&ipsrvOwnerNode(n);if(o)c.mode=ipsModeOf(o);
   return c;
+}
+// Поле окна потоков → свойство потока на сервере. Нет в списке — только у камеры без объектов потоков (заглушка)
+const CV_SRV={codec:"codec",profile:"codecProfile",brc:"bitrateMode",kbps:"bitrateKbps",quality:"quality",gop:"gopFrames",smart:"smartCodec",dprof:"deviceProfile",on:"enabled",live:"liveUse"};
+// Значения потока по умолчанию: поля нет у потока на сервере — окно показывает их
+function cvDefOf(n,s,i){const mp=cvMp(s.res||(i?"":n.res));return{codec:"H.264",profile:i?"Main":"High",brc:"vbr",kbps:Math.max(256,Math.round(mp*1000/128)*128)||(i?1024:2048),quality:"5",gop:2*(s.fps||(i?12:n.fps)||25),smart:false,dprof:"",on:true,live:true}}
+// Сервер принимает это свойство потока: оно есть в схеме вида stream и не только для чтения. Нет — поле остаётся заглушкой
+// страницы (сервер с профилем vms.stream/1 1.1 и раньше)
+function cvSrvOk(f){const p=KINDS.get("stream")?.schema?.properties?.[f];return!!p&&!p.readOnly}
+// Поля нет у потока — это значение по умолчанию: строку плана сравнивают с ним
+const CV_SRV_DEF={enabled:true,liveUse:true,smartCodec:false};
+function cvSrvNorm(f,v){return v===undefined?CV_SRV_DEF[f]:v}
+function cvToSrv(k,v){return k==="profile"?String(v).toLowerCase():k==="quality"?Number(v):v}
+function cvFromSrv(k,v){return k==="profile"?String(v).replace(/^./,x=>x.toUpperCase()):k==="quality"?String(v):v}
+// Правка поля потока: значение в окне (cvCfg) и в записи потока — её отправит «Применить» одним PATCH потока
+function cvParamPut(n,sid,k,v){
+  const p=cvCfgOf(n).streams[sid];if(!p)return;p[k]=v;
+  const s=(n.streams||[]).find(x=>x.id===sid);
+  if(s&&CV_SRV[k]&&cvSrvOk(CV_SRV[k])){if(v===""||v==null)delete s[CV_SRV[k]];else s[CV_SRV[k]]=cvToSrv(k,v)}
 }
 function cvMp(res){const m=/^(\d+)x(\d+)$/.exec(res||"");return m?(+m[1])*(+m[2])/1e6:0}
 function cvStreamRes(n,s,i){return s.res||(i?"":n.res)||""}
@@ -23746,8 +23780,12 @@ function ttPlanRows(n,b,out){
 }
 // ── Параметры потоков ─────────────────────────────────────────────────────
 // «Параметры потоков» — как другие блоки вкладок: значения текстом, «Изменить» открывает поля, «Добавить в план» закрывает.
-// Разрешение и к/с, новый и удалённый поток — правка потоков в черновике карточки (n.streams): «Применить» отправляет их
-// отдельными запросами (camCallRun). Кодек, битрейт и другие — заглушка cvCfg, строки плана из camPlanRows
+// Поток — объект сервера (вид stream, профиль vms.stream/1 1.2): имя, разрешение, к/с, кодек, битрейт, качество, опорный
+// кадр, умный кодек, профиль потока камеры, «Поток включён» и «В просмотре» — правка потока в черновике карточки (n.streams):
+// «Применить» отправляет их одним PATCH потока (camCallRun), новый и удалённый поток — отдельными запросами.
+// Параметры устройства (x-dev: кодек, профиль кодека, битрейт, качество, опорный кадр, умный кодек; разрешение и к/с — как раньше) правятся, только когда включено «Отправлять настройки устройству»; имя, «Поток
+// включён», «В просмотре» и профиль потока камеры — поля консоли, их правят всегда.
+// Заглушка cvCfg осталась для камеры без объектов потоков (основной поток — сама камера) и для флажка режима
 const cvSnap=new Map();   // uid камеры → значения при «Изменить»: для «Отменить»
 function cvPend(id,sid,k,v){
   const n=find(id)?.n;if(!n)return;const val=k==="fps"?Number(v):String(v).trim();
@@ -23765,28 +23803,31 @@ function cvDirty(n){const snap=cvSnap.get(n.id);return!!snap&&JSON.stringify(cvS
 function cvEditCancel(id){const n=find(id)?.n;if(n&&cvSnap.has(id))cvRestore(n,cvSnap.get(id));cvSnap.delete(id);setD(true);csEditSet(id,"streams",false)}
 function cvEditDone(id){cvSnap.delete(id);setD(true);csEditSet(id,"streams",false)}
 function cvStreamsCardHtml(n){
-  const c=cvCfgOf(n),con=drvSend(n),rtsp=camRtsp(n),ed=con&&csEditOn(n.id,"streams");
-  const acts=!con?"":ed?`<button type="button" class="btn s" ${onEv("click",["cvEditCancel",`${n.id}`])}>${i18n("Отменить")}</button><button type="button" class="btn pri s" ${onEv("click",["cvEditDone",`${n.id}`])}>${i18n("Добавить в план")}</button>`
+  const c=cvCfgOf(n),con=drvSend(n),rtsp=camRtsp(n),objs=!!n.streams?.some(x=>x.uid),ed=(con||objs)&&csEditOn(n.id,"streams");
+  const acts=!con&&!objs?"":ed?`<button type="button" class="btn s" ${onEv("click",["cvEditCancel",`${n.id}`])}>${i18n("Отменить")}</button><button type="button" class="btn pri s" ${onEv("click",["cvEditDone",`${n.id}`])}>${i18n("Добавить в план")}</button>`
     :`<button type="button" class="btn s" ${onEv("click",["cvEditStart",`${n.id}`])}>${i18n("Изменить")}</button>`;
   const note=ed?`<div class="nt cv-push">${lu("triangle-alert",14)}${i18n("После изменения камера может перезапустить поток. Тогда видео и запись прервутся на несколько секунд.")}</div>`
     :"";
-  const cols=camStreams(n).map((s,i)=>cvStreamColHtml(n,s,i,c,ed)).join("");
+  const cols=camStreams(n).map((s,i)=>cvStreamColHtml(n,s,i,c,ed,con)).join("");
   return`<div class="card cv-streams" data-cv-streams data-sec="streams"><div class="ch">${i18n("Параметры потоков")}<span class="sub" style="font-weight:400">${camStreams(n).length}</span>${con?"":csLockHtml()}<span class="cs-acts">${acts}</span></div><div class="cb">
     ${note}<div class="cv-cols">${cols}</div>
-    ${ed?`<div class="ca-foot"><button type="button" class="btn s" ${onEv("click",["streamAdd",`${n.id}`])}>${lu("plus")}${i18n("Поток")}</button></div>`:""}
-    <p class="sub cv-stub">${i18n("Прототип: «Отправлять настройки устройству», кодек, профиль, битрейт, качество, опорные кадры и «В просмотре» пока живут только в этой странице. Для них нужен запрос к API. Разрешение и к/с консоль записывает на сервер.")}</p>
+    ${ed&&con?`<div class="ca-foot"><button type="button" class="btn s" ${onEv("click",["streamAdd",`${n.id}`])}>${lu("plus")}${i18n("Поток")}</button></div>`:""}
+    ${ed&&!con?`<p class="sub" data-cv-dev-off>${lu("lock",13)} ${i18n("Камера сама хранит кодек, битрейт, качество, опорный кадр, умный кодек, разрешение и к/с. Консоль изменит их, только когда включено «Отправлять настройки устройству».")}</p>`:""}
+    <p class="sub cv-stub">${i18n(objs?"Прототип: флажок «Отправлять настройки устройству» консоль пока хранит только в этой странице. Параметры потоков консоль записывает на сервер. Если сервер не сообщает параметр, консоль показывает значение по умолчанию."
+      :"Прототип: у этой камеры нет объектов потоков. Кодек, битрейт, качество и опорный кадр консоль пока хранит только в этой странице. Разрешение и к/с консоль записывает на сервер.")}</p>
     <p class="sub">${i18n("Детекторы видеоаналитики — на вкладке")} <button class="lk" ${onEv("click",["goTab","det"])}>${i18n("Детекторы")}</button>.</p>
   </div></div>`;
 }
-function cvStreamColHtml(n,s,i,c,con){
-  const sid=s.id,id=n.id,p=c.streams[sid],res=cvStreamRes(n,s,i),fps=cvStreamFps(n,s,i);
+function cvStreamColHtml(n,s,i,c,ed,dev){
+  const sid=s.id,id=n.id,p=c.streams[sid],res=cvStreamRes(n,s,i),fps=cvStreamFps(n,s,i),obj=(n.streams||[]).some(x=>x.id===sid);
+  const con=ed;   // поля открыты: «Изменить»
   const set=(k)=>["cvStubSet",`${id}`,`${sid}`,k,onEv.value];
   const ro=(l,v)=>`<div class="cv-f"><label>${i18n(l)}</label><div class="cv-ro">${escHtml(v)}</div></div>`;
   const sel=(l,k,opts,cur)=>`<div class="cv-f"><label>${i18n(l)}</label><select ${onEv("change",set(k))}>${opts.map(o=>{const[v,t]=Array.isArray(o)?o:[o,o];return`<option value="${escHtml(v)}" ${String(v)===String(cur)?"selected":""}>${escHtml(i18n(t))}</option>`}).join("")}</select></div>`;
   const num=(l,k,v,min,unit)=>`<div class="cv-f"><label>${i18n(l)}</label><span class="cv-num"><input type="number" min="${min}" value="${escHtml(v??"")}" ${onEv("change",set(k))}>${unit?`<small>${i18n(unit)}</small>`:""}</span></div>`;
   const gopSec=fps?(p.gop/fps):0;
   const warn=[];
-  if(con){
+  if(con&&dev){
     const mp=cvMp(res);
     if(mp&&p.kbps<mp*700)warn.push(`${i18n("Битрейт низкий для")} ${res.replace("x","×")}: ${i18n("совет — около")} ${cvKbpsText(Math.round(mp*1000))}`);
     if(gopSec>2)warn.push(`${i18n("Опорный кадр реже чем раз в 2 с. Перемотка архива станет грубее")}`);
@@ -23794,14 +23835,31 @@ function cvStreamColHtml(n,s,i,c,con){
     const m=/^(\d+)x(\d+)$/.exec(res||"");
     if(i&&m&&(+m[1]<640||+m[1]>1280))warn.push(i18n("Для детекторов на этом потоке лучше разрешение от 640×360 до 1280×720"));
   }
-  const head=`<div class="cv-col-h"><b>${escHtml(s.name)}</b>${i?"":`<span class="sub">${i18n("основной")}</span>`}${s.online===false?`<span class="pf-st bad">${i18n("нет сигнала")}</span>`:`<span class="pf-st ok">${i18n("работает")}</span>`}
-    ${con&&i?`<button type="button" class="btn s btn-icon" data-tip="${i18n("Удалить поток")}" aria-label="${i18n("Удалить поток")} ${escHtml(s.name)}" ${pendingDelHas(`camstream:${id}/${sid}`)?"disabled":""} ${onEv("click",["streamDel",`${id}`,`${sid}`])}>${lu("trash",14)}</button>`:""}</div>`;
-  if(!con)return`<div class="cv-col" data-stream="${escHtml(sid)}">${head}<div class="cv-g">${pfw("stream","codec",ro("Кодек",`${s.codec||p.codec}${p.profile?` · ${p.profile}`:""}`))}${pfw("stream","res",ro("Разрешение",(res||"—").replace("x","×")))}${pfw("stream","fps",ro("Кадров в секунду",fps??"—"))}${ro("Битрейт",`${p.brc==="cbr"?i18n("постоянный"):i18n("переменный, до")} ${cvKbpsText(p.kbps)}`)}${ro("Опорный кадр",`${i18n("каждые")} ${p.gop} ${i18n("кадров")}`)}${ro("В просмотре",i18n(p.live?"да":"нет"))}</div></div>`;
+  const off=p.on===false;
+  const nameH=con&&obj?`<input class="cv-name" value="${escHtml(s.name)}" aria-label="${i18n("Имя потока")}" ${onEv("change",["cvName",`${id}`,`${sid}`,onEv.value])}>`:`<b>${escHtml(s.name)}</b>`;
+  const head=`<div class="cv-col-h">${nameH}${i?"":`<span class="sub">${i18n("основной")}</span>`}${off?`<span class="pf-st">${i18n("выключен")}</span>`:s.online===false?`<span class="pf-st bad">${i18n("нет сигнала")}</span>`:`<span class="pf-st ok">${i18n("работает")}</span>`}
+    ${con&&dev&&i?`<button type="button" class="btn s btn-icon" data-tip="${i18n("Удалить поток")}" aria-label="${i18n("Удалить поток")} ${escHtml(s.name)}" ${pendingDelHas(`camstream:${id}/${sid}`)?"disabled":""} ${onEv("click",["streamDel",`${id}`,`${sid}`])}>${lu("trash",14)}</button>`:""}</div>`;
+  const dprofOpts=cvSrvOk("deviceProfile")&&s.deviceProfileOptions?.length?[...new Set([...s.deviceProfileOptions,...(p.dprof?[p.dprof]:[])])]:null,onOk=obj&&cvSrvOk("enabled"),smOk=!obj||cvSrvOk("smartCodec");
+  if(!con)return`<div class="cv-col" data-stream="${escHtml(sid)}">${head}<div class="cv-g">${onOk?ro("Поток включён",i18n(off?"нет":"да")):""}${pfw("stream","codec",ro("Кодек",`${p.codec}${p.profile&&p.codec!=="MJPEG"?` · ${p.profile}`:""}${p.smart?` · ${i18n("умный кодек")}`:""}`))}${pfw("stream","res",ro("Разрешение",(res||"—").replace("x","×")))}${pfw("stream","fps",ro("Кадров в секунду",fps??"—"))}${ro("Битрейт",`${p.brc==="cbr"?i18n("постоянный"):i18n("переменный, до")} ${cvKbpsText(p.kbps)}`)}${ro("Опорный кадр",`${i18n("каждые")} ${p.gop} ${i18n("кадров")}`)}${dprofOpts?.length?ro("Профиль потока камеры",p.dprof||i18n("выбирает драйвер")):""}${ro("В просмотре",i18n(p.live?"да":"нет"))}</div></div>`;
+  if(!dev){
+    // Поля консоли открыты, параметры устройства — текстом
+    const prof=dprofOpts?.length?sel("Профиль потока камеры","dprof",[["",i18n("выбирает драйвер")],...dprofOpts],p.dprof||""):"";
+    return`<div class="cv-col" data-stream="${escHtml(sid)}">${head}<div class="cv-g">
+    ${onOk?`<div class="cv-f cv-f-chk"><label><input type="checkbox" data-cv-on ${off?"":"checked"} ${onEv("change",["cvStubSet",`${id}`,`${sid}`,"on",onEv.checked])}>${i18n("Поток включён")}</label><small class="sub">${i18n("Если поток выключен, сервер не берёт его с камеры. Тогда у потока нет видео, записи и детекторов.")}</small></div>`:""}
+    ${prof}
+    ${pfw("stream","codec",ro("Кодек",`${p.codec}${p.profile&&p.codec!=="MJPEG"?` · ${p.profile}`:""}${p.smart?` · ${i18n("умный кодек")}`:""}`))}${pfw("stream","res",ro("Разрешение",(res||"—").replace("x","×")))}${pfw("stream","fps",ro("Кадров в секунду",fps??"—"))}${ro("Битрейт",`${p.brc==="cbr"?i18n("постоянный"):i18n("переменный, до")} ${cvKbpsText(p.kbps)}`)}${ro("Опорный кадр",`${i18n("каждые")} ${p.gop} ${i18n("кадров")}`)}
+    <div class="cv-f cv-f-chk"><label><input type="checkbox" ${p.live?"checked":""} ${onEv("change",["cvStubSet",`${id}`,`${sid}`,"live",onEv.checked])}>${i18n("В просмотре")}</label><small class="sub">${i18n("Поток можно выбрать над видео")}</small></div>
+  </div></div>`;
+  }
   const resOpts=s.resOptions||(i?null:n.resOptions);
   const resF=`<div class="cv-f"${pfa("stream","res")}><label>${i18n("Разрешение")}</label>${resInput(resOpts,res,["cvPend",`${id}`,`${sid}`,"res",onEv.value]).replace(/^<(select|input) /,`<$1 data-df="Разрешение" `)}</div>`;
   const fpsF=`<div class="cv-f"${pfa("stream","fps")}><label>${i18n("Кадров в секунду")}</label><span class="cv-num"><input type="number" min="1" value="${escHtml(fps??"")}" ${onEv("change",["cvPend",`${id}`,`${sid}`,"fps",onEv.value])}><small>${i18n("к/с")}</small></span></div>`;
+  const chk=(k,l,hint,on)=>`<div class="cv-f cv-f-chk"><label><input type="checkbox" data-cv-${k} ${on?"checked":""} ${onEv("change",["cvStubSet",`${id}`,`${sid}`,k,onEv.checked])}>${i18n(l)}</label>${hint?`<small class="sub">${i18n(hint)}</small>`:""}</div>`;
   return`<div class="cv-col" data-stream="${escHtml(sid)}">${head}<div class="cv-g">
+    ${onOk?`<div class="cv-f cv-f-chk"><label><input type="checkbox" data-cv-on ${off?"":"checked"} ${onEv("change",["cvStubSet",`${id}`,`${sid}`,"on",onEv.checked])}>${i18n("Поток включён")}</label><small class="sub">${i18n("Если поток выключен, сервер не берёт его с камеры. Тогда у потока нет видео, записи и детекторов.")}</small></div>`:""}
+    ${dprofOpts?.length?sel("Профиль потока камеры","dprof",[["",i18n("выбирает драйвер")],...dprofOpts],p.dprof||""):""}
     ${pfw("stream","codec",sel("Кодек","codec",CV_CODECS,p.codec))}${p.codec==="MJPEG"?"":sel("Профиль кодека","profile",CV_PROFILES,p.profile)}
+    ${p.codec==="MJPEG"||!smOk?"":chk("smart","Умный кодек","Режимы H.264+ и H.265+ уменьшают битрейт на спокойной сцене. Этот режим есть не у всех камер.",p.smart)}
     ${resF}${fpsF}
     ${sel("Режим битрейта","brc",[["vbr","Переменный (VBR)"],["cbr","Постоянный (CBR)"]],p.brc)}
     ${num(p.brc==="cbr"?"Битрейт":"Наибольший битрейт","kbps",p.kbps,64,"кбит/с")}
@@ -23829,8 +23887,14 @@ function cvModeSet(id,mode){
 }
 function cvStubSet(id,sid,k,v){
   const n=find(id)?.n;if(!n)return;const p=cvCfgOf(n).streams[sid];if(!p)return;
-  p[k]=k==="kbps"||k==="gop"?Math.max(1,Math.round(+v)||p[k]):v;
+  cvParamPut(n,sid,k,k==="kbps"||k==="gop"?Math.max(k==="kbps"?64:1,Math.round(+v)||p[k]):v);   // kbps: minimum 64 в схеме потока
+  if((n.streams||[]).some(x=>x.id===sid))setD(true);
   mainSeen.html=null;gear();// поле покажет значение после поправки, даже если разметка та же
+}
+// Имя потока — общее поле объекта (name, вид stream объявляет rename): «Применить» отправит его тем же PATCH потока
+function cvName(id,sid,v){
+  const n=find(id)?.n,s=(n?.streams||[]).find(x=>x.id===sid),val=String(v).trim();if(!s)return;
+  if(val)s.name=val;setD(true);mainSeen.html=null;gear();
 }
 // ── Пресеты и движение для их настройки ───────────────────────────────────
 // Камеру наводят по кадру и запоминают положение. Пока кнопка нажата, аренда продлевается раньше срока;
