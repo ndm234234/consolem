@@ -523,7 +523,7 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   ok(/всего 1/.test(document.getElementById("tt")?.textContent || ""), "U7: тост из таблицы — со счётом «всего»");
   lanSetQ(lk.ip);   // строка сети может оказаться не на первой странице
   const chk = document.querySelector("tr.lan-net input.ts-chk:disabled");
-  ok(chk && /плане/i.test(chk.title), "U6: у погашенной отметки строки плана есть причина: " + (chk && chk.title));
+  ok(chk && /плане/i.test((chk.title||chk.dataset.tip)), "U6: у погашенной отметки строки плана есть причина: " + (chk && (chk.title||chk.dataset.tip)));
   planClear();
   addPlan.rows = [];
   planTouch();
@@ -754,7 +754,7 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   ok(s3Labels().slice(0, 5).join() === "Тип устройства,Производитель,Модель,IP-адрес,Порт", "форма: производитель и модель перед адресом — " + s3Labels().slice(0, 5));
   ok(!s3Labels().includes("RTSP"), "форма: отдельного поля RTSP нет");
   planAddManual();
-  ok(!hdPlan.hidden && hdPlan.textContent === "В плане: 1" && /Применить план/.test(hdPlan.title) && getComputedStyle(hdPlan).backgroundColor !== "rgba(0, 0, 0, 0)", "счётчик: «В плане: 1», подсветка, подсказка объясняет — " + hdPlan.title);
+  ok(!hdPlan.hidden && hdPlan.textContent === "В плане: 1" && /Применить план/.test((hdPlan.title||hdPlan.dataset.tip)) && getComputedStyle(hdPlan).backgroundColor !== "rgba(0, 0, 0, 0)", "счётчик: «В плане: 1», подсветка, подсказка объясняет — " + (hdPlan.title||hdPlan.dataset.tip));
   // Из другого раздела счётчик ведёт в «Оборудование» и открывает план
   closeWizard();
   goApp("log");
@@ -800,7 +800,7 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   let s3G = s3Cb("updateManual|group");
   const s3Plain = s3Cb("updateManual|model");
   ok(s3G.offsetHeight === s3Plain.offsetHeight && s3G.scrollWidth > s3G.clientWidth && getComputedStyle(s3G).textOverflow === "ellipsis", "папка: длинное имя в одну строку с многоточием, высота " + s3G.offsetHeight);
-  ok(s3G.title === folderPathName(s3F.id), "папка: полный путь в подсказке");
+  ok((s3G.title||s3G.dataset.tip) === folderPathName(s3F.id), "папка: полный путь в подсказке");
   comboClick(s3G);
   ok(combo && s3Opts().length === Math.min(COMBO_MAX, flatFolders().filter((f) => folderDomain(f.id) === wizd.domain).length + 1) && document.querySelector("#comboPop .combo-opt.cur") !== null, "папка: при открытии весь список папок домена ящика, текущая отмечена — " + s3Opts().length);
   const s3Rect = document.getElementById("comboPop").getBoundingClientRect();

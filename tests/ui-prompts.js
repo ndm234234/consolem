@@ -72,12 +72,12 @@ UiCheck(async ({ ok, until, sleep }) => {
   // Английские подписи: файл подписей разбирается, колокольчик и панель переведены
   ok(Object.keys(window.I18N_EN || {}).length > 1000, "английские подписи загружены");
   setUiLang("en");
-  ok(el("promptBell").title === "Operator questions" && el("promptSound").title === "Escalation sound is on", "английские подписи колокольчика");
+  ok((el("promptBell").title||el("promptBell").dataset.tip) === "Operator questions" && (el("promptSound").title||el("promptSound").dataset.tip) === "Escalation sound is on", "английские подписи колокольчика");
   press(el("promptBell"));
   ok(/No open questions/.test(el("promptPop").textContent), "английские подписи панели");
   press(el("promptClose"));
   setUiLang("ru");
-  ok(el("promptBell").title === "Вопросы операторам", "русские вернулись");
+  ok((el("promptBell").title||el("promptBell").dataset.tip) === "Вопросы операторам", "русские вернулись");
 
   // ask: вопрос, счётчик виден с другого раздела, «Да», ветка пошла дальше. Звука нет
   await runByForm(ASK);

@@ -247,7 +247,7 @@ UiCheck(async ({ ok, until }) => {
   window.webkitSpeechRecognition = undefined;
   asstOpen("");
   const voice = asst;
-  ok(el("asstMicBtn").disabled && /не распознаёт/.test(el("asstMicBtn").title), "браузер без распознавания: кнопка выключена, причина названа");
+  ok(el("asstMicBtn").disabled && /не распознаёт/.test((el("asstMicBtn").title||el("asstMicBtn").dataset.tip)), "браузер без распознавания: кнопка выключена, причина названа");
   window.SpeechRecognition = FakeRec;
   asstRender();
   ok(!el("asstMicBtn").disabled, "браузер с распознаванием: кнопка работает");

@@ -97,11 +97,11 @@ UiCheck(async ({ ok, until, absent }) => {
   ok(chip("lay:agent.models")?.classList.contains("on") && slice === "lay:agent.models", "срез переживает перерисовку");
   ok(await until(() => !!row(AGENT)), "раскрытие модели — за срезом: после возврата агент снова виден");
   // Подсказка кнопки и значок в поиске по разделам — от системы; без подсказки — подпись
-  ok(chip("lay:agent.models").title === "По моделям", "без hint подсказка кнопки — подпись раскладки: " + chip("lay:agent.models").title);
+  ok((chip("lay:agent.models").title||chip("lay:agent.models").dataset.tip) === "По моделям", "без hint подсказка кнопки — подпись раскладки: " + (chip("lay:agent.models").title||chip("lay:agent.models").dataset.tip));
   const declared = TREE_LAYOUTS;
   layoutsApply(declared.map((l) => (l.id === "agent.models" ? Object.assign({}, l, { hint: { text: "Модель → агенты" }, icon: "server" }) : l)));
   aside();
-  ok(chip("lay:agent.models")?.title === "Модель → агенты", "подсказка кнопки — hint раскладки: " + chip("lay:agent.models")?.title);
+  ok((chip("lay:agent.models")?.title||chip("lay:agent.models")?.dataset.tip) === "Модель → агенты", "подсказка кнопки — hint раскладки: " + (chip("lay:agent.models")?.title||chip("lay:agent.models")?.dataset.tip));
   const jumpSlice = jumpSources.flatMap((f) => { try { return f(); } catch (e) { return []; } }).find((x) => x.kind === "Срез" && x.title === "По моделям");
   ok(jumpSlice?.icon === "server", "значок среза в поиске по разделам — icon раскладки: " + jumpSlice?.icon);
   // Система объявила пустой список раскладок: кнопок срезов нет, кнопки «undefined» нет
@@ -111,7 +111,7 @@ UiCheck(async ({ ok, until, absent }) => {
   ok(!/undefined/.test(document.getElementById("aside").textContent) && !document.querySelector("#aside [data-slice]"), "layouts: [] — кнопок срезов нет и нет «undefined»: " + bar);
   layoutsApply(declared);
   treeReset(); aside();
-  ok(await until(() => chip("lay:agent.models")?.title === "По моделям"), "раскладки вернулись");
+  ok(await until(() => (chip("lay:agent.models")?.title||chip("lay:agent.models")?.dataset.tip) === "По моделям"), "раскладки вернулись");
   setSlice("lay:unknown");
   ok(slice === "lay:agent.models", "необъявленная раскладка — срез не меняется");
   // Поиск в своей раскладке находит объект в непрочитанной ветке, а не «Ничего не найдено» по прочитанному

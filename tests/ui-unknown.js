@@ -50,7 +50,7 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   // Мультивыбор с ошибкой: класс одной строкой — подсветка .sf-multi.sf-bad работает
   const bx = document.createElement("div");
   bx.innerHTML = sfFieldHtml("card", tu.uid, "tags", TU.schema.properties.tags, ["a"], { err: "Неверно" });
-  ok(bx.querySelector(".sf-multi")?.classList.contains("sf-bad") && bx.querySelector(".sf-multi").title === "Неверно", "мультивыбор с ошибкой — подсвечен (sf-bad на .sf-multi)");
+  ok(bx.querySelector(".sf-multi")?.classList.contains("sf-bad") && (bx.querySelector(".sf-multi").title||bx.querySelector(".sf-multi").dataset.tip) === "Неверно", "мультивыбор с ошибкой — подсвечен (sf-bad на .sf-multi)");
 
   // Команда с confirm.typeCount (не удаление): поле числа есть, но подпись — не «удаляемых объектов»
   actd = { uid: tu.uid, desc: { id: "wipe", label: { text: "Сброс" }, confirm: { text: { text: "Настройки пропадут" }, typeCount: true } } };
@@ -77,7 +77,7 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   await open(tu.uid);
   type(sf("port"), "70000");
   cardPlan();
-  ok(await until(() => sf("port")?.classList.contains("sf-bad")) && !document.getElementById("bmodal").classList.contains("open") && /65535/.test(sf("port").title),
+  ok(await until(() => sf("port")?.classList.contains("sf-bad")) && !document.getElementById("bmodal").classList.contains("open") && /65535/.test((sf("port").title||sf("port").dataset.tip)),
     "ошибка сервера подсвечивает поле по указателю");
   cardReset();
 

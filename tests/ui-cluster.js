@@ -123,9 +123,9 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   ok(await until(() => document.querySelector("[data-preset-save]")), "пресеты на вкладке «Видео»");
   const saveBtn = document.querySelector("[data-preset-save]"), presetNo = Number(saveBtn.closest("[data-preset]").dataset.preset);
   ok(saveBtn.disabled, "«Запомнить здесь» неактивна");
-  ok(/за NAT/.test(saveBtn.title), "подсказка почему: " + saveBtn.title);
+  ok(/за NAT/.test((saveBtn.title||saveBtn.dataset.tip)), "подсказка почему: " + (saveBtn.title||saveBtn.dataset.tip));
   ok(/за NAT/.test(document.querySelector("[data-preset-nat]").textContent), "слова на карточке");
-  ok(!/канал|вход/i.test(document.querySelector("[data-preset-nat]").textContent + saveBtn.title), "ни канала домена, ни входа не обещает");
+  ok(!/канал|вход/i.test(document.querySelector("[data-preset-nat]").textContent + (saveBtn.title||saveBtn.dataset.tip)), "ни канала домена, ни входа не обещает");
   const presetPuts = [], putBefore = API.put;
   API.put = (p, b, ...r) => { if (/\/presets\//.test(p)) presetPuts.push(b); return putBefore(p, b, ...r); };
   press(saveBtn);

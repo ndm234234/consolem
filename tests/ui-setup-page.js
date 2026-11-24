@@ -194,7 +194,7 @@ UiCheck(async ({ ok, until, sleep }) => {
         ok(un().props.beep === true && cardDiff().length === 1, "сообщение не от рамки пропущено");
         fromPage({ type: "invalid", fields: ["/properties/display_text"], message: "x" });
         const dis = document.querySelector("#cardFoot button.pri[disabled]");
-        ok(!!dis && dis.title === i18n("Страница нашла ошибку ввода. Чтобы показать план, исправить ошибку на странице."), "invalid — «Показать план» неактивна, подсказка называет причину");
+        ok(!!dis && (dis.title||dis.dataset.tip) === i18n("Страница нашла ошибку ввода. Чтобы показать план, исправить ошибку на странице."), "invalid — «Показать план» неактивна, подсказка называет причину");
         fromPage({ type: "invalid", fields: [] });
         ok(!!document.querySelector("#cardFoot button.pri") && !document.querySelector("#cardFoot button.pri[disabled]"), "пустой invalid снимает запрет");
         const flushes = sent.filter((m) => m.type === "flush").length;

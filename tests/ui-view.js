@@ -394,11 +394,11 @@ UiCheck(async ({ ok, until, sleep, confirmWith }) => {
   API.post = (p, ...r) => { if (/\/holds$/.test(p)) holdPosts.push(r[0]); return postWas(p, ...r); };
   document.querySelectorAll(".hold-rec").forEach(clickEl);
   ok(!document.querySelector(".hold-rec:checked") && okBtn.disabled, "галочки сняты: «Удержать» недоступна");
-  ok(/пустой список значит все записи камеры|Пустой список означает все записи камеры/.test(okBtn.title), "подсказка почему: " + okBtn.title);
+  ok(/пустой список значит все записи камеры|Пустой список означает все записи камеры/.test((okBtn.title||okBtn.dataset.tip)), "подсказка почему: " + (okBtn.title||okBtn.dataset.tip));
   clickEl(okBtn);
   ok(!holdPosts.length && document.getElementById("holdFrom"), "запроса нет, окно на месте");
   document.querySelectorAll(".hold-rec").forEach(clickEl);
-  ok(!okBtn.disabled && !okBtn.title, "галочки вернулись: кнопка доступна");
+  ok(!okBtn.disabled && !(okBtn.title||okBtn.dataset.tip), "галочки вернулись: кнопка доступна");
   API.post = postWas;
   const fromV = document.getElementById("holdFrom").value, toV = document.getElementById("holdTo").value;
   await confirmWith(null);
