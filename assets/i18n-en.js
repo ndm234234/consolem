@@ -254,6 +254,7 @@ window.I18N_EN={
 "Скрыть в дереве":"Hide in tree","Показывать в дереве":"Show in tree",
 "Устройства":"Devices","ACFA":"ACFA","Камеры и видеоустройства":"Cameras and video devices","ACFA-устройства":"ACFA devices",
 "Домен":"Domain","Нераспределённые серверы":"Unassigned servers","Сервер":"Server","Камера":"Camera","IP-сервер":"IP server",
+"выключен. Консоль включит канал вместе с этим объектом. Строка канала есть в плане.":"is off. The console will turn on the channel together with this object. The channel row is in the plan.",
 "Канал":"Channel","Микрофон":"Microphone","Датчик":"Sensor","Реле":"Relay","Динамик":"Speaker",
 "Детектор":"Detector","Источник событий":"Event source","Датчик ACFA":"ACFA sensor","Замок":"Lock","Шлейф":"Loop",
 "Агент экспорта":"Export agent","Email-оповещатель":"Email notifier","SMS-оповещатель":"SMS notifier","PTZ":"PTZ","Встроенное хранилище":"Built-in storage",
