@@ -9465,9 +9465,16 @@ function domainNameTaken(name,exceptId){
   const v=String(name||"").trim().toLowerCase();
   return domains.some(d=>d.id!==exceptId&&String(d.name||"").trim().toLowerCase()===v);
 }
+// Правила имени приходят с видом (UnitKind.nameSchema, контракт 0.38.0): у домена — до 100 знаков, как у Axxon One.
+// Консоль берёт maxLength вида domain, а без него — первого вида экрана домена, который его назвал; нет правил — длину не проверяем
+function domainNameRule(){
+  const k=["domain",...kindsLike("domain")].map(c=>KINDS.get(c)).find(x=>x?.nameSchema);
+  return k?.nameSchema||{};
+}
 function domainNameError(name,exceptId){
-  const v=String(name||"").trim();
+  const v=String(name||"").trim(),max=domainNameRule().maxLength;
   if(!v)return i18n("Указать имя домена");
+  if(max&&[...v].length>max)return`${i18n("Имя домена — не длиннее")} ${max} ${i18n(plural(max,"знака|знаков|знаков"))}`;
   if(domainNameTaken(v,exceptId))return i18n("Домен с таким именем уже есть");
   return"";
 }
@@ -9794,6 +9801,7 @@ function cardPlan(flushed){
   if(bq&&!bq.finished){toast("Групповая операция ещё не закончена. Подождать её конца");return}
   if(busyRefuse(cardDraft.id))return;
   {const wb=webPlanBlock(find(cardDraft.id)?.n);if(wb){toast(wb);return}}
+  {const eb=cardEditBlock();if(eb){toast(eb);return}}
   // Объект по схеме вида: сервер сначала проверяет правку, план открывается без ошибок
   const n=find(cardDraft.id).n;
   if(isSchemaNode(n)&&can("validateUnits")){schemaValidate(n,d).then(ok=>{if(ok&&cardDraft&&cardDraft.id===n.id)cardPlanOpen()});return}
@@ -9820,8 +9828,15 @@ function cardPlanOpen(){
      ${d.some(r=>r.stub&&r.stub!=="act"&&r.stub!=="onvif")?`<p class="sub" data-plan-stub>${i18n("Заглушка: консоль пока не отправляет на сервер кодек и битрейт потоков, туры и Tag&Track Pro. «Применить» оставит их как есть.")}</p>`:""}`,
     `<button type="button" class="btn" ${onEv("click",["closeBulkModal"])}>${i18n("Назад")}</button><button type="button" class="btn pri" ${onEv("click",["closeBulkModal"],["cardApply"])}>${i18n("Применить")} (${d.length})</button>`,"bbox-wide");
 }
+// Ошибка поля карточки (fldEdit: имя домена — пустое, занятое, длиннее предела вида) закрывает план и «Применить»:
+// у предела длины нет отказа сервера, консоль — единственная проверка
+function cardEditBlock(){
+  if(!cardDraft)return"";
+  return Object.keys(edits).map(k=>{const[id,f]=splitEditKey(k);return id===cardDraft.id?editError(id,f,edits[k]):""}).find(Boolean)||"";
+}
 function cardApply(ok){
   const all=cardDiff();if(!all.length)return;
+  {const eb=cardEditBlock();if(eb){toast(eb);return}}
   // Правило записи по движению — запрос POST /rules (правил в /operations нет): консоль создаёт его только после
   // операции без ошибок, иначе правило осталось бы у камеры без детектора и режима
   const d=all.filter(r=>!r.recRule),recRules=all.filter(r=>r.recRule),afterOk=recRules.length?()=>camRecRulesAfter(recRules):null;

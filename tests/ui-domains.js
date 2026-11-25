@@ -27,7 +27,26 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   ok((await uiRec(nd.id)).name==="Филиал Юг","на сервере — новое имя");
   treeRenameId=nd.id;treeRenameField="name";commitTreeRename(nd.id,domains[0].name);
   ok(treeRenameId===nd.id&&nd.name==="Филиал Юг","занятое имя — отказ, поле открыто");
+  // Предел длины — из вида (UnitKind.nameSchema.maxLength 100, контракт 0.38.0): 101 знак — отказ до запроса, 100 — можно
+  ok(domainNameRule().maxLength===100,"предел имени домена пришёл с видом: "+domainNameRule().maxLength);
+  ok(/100/.test(domainNameError("Д".repeat(101),nd.id))&&!domainNameError("Д".repeat(100),nd.id),"101 знак — отказ с пределом, 100 — можно");
+  window.CONSOLEM_TRACE=[];
+  commitTreeRename(nd.id,"Д".repeat(101));
+  ok(treeRenameId===nd.id&&nd.name==="Филиал Юг"&&!CONSOLEM_TRACE.some(t=>t.method==="PATCH"&&t.path===`/units/${nd.id}`),"длинное имя — отказ без запроса, поле открыто");
+  delete window.CONSOLEM_TRACE;
   treeRenameId=null;
+  // Карточка: поле «Имя» с 101 знаком — план не открывается, «Применить» ничего не шлёт (у предела нет отказа сервера)
+  pick(nd.id);goTab("gen");
+  ok(await until(()=>[...document.querySelectorAll("#main .card input")].some(i=>i.value===nd.name)),"поле имени в карточке домена");
+  const ci=[...document.querySelectorAll("#main .card input")].find(i=>i.value===nd.name);
+  ci.value="Д".repeat(101);ci.dispatchEvent(new Event("input",{bubbles:true}));
+  ok(/100/.test(ci.parentElement.querySelector(".fld-err")?.textContent||""),"под полем — предел из вида");
+  window.CONSOLEM_TRACE=[];
+  cardPlan();cardApply();
+  await until(()=>false,500);
+  ok(!/Станет/.test(document.getElementById("bmodal")?.textContent||"")&&!CONSOLEM_TRACE.some(t=>t.method==="POST"&&t.path==="/operations"),"длинное имя в карточке: плана нет, операции нет");
+  delete window.CONSOLEM_TRACE;
+  cardReset();
   // Сервер: исключить и вернуть
   const d1=domains[0],s=d1.servers.find(x=>x.online!==false);
   excludeFromDomain(s.id);

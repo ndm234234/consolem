@@ -66,6 +66,14 @@
     assert.eq(await refused(env, { kind: "domain", name: "  ", properties: {} }), [["NAME_REQUIRED", "/name"]], "имя пустое");
   }, { needs: ["createUnits", "cap:domain:create"] });
 
+  // С 0.38.0 вид называет правила имени (UnitKind.nameSchema): у домена — до 100 знаков, как у отображаемого имени Axxon One
+  test("Домен: вид называет правила имени — nameSchema.maxLength 100; имена доменов набора в него входят", async () => {
+    const env = await makeEnv();
+    const kind = (await env.list("/kinds")).find((k) => k.kind === "domain");
+    assert.eq(kind.nameSchema, { maxLength: 100 }, "nameSchema вида domain");
+    assert.ok(FX.domains.every((d) => [...String(d.name).trim()].length <= 100), "имена доменов набора не длиннее 100 знаков");
+  }, { needs: ["listKinds"] });
+
   // Свойство license жило в vms.domain/1 и снято с ним в 0.32.0: лицензии домена — License.* (/licenses, /licenses/keys)
   test("Домен: свойства license нет (снято в 0.32.0) — ни в схеме вида, ни у нового домена; PATCH license — 422", async () => {
     const env = await makeEnv();
