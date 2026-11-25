@@ -95,6 +95,7 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   anSet("storage", "block");
   anGo(2);
   anSrc("found");
+  ok(await until(() => !foundLoading() && an.found), "сервер назвал тома с записями (findVolumes)");
   const found = protoFound(anDraft()).list, pickedKey = an.found;
   ok(found.length > 0 && found.some((f) => f.key === pickedKey), "найдены тома с записями, первый выбран: " + pickedKey);
   ok(!anBlockVol(), "том выбран — «Далее» доступна");
@@ -104,7 +105,8 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   createArchive();
   ok(await until(() => arch.length === nF + 1), "хранилище из тома с записями создано");
   const fa = arch[arch.length - 1], fv = fa.vols[0];
-  ok(PROTO_REC.has(fv.id) && fv.state !== "unfmt", "том с записями не «Не отформатирован»: " + volStateText(fv));
+  ok(!!volRec(fv) && fv.state !== "unfmt", "том с записями не «Не отформатирован», период от сервера: " + volStateText(fv));
+  ok(!!(await uiRec(fv.id)).recordsFrom, "у тома на сервере есть recordsFrom");
   ok(/без форматирования/.test(toastText()), "тост: «" + toastText() + "»");
   // Подключённый том второй раз не предлагается
   addArchive(srvFree.id);
@@ -112,18 +114,20 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   anSet("storage", "block");
   anGo(2);
   anSrc("found");
+  ok(await until(() => !foundLoading()), "список томов обновлён");
   ok(!protoFound(anDraft()).list.some((f) => f.key === pickedKey), "подключённый том в списке больше нет");
   wzCancelQuiet("arch");
   an = null;
   // «＋ Том»: том с записями
   addVolume(fa.id);
   avSrc("found");
+  await until(() => !foundLoading());
   const avL = avList(fa);
   if (avL.length) {
     ok(av.found === avL[0].key || avL.some((f) => f.key === av.found), "в окне «＋ Том» выбран найденный том");
     avCreate();
     ok(await until(() => fa.vols.length === 2), "том с записями добавлен");
-    ok(PROTO_REC.has(fa.vols[1].id), "второй том помечен «с записями»");
+    ok(!!volRec(fa.vols[1]), "второй том — с записями, период от сервера");
   } else {
     ok(!!avBlock(fa), "томов с записями нет — «Подключить том» недоступна");
     avClose();

@@ -430,6 +430,70 @@
     return { result: { ok: !missing, code: missing ? "CONNECTION_FAILED" : null } };
   }
 
+  // Тома с записями (команда findVolumes, профиль vms.volume/1 1.3): стенд дисков не сканирует, а строит список по дискам
+  // сервера и по пути NAS одним и тем же правилом — так список один и тот же при каждом вызове и на любом наборе.
+  // Диск без томов (чётный по счёту, не системный) — раздел SolidStore целиком; остальные — файл .afs и папка объектного.
+  // Тома, которые уже подключило какое-нибудь хранилище, и диски под разделом в список не входят
+  const FOUND_PERIODS = [["2026-03-14", "2026-11-02"], ["2025-09-01", "2026-02-28"], ["2026-06-20", "2026-11-11"]];
+  const TBY = 1024 ** 4, GBY = 1024 ** 3;
+  const foundAt = (from, to) => ({ recordsFrom: `${from}T00:00:00Z`, recordsTo: `${to}T23:59:59Z` });
+  const sameAddr = (x, f) => x.disk === f.disk && (x.mode || "file") === (f.mode || "file") && (x.dir || "") === (f.dir || "") && (x.file || "") === (f.file || "");
+  // Тома хранилищ одного адреса: на дисках сервера sid (address disk) или в NAS (address nas)
+  const volumesAt = (address, sid, ctx) => ctx.db.volumes.filter((x) => ctx.db.archives.some((y) => y.id === x.archiveId && ctx.specOf(y).address === address && (address !== "disk" || y.serverId === sid)));
+  function foundOnServer(sid, ctx) {
+    const s = ctx.byId("servers", sid);
+    if (!s) return null;
+    const vols = volumesAt("disk", sid, ctx);
+    return (s.disks || []).flatMap((d, i) => {
+      const on = vols.filter((x) => x.disk === d.disk);
+      if (on.some((x) => x.mode === "part")) return [];
+      const [from, to] = FOUND_PERIODS[i % FOUND_PERIODS.length], [from2, to2] = FOUND_PERIODS[(i + 1) % FOUND_PERIODS.length];
+      const srvOf = (j) => (i === 2 && j === 0) || (i === 3 && j === 2) ? "SRV-OLD" : s.name;
+      // Раздел SolidStore занимает диск целиком: на нём нет файловой системы, поэтому нет файлов .afs и папок
+      if (!d.system && !on.length && i % 2 === 0) return [Object.assign({ disk: d.disk, mode: "part", sizeBytes: d.sizeBytes, storage: "block" }, foundAt(from, to), { archiveName: "Архив 2025", serverName: srvOf(0) })];
+      return [
+        Object.assign({ disk: d.disk, mode: "file", dir: `${d.disk}\\Axxon`, file: "Архив 2024.afs", sizeBytes: Math.min(800 * GBY, d.sizeBytes), storage: "block" }, foundAt(from2, to2), { archiveName: "Архив 2024", serverName: srvOf(1) }),
+        Object.assign({ disk: d.disk, mode: "dir", dir: `${d.disk}\\AxxonArchive\\Объектный`, sizeBytes: Math.min(TBY, d.sizeBytes), storage: "object" }, foundAt(from, to), { archiveName: "Объектный", serverName: srvOf(2) }),
+      ].filter((f) => !on.some((x) => sameAddr(x, f)));
+    }).map((f) => Object.assign(f, { recordsVisible: f.serverName === s.name }));
+  }
+  // В папке NAS: два файла .afs (блочное) и папка объектного хранилища; один файл записал другой сервер
+  function foundOnNas(path, sid, ctx) {
+    path = trimmed(path);
+    if (!path) return [];
+    const vols = volumesAt("nas", null, ctx), s = sid ? ctx.byId("servers", sid) : null;
+    return [
+      Object.assign({ disk: path, mode: "file", file: "vol1.afs", sizeBytes: 2 * TBY, storage: "block" }, foundAt("2026-01-05", "2026-11-11"), { archiveName: "Сетевое NAS", serverName: s ? s.name : "SRV-NAS" }),
+      Object.assign({ disk: path, mode: "file", file: "Архив 2024.afs", sizeBytes: TBY, storage: "block" }, foundAt("2024-03-01", "2024-12-30"), { archiveName: "Архив 2024", serverName: "SRV-OLD" }),
+      Object.assign({ disk: path, mode: "dir", dir: `${path}\\Объектный`, sizeBytes: 2 * TBY, storage: "object" }, foundAt("2025-10-01", "2026-11-11"), { archiveName: "Объектный NAS", serverName: s ? s.name : "SRV-NAS" }),
+    ].filter((f) => !vols.some((x) => sameAddr(x, f))).map((f) => (s ? Object.assign(f, { recordsVisible: f.serverName === s.name }) : f));
+  }
+  // Команда вида findVolumes: хранилища ещё нет, у локального — диски сервера, у сетевого — папка NAS
+  function archiveFind(kind, params, ctx) {
+    const address = archSpec(kind, ctx).address;
+    if (address === "disk") {
+      if (!trimmed(params.serverId)) return ctx.problem(422, "VALIDATION_FAILED", "Укажите сервер: тома ищут на его дисках", { field: "serverId" });
+      const items = foundOnServer(params.serverId, ctx);
+      if (!items) return ctx.problem(422, "VALIDATION_FAILED", "Такого сервера нет", { field: "serverId" });
+      return { result: { items } };
+    }
+    if (address !== "nas") return ctx.problem(422, "NOT_SUPPORTED", `У вида ${kind} нет поиска томов`, { field: "kind" });
+    if (!trimmed(params.disk)) return ctx.problem(422, "VALIDATION_FAILED", "Укажите путь к папке NAS", { field: "disk" });
+    if (!trimmed(params.login)) return ctx.problem(422, "VALIDATION_FAILED", "Укажите учётную запись NAS", { field: "login" });
+    if (params.serverId && !ctx.byId("servers", params.serverId)) return ctx.problem(422, "VALIDATION_FAILED", "Такого сервера нет", { field: "serverId" });
+    return { result: { items: foundOnNas(params.disk, params.serverId || null, ctx) } };
+  }
+  // Том с записями (attachExisting): адрес — из списка findVolumes этого хранилища, тип хранения — как у хранилища
+  function volumeAttachProblem(a, v, storage, ctx) {
+    const address = archSpec(a.kind, ctx).address;
+    const list = address === "disk" ? foundOnServer(a.parentId, ctx) || [] : address === "nas" ? foundOnNas(v.disk, null, ctx) : [];
+    const f = list.find((x) => sameAddr(v, x));
+    const no = (reason, msg) => ctx.problem(422, "VALIDATION_FAILED", msg, { field: "attachExisting", params: { reason } });
+    if (!f) return { bad: no("notFound", "По этому адресу нет тома с записями") };
+    if (f.storage !== (storage || "block")) return { bad: no("storageMismatch", f.storage === "object" ? "Это том объектного хранилища: блочное хранилище не может его подключить" : "Это том блочного хранилища: объектное хранилище не может его подключить") };
+    return { found: f };
+  }
+
   const archive = {
     spec: archSpec,
     setProblem: archiveSetProblem,
@@ -457,6 +521,7 @@
     remove: archiveRemove,
     actions: {
       check: (u, params, ctx) => archiveCheck(u.kind, params.volume, ctx),
+      findVolumes: (u, params, ctx) => archiveFind(u.kind, params, ctx),
     },
   };
 
@@ -515,6 +580,9 @@
     const locked = ctx.lockedProblem([v.id], ctx.held);
     if (locked) return locked;
     v.state = "format";
+    // Записи стёрты: периода записей у тома больше нет
+    delete v.recordsFrom;
+    delete v.recordsTo;
     ctx.bump(v);
     const until = ctx.now() + ctx.FORMAT_MS;
     ctx.formatting.set(v.id, until);
@@ -548,6 +616,15 @@
       const bad = volumeProblem(a, props(u), ctx, parent && parent.fresh ? (parent.rows || []).filter((x) => x.kind === u.kind) : []);
       if (bad) return bad;
       if (u.name === undefined) u.name = props(u).disk;
+      // Том с записями (attachExisting, профиль 1.3): сервер не форматирует его — «Готов», объём и период записей — тома
+      if (((u.spec || {}).properties || {}).attachExisting === true) {
+        const at = volumeAttachProblem(a, props(u), (parent.properties || {}).storage, ctx);
+        if (at.bad) return at.bad;
+        Object.assign(props(u), { state: "ready", sizeBytes: at.found.sizeBytes, recordsFrom: at.found.recordsFrom, recordsTo: at.found.recordsTo });
+        observedOf(u).usedPercent = 64;
+        statusOf(u).link = "online";
+        return null;
+      }
       props(u).state = archSpec(a.kind, ctx).address === "disk" && props(u).mode === "part" ? "unfmt" : "ready";
       observedOf(u).usedPercent = 0;
       statusOf(u).link = "online";

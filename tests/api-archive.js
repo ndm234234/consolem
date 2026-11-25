@@ -176,6 +176,46 @@
     assert.eq([on.state, on.enabled ?? true], ["ready", true], "снова готов");
   }, { needs: ["patchUnit", "kind:volume"] });
 
+  test("Том: с записями (профиль 1.3) — findVolumes называет тома, attachExisting подключает без форматирования; без поля — как раньше; нет тома или не тот тип — 422", async () => {
+    const env = await makeEnv();
+    const srv = FX.servers.find((s) => s.allocated && s.online && s.disks.filter((d) => !d.system && !FX.volumes.some((x) => x.disk === d.disk && FX.archives.some((a) => a.id === x.archiveId && a.serverId === s.id))).length >= 2);
+    const find = async (kind, params) => (await env.ok("POST", `/kinds/${kind}/actions/findVolumes`, { params })).result.items;
+    const items = await find("archive.local", { serverId: srv.id });
+    assert.ok(items.length > 0 && items.every((f) => f.recordsFrom && f.recordsTo && f.archiveName && f.serverName && typeof f.recordsVisible === "boolean"), "тома с периодом, прежним хранилищем и сервером записи");
+    const usedAt = (f) => FX.volumes.some((x) => x.disk === f.disk && (x.mode || "file") === f.mode && (x.dir || "") === (f.dir || "") && (x.file || "") === (f.file || "") && FX.archives.some((a) => a.id === x.archiveId && a.serverId === srv.id));
+    assert.ok(!items.some(usedAt), "подключённых томов в списке нет");
+    const part = items.find((f) => f.mode === "part"), obj = items.find((f) => f.storage === "object");
+    const arch = (vol, storage) => ({ kind: "archive.local", parentId: srv.id, name: "С записями", properties: { storage: storage || "block", encrypted: false, retentionDays: 30, provider: null },
+      children: [{ kind: "volume", name: vol.disk, properties: Object.assign({ disk: vol.disk, sizeBytes: GB, mode: vol.mode }, vol.dir ? { dir: vol.dir } : {}, vol.file ? { file: vol.file } : {}, vol.attach ? { attachExisting: true } : {}) }] });
+    // Чужой адрес и не тот тип хранения — общий 422 с причиной
+    const bad = await create(env, arch({ disk: part.disk, mode: "dir", dir: "Z:\\Нет", attach: true }));
+    assert.eq([bad.failed[0].code, bad.failed[0].field, (bad.failed[0].params || {}).reason], ["VALIDATION_FAILED", "/children/0/properties/attachExisting", "notFound"], "нет тома по адресу");
+    const mis = await create(env, arch(Object.assign({}, obj, { attach: true }), "block"));
+    assert.eq([mis.failed[0].code, mis.failed[0].field, (mis.failed[0].params || {}).reason], ["VALIDATION_FAILED", "/children/0/properties/attachExisting", "storageMismatch"], "объектный том у блочного");
+    // С полем — «Готов», объём и период тома, поле не хранится
+    const made = await create(env, arch(Object.assign({}, part, { attach: true })));
+    assert.eq(made.failed.length, 0, "хранилище с томом создано");
+    const vol = made.done[0].units.find((u) => u.kind === "volume");
+    const got = await get(env, vol.uid);
+    assert.eq([got.properties.state, got.properties.sizeBytes, got.properties.recordsFrom, got.properties.recordsTo, "attachExisting" in got.properties], ["ready", part.sizeBytes, part.recordsFrom, part.recordsTo, false], "том с записями: не unfmt, период тома");
+    assert.ok(!(await find("archive.local", { serverId: srv.id })).some((f) => f.disk === part.disk), "подключённый том больше не найден");
+    // Без поля — раздел подключается неотформатированным, как раньше
+    const other = (await find("archive.local", { serverId: srv.id })).find((f) => f.mode === "part");
+    if (other) {
+      const plain = await create(env, arch(other));
+      assert.eq((await get(env, plain.done[0].units.find((u) => u.kind === "volume").uid)).properties.state, "unfmt", "без attachExisting — unfmt");
+    }
+    // Форматирование стирает записи и период
+    await env.ok("POST", `${U(vol.uid)}/actions/format`, { params: {} });
+    const fm = await get(env, vol.uid);
+    assert.eq(["recordsFrom" in fm.properties, "recordsTo" in fm.properties], [false, false], "после форматирования периода нет");
+    // NAS: путь и учётная запись обязательны; файлы .afs — блочные
+    assert.status(await env.call("POST", "/kinds/archive.network/actions/findVolumes", { params: { disk: "\\\\nas01\\vms" } }), 422, "VALIDATION_FAILED", "NAS без учётной записи");
+    const nas = await find("archive.network", { disk: "\\\\nas01\\old", login: "svc", serverId: srv.id });
+    assert.ok(nas.some((f) => f.file && f.storage === "block") && nas.some((f) => f.mode === "dir" && f.storage === "object"), "в папке NAS — файлы .afs и папка объектного");
+    assert.status(await env.call("POST", "/kinds/archive.local/actions/findVolumes", { params: {} }), 422, "VALIDATION_FAILED", "локальное без сервера");
+  }, { needs: ["createUnits", "runKindAction", "runUnitAction", "kind:volume", "kind:archive.local", "action:archive.local/findVolumes", "prop:volume.attachExisting"] });
+
   test("Том: «только чтение» (профиль 1.2) — writeStopped хранится, состояние не меняется, откат возвращает запись", async () => {
     const env = await makeEnv();
     const vol = FX.volumes.find((x) => x.state === "ready" && x.enabled !== false && !x.writeStopped && x.shrinkPendingBytes == null);

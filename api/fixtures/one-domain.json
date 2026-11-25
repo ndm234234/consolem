@@ -953,7 +953,126 @@
     "archiveModes": [],
     "admits": true,
     "address": "disk"
-   }
+   },
+   "actions": [
+    {
+     "id": "findVolumes",
+     "label": {
+      "key": "action.archive.findVolumes",
+      "text": "Найти тома с записями",
+      "lang": "ru"
+     },
+     "execution": "instant",
+     "scope": [
+      "kind"
+     ],
+     "params": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "serverId": {
+        "type": "string",
+        "description": "uid сервера. archive.local — обязателен: на его дисках сервер ищет тома. archive.network — необязателен: по нему сервер судит recordsVisible"
+       },
+       "disk": {
+        "type": "string",
+        "description": "archive.network: путь к папке NAS, где лежат тома"
+       },
+       "login": {
+        "type": "string",
+        "description": "archive.network: учётная запись NAS"
+       },
+       "password": {
+        "type": "string",
+        "writeOnly": true,
+        "description": "archive.network: пароль учётной записи NAS"
+       }
+      }
+     },
+     "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "items"
+      ],
+      "properties": {
+       "items": {
+        "type": "array",
+        "items": {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "disk",
+          "mode",
+          "sizeBytes",
+          "storage",
+          "recordsFrom",
+          "recordsTo",
+          "archiveName",
+          "serverName"
+         ],
+         "properties": {
+          "disk": {
+           "type": "string",
+           "description": "Диск сервера (archive.local) или путь к папке NAS (archive.network) — поле disk тома"
+          },
+          "mode": {
+           "type": "string",
+           "enum": [
+            "part",
+            "file",
+            "dir"
+           ],
+           "description": "part — раздел SolidStore целиком, file — файл тома .afs, dir — папка объектного хранилища"
+          },
+          "dir": {
+           "type": "string",
+           "description": "Папка файла или папка объектного хранилища"
+          },
+          "file": {
+           "type": "string",
+           "description": "Имя файла тома .afs"
+          },
+          "sizeBytes": {
+           "type": "integer",
+           "minimum": 0
+          },
+          "storage": {
+           "type": "string",
+           "enum": [
+            "block",
+            "object"
+           ],
+           "description": "Тип хранения тома: подключить его может только хранилище того же типа"
+          },
+          "recordsFrom": {
+           "type": "string",
+           "format": "date-time"
+          },
+          "recordsTo": {
+           "type": "string",
+           "format": "date-time"
+          },
+          "archiveName": {
+           "type": "string",
+           "description": "Имя хранилища, в котором был том"
+          },
+          "serverName": {
+           "type": "string",
+           "description": "Имя сервера, который писал том"
+          },
+          "recordsVisible": {
+           "type": "boolean",
+           "description": "Записи будут видны: имя сервера записи — то же, что у сервера serverId. Поля нет — сервер не знает (serverId не задан)"
+          }
+         }
+        },
+        "description": "Тома с записями, которые можно подключить с attachExisting. Тома, которые уже подключили хранилища, в список не входят"
+       }
+      }
+     }
+    }
+   ]
   },
   {
    "kind": "archive.network",
@@ -1235,6 +1354,123 @@
        }
       },
       "additionalProperties": false
+     }
+    },
+    {
+     "id": "findVolumes",
+     "label": {
+      "key": "action.archive.findVolumes",
+      "text": "Найти тома с записями",
+      "lang": "ru"
+     },
+     "execution": "instant",
+     "scope": [
+      "kind"
+     ],
+     "params": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "serverId": {
+        "type": "string",
+        "description": "uid сервера. archive.local — обязателен: на его дисках сервер ищет тома. archive.network — необязателен: по нему сервер судит recordsVisible"
+       },
+       "disk": {
+        "type": "string",
+        "description": "archive.network: путь к папке NAS, где лежат тома"
+       },
+       "login": {
+        "type": "string",
+        "description": "archive.network: учётная запись NAS"
+       },
+       "password": {
+        "type": "string",
+        "writeOnly": true,
+        "description": "archive.network: пароль учётной записи NAS"
+       }
+      }
+     },
+     "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "items"
+      ],
+      "properties": {
+       "items": {
+        "type": "array",
+        "items": {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "disk",
+          "mode",
+          "sizeBytes",
+          "storage",
+          "recordsFrom",
+          "recordsTo",
+          "archiveName",
+          "serverName"
+         ],
+         "properties": {
+          "disk": {
+           "type": "string",
+           "description": "Диск сервера (archive.local) или путь к папке NAS (archive.network) — поле disk тома"
+          },
+          "mode": {
+           "type": "string",
+           "enum": [
+            "part",
+            "file",
+            "dir"
+           ],
+           "description": "part — раздел SolidStore целиком, file — файл тома .afs, dir — папка объектного хранилища"
+          },
+          "dir": {
+           "type": "string",
+           "description": "Папка файла или папка объектного хранилища"
+          },
+          "file": {
+           "type": "string",
+           "description": "Имя файла тома .afs"
+          },
+          "sizeBytes": {
+           "type": "integer",
+           "minimum": 0
+          },
+          "storage": {
+           "type": "string",
+           "enum": [
+            "block",
+            "object"
+           ],
+           "description": "Тип хранения тома: подключить его может только хранилище того же типа"
+          },
+          "recordsFrom": {
+           "type": "string",
+           "format": "date-time"
+          },
+          "recordsTo": {
+           "type": "string",
+           "format": "date-time"
+          },
+          "archiveName": {
+           "type": "string",
+           "description": "Имя хранилища, в котором был том"
+          },
+          "serverName": {
+           "type": "string",
+           "description": "Имя сервера, который писал том"
+          },
+          "recordsVisible": {
+           "type": "boolean",
+           "description": "Записи будут видны: имя сервера записи — то же, что у сервера serverId. Поля нет — сервер не знает (serverId не задан)"
+          }
+         }
+        },
+        "description": "Тома с записями, которые можно подключить с attachExisting. Тома, которые уже подключили хранилища, в список не входят"
+       }
+      }
      }
     }
    ],
@@ -1894,11 +2130,38 @@
       "type": "boolean",
       "description": "true — сервер больше не пишет на том, записи на нём остаются видны и читаются (так меняют диск без разрыва в архиве). Состояние тома (state) не меняется. Поля нет или false — запись идёт. У выключенного тома (enabled: false) значения не имеет"
      },
+     "recordsFrom": {
+      "x-label": {
+       "key": "field.recordsFrom",
+       "text": "Записи с",
+       "lang": "ru"
+      },
+      "type": "string",
+      "format": "date-time",
+      "readOnly": true,
+      "description": "Начало записей, которые уже были на томе, когда сервер подключил его с attachExisting. Только чтение. Форматирование стирает записи и поле. Поля нет — том подключили пустым"
+     },
+     "recordsTo": {
+      "x-label": {
+       "key": "field.recordsTo",
+       "text": "Записи по",
+       "lang": "ru"
+      },
+      "type": "string",
+      "format": "date-time",
+      "readOnly": true,
+      "description": "Конец записей, которые уже были на томе при подключении с attachExisting. Только чтение. Форматирование стирает поле"
+     },
      "confirmShrinkBytes": {
       "type": "integer",
       "minimum": 0,
       "description": "Второе подтверждение уменьшения: равно новому sizeBytes. Меньшая квота без него — 422 VALIDATION_FAILED, field: sizeBytes. Не хранится",
       "x-transient": true
+     },
+     "attachExisting": {
+      "type": "boolean",
+      "x-transient": true,
+      "description": "Только в POST /units: true — на томе уже есть записи (раздел SolidStore, файл .afs, папка объектного хранилища), сервер подключает его как есть, без форматирования; том получает state ready, а не unfmt, и recordsFrom, recordsTo. Адрес тома — из ответа команды findVolumes вида хранилища. По адресу нет тома с записями — 422 VALIDATION_FAILED, field: attachExisting, params.reason notFound; тип хранения тома не тот, что у хранилища, — reason storageMismatch. Поля нет или false — прежнее поведение. Не хранится"
      }
     }
    },
@@ -9978,7 +10241,7 @@
     "text": "Том",
     "lang": "ru"
    },
-   "version": "1.2",
+   "version": "1.3",
    "uses": [
     {
      "id": "vms.archive/1",
@@ -9991,6 +10254,7 @@
    ],
    "properties": [
     "account",
+    "attachExisting",
     "bucket",
     "confirmShrinkBytes",
     "dir",
@@ -10006,6 +10270,8 @@
     "path",
     "port",
     "proto",
+    "recordsFrom",
+    "recordsTo",
     "region",
     "secret",
     "sizeBytes",

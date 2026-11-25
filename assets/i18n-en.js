@@ -3565,6 +3565,8 @@ window.I18N_EN={
 "Хранилище этого типа не может их подключить.":"A storage of this type cannot connect them.",
 "папка, где лежат файлы томов .afs":"the folder with the .afs volume files",
 "Указать путь к папке. Консоль покажет файлы томов в ней.":"Enter the folder path. The console will show the volume files in it.",
+// Тома с записями называет сервер: команда findVolumes (профиль vms.volume/1 1.3)
+"Сервер ищет тома с записями…":"The server is looking for volumes with recordings…","Тома с записями в папке":"Volumes with recordings in the folder","Тип хранения тома не подходит хранилищу. Выбрать другой том":"The volume storage type does not match the storage. Select a different volume","По этому адресу больше нет тома с записями. Выбрать том снова":"There is no longer a volume with recordings at this address. Select the volume again","В папке нет томов с записями этого типа.":"The folder has no volumes with recordings of this type.","Указать путь к папке и пользователя. Сервер покажет тома в папке.":"Enter the folder path and the user. The server will show the volumes in the folder.",
 "Выбрать том с записями":"Select a volume with recordings",
 "файл":"file",
 "файла":"files",
