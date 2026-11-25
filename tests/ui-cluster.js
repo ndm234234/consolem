@@ -115,7 +115,7 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   ptz.direct = false;
   ok(/disabled/.test(ptzCardHtml(ptz).split('data-ptz="0"')[1].slice(0, 200)), "движение выключено");
   // ADR-0111 доп. (1): положение не запомнить, подпись сохраняется. Настоящим кликом
-  // Пресеты — на вкладке «PTZ», если она есть у камеры (прототип 96), иначе на «Видео»
+  // Пресеты — на вкладке «PTZ», если она есть у камеры (прототип 97), иначе на «Видео»
   goTab(tabsForHand(ptz).some(([id]) => id === "ptz") ? "ptz" : "vid");
   delete ptz.direct;
   if (!presetRows(ptz).length) await presetPut(ptz.id, 1, { name: "" });
