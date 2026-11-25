@@ -797,6 +797,7 @@ div.exp-ln{display:flex;align-items:center;padding:8px 0}
 .cv-g{display:grid;grid-template-columns:1fr 1fr;gap:8px 10px}
 .cv-f label{display:block;font-size:12px;color:var(--mu);margin-bottom:3px}
 .cv-f select,.cv-f input[type=number]{width:100%}
+.cv-f-url{grid-column:1/-1}.cv-f-url input{width:100%}.cv-f-url small{display:block;margin-top:4px}.cv-ro-url{overflow-wrap:anywhere}
 .cv-num{display:flex;align-items:center;gap:6px}.cv-num input{flex:1;min-width:0}.cv-num small{color:var(--mu);font-size:12px;white-space:nowrap}
 .cv-ro{min-height:28px;display:flex;align-items:center;font-size:12px}
 .cv-f-chk{grid-column:1/-1}.cv-f-chk label{display:flex;gap:6px;align-items:center;color:var(--tx);font-size:12px;margin:0}.cv-f-chk small{margin:0}
@@ -1681,6 +1682,7 @@ label.dev-id-bad-lb,.dev-grid label.dev-id-bad-lb,.dev-field label.dev-id-bad-lb
 .dev-grid{display:grid;grid-template-columns:repeat(2,minmax(180px,1fr));gap:12px}.dev-grid .full{grid-column:1/-1}
 /* Каналы RTSP-регистратора */
 .rtsp-ch-hint{margin:4px 0 0;font-size:12px;color:var(--mu)}
+.rtsp-urls-bad{color:var(--rd)}
 .rtsp-ch{border:1px solid var(--ln);border-radius:var(--one-radius-container);padding:8px 10px;background:var(--p1,transparent)}
 .rtsp-ch-hd{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:6px}.rtsp-ch-hd b{font-size:12px}.rtsp-ch-hd span{font-size:12px;color:var(--mu)}
 .rtsp-ch-list{display:grid;grid-template-columns:max-content 1fr;gap:6px 10px;align-items:center;max-height:236px;overflow:auto;scrollbar-gutter:stable;padding-right:4px}
@@ -17103,9 +17105,10 @@ function camPlanTouch(n,part){
   if(part==="tt"&&!b.tt)b.tt=JSON.parse(JSON.stringify(ttOf(n)));
   camPlanBase.set(n.id,b);
 }
-const CV_KEY_RU={codec:"Кодек",profile:"Профиль кодека",brc:"Режим битрейта",kbps:"Битрейт",quality:"Качество",gop:"Опорный кадр каждые",smart:"Умный кодек",dprof:"Профиль потока камеры",on:"Поток включён",live:"В просмотре"};
+const CV_KEY_RU={codec:"Кодек",profile:"Профиль кодека",brc:"Режим битрейта",kbps:"Битрейт",quality:"Качество",gop:"Опорный кадр каждые",smart:"Умный кодек",dprof:"Профиль потока камеры",on:"Поток включён",live:"В просмотре",url:"Адрес RTSP"};
 function cvValText(k,v){
   if(k==="dprof"&&!v)return i18n("выбирает драйвер");
+  if(k==="url")return v||i18n("адрес камеры");
   if(v===undefined||v===null||v==="")return"—";
   if(k==="live")return i18n(v?"да":"нет");
   if(k==="on"||k==="smart")return i18n(v?"включён":"выключен");
@@ -17119,7 +17122,7 @@ function drvValText(p,v){return p.type==="boolean"?i18n(v?"включено":"в
 function cvSrvKey(f){return Object.keys(CV_SRV).find(k=>CV_SRV[k]===f)}
 function camStreamText(s,keys){return keys.map(k=>k==="res"?(s.res||"—").replace("x","×"):k==="fps"?`${s.fps??"—"} ${i18n("к/с")}`:k==="name"?`«${s.name}»`
   :cvValText(cvSrvKey(k),s[k]===undefined?CV_SRV_DEF[k]:cvFromSrv(cvSrvKey(k),s[k]))).join(", ")}   // поля нет — значение по умолчанию
-function camStreamKeyRu(k){return i18n(k==="res"?"разрешение":k==="fps"?"к/с":k==="name"?"имя":CV_KEY_RU[cvSrvKey(k)]).toLowerCase()}
+function camStreamKeyRu(k){return k==="rtspUrl"?i18n("адрес RTSP"):i18n(k==="res"?"разрешение":k==="fps"?"к/с":k==="name"?"имя":CV_KEY_RU[cvSrvKey(k)]).toLowerCase()}
 // Потоки камеры в плане: строка на поток — разрешение и к/с одним PATCH потока, новый поток — POST /units, удалённый — DELETE
 function camStreamsDiff(live,snap,out){
   const was=new Map((snap.streams||[]).map(x=>[x.id,x])),now=live.streams||[];
@@ -22916,9 +22919,9 @@ function cvCfgOf(n){
   return c;
 }
 // Поле окна потоков → свойство потока на сервере. Нет в списке — только у камеры без объектов потоков (заглушка)
-const CV_SRV={codec:"codec",profile:"codecProfile",brc:"bitrateMode",kbps:"bitrateKbps",quality:"quality",gop:"gopFrames",smart:"smartCodec",dprof:"deviceProfile",on:"enabled",live:"liveUse"};
+const CV_SRV={codec:"codec",profile:"codecProfile",brc:"bitrateMode",kbps:"bitrateKbps",quality:"quality",gop:"gopFrames",smart:"smartCodec",dprof:"deviceProfile",on:"enabled",live:"liveUse",url:"rtspUrl"};
 // Значения потока по умолчанию: поля нет у потока на сервере — окно показывает их
-function cvDefOf(n,s,i){const mp=cvMp(s.res||(i?"":n.res));return{codec:"H.264",profile:i?"Main":"High",brc:"vbr",kbps:Math.max(256,Math.round(mp*1000/128)*128)||(i?1024:2048),quality:"5",gop:2*(s.fps||(i?12:n.fps)||25),smart:false,dprof:"",on:true,live:true}}
+function cvDefOf(n,s,i){const mp=cvMp(s.res||(i?"":n.res));return{codec:"H.264",profile:i?"Main":"High",brc:"vbr",kbps:Math.max(256,Math.round(mp*1000/128)*128)||(i?1024:2048),quality:"5",gop:2*(s.fps||(i?12:n.fps)||25),smart:false,dprof:"",on:true,live:true,url:""}}
 // Сервер принимает это свойство потока: оно есть в схеме вида stream и не только для чтения. Нет — поле остаётся заглушкой
 // страницы (сервер с профилем vms.stream/1 1.1 и раньше)
 function cvSrvOk(f){const p=KINDS.get("stream")?.schema?.properties?.[f];return!!p&&!p.readOnly}
@@ -24701,15 +24704,19 @@ function cvStreamColHtml(n,s,i,c,ed,dev){
     if(i&&m&&(+m[1]<640||+m[1]>1280))warn.push(i18n("Для детекторов на этом потоке лучше разрешение от 640×360 до 1280×720"));
   }
   const off=p.on===false;
+  // Адрес RTSP потока (пробел AX1, vms.stream/1 1.3): у основного — адрес камеры, у остальных — свой или адрес камеры
+  const camUrl=camConnVal(n,"RTSP",cardFldOrig("RTSP","")),urlOk=cvSrvOk("rtspUrl")&&(camRtsp(n)||!!camUrl||(n.streams||[]).some(x=>x.rtspUrl));
+  const roU=v=>`<div class="cv-f cv-f-url"><label>${i18n("Адрес RTSP")}</label><div class="cv-ro cv-ro-url">${escHtml(v)}</div></div>`;
+  const urlF=!urlOk?"":!i?roU(camUrl||"—"):!con||!obj?roU(p.url||i18n("адрес камеры")):`<div class="cv-f cv-f-url"><label>${i18n("Адрес RTSP")}</label><input data-cv-url value="${escHtml(p.url||"")}" placeholder="${escHtml(camUrl||"rtsp://адрес:554/поток")}" spellcheck="false" autocomplete="off" ${onEv("change",["cvStubSet",`${id}`,`${sid}`,"url",onEv.value])}><small class="sub">${i18n("Пустое поле — поток идёт по адресу камеры.")}</small></div>`;
   const nameH=con&&obj?`<input class="cv-name" value="${escHtml(s.name)}" aria-label="${i18n("Имя потока")}" ${onEv("change",["cvName",`${id}`,`${sid}`,onEv.value])}>`:`<b>${escHtml(s.name)}</b>`;
   const head=`<div class="cv-col-h">${nameH}${i?"":`<span class="sub">${i18n("основной")}</span>`}${off?`<span class="pf-st">${i18n("выключен")}</span>`:s.online===false?`<span class="pf-st bad">${i18n("нет сигнала")}</span>`:`<span class="pf-st ok">${i18n("работает")}</span>`}
     ${con&&dev&&i?`<button type="button" class="btn s btn-icon" data-tip="${i18n("Удалить поток")}" aria-label="${i18n("Удалить поток")} ${escHtml(s.name)}" ${pendingDelHas(`camstream:${id}/${sid}`)?"disabled":""} ${onEv("click",["streamDel",`${id}`,`${sid}`])}>${lu("trash",14)}</button>`:""}</div>`;
   const dprofOpts=cvSrvOk("deviceProfile")&&s.deviceProfileOptions?.length?[...new Set([...s.deviceProfileOptions,...(p.dprof?[p.dprof]:[])])]:null,onOk=obj&&cvSrvOk("enabled"),smOk=!obj||cvSrvOk("smartCodec");
-  if(!con)return`<div class="cv-col" data-stream="${escHtml(sid)}">${head}<div class="cv-g">${onOk?ro("Поток включён",i18n(off?"нет":"да")):""}${pfw("stream","codec",ro("Кодек",`${p.codec}${p.profile&&p.codec!=="MJPEG"?` · ${p.profile}`:""}${p.smart?` · ${i18n("умный кодек")}`:""}`))}${pfw("stream","res",ro("Разрешение",(res||"—").replace("x","×")))}${pfw("stream","fps",ro("Кадров в секунду",fps??"—"))}${ro("Битрейт",`${p.brc==="cbr"?i18n("постоянный"):i18n("переменный, до")} ${cvKbpsText(p.kbps)}`)}${ro("Опорный кадр",`${i18n("каждые")} ${p.gop} ${i18n("кадров")}`)}${dprofOpts?.length?ro("Профиль потока камеры",p.dprof||i18n("выбирает драйвер")):""}${ro("В просмотре",i18n(p.live?"да":"нет"))}</div></div>`;
+  if(!con)return`<div class="cv-col" data-stream="${escHtml(sid)}">${head}<div class="cv-g">${urlF}${onOk?ro("Поток включён",i18n(off?"нет":"да")):""}${pfw("stream","codec",ro("Кодек",`${p.codec}${p.profile&&p.codec!=="MJPEG"?` · ${p.profile}`:""}${p.smart?` · ${i18n("умный кодек")}`:""}`))}${pfw("stream","res",ro("Разрешение",(res||"—").replace("x","×")))}${pfw("stream","fps",ro("Кадров в секунду",fps??"—"))}${ro("Битрейт",`${p.brc==="cbr"?i18n("постоянный"):i18n("переменный, до")} ${cvKbpsText(p.kbps)}`)}${ro("Опорный кадр",`${i18n("каждые")} ${p.gop} ${i18n("кадров")}`)}${dprofOpts?.length?ro("Профиль потока камеры",p.dprof||i18n("выбирает драйвер")):""}${ro("В просмотре",i18n(p.live?"да":"нет"))}</div></div>`;
   if(!dev){
     // Поля консоли открыты, параметры устройства — текстом
     const prof=dprofOpts?.length?sel("Профиль потока камеры","dprof",[["",i18n("выбирает драйвер")],...dprofOpts],p.dprof||""):"";
-    return`<div class="cv-col" data-stream="${escHtml(sid)}">${head}<div class="cv-g">
+    return`<div class="cv-col" data-stream="${escHtml(sid)}">${head}<div class="cv-g">${urlF}
     ${onOk?`<div class="cv-f cv-f-chk"><label><input type="checkbox" data-cv-on ${off?"":"checked"} ${onEv("change",["cvStubSet",`${id}`,`${sid}`,"on",onEv.checked])}>${i18n("Поток включён")}</label><small class="sub">${i18n("Если поток выключен, сервер не берёт его с камеры. Тогда у потока нет видео, записи и детекторов.")}</small></div>`:""}
     ${prof}
     ${pfw("stream","codec",ro("Кодек",`${p.codec}${p.profile&&p.codec!=="MJPEG"?` · ${p.profile}`:""}${p.smart?` · ${i18n("умный кодек")}`:""}`))}${pfw("stream","res",ro("Разрешение",(res||"—").replace("x","×")))}${pfw("stream","fps",ro("Кадров в секунду",fps??"—"))}${ro("Битрейт",`${p.brc==="cbr"?i18n("постоянный"):i18n("переменный, до")} ${cvKbpsText(p.kbps)}`)}${ro("Опорный кадр",`${i18n("каждые")} ${p.gop} ${i18n("кадров")}`)}
@@ -24720,7 +24727,7 @@ function cvStreamColHtml(n,s,i,c,ed,dev){
   const resF=`<div class="cv-f"${pfa("stream","res")}><label>${i18n("Разрешение")}</label>${resInput(resOpts,res,["cvPend",`${id}`,`${sid}`,"res",onEv.value]).replace(/^<(select|input) /,`<$1 data-df="Разрешение" `)}</div>`;
   const fpsF=`<div class="cv-f"${pfa("stream","fps")}><label>${i18n("Кадров в секунду")}</label><span class="cv-num"><input type="number" min="1" value="${escHtml(fps??"")}" ${onEv("change",["cvPend",`${id}`,`${sid}`,"fps",onEv.value])}><small>${i18n("к/с")}</small></span></div>`;
   const chk=(k,l,hint,on)=>`<div class="cv-f cv-f-chk"><label><input type="checkbox" data-cv-${k} ${on?"checked":""} ${onEv("change",["cvStubSet",`${id}`,`${sid}`,k,onEv.checked])}>${i18n(l)}</label>${hint?`<small class="sub">${i18n(hint)}</small>`:""}</div>`;
-  return`<div class="cv-col" data-stream="${escHtml(sid)}">${head}<div class="cv-g">
+  return`<div class="cv-col" data-stream="${escHtml(sid)}">${head}<div class="cv-g">${urlF}
     ${onOk?`<div class="cv-f cv-f-chk"><label><input type="checkbox" data-cv-on ${off?"":"checked"} ${onEv("change",["cvStubSet",`${id}`,`${sid}`,"on",onEv.checked])}>${i18n("Поток включён")}</label><small class="sub">${i18n("Если поток выключен, сервер не берёт его с камеры. Тогда у потока нет видео, записи и детекторов.")}</small></div>`:""}
     ${dprofOpts?.length?sel("Профиль потока камеры","dprof",[["",i18n("выбирает драйвер")],...dprofOpts],p.dprof||""):""}
     ${pfw("stream","codec",sel("Кодек","codec",CV_CODECS,p.codec))}${p.codec==="MJPEG"?"":sel("Профиль кодека","profile",CV_PROFILES,p.profile)}
@@ -24752,6 +24759,7 @@ function cvModeSet(id,mode){
 }
 function cvStubSet(id,sid,k,v){
   const n=find(id)?.n;if(!n)return;const p=cvCfgOf(n).streams[sid];if(!p)return;
+  if(k==="url")v=String(v).trim();
   cvParamPut(n,sid,k,k==="kbps"||k==="gop"?Math.max(k==="kbps"?64:1,Math.round(+v)||p[k]):v);   // kbps: minimum 64 в схеме потока
   if((n.streams||[]).some(x=>x.id===sid))setD(true);
   mainSeen.html=null;gear();// поле покажет значение после поправки, даже если разметка та же
@@ -38953,7 +38961,7 @@ function gbtUseRef(){
 }
 function updateManual(key,value){
   wizd.manual[key]=value;
-  if(key==="rtsp")rtspChPreview();
+  if(key==="rtsp"){rtspChPreview();const h=document.getElementById("devRtspUrls");if(h)h.innerHTML=rtspUrlsHintHtml(value)}
   // Модель N_channel_device, набранную руками, консоль понимает так же, как выбор в поле «Каналы»
   if(key==="model"&&manualIsRtsp(wizd.manual)){const n=rtspModelChannels(value);if(n&&n!==rtspChannelsOf(wizd.manual)){changeManualChannels(n);return}}
   if((key==="ip"||key==="port")&&manualIsGbt(wizd.manual))gbtNotePaint();
@@ -39191,7 +39199,7 @@ function deviceManualHtml(){
       <div><label>Производитель</label>${comboVendorHtml(m.vendor,["changeManualVendor"],{inline:false})}</div>
       <div><label>Модель</label><div class="inline-field">${comboModelHtml(m.vendor,m.model,["updateManual","model"],{inline:false,ph:rtsp?i18n("Необязательно"):""})}${rtsp||gbt||handOf(m,"acfa")?"":`<button type="button" class="btn s" data-tip="Определить модель по данным подключения" ${onEv("click",["detectManualModel"])}>${ic("search")} Определить</button>`}</div></div>
       ${rtsp?`<div><label>${i18n("Каналы")}</label><input type="number" min="1" max="${RTSP_CH_MAX}" value="${chN}" data-tip="${i18n("Ввести число каналов регистратора. Один канал — одна камера.")}" ${onEv("change",["changeManualChannels",onEv.value])}></div>
-      <div class="full"><label>${chN>1?i18n("Шаблон адреса RTSP"):"RTSP"}</label><input id="devManIp" value="${escHtml(m.rtsp||"")}" placeholder="${chN>1?"rtsp://адрес:554/ch{канал}":"rtsp://адрес:554/поток"}" ${onEv("input",["updateManual","rtsp",onEv.value])}>${chN>1?`<p class="rtsp-ch-hint">${i18n("Вместо {канал} консоль подставит номер канала: 1, 2, 3…")}</p>`:""}</div>
+      <div class="full"><label>${chN>1?i18n("Шаблон адреса RTSP"):"RTSP"}</label><input id="devManIp" value="${escHtml(m.rtsp||"")}" placeholder="${chN>1?"rtsp://адрес:554/ch{канал}":"rtsp://адрес:554/поток"}" ${onEv("input",["updateManual","rtsp",onEv.value])}>${chN>1?`<p class="rtsp-ch-hint">${i18n("Вместо {канал} консоль подставит номер канала: 1, 2, 3…")}</p>`:cvSrvOk("rtspUrl")?`<p class="rtsp-ch-hint" id="devRtspUrls" aria-live="polite">${rtspUrlsHintHtml(m.rtsp)}</p>`:""}</div>
       ${chN>1?rtspChannelsHtml(m,chN):""}`
       :gbt?`<div class="full"><label>${i18n("Адрес GB/T28181")}</label><input id="devManIp" class="${String(m.ip||"").trim()&&gbtBlock(m)&&gbtBlock(m)!==GBT_WAIT?"gbt-bad":""}" value="${escHtml(m.ip)}" placeholder="34020000001320000008@34020000002000000001" spellcheck="false" autocomplete="off" ${onEv("input",["updateManual","ip",onEv.value])}></div>
       <div class="gbt-note" id="gbtNote" aria-live="polite">${gbtNoteHtml(m)}</div>
@@ -39915,6 +39923,9 @@ function planAddManual(){
   const rtsp=manualIsRtsp(m);
   const chN=rtspChannelsOf(m);
   if(rtsp&&chN<2&&!String(m.rtsp||"").trim()){toast(i18n("Укажите адрес RTSP"));return}
+  // Несколько адресов через «;» (пробел AX1): первый — адрес камеры, остальные — потоки камеры со своим адресом
+  const urls=rtsp&&chN<2&&cvSrvOk("rtspUrl")?rtspUrlsSplit(m.rtsp):[];
+  if(urls.length>RTSP_URLS_MAX){toast(i18n("Ввести не больше трёх адресов RTSP через «;»"));document.getElementById("devManIp")?.focus();return}
   const gbtErr=gbtBlock(m);
   if(gbtErr){toast(i18n(gbtErr));document.getElementById("devManIp")?.focus();return}
   const fe=manualFieldErrors(m,true),feKey=["ip","ipTo","port"].find(k=>fe[k]);
@@ -39926,7 +39937,7 @@ function planAddManual(){
   if(m.type!=="camera"&&!acfa&&(!m.ip||!m.vendor||!m.model)){toast(i18n("Заполните IP, производителя и модель"));return}
   // Уходит только адрес, который виден в форме: набранный раньше другой адрес в строку не попадает
   const addrNorm=!rtsp&&!manualIsGbt(m)&&!handOf(m,"eventsrc");
-  const r={...m,ip:rtsp||acfa?"":addrNorm?manualNormIp(m.ip):m.ip,port:rtsp||acfa?80:manualNormPort(m.port),rtsp:rtsp?m.rtsp:"",rtspUrl:rtsp?m.rtsp:"",channels:chN,chUrls:chN>1?{...(m.chUrls||{})}:{},status:"ok",...(manualIsGbt(m)?{user:"",pass:""}:{})};
+  const r={...m,ip:rtsp||acfa?"":addrNorm?manualNormIp(m.ip):m.ip,port:rtsp||acfa?80:manualNormPort(m.port),rtsp:rtsp?(urls[0]||m.rtsp):"",rtspUrl:rtsp?(urls[0]||m.rtsp):"",rtspMore:urls.slice(1),channels:chN,chUrls:chN>1?{...(m.chUrls||{})}:{},status:"ok",...(manualIsGbt(m)?{user:"",pass:""}:{})};
   const sid=planServerId();
   if(manualIsRange(m)){planAddManualRange(m,r,sid);return}
   if(planAddrKey(r,"")!=="|:80"&&planFindByAddr(r,SERVER_DOMAIN[sid]||wizd.domain)){planDone(0,1);return}
@@ -40040,10 +40051,18 @@ function planSetField(row,key,value){
     if(value!==was&&manualModels(value).length&&!manualModels(value).includes(row.r.model))row.r.model=manualModels(value)[0];
   }
   if(key==="arch"){if(!value)row.r.record="none";row.archWas=null}
-  if(key==="rtspUrl")row.r.rtsp=value;
+  if(key==="rtspUrl"){
+    // Адреса через «;» и в строке плана: первый — адрес камеры, остальные — потоки (пробел AX1)
+    const urls=rtspUrlsSplit(value);
+    if(urls.length>1&&rtspChannelsOf(row.r)<2&&cvSrvOk("rtspUrl")){row.r.rtspUrl=urls[0];row.r.rtspMore=urls.slice(1,RTSP_URLS_MAX)}
+    else row.r.rtspMore=[];
+    row.r.rtsp=row.r.rtspUrl;
+  }
+  if(key==="vendor"&&!isRtspVendor(value))row.r.rtspMore=[];
   if(key==="channels"||key==="model"&&isRtspVendor(row.r.vendor)&&rtspModelChannels(value)){
     const n=key==="channels"?Math.max(1,Math.min(RTSP_CH_MAX,parseInt(value,10)||1)):rtspModelChannels(value);
     row.r.channels=n;
+    if(n>1)row.r.rtspMore=[];
     if(n>1)row.r.model=rtspChannelModel(n);else if(key==="channels"&&rtspModelChannels(row.r.model))row.r.model="";
   }
   if(key==="arch")row.archSkip=null;
@@ -40112,6 +40131,33 @@ function planConnError(row){
   if(row.source==="manual"){const fe=manualFieldErrors({...r,ipMode:"one"},true);const e=fe.ip||fe.port;if(e)return e}
   if(!r.vendor||!r.model)return"Указать производителя и модель";
   return"";
+}
+// ── Адреса RTSP потоков (пробел AX1, профиль vms.stream/1 1.3) ──
+// В Axxon One поле адреса RTSP принимает до трёх адресов через «;»: основной поток и дополнительные. Консоль делит строку:
+// первый адрес — rtspUrl камеры, остальные — rtspUrl потоков камеры. Сервер потоки по адресам сам не создаёт: консоль после
+// добавления камеры правит её второй поток (если он есть и адреса у него нет) и создаёт недостающие (POST /units)
+const RTSP_URLS_MAX=3;
+function rtspUrlsSplit(v){return String(v||"").split(";").map(x=>x.trim()).filter(Boolean)}
+function rtspUrlsHintHtml(v){
+  const n=rtspUrlsSplit(v).length;
+  if(n>RTSP_URLS_MAX)return`<span class="rtsp-urls-bad">${i18n("Адресов")}: ${n}. ${i18n("Ввести не больше трёх адресов RTSP через «;»")}.</span>`;
+  if(n>1)return`${i18n("Консоль добавит камеру с потоками")}: ${n}. ${i18n("Первый адрес — основной поток.")}`;
+  return i18n("Для дополнительных потоков ввести их адреса через «;», всего до трёх адресов.");
+}
+function planRtspStreams(rows,done){
+  const jobs=[];
+  done.forEach(d=>{
+    const more=rows[d.index]?.r?.rtspMore||[],u=d.units.find(x=>hasStreams(x.kind));
+    if(!more.length||!u)return;
+    const have=find(u.uid)?.n?.streams||[];
+    jobs.push(more.reduce((p,url,k)=>p.then(()=>{
+      const s=have[k+1];
+      if(s?.uid&&!s.rtspUrl)return API.patch(`/units/${s.uid}`,{properties:{rtspUrl:url}},hwVer.get(s.uid)).then(x=>{if(x?.version!=null)hwVer.set(s.uid,x.version)});
+      return unitsCreate([{kind:kindToCreate("stream",u.kind),parentId:u.uid,name:`${i18n("Поток")} ${k+2}`,properties:{rtspUrl:url}}]);
+    }),Promise.resolve()).then(()=>hwStreamsRead(u.uid)));
+  });
+  if(!jobs.length)return;
+  Promise.all(jobs).then(()=>{mainSeen.html=null;paint()}).catch(e=>toast(`${i18n("Консоль не добавила потоки RTSP")}: ${problemText(e)}`));
 }
 // Камера ли строка: у регистратора из файла архива нет
 function planIsRtsp(r){return!!(r.rtspUrl||r.rtsp)||((r.type||"camera")==="camera"&&isRtspVendor(r.vendor))}
@@ -40228,6 +40274,7 @@ function planSend(rows,retry){
     addPlan.rows=addPlan.rows.filter(x=>!gone.has(x));
     addPlan.added=got;
     planRecRulesCreate(rows,res.done);
+    planRtspStreams(rows,res.done);
     addPlan.last={done:(retry&&addPlan.last?addPlan.last.done:0)+res.done.length};
     treeMatchCache.clear();searchMatchCache.clear();
     toast(res.failed.length?`${i18n("Добавлено")} ${res.done.length} · ${i18n("не добавлено")} ${res.failed.length}`:`${i18n("Добавлено устройств")}: ${res.done.length}`);
@@ -40270,7 +40317,8 @@ function planRowTitle(row){
   const addr=r.ip?`${r.ip}${r.port&&+r.port!==80?":"+r.port:""}`:"";
   const chN=planRowChannels(row);
   const model=[r.vendor,r.model].filter(Boolean).join(" ")+(chN>1?` · ${chN} ${i18n(plural(chN,"канал|канала|каналов"))}`:"");
-  return{title:named?r.name:(addr||r.rtspUrl||r.rtsp||"—"),sub:named?[addr,model].filter(Boolean).join(" · "):model};
+  const more=r.rtspMore?.length?`${i18n("потоки")}: ${r.rtspMore.join(", ")}`:"";
+  return{title:named?r.name:(addr||r.rtspUrl||r.rtsp||"—"),sub:[...(named?[addr]:[]),model,more].filter(Boolean).join(" · ")};
 }
 function planRowHeadHtml(row){
   const f=planFailIssue(row),iss=planRowIssues(row),lock=addPlan.applying;

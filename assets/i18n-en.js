@@ -4631,4 +4631,15 @@ window.I18N_EN={
 "Показать джойстик и кнопки поворота":"Show the joystick and the pan buttons",
 "Скрыть джойстик и кнопки поворота. Камеру можно поворачивать мышью по кадру":"Hide the joystick and the pan buttons. You can turn the camera with the mouse on the frame",
 "Тянуть кадр мышью — поворот, колесо — зум":"Drag the frame to turn, use the wheel to zoom",
+// Адрес RTSP потока (пробел AX1, профиль vms.stream/1 1.3)
+"Ввести не больше трёх адресов RTSP через «;»":"Enter no more than three RTSP addresses separated by «;»",
+"Адресов":"Addresses",
+"Консоль добавит камеру с потоками":"The console will add the camera with streams",
+"Первый адрес — основной поток.":"The first address is the main stream.",
+"Для дополнительных потоков ввести их адреса через «;», всего до трёх адресов.":"For extra streams, enter their addresses separated by «;», up to three addresses in total.",
+"Консоль не добавила потоки RTSP":"The console did not add the RTSP streams",
+"потоки":"streams",
+"адрес камеры":"camera address",
+"адрес RTSP":"RTSP address",
+"Пустое поле — поток идёт по адресу камеры.":"Empty field: the stream uses the camera address.",
 };
