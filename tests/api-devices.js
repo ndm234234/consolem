@@ -288,9 +288,21 @@
     const ok = await env.ok("PATCH", U(s.uid), { name: "Ворота", properties: { enabled: false, norm: "closed" } }, v(s));
     assert.eq([ok.name, ok.properties.enabled, ok.properties.norm], ["Ворота", false, "closed"], "имя, включение, norm");
     const ch = await ofKind(env, "channel");
-    field(await patch(env, ch, { name: "x" }), "NOT_SUPPORTED", "/name", "у канала ничего");
+    field(await patch(env, ch, { name: "x" }), "NOT_SUPPORTED", "/name", "имя канала не правится");
     const st = await ofKind(env, "storage", (u) => u.writable && u.writable.join() === "replication");
     assert.status(await props(env, st, { enabled: false }), 422, null, "у хранилища ничего");
+  });
+
+  kindTest("channel", "Канал ввода-вывода: включение правится (enable), номер и имя — нет", async () => {
+    const env = await makeEnv();
+    const ch = await ofKind(env, "channel");
+    assert.ok(!ch.writable || ch.writable.includes("enabled"), "Unit.writable не закрывает enabled");
+    const off = await env.ok("PATCH", U(ch.uid), { properties: { enabled: false } }, v(ch));
+    assert.eq(off.properties.enabled, false, "канал выключен");
+    const on = await env.ok("PATCH", U(ch.uid), { properties: { enabled: true } }, v(off));
+    assert.eq(on.properties.enabled, true, "канал включён");
+    field(await props(env, on, { channel: 9 }), "VALIDATION_FAILED", P("channel"), "номер не правится");
+    field(await patch(env, on, { name: "x" }), "NOT_SUPPORTED", "/name", "имя не правится");
   });
 
   test("Схемы видов: параметров pulse, debounce, gain, vol, acodec нет; у входа и выхода — norm", async () => {

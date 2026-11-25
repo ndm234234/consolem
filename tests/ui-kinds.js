@@ -27,9 +27,9 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   ok(main().textContent.includes("Нормальное состояние") && !/Задержка срабатывания|Импульс/.test(main().textContent), "параметры — из справочника: только norm");
   ok(!!main().querySelector('.sw[role="switch"]'), "включение правится");
 
-  // Канал и хранилище — только чтение, без переключателя
+  // Канал — только переключатель «Включён» (вид channel: enable); хранилище — только чтение, без переключателя
   open(of("channel").id);
-  ok(!main().querySelector('.sw[role="switch"]') && !main().querySelector("[data-df]"), "у канала ничего не правится");
+  ok(!!main().querySelector('.sw[role="switch"]') && !main().querySelector("[data-df]"), "у канала правится только включение");
   open(of("storage").id);
   ok(!main().querySelector('.sw[role="switch"]') && !main().querySelector("[data-df]"), "у встроенного хранилища ничего не правится");
   const owner = devices.find((d) => d.type === "camera" && devices.some((x) => x.parentId === d.id && x.type === "storage"));
