@@ -1018,6 +1018,23 @@
     assert.status(await env.call("PUT", `${U(c.uid)}/ptz`, { pan: 1, ttlSec: 1 }), 409, "DEVICE_OFFLINE", "без связи");
   }, { needs: ["putUnitPtz", "deleteUnitPtz", "implements:vms.ptz/1"] });
 
+  test("PTZ выключен (ptzEnabled: false) — аренда и положение пресета 422 field /properties/ptzEnabled; телеметрия через порт хранится", async () => {
+    const env = await makeEnv();
+    const c = await ptzCam(env);
+    const srv = (await env.pages("/units?kind=server&limit=10"))[0];
+    const r = await patch(env, c, { properties: { ptzEnabled: false, ptzSource: "port", ptzPort: { unitId: srv.uid, port: "COM1" }, ptzProtocol: "Pelco-D", ptzAddress: 3 } });
+    assert.status(r, 200);
+    const off = r.body;
+    assert.eq([off.properties.ptzEnabled, off.properties.ptzSource, off.properties.ptzPort, off.properties.ptzAddress], [false, "port", { unitId: srv.uid, port: "COM1" }, 3], "поля телеметрии хранятся");
+    field(await env.call("PUT", `${U(c.uid)}/ptz`, { pan: 0.5, ttlSec: 3 }), "NOT_SUPPORTED", P("ptzEnabled"), "аренда при выключенном");
+    field(await env.call("PUT", `${U(c.uid)}/presets/1`, {}), "NOT_SUPPORTED", P("ptzEnabled"), "положение при выключенном");
+    assert.status(await env.call("PUT", `${U(c.uid)}/presets/1`, { name: "Вход" }), 200, null, "подпись пресета — правка, ptzEnabled её не судит");
+    assert.status(await patch(env, await get(env, c.uid), { properties: { ptzAddress: 256 } }), 422, "VALIDATION_FAILED", "адрес до 255");
+    const on = await patch(env, await get(env, c.uid), { properties: { ptzEnabled: true } });
+    assert.status(on, 200);
+    assert.ok(Date.parse((await env.ok("PUT", `${U(c.uid)}/ptz`, { pan: 0.5, ttlSec: 3 })).expiresAt) > 0, "включён — аренда снова есть");
+  }, { needs: ["patchUnit", "putUnitPtz", "putUnitPreset", "implements:vms.ptz/1", "kind:server"], layer: "profile:vms.ptz/1", since: "1.1" });
+
   /* ===== Источник событий ===== */
 
   const pos = (over) => ({ kind: "eventsrc", name: "Касса", domainId: d1.id, properties: Object.assign({ vendor: "PosXml", model: "PosXml Device", ip: "10.3.3.3", port: 2600 }, over) });

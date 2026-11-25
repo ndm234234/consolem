@@ -4513,7 +4513,7 @@
     const notFound = (what) => problem(404, "NOT_FOUND", `${what} не найден(а)`);
     // Путь ядра /units/{uid}/…: вид объекта реализует профиль. field отказа — указатель: свойство объекта — /properties/…,
     // поле тела — /<имя> (тело — та же схема, что у старого пути), тип записи — /kind
-    const SUBJECT_POINTER = { type: "/kind", ptz: "/properties/ptz", direct: "/properties/direct" };
+    const SUBJECT_POINTER = { type: "/kind", ptz: "/properties/ptz", ptzEnabled: "/properties/ptzEnabled", direct: "/properties/direct" };
     function subject(uid, profile, fn) {
       const u = store.get(uid);
       if (!u) return notFound("Объект");

@@ -245,7 +245,8 @@ UiCheck(async ({ ok, until, confirmWith }) => {
 
   // Пресеты: движение арендой, пресет запоминается, в правиле — выбор из списка
   const ptz = of("camera", (d) => d.ptz && d.presets?.length);
-  open(ptz.id, "vid");
+  // Пресеты — на вкладке «PTZ», если она есть у камеры (прототип 96), иначе на «Видео»
+  open(ptz.id, tabsForHand(ptz).some(([id]) => id === "ptz") ? "ptz" : "vid");
   ok(main().textContent.includes("Пресеты") && main().querySelector("[data-preset]"), "карточка пресетов");
   ok(!!main().querySelector("[data-preset] input") && !!main().querySelector("[data-preset-max]"), "имя вводится, предел номера виден");
   ok(!(TF_CAM.some((t) => t[0] === "ptz")), "вида PTZ в фильтрах нет");

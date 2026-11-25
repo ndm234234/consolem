@@ -3937,6 +3937,108 @@
        }
       },
       "description": "Чьи настройки у параметров x-dev: device — консоль показывает то, что сообщило устройство, поля x-dev только для чтения; console — консоль передаёт значения в устройство. Нет поля — device. Axxon One: blockingConfiguration (device — «Использовать настройки устройства»). Профиль vms.camera/1 1.4"
+     },
+     "ptzEnabled": {
+      "x-label": {
+       "key": "field.ptzEnabled",
+       "text": "Включить PTZ",
+       "lang": "ru"
+      },
+      "type": "boolean",
+      "default": true,
+      "description": "«Включить»: false — оператор не поворачивает камеру: аренда движения (PUT ptz) и запись положения пресета — 422 NOT_SUPPORTED, туры и патрулирование не идут. Поля нет — включён. Профиль vms.ptz/1 1.1"
+     },
+     "ptzSource": {
+      "x-label": {
+       "key": "field.ptzSource",
+       "text": "Телеметрия",
+       "lang": "ru"
+      },
+      "type": "string",
+      "enum": [
+       "self",
+       "port"
+      ],
+      "default": "self",
+      "x-enum-labels": {
+       "self": {
+        "key": "enum.ptzSource.self",
+        "text": "Сама камера (ONVIF)",
+        "lang": "ru"
+       },
+       "port": {
+        "key": "enum.ptzSource.port",
+        "text": "Порт другого устройства",
+        "lang": "ru"
+       }
+      },
+      "description": "«Телеметрия»: self — поворотом управляет сама камера (её драйвер, ONVIF); port — поворотное устройство на порту другого устройства (ptzPort); подключив его, сервер ставит камере ptz: true. Поля нет — self. Профиль vms.ptz/1 1.1"
+     },
+     "ptzPort": {
+      "x-label": {
+       "key": "field.ptzPort",
+       "text": "Порт",
+       "lang": "ru"
+      },
+      "type": [
+       "object",
+       "null"
+      ],
+      "properties": {
+       "unitId": {
+        "type": "string",
+        "format": "uuid",
+        "x-ref": {
+         "kinds": [
+          "server",
+          "channel"
+         ]
+        }
+       },
+       "port": {
+        "type": "string",
+        "examples": [
+         "RS-485",
+         "COM1",
+         "COM2"
+        ]
+       }
+      },
+      "required": [
+       "unitId",
+       "port"
+      ],
+      "additionalProperties": false,
+      "description": "«Порт»: порт телеметрии при ptzSource port — порт RS-485 канала IP-сервера или COM-порт сервера (unitId — объект с портом, port — имя порта). Скорость и чётность задают у порта: они общие для всех устройств на линии. Нет поля — порт не выбран. Профиль vms.ptz/1 1.1"
+     },
+     "ptzProtocol": {
+      "x-label": {
+       "key": "field.ptzProtocol",
+       "text": "Протокол",
+       "lang": "ru"
+      },
+      "type": "string",
+      "examples": [
+       "Pelco-D",
+       "Pelco-P",
+       "Bosch (Philips)",
+       "Panasonic",
+       "Samsung",
+       "Vicon"
+      ],
+      "description": "«Протокол»: протокол поворотного устройства при ptzSource port. Набор зависит от сервера; examples — подсказки. Профиль vms.ptz/1 1.1"
+     },
+     "ptzAddress": {
+      "x-label": {
+       "key": "field.ptzAddress",
+       "text": "Адрес",
+       "lang": "ru"
+      },
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255,
+      "default": 1,
+      "description": "«Адрес»: адрес поворотного устройства на линии при ptzSource port; совпадает с переключателями на устройстве. Поля нет — 1. Профиль vms.ptz/1 1.1"
      }
     },
     "allOf": [
@@ -5556,12 +5658,11 @@
          },
          "x-ui-group": {
           "key": "group.camera.ptz",
-          "text": "Поворотное устройство (PTZ)",
+          "text": "Патрулирование и предустановки",
           "lang": "ru"
          },
          "x-ui-order": 60,
          "default": false,
-         "x-dev": true,
          "x-hidden": false
         },
         "homePreset": {
@@ -5578,14 +5679,13 @@
          },
          "x-ui-group": {
           "key": "group.camera.ptz",
-          "text": "Поворотное устройство (PTZ)",
+          "text": "Патрулирование и предустановки",
           "lang": "ru"
          },
          "x-ui-order": 63,
          "minimum": 0,
          "maximum": 999999999,
          "default": 0,
-         "x-dev": true,
          "x-hidden": false
         },
         "homePresetTimeout": {
@@ -5602,7 +5702,7 @@
          },
          "x-ui-group": {
           "key": "group.camera.ptz",
-          "text": "Поворотное устройство (PTZ)",
+          "text": "Патрулирование и предустановки",
           "lang": "ru"
          },
          "x-ui-order": 64,
@@ -5610,7 +5710,6 @@
          "maximum": 999999999,
          "default": 0,
          "x-ui-unit": "мс",
-         "x-dev": true,
          "x-hidden": false
         },
         "savePresetsOnDevice": {
@@ -5627,12 +5726,11 @@
          },
          "x-ui-group": {
           "key": "group.camera.ptz",
-          "text": "Поворотное устройство (PTZ)",
+          "text": "Патрулирование и предустановки",
           "lang": "ru"
          },
          "x-ui-order": 65,
          "default": false,
-         "x-dev": true,
          "x-hidden": false
         },
         "useDevicePresets": {
@@ -5649,12 +5747,11 @@
          },
          "x-ui-group": {
           "key": "group.camera.ptz",
-          "text": "Поворотное устройство (PTZ)",
+          "text": "Патрулирование и предустановки",
           "lang": "ru"
          },
          "x-ui-order": 66,
          "default": false,
-         "x-dev": true,
          "x-hidden": false
         },
         "enableMultipleControl": {
@@ -5671,12 +5768,11 @@
          },
          "x-ui-group": {
           "key": "group.camera.ptz",
-          "text": "Поворотное устройство (PTZ)",
+          "text": "Патрулирование и предустановки",
           "lang": "ru"
          },
          "x-ui-order": 67,
          "default": true,
-         "x-dev": true,
          "x-hidden": false
         },
         "discreteOverContinous": {
@@ -5693,12 +5789,11 @@
          },
          "x-ui-group": {
           "key": "group.camera.ptz",
-          "text": "Поворотное устройство (PTZ)",
+          "text": "Патрулирование и предустановки",
           "lang": "ru"
          },
          "x-ui-order": 68,
          "default": false,
-         "x-dev": true,
          "x-hidden": false
         }
        },
@@ -5730,7 +5825,7 @@
             },
             "x-ui-group": {
              "key": "group.camera.ptz",
-             "text": "Поворотное устройство (PTZ)",
+             "text": "Патрулирование и предустановки",
              "lang": "ru"
             },
             "x-ui-order": 61,
@@ -5738,7 +5833,6 @@
             "maximum": 600000,
             "default": 1,
             "x-ui-unit": "с",
-            "x-dev": true,
             "x-hidden": false
            },
            "patrolSpeed": {
@@ -5755,14 +5849,13 @@
             },
             "x-ui-group": {
              "key": "group.camera.ptz",
-             "text": "Поворотное устройство (PTZ)",
+             "text": "Патрулирование и предустановки",
              "lang": "ru"
             },
             "x-ui-order": 62,
             "minimum": 0,
             "maximum": 100,
             "default": 100,
-            "x-dev": true,
             "x-hidden": false
            }
           }
@@ -5906,79 +5999,6 @@
             "readOnly": true
            },
            "camMotionDelay": {
-            "readOnly": true
-           }
-          }
-         }
-        }
-       ]
-      }
-     },
-     {
-      "if": {
-       "properties": {
-        "driver": {
-         "enum": [
-          "onvif",
-          "native",
-          "onvif-channel",
-          "native-channel"
-         ]
-        },
-        "ptz": {
-         "const": true
-        },
-        "streamsMode": {
-         "const": "device"
-        }
-       },
-       "required": [
-        "driver",
-        "ptz"
-       ]
-      },
-      "then": {
-       "properties": {
-        "defaultEnablePatrol": {
-         "readOnly": true
-        },
-        "homePreset": {
-         "readOnly": true
-        },
-        "homePresetTimeout": {
-         "readOnly": true
-        },
-        "savePresetsOnDevice": {
-         "readOnly": true
-        },
-        "useDevicePresets": {
-         "readOnly": true
-        },
-        "enableMultipleControl": {
-         "readOnly": true
-        },
-        "discreteOverContinous": {
-         "readOnly": true
-        }
-       },
-       "allOf": [
-        {
-         "if": {
-          "properties": {
-           "defaultEnablePatrol": {
-            "const": true
-           }
-          },
-          "required": [
-           "defaultEnablePatrol"
-          ]
-         },
-         "then": {
-          "properties": {
-           "patrolTimeout": {
-            "readOnly": true
-           },
-           "patrolSpeed": {
             "readOnly": true
            }
           }
@@ -14933,11 +14953,16 @@
     "text": "PTZ",
     "lang": "ru"
    },
-   "version": "1.0",
+   "version": "1.1",
    "properties": [
     "ptz",
     "presets",
-    "presetMax"
+    "presetMax",
+    "ptzEnabled",
+    "ptzSource",
+    "ptzPort",
+    "ptzProtocol",
+    "ptzAddress"
    ],
    "apis": [
     "ptz",

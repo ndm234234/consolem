@@ -1,6 +1,6 @@
 {
  "id": "vms.ptz/1",
- "version": "1.0",
+ "version": "1.1",
  "label": "PTZ",
  "owner": "mockup",
  "reviewers": [
@@ -49,6 +49,86 @@
    },
    "meaning": "Предел номера пресета (только чтение)",
    "since": "1.0"
+  },
+  "ptzEnabled": {
+   "schema": {
+    "type": "boolean",
+    "default": true
+   },
+   "meaning": "«Включить»: false — оператор не поворачивает камеру: аренда движения (PUT ptz) и запись положения пресета — 422 NOT_SUPPORTED, туры и патрулирование не идут. Поля нет — включён",
+   "since": "1.1"
+  },
+  "ptzSource": {
+   "schema": {
+    "type": "string",
+    "enum": [
+     "self",
+     "port"
+    ],
+    "default": "self"
+   },
+   "meaning": "«Телеметрия»: self — поворотом управляет сама камера (её драйвер, ONVIF); port — поворотное устройство на порту другого устройства (ptzPort); подключив его, сервер ставит камере ptz: true. Поля нет — self",
+   "since": "1.1"
+  },
+  "ptzPort": {
+   "schema": {
+    "type": [
+     "object",
+     "null"
+    ],
+    "properties": {
+     "unitId": {
+      "type": "string",
+      "format": "uuid",
+      "x-ref": {
+       "kinds": [
+        "server",
+        "channel"
+       ]
+      }
+     },
+     "port": {
+      "type": "string",
+      "examples": [
+       "RS-485",
+       "COM1",
+       "COM2"
+      ]
+     }
+    },
+    "required": [
+     "unitId",
+     "port"
+    ],
+    "additionalProperties": false
+   },
+   "meaning": "«Порт»: порт телеметрии при ptzSource port — порт RS-485 канала IP-сервера или COM-порт сервера (unitId — объект с портом, port — имя порта). Скорость и чётность задают у порта: они общие для всех устройств на линии. Нет поля — порт не выбран",
+   "since": "1.1"
+  },
+  "ptzProtocol": {
+   "schema": {
+    "type": "string",
+    "examples": [
+     "Pelco-D",
+     "Pelco-P",
+     "Bosch (Philips)",
+     "Panasonic",
+     "Samsung",
+     "Vicon"
+    ]
+   },
+   "meaning": "«Протокол»: протокол поворотного устройства при ptzSource port. Набор зависит от сервера; examples — подсказки",
+   "since": "1.1"
+  },
+  "ptzAddress": {
+   "schema": {
+    "type": "integer",
+    "minimum": 0,
+    "maximum": 255,
+    "default": 1
+   },
+   "meaning": "«Адрес»: адрес поворотного устройства на линии при ptzSource port; совпадает с переключателями на устройстве. Поля нет — 1",
+   "since": "1.1"
   }
  },
  "apis": [
@@ -56,6 +136,10 @@
   "presets/{n}"
  ],
  "changes": [
+  {
+   "version": "1.1",
+   "what": "Пробел F38 (прототип 96): добавлены `ptzEnabled`, `ptzSource`, `ptzPort`, `ptzProtocol`, `ptzAddress` — включение PTZ и телеметрия через порт другого устройства. Встроенный сервер при `ptzEnabled: false` отказывает в аренде движения и записи положения пресета"
+  },
   {
    "version": "1.0",
    "what": "Профиль перенесён в файл из api/fixtures/demo.json и api/BACKEND.md, контракт 0.25.0. Поля до переноса — с 1.0; когда какое поле появилось в контракте — api/README.md, «Что добавлено в …»"

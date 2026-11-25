@@ -115,12 +115,13 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   ptz.direct = false;
   ok(/disabled/.test(ptzCardHtml(ptz).split('data-ptz="0"')[1].slice(0, 200)), "движение выключено");
   // ADR-0111 доп. (1): положение не запомнить, подпись сохраняется. Настоящим кликом
-  goTab("vid");
+  // Пресеты — на вкладке «PTZ», если она есть у камеры (прототип 96), иначе на «Видео»
+  goTab(tabsForHand(ptz).some(([id]) => id === "ptz") ? "ptz" : "vid");
   delete ptz.direct;
   if (!presetRows(ptz).length) await presetPut(ptz.id, 1, { name: "" });
   ptz.direct = false;
   gear();
-  ok(await until(() => document.querySelector("[data-preset-save]")), "пресеты на вкладке «Видео»");
+  ok(await until(() => document.querySelector("[data-preset-save]")), "пресеты на вкладке «PTZ» или «Видео»");
   const saveBtn = document.querySelector("[data-preset-save]"), presetNo = Number(saveBtn.closest("[data-preset]").dataset.preset);
   ok(saveBtn.disabled, "«Запомнить здесь» неактивна");
   ok(/за NAT/.test((saveBtn.title||saveBtn.dataset.tip)), "подсказка почему: " + (saveBtn.title||saveBtn.dataset.tip));

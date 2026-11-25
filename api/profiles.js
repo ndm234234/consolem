@@ -1578,6 +1578,8 @@
   const ptzKind = (rec, ctx) => ctx.kinds.profileOf(rec.type, "vms.ptz/1");
   function ptzProblem(rec, ctx) {
     if (!ptzKind(rec, ctx) || !rec.ptz) return ctx.problem(422, "NOT_SUPPORTED", "У камеры нет PTZ", { field: "ptz" });
+    // Профиль 1.1: PTZ выключен администратором — поворота нет, как у камеры без PTZ
+    if (rec.ptzEnabled === false) return ctx.problem(422, "NOT_SUPPORTED", "PTZ камеры выключен", { field: "ptzEnabled" });
     return rec.online === false ? ctx.problem(409, "DEVICE_OFFLINE", "Камера без связи") : null;
   }
   const presetCameraProblem = (rec, ctx) => (ptzKind(rec, ctx) ? null : ctx.problem(422, "NOT_SUPPORTED", "Пресеты бывают только у камеры", { field: "ptz" }));
