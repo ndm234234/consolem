@@ -4061,6 +4061,114 @@
       "maximum": 255,
       "default": 1,
       "description": "«Адрес»: адрес поворотного устройства на линии при ptzSource port; совпадает с переключателями на устройстве. Поля нет — 1. Профиль vms.ptz/1 1.1"
+     },
+     "tours": {
+      "x-label": {
+       "key": "field.tours",
+       "text": "Туры PTZ",
+       "lang": "ru"
+      },
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "id": {
+         "type": "string",
+         "minLength": 1,
+         "maxLength": 64
+        },
+        "name": {
+         "type": "string",
+         "minLength": 1,
+         "maxLength": 128
+        },
+        "steps": {
+         "type": "array",
+         "minItems": 1,
+         "items": {
+          "type": "object",
+          "properties": {
+           "preset": {
+            "type": "integer",
+            "minimum": 1
+           },
+           "dwellSec": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3600
+           },
+           "speed": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+           }
+          },
+          "required": [
+           "preset",
+           "dwellSec"
+          ],
+          "additionalProperties": false
+         }
+        },
+        "order": {
+         "type": "string",
+         "enum": [
+          "seq",
+          "random"
+         ],
+         "default": "seq"
+        },
+        "pauseSec": {
+         "type": "integer",
+         "minimum": 0,
+         "default": 0
+        },
+        "onManual": {
+         "type": "string",
+         "enum": [
+          "pause",
+          "stop"
+         ],
+         "default": "pause"
+        },
+        "resumeSec": {
+         "type": "integer",
+         "minimum": 5,
+         "default": 15
+        },
+        "resumeFrom": {
+         "type": "string",
+         "enum": [
+          "same",
+          "first"
+         ],
+         "default": "same"
+        },
+        "idleStartSec": {
+         "type": "integer",
+         "minimum": 10
+        }
+       },
+       "required": [
+        "id",
+        "name",
+        "steps"
+       ],
+       "additionalProperties": false
+      },
+      "description": "Туры PTZ камеры: тур водит камеру по пресетам. id — имя тура для команды правила ptz.tour; steps — точки: preset — номер пресета, dwellSec — сколько стоять, speed — скорость переезда (1–100, нет поля — скорость камеры); order — seq по списку или random; pauseSec — пауза между кругами; onManual — что делает тур, когда оператор взял управление: pause — пауза, через resumeSec без управления тур продолжает с той же точки (resumeFrom same) или с первой (first), stop — тур останавливается; idleStartSec — тур запускается сам, когда камерой не управляют столько секунд (так только один тур камеры). Пресет точки сервер не проверяет: пресет могли удалить позже, консоль показывает такую точку ошибкой. Пуск, пауза и состояние тура — API видео. Нет поля — туров нет. Профиль vms.ptz/1 1.3"
+     },
+     "tourMax": {
+      "type": "integer",
+      "description": "Только чтение: предел числа туров камеры. Нет поля — предел не задан. Профиль vms.ptz/1 1.3",
+      "minimum": 0,
+      "readOnly": true
+     },
+     "tourStepsMax": {
+      "type": "integer",
+      "description": "Только чтение: предел числа точек в туре. Нет поля — предел не задан. Профиль vms.ptz/1 1.3",
+      "minimum": 1,
+      "readOnly": true
      }
     },
     "allOf": [
@@ -15055,7 +15163,7 @@
     "text": "PTZ",
     "lang": "ru"
    },
-   "version": "1.2",
+   "version": "1.3",
    "properties": [
     "ptz",
     "presets",
@@ -15064,7 +15172,10 @@
     "ptzSource",
     "ptzPort",
     "ptzProtocol",
-    "ptzAddress"
+    "ptzAddress",
+    "tours",
+    "tourMax",
+    "tourStepsMax"
    ],
    "apis": [
     "ptz",
@@ -19324,6 +19435,28 @@
       ],
       "size": 64
      }
+    ],
+    "tourMax": 8,
+    "tourStepsMax": 16,
+    "tours": [
+     {
+      "id": "t1",
+      "name": "Обход входа",
+      "steps": [
+       {
+        "preset": 1,
+        "dwellSec": 10,
+        "speed": 50
+       },
+       {
+        "preset": 2,
+        "dwellSec": 15,
+        "speed": 50
+       }
+      ],
+      "onManual": "pause",
+      "resumeSec": 15
+     }
     ]
    },
    "status": {
@@ -20167,7 +20300,9 @@
     "presets": [],
     "presetMax": 8,
     "driver": "native",
-    "edgeStorage": true
+    "edgeStorage": true,
+    "tourMax": 4,
+    "tourStepsMax": 8
    },
    "status": {
     "link": "online",

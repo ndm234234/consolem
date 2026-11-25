@@ -1622,9 +1622,27 @@
     }
     return s;
   }
+  // Профиль 1.3 (пробел F40): туры камеры — по записи целиком. Схема проверила поля; здесь — то, что схема не скажет:
+  // id без повторов, запуск без оператора (idleStartSec) — у одного тура, пределы камеры tourMax и tourStepsMax.
+  // Пресет точки не проверяется: его могли удалить позже, консоль показывает такую точку ошибкой
+  function toursProblem(set, whole, ctx) {
+    if (!whole || !("tours" in set) || !Array.isArray(whole.tours)) return null;
+    const list = whole.tours, bad = (text, reason, params) => ctx.problem(422, "VALIDATION_FAILED", text, { field: "/properties/tours", params: Object.assign({ reason }, params) });
+    const ids = list.map((t) => t.id), twice = ids.find((x, i) => ids.indexOf(x) !== i);
+    if (twice !== undefined) return bad("У двух туров один id", "duplicateId", { id: twice });
+    const idle = list.filter((t) => t.idleStartSec != null);
+    if (idle.length > 1) return bad("Запускаться сам, когда камерой не управляют, может только один тур", "idleTwice", { ids: idle.map((t) => t.id) });
+    if (whole.tourMax != null && list.length > whole.tourMax) return bad("Туров больше, чем позволяет камера", "tourMax", { max: whole.tourMax });
+    const long = whole.tourStepsMax != null ? list.find((t) => t.steps.length > whole.tourStepsMax) : null;
+    if (long) return bad("Точек в туре больше, чем позволяет камера", "tourStepsMax", { id: long.id, max: whole.tourStepsMax });
+    return null;
+  }
 
   const ptz = {
     problem: ptzProblem,
+    beforeSet(u, patch, whole, ctx) {
+      return toursProblem(flat(patch), whole, ctx);
+    },
     // PUT presets/{n}: Problem | {same} — записи менять не надо | {presets} — новый состав (применяет сервер)
     put(rec, n, body, ctx) {
       // Имя устройству не идёт: связь и ptz его не судят

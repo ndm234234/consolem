@@ -1,6 +1,6 @@
 {
  "id": "vms.ptz/1",
- "version": "1.2",
+ "version": "1.3",
  "label": "PTZ",
  "owner": "mockup",
  "reviewers": [
@@ -151,6 +151,118 @@
    },
    "meaning": "«Адрес»: адрес поворотного устройства на линии при ptzSource port; совпадает с переключателями на устройстве. Поля нет — 1",
    "since": "1.1"
+  },
+  "tours": {
+   "schema": {
+    "type": "array",
+    "items": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string",
+       "minLength": 1,
+       "maxLength": 64
+      },
+      "name": {
+       "type": "string",
+       "minLength": 1,
+       "maxLength": 128
+      },
+      "steps": {
+       "type": "array",
+       "minItems": 1,
+       "items": {
+        "type": "object",
+        "properties": {
+         "preset": {
+          "type": "integer",
+          "minimum": 1
+         },
+         "dwellSec": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3600
+         },
+         "speed": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+         }
+        },
+        "required": [
+         "preset",
+         "dwellSec"
+        ],
+        "additionalProperties": false
+       }
+      },
+      "order": {
+       "type": "string",
+       "enum": [
+        "seq",
+        "random"
+       ],
+       "default": "seq"
+      },
+      "pauseSec": {
+       "type": "integer",
+       "minimum": 0,
+       "default": 0
+      },
+      "onManual": {
+       "type": "string",
+       "enum": [
+        "pause",
+        "stop"
+       ],
+       "default": "pause"
+      },
+      "resumeSec": {
+       "type": "integer",
+       "minimum": 5,
+       "default": 15
+      },
+      "resumeFrom": {
+       "type": "string",
+       "enum": [
+        "same",
+        "first"
+       ],
+       "default": "same"
+      },
+      "idleStartSec": {
+       "type": "integer",
+       "minimum": 10
+      }
+     },
+     "required": [
+      "id",
+      "name",
+      "steps"
+     ],
+     "additionalProperties": false
+    }
+   },
+   "meaning": "Туры PTZ камеры: тур водит камеру по пресетам. id — имя тура для команды правила ptz.tour; steps — точки: preset — номер пресета, dwellSec — сколько стоять, speed — скорость переезда (1–100, нет поля — скорость камеры); order — seq по списку или random; pauseSec — пауза между кругами; onManual — что делает тур, когда оператор взял управление: pause — пауза, через resumeSec без управления тур продолжает с той же точки (resumeFrom same) или с первой (first), stop — тур останавливается; idleStartSec — тур запускается сам, когда камерой не управляют столько секунд (так только один тур камеры). Пресет точки сервер не проверяет: пресет могли удалить позже, консоль показывает такую точку ошибкой. Пуск, пауза и состояние тура — API видео. Нет поля — туров нет",
+   "since": "1.3"
+  },
+  "tourMax": {
+   "schema": {
+    "type": "integer",
+    "minimum": 0,
+    "readOnly": true
+   },
+   "meaning": "Предел числа туров камеры (ONVIF MaximumNumberOfPresetTours, Axis MaxGuardTour). Нет поля — предел не задан (только чтение)",
+   "since": "1.3"
+  },
+  "tourStepsMax": {
+   "schema": {
+    "type": "integer",
+    "minimum": 1,
+    "readOnly": true
+   },
+   "meaning": "Предел числа точек в туре. Нет поля — предел не задан (только чтение)",
+   "since": "1.3"
   }
  },
  "apis": [
@@ -158,6 +270,10 @@
   "presets/{n}"
  ],
  "changes": [
+  {
+   "version": "1.3",
+   "what": "Пробел F40 (ответ на запрос 2026-11-08-174207Z-mockup-camera-video-streams-tours, п. 4): добавлены `tours` — туры PTZ камеры (имя, точки: пресет, сколько стоять, скорость переезда; порядок, пауза между кругами, правило ручного управления, запуск без оператора) — и пределы `tourMax`, `tourStepsMax`. Встроенный сервер отклоняет повтор `id`, второй тур с `idleStartSec` и выход за пределы: 422 VALIDATION_FAILED, `field: /properties/tours`. Пуск, пауза и состояние тура — API видео, не здесь"
+  },
   {
    "version": "1.2",
    "what": "Пробел F39: у пресета необязательные `savedOnDevice` и записанное положение `pan`, `tilt`, `zoom`; у `PtzMove` — `iris` (диафрагма). Встроенный сервер считает положение по аренде движения. Контракт 0.37.0"

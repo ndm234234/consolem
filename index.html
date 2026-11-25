@@ -6161,6 +6161,9 @@ function schemaDiffX(live,snap,owner,out){
     // Режим настроек устройства — словами переключателя; нет поля — "device"
     if(f==="streamsMode"){const t=v=>i18n(v==="console"?"включено":"выключено");
       out.push({node:live,key:"xprops",schemaProp:f,from,to,label:(live!==owner?`«${locName(live)}»: `:"")+i18n("Отправлять настройки устройству"),fromT:t(from),toT:t(to)});return}
+    // Туры PTZ (профиль vms.ptz/1 1.3) — одна строка: сколько было и что добавили, изменили, удалили
+    if(f==="tours"){
+      out.push({node:live,key:"xprops",schemaProp:f,from,to,label:(live!==owner?`«${locName(live)}»: `:"")+i18n("Туры PTZ"),fromT:cvToursCount(from),toT:cvToursDiffText(from,to)});return}
     // Надписи на кадре — одна строка: сколько было и что добавили, изменили, убрали
     if(f==="overlayTexts"){
       out.push({node:live,key:"xprops",schemaProp:f,from,to,label:(live!==owner?`«${locName(live)}»: `:"")+i18n("Надписи на кадре"),fromT:otCount((from||[]).length),toT:otDiffText(live,from,to)});return}
@@ -17076,14 +17079,14 @@ function csLeave(id){
 // считает правки всех вкладок, «Применить» отправляет их вместе: «Сервер записи» и потоки — отдельными запросами до
 // операции (camCallOf), остальное — шагами одной операции.
 // Параметры драйвера — свойства схемы объекта (drvSchema): их строки плана — строки базовой формы (key "xprops"), шаги patch.
-// ЗАГЛУШКА: кодек и битрейт потоков (cvCfg) и туры живут только в этой странице
-// (запрос api/requests/2026-11-08-174207Z-mockup-camera-video-streams-tours-request.md):
+// ЗАГЛУШКА: кодек и битрейт потоков (cvCfg) живут только в этой странице
+// (запрос api/requests/2026-11-08-174207Z-mockup-camera-video-streams-tours-request.md). Туры — свойство tours камеры (строка
+// плана в schemaDiffX):
 // их строки плана помечены stub, «Применить» оставляет значения, «Сбросить» возвращает значения до плана
-const camPlanBase=new Map();   // uid камеры → {cv: cvCfg потоков до плана, tours: туры до плана}
+const camPlanBase=new Map();   // uid камеры → {cv: cvCfg потоков до плана}
 function camPlanTouch(n,part){
   const b=camPlanBase.get(n.id)||{};
   if(part==="cv"&&!b.cv)b.cv=cardClone({v:cvCfgOf(n).streams}).v;
-  if(part==="tours"&&!b.tours){const st=cvToursOf(n);b.tours=cardClone({tours:st.tours,idleTour:st.idleTour,idleSec:st.idleSec})}
   if(part==="tt"&&!b.tt)b.tt=JSON.parse(JSON.stringify(ttOf(n)));
   camPlanBase.set(n.id,b);
 }
@@ -17136,7 +17139,7 @@ function camCallRun(n,r){
   if(r.streamDel){const uid=r.streamDel.uid;return API.del(`/units/${uid}`,hwVer.get(uid)).then(()=>hwVer.delete(uid))}
   return Promise.resolve();
 }
-// Строки плана из заглушек камеры: кодек и битрейт потоков, туры
+// Строки плана из заглушек камеры: кодек и битрейт потоков
 function camPlanRows(n,out){
   if(isSchemaNode(n)||n.type!=="camera"&&!handOf(n,"ipsrv"))return;
   const b=camPlanBase.get(n.id);
@@ -17149,15 +17152,6 @@ function camPlanRows(n,out){
     const srv=new Set((n.streams||[]).map(x=>x.id));   // объект потока: поля, которые сервер принимает, идут строкой PATCH потока (camStreamsDiff)
     Object.entries(cur).forEach(([sid,o])=>{const w=b.cv[sid];if(!w||!names.has(sid))return;   // новый поток — строка «Добавить: поток»
       Object.keys(CV_KEY_RU).forEach(k=>{if(srv.has(sid)&&cvSrvOk(CV_SRV[k]))return;if(JSON.stringify(o[k])!==JSON.stringify(w[k]))out.push({node:n,stub:"cv",label:`«${names.get(sid)}»: ${i18n(CV_KEY_RU[k])}`,fromT:cvValText(k,w[k]),toT:cvValText(k,o[k])})})});
-  }
-  if(b?.tours){
-    const st=cvToursOf(n),was=new Map(b.tours.tours.map(t=>[t.id,t])),now=new Map(st.tours.map(t=>[t.id,t])),lb=t=>`${i18n("Тур")} «${t.name}»`;
-    now.forEach((t,id)=>{const w=was.get(id);
-      if(!w)out.push({node:n,stub:"tours",label:lb(t),fromT:"—",toT:i18n("консоль добавит")});
-      else if(JSON.stringify(w)!==JSON.stringify(t))out.push({node:n,stub:"tours",label:lb(t),fromT:i18n("прежний"),toT:i18n("консоль изменит")})});
-    was.forEach((t,id)=>{if(!now.has(id))out.push({node:n,stub:"tours",label:lb(t),fromT:"—",toT:i18n("консоль удалит")})});
-    const idle=x=>{const t=x.tours.find(y=>y.id===x.idleTour);return t?`«${t.name}», ${i18n("через")} ${cvDur(x.idleSec)}`:"—"};
-    if(idle(b.tours)!==idle(st))out.push({node:n,stub:"tours",label:i18n("Тур, когда камерой не управляют"),fromT:idle(b.tours),toT:idle(st)});
   }
   ttPlanRows(n,b,out);
 }
@@ -17172,7 +17166,6 @@ function camPlanRestore(id){
   const n=find(id)?.n,b=camPlanBase.get(id);
   drvSnap.delete(id);
   if(n&&b?.cv){const cur=cvCfgOf(n).streams;Object.keys(b.cv).forEach(sid=>{cur[sid]=b.cv[sid]})}
-  if(n&&b?.tours){const t=cvToursOf(n);if(t.run&&!b.tours.tours.some(x=>x.id===t.run.tid))cvTourHalt(t);Object.assign(t,b.tours)}
   if(n&&b?.tt){Object.assign(ttOf(n),b.tt);if(cvCalib?.id===id)cvCalib=null}
   camPlanBase.delete(id);cvSnap.delete(id);csPlaceSnap.delete(id);webPlanForget(id);
   csBlkSnap.forEach((v,k)=>{if(k.startsWith(id+":"))csBlkSnap.delete(k)});
@@ -23391,12 +23384,13 @@ function cvJoyKey(id){
 let cvSideTab="pre";
 function cvPresetsHtml(n){
   if(cvTourEdit?.id===n.id)return`<section class="cv-sec cv-pre cv-ed">${cvTourEditorHtml(n,cvTourEdit.t)}</section>`;
-  return`<section class="cv-sec cv-pre">${cvSideTabsHtml(n)}<div class="cv-tab-body" data-cv-tab-body>${cvSideTab==="tours"?cvToursHtml(n):cvPresetListHtml(n)}</div></section>`;
+  return`<section class="cv-sec cv-pre">${cvSideTabsHtml(n)}<div class="cv-tab-body" data-cv-tab-body>${cvSideTab==="tours"&&cvToursOn(n)?cvToursHtml(n):cvPresetListHtml(n)}</div></section>`;
 }
 function cvSideTabsHtml(n){
   const st=cvToursOf(n),run=st.run,pl=presetRows(n).length;
-  const tab=(k,l,c,extra="")=>`<button type="button" role="tab" id="cv-tab-${k}" aria-selected="${cvSideTab===k}" tabindex="${cvSideTab===k?0:-1}" data-cv-tab="${k}" ${onEv("click",["cvSideTabSet",`${n.id}`,k])} ${onEv("keydown",["cvSideTabKey",`${n.id}`])}>${i18n(l)}<span>${c}</span>${extra}</button>`;
-  return`<div class="cv-tabs" role="tablist" aria-label="${i18n("Пресеты и туры")}">${tab("pre","Пресеты",`${nodeFieldOff(n,"presets")?"":pl}${n.presetMax&&!nodeFieldOff(n,"presetMax")?`<span data-preset-max> ${i18n("из")} ${n.presetMax}</span>`:""}`)}${tab("tours","Туры",st.tours.length,`<i class="cv-dot ${run?.paused?"pause":""}" data-cv-tour-dot ${run?"":"hidden"} data-tip="${i18n(run?.paused?"Тур на паузе":"Тур идёт")}"></i>`)}</div>`;
+  const cur=cvSideTab==="tours"&&!cvToursOn(n)?"pre":cvSideTab;
+  const tab=(k,l,c,extra="",pf="")=>`<button type="button" role="tab" id="cv-tab-${k}" aria-selected="${cur===k}" tabindex="${cur===k?0:-1}" data-cv-tab="${k}"${pf} ${onEv("click",["cvSideTabSet",`${n.id}`,k])} ${onEv("keydown",["cvSideTabKey",`${n.id}`])}>${i18n(l)}<span>${c}</span>${extra}</button>`;
+  return`<div class="cv-tabs" role="tablist" aria-label="${i18n("Пресеты и туры")}">${tab("pre","Пресеты",`${nodeFieldOff(n,"presets")?"":pl}${n.presetMax&&!nodeFieldOff(n,"presetMax")?`<span data-preset-max> ${i18n("из")} ${n.presetMax}</span>`:""}`)}${cvToursOn(n)?tab("tours","Туры",st.tours.length,`<i class="cv-dot ${run?.paused?"pause":""}" data-cv-tour-dot ${run?"":"hidden"} data-tip="${i18n(run?.paused?"Тур на паузе":"Тур идёт")}"></i>`,pfa(n,"tours")):""}</div>`;
 }
 // Смена вкладки — только содержимое панели, с проявлением; видео и джойстик не трогает
 function cvSideTabSet(id,k){
@@ -23410,7 +23404,7 @@ function cvSideTabSet(id,k){
   document.getElementById("cv-tab-"+k)?.focus();mainSeen.html=null;
 }
 // Стрелки влево и вправо переключают вкладки, как в обычном tablist
-function cvSideTabKey(id){const e=onEv.now;if(e.key!=="ArrowLeft"&&e.key!=="ArrowRight")return;e.preventDefault();e.stopPropagation();cvSideTabSet(id,cvSideTab==="pre"?"tours":"pre")}
+function cvSideTabKey(id){const e=onEv.now;if(e.key!=="ArrowLeft"&&e.key!=="ArrowRight")return;e.preventDefault();e.stopPropagation();const n=find(id)?.n;if(n&&!cvToursOn(n))return;cvSideTabSet(id,cvSideTab==="pre"?"tours":"pre")}
 // Боковая панель без перерисовки вкладки: тот же блок .cv, поэтому ширина колонки меняется плавно (transition),
 // а видео не перезапускается. anim — новое содержимое проявляется; без него (правка в редакторе) — сразу.
 function cvSidePaint(n,anim){
@@ -23446,21 +23440,81 @@ function cvPresetListHtml(n){
     <div class="cv-pre-add"${pf}><input data-cv-newname placeholder="${escHtml(full?i18n("Все номера заняты"):`${i18n("Пресет")} ${presetFree(n)}`)}" aria-label="${i18n("Имя нового пресета")}" ${full||off?"disabled":""} ${onEv("keydown",[".key","Enter"],["cvPresetNew",`${n.id}`])}>
       <button type="button" class="btn s pri" data-cv-preset-new ${full||off?"disabled":""} data-tip="${escHtml(full?i18n("Все номера заняты"):nat?i18n("Камера за NAT. Связи с ней нет, поэтому здесь нельзя запомнить положение"):i18n("Запомнить нынешнее положение камеры под следующим свободным номером"))}" ${onEv("click",["cvPresetNew",`${n.id}`])}>${lu("plus",14)}${i18n("Запомнить")}</button></div>`;
 }
-// ── Туры (ЗАГЛУШКА: в контракте туров нет) ─────────────────────
+// ── Туры PTZ: свойство tours камеры (профиль vms.ptz/1 1.3, пробел F40) ─────────────────────
 // Тур — список точек «пресет, сколько стоять, скорость переезда», как PresetTour / TourSpot в ONVIF PTZ и туры Axxon One.
 // Тур собирают из уже сохранённых пресетов, рядом с видео: пробный запуск видно в кадре.
-// Оператор взял джойстик — тур на паузе, через resumeSec без движения продолжает (как патруль Hikvision и Axxon One).
-// Хранится только в странице (cvTourState); «едет в пресет» — подпись, потому что перехода в пресет в API нет.
+// Значение сервера — unitProps.get(id).tours, значение черновика карточки — n.xprops.tours (строка плана «Туры PTZ»,
+// «Применить» шлёт весь список шагом patch). Рабочий список st.tours собирается из значения черновика или сервера и
+// пересобирается, когда оно изменилось не здесь: «Сбросить», ответ сервера. Поля консоли: точка {n, dwell, speed},
+// afterManual resume|stop; запуск без оператора — idleTour и idleSec (на сервере — idleStartSec у одного тура).
+// ЗАГЛУШКА: пуска, паузы и состояния тура в контракте нет (ждут API видео, ответ на запрос
+// api/requests/2026-11-08-174207Z-mockup-camera-video-streams-tours-request.md, п. 4). Пуск и пробный круг — симуляция
+// страницы (st.run); оператор взял джойстик — тур на паузе, через resumeSec без движения продолжает.
 let cvTourEdit=null;
 const cvTourState=new Map();
-function cvToursOf(n){
-  if(!cvTourState.has(n.id)){
-    const p=presetRows(n);
-    const tours=p.length>=2?[{id:"t1",name:i18n("Обход входа"),order:"seq",pauseSec:0,afterManual:"resume",resumeSec:15,resumeFrom:"same",steps:p.slice(0,3).map((x,i)=>({n:x.n,dwell:i?15:10,speed:50}))}]:[];
-    cvTourState.set(n.id,{tours,idleTour:"",idleSec:120,run:null});
-  }
-  return cvTourState.get(n.id);
+const CV_TOUR_KEYS=["id","name","steps","order","pauseSec","onManual","resumeSec","resumeFrom","idleStartSec"];
+function cvToursSchema(n){return nodeProps(n).tours||null}
+// Вкладка «Туры»: вид камеры объявил tours, и сервер отдаёт поле этой версии профиля
+function cvToursOn(n){return!!cvToursSchema(n)&&!nodeFieldOff(n,"tours")}
+// Только чтение: сервер не принимает правку свойства (Unit.writable через canWrite или readOnly в схеме вида)
+function cvToursRo(n){return!canWrite(n,"tours")||!!cvToursSchema(n)?.readOnly}
+function cvToursMax(n){const v=unitProps.get(n.id)?.tourMax;return Number.isInteger(v)?v:null}
+function cvStepsMax(n){const v=unitProps.get(n.id)?.tourStepsMax;return Number.isInteger(v)?v:null}
+// Значение черновика, а без него — сервера
+function cvToursSrc(n){const x=n.xprops;return x&&Object.prototype.hasOwnProperty.call(x,"tours")?x.tours:unitProps.get(n.id)?.tours}
+// Сервер → поля консоли. Поля тура, которых консоль не знает (новее профиля), лежат в _extra и уходят на сервер как есть
+function cvTourFromWire(w){
+  const extra={};Object.keys(w||{}).forEach(k=>{if(!CV_TOUR_KEYS.includes(k))extra[k]=w[k]});
+  const t={id:String(w?.id??""),name:String(w?.name??""),order:w?.order==="random"?"random":"seq",pauseSec:Number.isInteger(w?.pauseSec)?w.pauseSec:0,
+    afterManual:w?.onManual==="stop"?"stop":"resume",resumeSec:Number.isInteger(w?.resumeSec)?w.resumeSec:15,resumeFrom:w?.resumeFrom==="first"?"first":"same",
+    steps:(Array.isArray(w?.steps)?w.steps:[]).map(x=>({n:+x?.preset||1,dwell:+x?.dwellSec||10,...(x?.speed!=null?{speed:+x.speed}:{})}))};
+  if(Object.keys(extra).length)t._extra=extra;
+  return t;
 }
+// Поля консоли → свойство схемы: поля в одном порядке (по нему сравнивают с сервером)
+function cvTourWire(t,idleSec){
+  const o={id:t.id,name:t.name.trim(),steps:t.steps.map(s=>({preset:s.n,dwellSec:s.dwell,...(s.speed!=null?{speed:s.speed}:{})})),
+    order:t.order,pauseSec:Number.isFinite(+t.pauseSec)?+t.pauseSec:0,onManual:t.afterManual==="stop"?"stop":"pause",resumeSec:Number.isFinite(+t.resumeSec)?+t.resumeSec:15,resumeFrom:t.resumeFrom==="first"?"first":"same"};
+  if(idleSec!=null)o.idleStartSec=idleSec;
+  return t._extra?Object.assign(o,JSON.parse(JSON.stringify(t._extra))):o;
+}
+function cvToursWire(st){return st.tours.map(t=>cvTourWire(t,st.idleTour===t.id?st.idleSec:null))}
+// Список со стороны сервера в виде консоли: по нему черновик решает, есть ли правка
+function cvToursServer(n){return cvToursWire(cvToursSplit(unitProps.get(n.id)?.tours))}
+function cvToursSplit(v){
+  const list=(Array.isArray(v)?v:[]),tours=list.map(cvTourFromWire),idle=list.find(x=>x?.idleStartSec!=null);
+  return{tours,idleTour:idle?String(idle.id):"",idleSec:idle?+idle.idleStartSec:120};
+}
+function cvToursOf(n){
+  const raw=JSON.stringify(cvToursSrc(n)??null);let st=cvTourState.get(n.id);
+  if(!st||st.raw!==raw){
+    const run=st?.run;st=Object.assign({raw,run:null},cvToursSplit(cvToursSrc(n)));
+    // Список собран заново (сброс, ответ сервера): идущий тур остаётся, если он ещё есть
+    if(run){if(run.trial||st.tours.some(t=>t.id===run.tid))st.run=run;else if(run.timer)clearInterval(run.timer)}
+    cvTourState.set(n.id,st);
+  }
+  return st;
+}
+// Список → черновик карточки: равный серверному значению снимает ключ (строки плана нет)
+function cvToursCommit(n,st){
+  const w=cvToursWire(st),x=n.xprops||(n.xprops={});
+  if(JSON.stringify(w)===JSON.stringify(cvToursServer(n)))delete x.tours;else x.tours=w;
+  st.raw=JSON.stringify(cvToursSrc(n)??null);
+  // Редактор перерисовывает только боковую панель: подвал «Не применено» — сразу, не ждать кадра
+  setD(true);cardFootRefresh();
+}
+// Строка плана «Туры PTZ»: что добавили, изменили, удалили; запуск без оператора
+function cvToursDiffText(from,to){
+  const a=cvToursSplit(from),b=cvToursSplit(to),was=new Map(a.tours.map(t=>[t.id,t])),out=[];
+  b.tours.forEach(t=>{const w=was.get(t.id);
+    if(!w)out.push(`${i18n("добавит")} «${t.name}»`);
+    else if(JSON.stringify(w)!==JSON.stringify(t))out.push(`${i18n("изменит")} «${w.name}»${w.name!==t.name?` → «${t.name}»`:""}`)});
+  a.tours.forEach(t=>{if(!b.tours.some(x=>x.id===t.id))out.push(`${i18n("удалит")} «${t.name}»`)});
+  const idle=x=>{const t=x.tours.find(y=>y.id===x.idleTour);return t?`«${t.name}», ${i18n("через")} ${cvDur(x.idleSec)}`:"—"};
+  if(idle(a)!==idle(b))out.push(`${i18n("сам, когда камерой не управляют")}: ${idle(b)}`);
+  return out.join("; ")||i18n("без изменений");
+}
+function cvToursCount(v){const k=Array.isArray(v)?v.length:0;return k?`${k} ${i18n(plural(k,"тур|тура|туров"))}`:i18n("нет туров")}
 function cvDur(s){s=Math.round(s);const m=Math.floor(s/60),r=s%60;return m?`${m} ${i18n("мин")}${r?` ${r} ${i18n("с")}`:""}`:`${r} ${i18n("с")}`}
 function cvTourCycle(t){return t.steps.reduce((a,s)=>a+(+s.dwell||0),0)+(+t.pauseSec||0)}
 function cvPresetLabel(n,no){const p=presetRows(n).find(x=>x.n===no);return p?(p.name||`${i18n("Пресет")} ${no}`):`${i18n("Пресет")} ${no} (${i18n("пресета нет")})`}
@@ -23470,22 +23524,23 @@ function cvTourProblems(n,t){
   t.steps.forEach((s,i)=>{
     if(!have.has(s.n))out.push(`${i18n("Точка")} ${i+1}: ${i18n("пресета")} ${s.n} ${i18n("больше нет")}`);
   });
+  const mx=cvStepsMax(n);if(mx!=null&&t.steps.length>mx)out.push(`${i18n("Камера позволяет не больше")} ${mx} ${i18n(plural(mx,"точки|точек|точек"))} ${i18n("в туре")}`);
   if(!t.name.trim())out.push(i18n("Задать имя тура"));
   return out;
 }
 function cvToursHtml(n){
-  const st=cvToursOf(n),off=n.online===false||n.direct===false,few=presetRows(n).length<2;
-  const run=st.run;
+  const st=cvToursOf(n),off=n.online===false||n.direct===false,few=presetRows(n).length<2,ro=cvToursRo(n),mx=cvToursMax(n),full=mx!=null&&st.tours.length>=mx;
+  const run=st.run,why=ro?i18n("Сервер не принимает правку туров этой камеры"):full?`${i18n("Камера позволяет не больше")} ${mx} ${i18n(plural(mx,"тура|туров|туров"))}`:few?i18n("Нужно не меньше двух пресетов"):i18n("Собрать новый тур из пресетов");
   const rows=st.tours.map(t=>{
     const on=run?.tid===t.id,bad=cvTourProblems(n,t).length;
     return`<li class="cv-tr ${on?"on":""}" data-tour="${t.id}">
       <button type="button" class="btn s btn-icon cv-tr-go ${on?"pri":""}" ${off||bad?"disabled":""} data-tip="${escHtml(bad?i18n("Тур с ошибкой. Открыть и исправить"):on?i18n("Остановить тур"):i18n("Запустить тур"))}" aria-label="${escHtml(`${i18n(on?"Остановить тур":"Запустить тур")} ${t.name}`)}" ${onEv("click",["cvTourToggle",`${n.id}`,t.id])}>${on?lu("square",13):lu("circle-play",15)}</button>
       <button type="button" class="cv-tr-name" data-tip="${i18n("Изменить тур")}" ${onEv("click",["cvTourOpen",`${n.id}`,t.id])}><b>${escHtml(t.name)}</b>
         <small>${on?cvTourRunText(n,t,run):`${t.steps.length} ${i18n(plural(t.steps.length,"точка|точки|точек"))} · ${i18n("круг")} ${cvDur(cvTourCycle(t))}${t.order==="random"?` · ${i18n("случайно")}`:""}${st.idleTour===t.id?` · ${i18n("сам через")} ${cvDur(st.idleSec)}`:""}`}${bad?` · <span class="cv-bad">${i18n("ошибка")}</span>`:""}</small></button>
-      <button type="button" class="btn s btn-icon" data-tip="${i18n("Удалить тур")}" aria-label="${escHtml(`${i18n("Удалить тур")} ${t.name}`)}" ${pendingDelHas(`camtour:${n.id}/${t.id}`)?"disabled":""} ${onEv("click",["cvTourDel",`${n.id}`,t.id])}>${lu("trash",14)}</button>
+      <button type="button" class="btn s btn-icon" data-tip="${i18n("Удалить тур")}" aria-label="${escHtml(`${i18n("Удалить тур")} ${t.name}`)}" ${ro||pendingDelHas(`camtour:${n.id}/${t.id}`)?"disabled":""} ${onEv("click",["cvTourDel",`${n.id}`,t.id])}>${lu("trash",14)}</button>
       <button type="button" class="lk cv-tr-resume" data-tour-resume ${on&&run.paused?"":"hidden"} ${onEv("click",["cvTourResume",`${n.id}`])}>${lu("circle-play",13)}${i18n("Продолжить тур сейчас")}</button></li>`}).join("");
   return`${st.tours.length?`<ul class="cv-pl cv-trl" data-keep-scroll>${rows}</ul>`:`<p class="sub cv-pl-empty">${i18n(few?"Тур собирают из пресетов. Сначала запомнить хотя бы два пресета":"Туров нет. Тур водит камеру по пресетам по очереди")}</p>`}
-    <div class="cv-pre-add"><button type="button" class="btn s pri" ${few?"disabled":""} data-tip="${i18n(few?"Нужно не меньше двух пресетов":"Собрать новый тур из пресетов")}" ${onEv("click",["cvTourNew",`${n.id}`])}>${lu("plus",14)}${i18n("Тур")}</button></div>`;
+    <div class="cv-pre-add"><button type="button" class="btn s pri" ${few||ro||full?"disabled":""} data-tip="${escHtml(why)}" ${onEv("click",["cvTourNew",`${n.id}`])}>${lu("plus",14)}${i18n("Тур")}</button></div>`;
 }
 function cvTourRunText(n,t,run){
   const s=t.steps[run.step];
@@ -23500,7 +23555,7 @@ function cvTourToggle(id,tid){
   if(st.run?.tid===tid){cvTourHalt(st);toast(i18n("Консоль остановила тур"));cvSidePaint(n);cvTourOvSync(n);return}
   const t=st.tours.find(x=>x.id===tid);if(!t)return;
   cvTourStart(n,st,t);
-  toast(`${i18n("Консоль запустила тур")} «${t.name}». ${i18n("Прототип: в API нет туров и перехода в пресет. На стенде камеру по точкам ведёт симуляция")}`);
+  toast(`${i18n("Консоль запустила тур")} «${t.name}». ${i18n("В API нет пуска тура и перехода в пресет. На стенде камеру по точкам ведёт симуляция")}`);
 }
 function cvTourStart(n,st,t,trial){
   cvTourHalt(st);
@@ -23555,7 +23610,8 @@ function cvTourManual(id){
 // ── Редактор тура: в той же панели, видео остаётся на экране ───────────────
 function cvTourNew(id){
   const n=find(id)?.n;if(!n)return;const st=cvToursOf(n),p=presetRows(n);
-  let k=st.tours.length+1;while(st.tours.some(t=>t.id==="t"+k))k++;
+  // id — имя тура для команды правила ptz.tour: новый тур не берёт id удалённого, иначе правило запустит не тот тур
+  const k=Date.now().toString(36);
   cvTourEditStart(n,{id:"t"+k,name:`${i18n("Тур")} ${st.tours.length+1}`,order:"seq",pauseSec:0,afterManual:"resume",resumeSec:15,resumeFrom:"same",steps:p.slice(0,2).map(x=>({n:x.n,dwell:10,speed:50}))},true);
   requestAnimationFrame(()=>document.querySelector("#main [data-tour-name]")?.select());
 }
@@ -23569,20 +23625,20 @@ function cvTourEditStart(n,t,isNew){
 }
 function cvTourEditSnap(){const e=cvTourEdit;return JSON.stringify([e.t,e.idle,e.idleSec])}
 function cvTourEditorHtml(n,t){
-  const pre=presetRows(n),st=cvToursOf(n),trial=st.run?.trial&&st.run.tid===t.id,probs=cvTourProblems(n,t);
+  const pre=presetRows(n),st=cvToursOf(n),trial=st.run?.trial&&st.run.tid===t.id,probs=cvTourProblems(n,t),smx=cvStepsMax(n),ro=cvToursRo(n);
   const opt=(cur)=>pre.map(p=>`<option value="${p.n}" ${p.n===cur?"selected":""}>${p.n} · ${escHtml(p.name||`${i18n("Пресет")} ${p.n}`)}</option>`).join("")+(pre.some(p=>p.n===cur)?"":`<option value="${cur}" selected>${cur} · ${i18n("пресета нет")}</option>`);
   const steps=t.steps.map((s,i)=>`<li data-tstep="${i}" class="${trial&&st.run.step===i?"on":""}">
       <span class="cv-ts-no">${i+1}</span>
       <select aria-label="${i18n("Пресет точки")} ${i+1}" ${onEv("change",["cvStepSet",i,"n",onEv.value])}>${opt(s.n)}</select>
-      <span class="cv-num"><input type="number" min="1" value="${s.dwell}" aria-label="${i18n("Сколько секунд стоять в точке")} ${i+1}" ${onEv("change",["cvStepSet",i,"dwell",onEv.value])}><small>${i18n("с")}</small></span>
-      <select aria-label="${i18n("Скорость переезда в точку")} ${i+1}" ${onEv("change",["cvStepSet",i,"speed",onEv.value])}>${[[25,"медленно"],[50,"средне"],[100,"быстро"]].map(([v,l])=>`<option value="${v}" ${+s.speed===v?"selected":""}>${i18n(l)}</option>`).join("")}</select>
+      <span class="cv-num"><input type="number" min="${cvTourLim(n,"dwellSec",true)[0]}" max="${cvTourLim(n,"dwellSec",true)[1]??""}" value="${s.dwell}" aria-label="${i18n("Сколько секунд стоять в точке")} ${i+1}" ${onEv("change",["cvStepSet",i,"dwell",onEv.value])}><small>${i18n("с")}</small></span>
+      <select aria-label="${i18n("Скорость переезда в точку")} ${i+1}" ${onEv("change",["cvStepSet",i,"speed",onEv.value])}>${`<option value="" ${s.speed==null?"selected":""}>${i18n("скорость камеры")}</option>`+[[25,"медленно"],[50,"средне"],[100,"быстро"]].map(([v,l])=>`<option value="${v}" ${+s.speed===v?"selected":""}>${i18n(l)}</option>`).join("")+(s.speed==null||[25,50,100].includes(+s.speed)?"":`<option value="${+s.speed}" selected>${+s.speed} %</option>`)}</select>
       <span class="cv-ts-mv"><button type="button" class="btn s btn-icon" ${i?"":"disabled"} data-tip="${i18n("Выше")}" aria-label="${i18n("Точку")} ${i+1} ${i18n("выше")}" ${onEv("click",["cvStepMove",i,-1])}>${lu("arrow-up",13)}</button><button type="button" class="btn s btn-icon" ${i<t.steps.length-1?"":"disabled"} data-tip="${i18n("Ниже")}" aria-label="${i18n("Точку")} ${i+1} ${i18n("ниже")}" ${onEv("click",["cvStepMove",i,1])}>${lu("arrow-down",13)}</button><button type="button" class="btn s btn-icon" data-tip="${i18n("Убрать точку")}" aria-label="${i18n("Убрать точку")} ${i+1}" ${onEv("click",["cvStepDel",i])}>${lu("x",13)}</button></span>
     </li>`).join("");
   return`<div class="cv-te" data-cv-te>
     <div class="cv-te-h"><button type="button" class="lk" ${onEv("click",["cvTourClose"])}>${lu("chevron-left",13)}${i18n("Туры")}</button><input data-tour-name value="${escHtml(t.name)}" aria-label="${i18n("Имя тура")}" ${onEv("input",["cvTourSetF","name",onEv.value])}></div>
     <div class="cv-ts-hd" aria-hidden="true"><span></span><span>${i18n("Пресет")}</span><span>${i18n("Стоять")}</span><span>${i18n("Переезд")}</span><span></span></div>
     <ol class="cv-ts" data-keep-scroll>${steps}</ol>
-    <div class="cv-ts-foot"><button type="button" class="btn s cv-ts-add" ${pre.length?"":"disabled"} ${onEv("click",["cvStepAdd"])}>${lu("plus",13)}${i18n("Точка")}</button><span class="sub">${t.steps.length} ${i18n(plural(t.steps.length,"точка|точки|точек"))} · ${i18n("круг")} ${cvDur(cvTourCycle(t))} ${i18n("без учёта переездов")}</span></div>
+    <div class="cv-ts-foot"><button type="button" class="btn s cv-ts-add" ${pre.length&&!(smx!=null&&t.steps.length>=smx)?"":"disabled"} ${smx!=null&&t.steps.length>=smx?`data-tip="${escHtml(`${i18n("Камера позволяет не больше")} ${smx} ${i18n(plural(smx,"точки|точек|точек"))} ${i18n("в туре")}`)}"`:""} ${onEv("click",["cvStepAdd"])}>${lu("plus",13)}${i18n("Точка")}</button><span class="sub">${t.steps.length} ${i18n(plural(t.steps.length,"точка|точки|точек"))} · ${i18n("круг")} ${cvDur(cvTourCycle(t))} ${i18n("без учёта переездов")}</span></div>
     <div class="cv-te-more ${cvTourEdit.more?"open":""}" data-cv-more>
       <button type="button" class="cv-te-mh" aria-expanded="${!!cvTourEdit.more}" aria-controls="cv-te-g" data-tip="${i18n(cvTourEdit.more?"Свернуть параметры тура":"Показать параметры тура")}" ${onEv("click",["cvTourMore"])}>${lu("chevron-right",14)}<span><b>${i18n("Параметры тура")}</b><small data-cv-more-sum>${escHtml(cvTourSumText(t))}</small></span></button>
       <div class="cv-te-mb" data-keep-scroll="te-more"><div class="cv-te-mi">
@@ -23597,7 +23653,7 @@ function cvTourEditorHtml(n,t){
       </div></div>
     </div>
     ${probs.length?`<ul class="cv-warn">${probs.map(x=>`<li>${escHtml(x)}</li>`).join("")}</ul>`:""}
-    <div class="cv-te-f"><button type="button" class="btn s" ${probs.length?"disabled":""} data-tip="${i18n("Пройти один круг и остановиться. Камера идёт по точкам, видно в кадре")}" ${onEv("click",["cvTourTrial"])}>${trial?lu("square",13):lu("circle-play",14)}${i18n(trial?"Остановить":"Проверить круг")}</button><span class="cv-h-sp"></span><button type="button" class="btn s" ${onEv("click",["cvTourClose"])}>${i18n("Отмена")}</button><button type="button" class="btn s pri" ${probs.length?"disabled":""} ${onEv("click",["cvTourSave"])}>${i18n("Добавить в план")}</button></div>
+    <div class="cv-te-f"><button type="button" class="btn s" ${probs.length?"disabled":""} data-tip="${i18n("Пройти один круг и остановиться. Камера идёт по точкам, видно в кадре")}" ${onEv("click",["cvTourTrial"])}>${trial?lu("square",13):lu("circle-play",14)}${i18n(trial?"Остановить":"Проверить круг")}</button><span class="cv-h-sp"></span><button type="button" class="btn s" ${onEv("click",["cvTourClose"])}>${i18n("Отмена")}</button><button type="button" class="btn s pri" ${probs.length||ro?"disabled":""} ${ro?`data-tip="${i18n("Сервер не принимает правку туров этой камеры")}"`:""} ${onEv("click",["cvTourSave"])}>${i18n("Добавить в план")}</button></div>
   </div>`;
 }
 // Сам, когда камерой не управляют: так может запускаться только один тур камеры (как AutoStart в ONVIF)
@@ -23623,8 +23679,12 @@ function cvTourMore(){
   mainSeen.html=null;
 }
 function cvTE(){const n=cvTourEdit&&find(cvTourEdit.id)?.n;return n?{n,t:cvTourEdit.t}:null}
-function cvTourSetF(k,v){const e=cvTE();if(!e)return;e.t[k]=["pauseSec","resumeSec"].includes(k)?Math.max(0,Math.round(+v)||0):v;if(k!=="name")cvSidePaint(e.n);else{const b=document.querySelector("#main .cv-te-f .pri");const p=cvTourProblems(e.n,e.t);if(b)b.disabled=!!p.length}}
-function cvStepSet(i,k,v){const e=cvTE();if(!e||!e.t.steps[i])return;e.t.steps[i][k]=k==="dwell"?Math.max(1,Math.round(+v)||e.t.steps[i].dwell):+v;cvSidePaint(e.n)}
+// Пределы чисел тура — из схемы tours вида камеры (профиль vms.ptz/1 1.3): консоль не шлёт то, что сервер отклонит
+function cvTourLim(n,k,step){const ps=cvToursSchema(n)?.items?.properties||{},p=step?ps.steps?.items?.properties?.[k]:ps[k];
+  const d={pauseSec:[0,null],resumeSec:[5,null],dwellSec:[1,3600]}[k]||[0,null];return[p?.minimum??d[0],p?.maximum??d[1]]}
+function cvTourClamp(n,k,v,old,step){const[lo,hi]=cvTourLim(n,k,step),x=Math.round(+v);if(!Number.isFinite(x)||String(v).trim()==="")return old;return Math.min(hi??Infinity,Math.max(lo,x))}
+function cvTourSetF(k,v){const e=cvTE();if(!e)return;e.t[k]=["pauseSec","resumeSec"].includes(k)?cvTourClamp(e.n,k,v,e.t[k]):v;if(k!=="name")cvSidePaint(e.n);else{const b=document.querySelector("#main .cv-te-f .pri");const p=cvTourProblems(e.n,e.t);if(b)b.disabled=!!p.length||cvToursRo(e.n)}}
+function cvStepSet(i,k,v){const e=cvTE();if(!e||!e.t.steps[i])return;const was=e.t.steps[i][k];e.t.steps[i][k]=k==="dwell"?cvTourClamp(e.n,"dwellSec",v,was,true):k==="speed"&&v===""?undefined:+v;if(k==="speed"&&v==="")delete e.t.steps[i].speed;cvSidePaint(e.n)}
 function cvStepMove(i,by){const e=cvTE();if(!e)return;const s=e.t.steps,j=i+by;if(j<0||j>=s.length)return;[s[i],s[j]]=[s[j],s[i]];cvSidePaint(e.n);requestAnimationFrame(()=>{const li=document.querySelector(`#main [data-tstep="${j}"]`);li?.classList.add("acc-flash");li?.querySelector(by<0?".cv-ts-mv button:first-child":".cv-ts-mv button:nth-child(2)")?.focus()})}
 function cvStepDel(i){const e=cvTE();if(!e)return;e.t.steps.splice(i,1);cvSidePaint(e.n)}
 function cvStepAdd(){
@@ -23646,12 +23706,11 @@ function cvTourClose(){
   askConfirm("Закрыть без правок?",i18n("Консоль не добавит правки тура в план"),"",i18n("Закрыть"),go,{cancelLabel:"Вернуться"});
 }
 function cvTourSave(){
-  const e=cvTE();if(!e||cvTourProblems(e.n,e.t).length)return;const st=cvToursOf(e.n);
-  camPlanTouch(e.n,"tours");
+  const e=cvTE();if(!e||cvTourProblems(e.n,e.t).length||cvToursRo(e.n))return;const st=cvToursOf(e.n);
   if(st.run?.trial){cvTourHalt(st);cvTourOvSync(e.n)}
   const i=st.tours.findIndex(x=>x.id===e.t.id);if(i<0)st.tours.push(e.t);else st.tours[i]=e.t;
   if(cvTourEdit.idle){st.idleTour=e.t.id;st.idleSec=cvTourEdit.idleSec}else if(st.idleTour===e.t.id)st.idleTour="";
-  cvTourEdit=null;setD(true);cvSidePaint(e.n,true);toast(`${i18n("Консоль добавила в план тур")} «${e.t.name}»`);
+  cvTourEdit=null;cvToursCommit(e.n,st);cvSidePaint(e.n,true);toast(`${i18n("Консоль добавила в план тур")} «${e.t.name}»`);
   requestAnimationFrame(()=>{const li=document.querySelector(`#main [data-tour="${e.t.id}"]`);li?.classList.add("acc-flash")});
 }
 // Отложенное удаление потока или тура меняет черновик карточки камеры. Черновик есть только у открытой карточки
@@ -23664,8 +23723,9 @@ function cvTourDel(id,tid){
   if(pendingDelHas(key)){toast("Консоль удалит тур после отсчёта. Чтобы отменить, нажать «Отменить» в уведомлении");return}
   askConfirm("Удалить тур?",`<ul class="bk-del"><li>${i18n("Консоль удалит тур")} «${escHtml(t.name)}» ${i18n("после «Применить»")}</li>${st.idleTour===tid?`<li>${i18n("Когда камерой не управляют, камера останется на месте")}</li>`:""}<li>${i18n("Пресеты и другие туры останутся")}</li><li>${i18n("До «Применить» тур вернёт «Сбросить» внизу")}</li></ul>`,"",i18n("Удалить"),()=>scheduleDelete([key],{label:`${i18n("Тур")} «${t.name}»`,cancel:paint,commit:()=>{
     const n2=find(id)?.n,st2=n2&&cvToursOf(n2);if(!st2||!st2.tours.some(x=>x.id===tid)){paint();return}
+    if(cvToursRo(n2)){toast(`${i18n("Консоль не удалила тур")} «${t.name}». ${i18n("Сервер не принимает правку туров этой камеры")}`);paint();return}
     if(!camCardOpenFor(id)){toast(`${i18n("Консоль не удалила тур")} «${t.name}». ${i18n("Карточка камеры закрыта. Чтобы удалить, открыть камеру и удалить снова")}`);paint();return}
-    camPlanTouch(n2,"tours");if(st2.run?.tid===tid)cvTourHalt(st2);st2.tours=st2.tours.filter(x=>x.id!==tid);if(st2.idleTour===tid)st2.idleTour="";setD(true);paint();
+    if(st2.run?.tid===tid)cvTourHalt(st2);st2.tours=st2.tours.filter(x=>x.id!==tid);if(st2.idleTour===tid)st2.idleTour="";cvToursCommit(n2,st2);paint();
     toast(`${i18n("Консоль удалит тур")} «${t.name}» ${i18n("после «Применить»")}. ${i18n("До «Применить» тур вернёт «Сбросить» внизу")}`);
   }}),{html:true,typeCount:1});
 }

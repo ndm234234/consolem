@@ -1072,6 +1072,38 @@
     await env.ok("DELETE", `${U(c.uid)}/presets/9`);
   }, { needs: ["putUnitPreset", "deleteUnitPreset", "putUnitPtz", "deleteUnitPtz", "clock", "implements:vms.ptz/1"], layer: "profile:vms.ptz/1", since: "1.2" });
 
+  test("Туры PTZ (tours): сохранить, изменить, удалить; повтор id, второй тур с idleStartSec и пределы камеры — 422 field /properties/tours", async () => {
+    const env = await makeEnv();
+    const c = await ptzCam(env);
+    const st = (preset, dwellSec, speed) => Object.assign({ preset, dwellSec }, speed ? { speed } : {});
+    const a = { id: "a", name: "Вход и двор", steps: [st(1, 10, 50), st(2, 15)], order: "seq", pauseSec: 5, onManual: "pause", resumeSec: 20, resumeFrom: "first", idleStartSec: 120 };
+    const r = await patch(env, c, { properties: { tours: [a] } });
+    assert.status(r, 200);
+    assert.eq(r.body.properties.tours, [a], "тур хранится как есть");
+    const b = { id: "b", name: "Ночь", steps: [st(2, 30, 100)], onManual: "stop" };
+    const two = await patch(env, r.body, { properties: { tours: [a, b] } });
+    assert.status(two, 200);
+    assert.eq(two.body.properties.tours.map((t) => t.id), ["a", "b"], "второй тур добавлен, порядок как в запросе");
+    // Смысл туров (reason) — поле /properties/tours; ошибка схемы — путь до самого поля внутри tours
+    const bad = async (tours, reason, msg, at) => {
+      const res = await patch(env, await get(env, c.uid), { properties: { tours } });
+      if (reason) { field(res, "VALIDATION_FAILED", P("tours"), msg); assert.eq(res.body.params && res.body.params.reason, reason, `${msg}: причина`); return; }
+      field(res, "VALIDATION_FAILED", P(`tours/${at}`), msg);
+    };
+    await bad([a, Object.assign({}, b, { id: "a" })], "duplicateId", "повтор id");
+    await bad([a, Object.assign({}, b, { idleStartSec: 60 })], "idleTwice", "второй тур с запуском без оператора");
+    const cur = (await get(env, c.uid)).properties;
+    if (cur.tourStepsMax != null) await bad([Object.assign({}, b, { steps: Array.from({ length: cur.tourStepsMax + 1 }, (_, i) => st(1 + (i % 2), 5)) })], "tourStepsMax", "точек больше предела");
+    if (cur.tourMax != null) await bad(Array.from({ length: cur.tourMax + 1 }, (_, i) => Object.assign({}, b, { id: `t${i}` })), "tourMax", "туров больше предела");
+    await bad([Object.assign({}, b, { steps: [{ preset: 1 }] })], null, "точка без dwellSec", "0/steps/0/dwellSec");
+    await bad([Object.assign({}, b, { onManual: "resume" })], null, "onManual вне перечня", "0/onManual");
+    const one = await patch(env, await get(env, c.uid), { properties: { tours: [Object.assign({}, b, { name: "Ночь, долго" })] } });
+    assert.status(one, 200);
+    assert.eq(one.body.properties.tours, [Object.assign({}, b, { name: "Ночь, долго" })], "тур изменён, тур a удалён");
+    const none = await patch(env, one.body, { properties: { tours: [] } });
+    assert.eq(none.body.properties.tours, [], "пустой список — туров нет");
+  }, { needs: ["patchUnit", "implements:vms.ptz/1"], layer: "profile:vms.ptz/1", since: "1.3" });
+
   /* ===== Источник событий ===== */
 
   const pos = (over) => ({ kind: "eventsrc", name: "Касса", domainId: d1.id, properties: Object.assign({ vendor: "PosXml", model: "PosXml Device", ip: "10.3.3.3", port: 2600 }, over) });

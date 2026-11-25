@@ -2837,7 +2837,7 @@ window.I18N_EN={
 "«Сервер записи» и потоки консоль запишет отдельными запросами до операции. «Отменить» после применения их не вернёт.":"The console writes “Recording server” and the streams in separate requests before the operation. “Undo” after applying does not bring them back.",
 "Прототип: параметры драйвера, кодек и битрейт потоков и туры живут только в этой странице. «Применить» оставит их как есть.":"Prototype: the driver parameters, the stream codec and bitrate and the tours exist only in this page. “Apply” keeps them as they are.",
 "поток":"stream","разрешение":"resolution","прежний":"previous","изменён":"changed","будет добавлен":"will be added","будет удалён":"will be deleted","переменный":"variable","копий":"copies",
-"Тур, когда камерой не управляют":"Tour when nobody controls the camera","Закрыть без правок?":"Close without the changes?",
+"Закрыть без правок?":"Close without the changes?",
 "Консоль не добавит правки тура в план":"The console does not add the tour changes to the plan","Консоль добавила в план тур":"The console added to the plan the tour",
 "после «Применить»":"after “Apply”","Консоль удалит поток":"The console will delete the stream",
 "До «Применить» тур вернёт «Сбросить» внизу":"Until “Apply”, “Reset” at the bottom brings the tour back",
@@ -2925,7 +2925,6 @@ window.I18N_EN={
 "Пан":"Pan",
 "Наклон":"Tilt",
 "Прототип: в API нет такой команды. На стенде камеру поворачивает симуляция":"Prototype: the API has no such command. On the test stand, the simulation turns the camera",
-"Прототип: в API нет туров и перехода в пресет. На стенде камеру по точкам ведёт симуляция":"Prototype: the API has no tours and no move to a preset. On the test stand, the simulation moves the camera through the points",
 // Журнал: строка поиска, условия, фасеты, список и панель события (из прототипа 51); виды событий стенда (GET /journal/kinds)
 // Журнал: страницы, пояс, автор, два времени, CSV на сервере (контракт 0.9.0)
 "Время в часовом поясе системы: {z}":"Time in the system time zone: {z}",
@@ -4612,4 +4611,20 @@ window.I18N_EN={
 "Джойстик поворота. Стрелки поворачивают камеру. Плюс и минус меняют зум. Home и End меняют фокус. PageUp и PageDown меняют диафрагму":"PTZ joystick. Arrows turn the camera. Plus and minus change zoom. Home and End change focus. PageUp and PageDown change the iris",
 "Клавиши: стрелки или NumPad 8, 2, 4, 6 — поворот; + и − или NumPad 9, 3 — зум; Home и End — фокус; PageUp и PageDown — диафрагма":"Keys: arrows or NumPad 8, 2, 4, 6 — turn; + and − or NumPad 9, 3 — zoom; Home and End — focus; PageUp and PageDown — iris",
 "У пресета нет положения. Сначала записать положение":"The preset has no position. Save a position first",
+// Туры PTZ — свойство tours камеры (профиль vms.ptz/1 1.3, пробел F40)
+"Туры PTZ":"PTZ tours",
+"добавит":"will add",
+"изменит":"will change",
+"удалит":"will delete",
+"сам, когда камерой не управляют":"by itself when nobody controls the camera",
+"без изменений":"no changes",
+"нет туров":"no tours",
+"Камера позволяет не больше":"The camera allows at most",
+"в туре":"in a tour",
+"Сервер не принимает правку туров этой камеры":"The server does not accept tour changes for this camera",
+"В API нет пуска тура и перехода в пресет. На стенде камеру по точкам ведёт симуляция":"The API has no tour start and no move to a preset. On the test stand, the simulation moves the camera through the points",
+"тур":"tour",
+"тура":"tours",
+"туров":"tours",
+"скорость камеры":"camera speed",
 };
