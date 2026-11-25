@@ -3479,6 +3479,44 @@ body.dw-resizing,body.dw-resizing *{cursor:col-resize!important;user-select:none
 .pm-del{display:inline-grid;place-items:center;padding:4px 6px}
 .pm-empty{margin:0}
 .pm-who{display:block;margin:0 0 10px}
+/* Наложение текста на видео (прототип 95): окно надписи по тексту, ввод на кадре, вид — как у титров кассы */
+.ot-stage{container-type:inline-size}
+.ot-frame-t{left:auto;top:auto;right:8px;bottom:8px}
+.ot-stage:focus-visible{outline:2px solid var(--one-focus-ring);outline-offset:2px}
+.ot-ov{position:absolute;inset:0;width:100%;height:100%}
+.ot-tx{paint-order:stroke;stroke-linejoin:round;dominant-baseline:central;white-space:pre;pointer-events:none}
+.ot-a{fill:transparent;stroke:#fff;stroke-opacity:.35;stroke-width:.3;stroke-dasharray:1 .8;cursor:move}
+.ot-a:hover{stroke-opacity:.8}
+.ot-a.sel{stroke:var(--one-focus-ring);stroke-opacity:1;stroke-width:.6;stroke-dasharray:none;filter:drop-shadow(0 0 .4px #000)}
+.ot-a.bad{stroke:var(--one-danger);stroke-opacity:1;stroke-dasharray:1.2 .8}
+.ot-stage.draw,.ot-stage.draw .ot-a{cursor:crosshair}
+.ot-stage input.ot-inl{position:absolute;width:auto;min-width:30%;max-width:100%;height:auto;min-height:0;margin:0;padding:0 .2em;border:1px solid var(--one-focus-ring);border-radius:var(--one-radius-control);background:rgba(8,11,16,.55);line-height:1.3;box-shadow:none;outline:none}
+.ot-list{gap:4px}
+.ot-row{border:1px solid var(--ln);border-radius:var(--one-radius-container);transition:background .12s,border-color .12s}
+.ot-row.on{border-color:var(--bl);background:var(--one-info-bg)}
+.ot-rh{display:flex;align-items:center;gap:8px;padding:4px 4px 4px 8px;min-width:0}
+.ot-sw{box-shadow:0 0 0 1px var(--ln)}
+.ot-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
+.ot-meta{margin:0;white-space:nowrap;font-size:var(--one-type-caption-size,11px)}
+.ot-warn{display:inline-flex;color:var(--one-warning-icon)}
+.ot-cnt{margin:0 0 0 4px;font-weight:400}
+.ot-form{padding:4px 8px 8px;border-top:1px solid var(--ln)}
+.ot-g{grid-template-columns:repeat(auto-fill,minmax(112px,1fr))}
+.ot-g input[type=number]{width:100%}
+.ot-cs{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.ot-c{width:24px;height:24px;border-radius:var(--one-radius-control);border:1px solid var(--ln);background:var(--c);cursor:pointer;padding:0}
+.ot-c.on{outline:2px solid var(--one-focus-ring);outline-offset:1px}
+.ot-more{display:inline-flex;align-items:center;gap:4px;margin:0 0 0 4px;cursor:pointer}
+.ot-more input{width:24px;height:24px;padding:0;border:1px solid var(--ln);border-radius:var(--one-radius-control);background:none}
+.ot-more.on input{outline:2px solid var(--one-focus-ring);outline-offset:1px}
+.ot-pair{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.ot-pair .chk{margin:0;min-width:96px}
+.ot-pair select{width:auto}
+.ot-range{display:flex;flex-direction:column;flex:1;min-width:120px}
+.ot-range label{margin:0}
+.ot-msg{display:flex;gap:4px;align-items:flex-start;margin:8px 0 0}
+.ot-msg.bad{color:var(--one-warning-text)}
+.ot-copy{margin:0 0 12px}
 .pm-who ul{margin:0;padding-left:18px}
 .pm-who li{margin:3px 0}
 .pm-acts{display:flex;gap:8px;flex-wrap:wrap}
@@ -9708,7 +9746,7 @@ function cardPlanOpen(){
      ${webPlanNote(n,d)}
      ${d.some(r=>r.stub==="act")?`<p class="sub" data-plan-act>${i18n("Первая строка только называет действие. Консоль отправит на сервер строки ниже.")}</p>`:""}
      ${d.some(r=>r.stub==="onvif")?`<p class="sub" data-plan-stub-onvif>${i18n("Заглушка: ONVIF-сервера в контракте пока нет. «Применить» оставит порт и флажок только в странице.")}</p>`:""}
-     ${d.some(r=>r.stub&&r.stub!=="act"&&r.stub!=="onvif")?`<p class="sub" data-plan-stub>${i18n("Заглушка: консоль пока не отправляет на сервер кодек и битрейт потоков, туры и Tag&Track Pro. «Применить» оставит их как есть.")}</p>`:""}`,
+     ${d.some(r=>r.stub&&r.stub!=="act"&&r.stub!=="onvif")?`<p class="sub" data-plan-stub>${i18n("Заглушка: консоль пока не отправляет на сервер кодек и битрейт потоков, туры, Tag&Track Pro и надписи на кадре. «Применить» оставит их как есть.")}</p>`:""}`,
     `<button type="button" class="btn" ${onEv("click",["closeBulkModal"])}>${i18n("Назад")}</button><button type="button" class="btn pri" ${onEv("click",["closeBulkModal"],["cardApply"])}>${i18n("Применить")} (${d.length})</button>`,"bbox-wide");
 }
 function cardApply(ok){
@@ -16953,6 +16991,7 @@ function camPlanTouch(n,part){
   if(part==="cv"&&!b.cv)b.cv=cardClone({v:cvCfgOf(n).streams}).v;
   if(part==="tours"&&!b.tours){const st=cvToursOf(n);b.tours=cardClone({tours:st.tours,idleTour:st.idleTour,idleSec:st.idleSec})}
   if(part==="tt"&&!b.tt)b.tt=JSON.parse(JSON.stringify(ttOf(n)));
+  if(part==="ot"&&!b.ot)b.ot=JSON.parse(JSON.stringify(otOf(n)));
   camPlanBase.set(n.id,b);
 }
 const CV_KEY_RU={codec:"Кодек",profile:"Профиль кодека",brc:"Режим битрейта",kbps:"Битрейт",quality:"Качество",gop:"Опорный кадр каждые",smart:"Умный кодек",dprof:"Профиль потока камеры",on:"Поток включён",live:"В просмотре"};
@@ -17028,6 +17067,7 @@ function camPlanRows(n,out){
     if(idle(b.tours)!==idle(st))out.push({node:n,stub:"tours",label:i18n("Тур, когда камерой не управляют"),fromT:idle(b.tours),toT:idle(st)});
   }
   ttPlanRows(n,b,out);
+  otPlanRows(n,b,out);
 }
 // «Применить»: заглушки остаются как есть, база плана забывается
 function camPlanCommit(id){
@@ -17042,6 +17082,7 @@ function camPlanRestore(id){
   if(n&&b?.cv){const cur=cvCfgOf(n).streams;Object.keys(b.cv).forEach(sid=>{cur[sid]=b.cv[sid]})}
   if(n&&b?.tours){const t=cvToursOf(n);if(t.run&&!b.tours.tours.some(x=>x.id===t.run.tid))cvTourHalt(t);Object.assign(t,b.tours)}
   if(n&&b?.tt){Object.assign(ttOf(n),b.tt);if(cvCalib?.id===id)cvCalib=null}
+  if(n&&b?.ot){otStore.set(id,b.ot);if(ot.id===id){ot.sel=null;ot.inl=null}}
   camPlanBase.delete(id);cvSnap.delete(id);csPlaceSnap.delete(id);webPlanForget(id);
   csBlkSnap.forEach((v,k)=>{if(k.startsWith(id+":"))csBlkSnap.delete(k)});
   [...csEdit].forEach(k=>{if(k.startsWith(id+":"))csEdit.delete(k)});
@@ -23578,6 +23619,207 @@ function pmKey(id,e){
   const dx=Math.min(Math.max(v[0],-Math.min(...xs)),1-Math.max(...xs)),dy=Math.min(Math.max(v[1],-Math.min(...ys)),1-Math.max(...ys));
   z.pts=z.pts.map(p=>[+(p[0]+dx).toFixed(4),+(p[1]+dy).toFixed(4)]);pmRepaint(n);
 }
+// ── Наложение текста на видео камеры (ЗАГЛУШКА: в контракте нет свойства камеры overlayTexts, пробел F37, PMD-5967) ──
+// Надпись — точка привязки (левый верхний угол, доли кадра), текст и вид: шрифт, начертание, размер в пунктах для кадра
+// высотой 1080, цвет, обводка, фон. Окно надписи берёт размер текста: размер букв задаёт поле «Размер», а не рамка.
+// Поля вида — как у титров кассы (posLookCard): overlayFont, overlayFontSize, overlayColor, overlayBg, overlayBgTransparency.
+// Надписи живут только в этой странице (otStore): «Применить» оставляет их, «Сбросить» возвращает значения до плана
+// (camPlanBase, часть "ot"). Предел числа надписей — константа заглушки OT_MAX.
+// Состояние для проверки вида — запрос ?ot=empty|one|many|long: заготовка надписей у камер без своих правок
+const OT_MAX=8,OT_C="#38bdf8";
+const OT_FONTS=["Arial","Segoe UI","Verdana","Courier New","Consolas"];
+const OT_STYLES=[["normal","Обычный"],["bold","Жирный"],["italic","Курсив"],["bold-italic","Жирный курсив"]];
+// Цвета — данные примера (как цвет титров кассы): быстрый выбор; «Другой цвет» открывает полную палитру
+const OT_COLORS=[["#ffffff","Белый"],["#ffd60a","Жёлтый"],["#3ddc84","Зелёный"],["#22d3ee","Голубой"],["#ff4d4f","Красный"],["#000000","Чёрный"]];
+const otStore=new Map(),otShots=new Map();
+let ot={id:null,tool:false,sel:null,view:false,drag:false,inl:null};
+function otNew(id,text,pos,o){return Object.assign({id,text,pos,font:"Arial",style:"normal",size:56,color:"#ffffff",outline:true,outlineColor:"#000000",outlineW:2,bg:false,bgColor:"#000000",bgClear:40},o||{})}
+function otSeed(n){
+  const q=new URLSearchParams(location.search).get("ot"),name=n.name||i18n("Камера");
+  if(q==="empty")return[];
+  if(q==="many")return[["NORTH-St 22",[.03,.04],{color:"#ffd60a",size:72}],["South-St 23",[.6,.04],{color:"#3ddc84",size:72}],["West-St 23",[.03,.84],{size:64}],
+    [i18n("Въезд на парковку"),[.56,.62],{color:"#22d3ee",size:44}],[i18n("Вход"),[.22,.36],{size:44,bg:true}],[i18n("Склад 2"),[.68,.25],{color:"#ff4d4f",size:44}],
+    [i18n("Тротуар"),[.4,.5],{color:"#ffd60a",size:40}],[i18n("Дорога"),[.4,.71],{color:"#3ddc84",size:40}]].map(([t,p,o],i)=>otNew("o"+i,t,p,o));
+  if(q==="long")return[otNew("o0",i18n("Северный въезд на территорию склада, ворота 2, полоса для грузовых машин"),[.03,.04],{color:"#ffd60a",size:64})];
+  return[otNew("o0",name,[.03,.04],{size:64})];
+}
+function otOf(n){if(!otStore.has(n.id))otStore.set(n.id,otSeed(n));return otStore.get(n.id)}
+function otNode(id){return find(id)?.n||null}
+function otCur(n){return ot.id===n.id?ot:{tool:false,sel:null,view:false,inl:null}}
+function otFocus(n){if(ot.id!==n.id)ot={id:n.id,tool:false,sel:null,view:false,drag:false,inl:null};return ot}
+function otColorName(c){const x=OT_COLORS.find(x=>x[0]===c);return x?i18n(x[1]):c}
+function otSum(n){const k=otOf(n).length;return k?`${k} ${i18n(plural(k,"надпись|надписи|надписей"))}`:i18n("нет надписей")}
+function otShotAt(n){if(!otShots.has(n.id))otShots.set(n.id,Date.now());return new Date(otShots.get(n.id)).toLocaleTimeString(uiLang==="en"?"en-GB":"ru-RU")}
+// Окно надписи по тексту: размер букв в единицах кадра (DW_Y — высота кадра), ширина — оценка по средней ширине буквы шрифта
+const OT_W={"Arial":.55,"Segoe UI":.54,"Verdana":.63,"Courier New":.6,"Consolas":.55};
+function otFs(a){return a.size/1080*DW_Y*1.33}
+function otBox(a){const fs=otFs(a),pad=fs*.25,w=Math.max(1,(a.text||" ").length)*fs*(OT_W[a.font]||.56)*(/bold/.test(a.style)?1.07:1)+pad*2;
+  return{x:a.pos[0]*DW_X,y:a.pos[1]*DW_Y,w,h:fs*1.3,fs,pad}}
+function otFits(a){const b=otBox(a);return b.x+b.w<=DW_X+.01&&b.y+b.h<=DW_Y+.01}
+function otEdit(n){otFocus(n);camPlanTouch(n,"ot");setD(true);return otOf(n)}
+
+function otSecHtml(n){
+  const sum=otSum(n);
+  return`<div class="card ot-sec" data-sec="ot" data-cs-sum="${escHtml(sum)}"><div class="ch">${i18n("Наложение текста")}<span class="sub" style="font-weight:400" data-ot-sum>${escHtml(sum)}</span></div><div class="cb"><div data-ot-body>${otBodyHtml(n)}</div></div></div>`;
+}
+function otBodyHtml(n){
+  const c=otCur(n),list=otOf(n),full=list.length>=OT_MAX;
+  const add=`<button type="button" class="btn s${c.tool?" on":""}" aria-pressed="${c.tool}" ${full?`disabled data-tip="${i18n("Надписей уже")} ${OT_MAX}. ${i18n("Сначала убрать одну надпись.")}"`:""} ${onEv("click",["otTool",n.id])}>${lu("plus")}${i18n("Добавить надпись")}</button>`;
+  const tools=`<div class="dw-tools">${add}<span class="dw-lay"><button type="button" class="btn s${c.view?" on":""}" aria-pressed="${c.view}" data-tip="${i18n("Показать кадр так, как его видит оператор: без рамок")}" ${onEv("click",["otView",n.id])}>${lu(c.view?"eye-off":"eye")}${i18n("Как видит оператор")}</button></span></div>`;
+  const inl=c.inl&&list.find(a=>a.id===c.inl),ib=inl&&otBox(inl);
+  const inlEl=inl?`<input type="text" class="ot-inl" maxlength="128" value="${escHtml(inl.text)}" aria-label="${i18n("Текст надписи")}" style="left:${(ib.x/DW_X*100).toFixed(2)}%;top:${(ib.y/DW_Y*100).toFixed(2)}%;font-size:${(ib.fs/DW_X*100).toFixed(3)}cqw;font-family:'${inl.font}';color:${inl.color}" ${onEv("keydown",["otInlKey",n.id,inl.id,onEv.event])} ${onEv("blur",["otInlEnd",n.id,inl.id,onEv.value])}>`:"";
+  const stage=`<div class="dw-stage ot-stage${c.tool?" draw":""}" tabindex="0" role="application" aria-label="${i18n("Кадр камеры: надписи поверх видео")}" data-ot-stage="${escHtml(n.id)}" ${onEv("mousedown",["otDown",n.id,onEv.el,onEv.event])} ${onEv("dblclick",["otDbl",n.id,onEv.event])} ${onEv("keydown",["otKey",n.id,onEv.event])}>
+      ${dwSceneSvg()}<svg class="ot-ov" viewBox="0 0 ${DW_X} ${DW_Y}" preserveAspectRatio="none" data-ot-geo>${otGeoSvg(n)}</svg>${inlEl}
+      <span class="pm-frame-t ot-frame-t">${i18n("Стоп-кадр")} · ${escHtml(otShotAt(n))}</span></div>`;
+  const under=`<div class="pm-under"><p class="sub dw-hint" data-ot-hint>${i18n(otHint(n))}</p><button type="button" class="btn s" data-tip="${i18n("Взять с камеры новый кадр. Надписи остаются на своих местах кадра.")}" ${onEv("click",["otShot",n.id])}>${lu("refresh-cw")}${i18n("Новый кадр")}</button></div>`;
+  const rows=list.length?list.map((a,i)=>{
+      const on=c.sel===a.id,bad=!otFits(a),nm=a.text||i18n("Пустая надпись");
+      return`<div class="ot-row${on?" on":""}"><div class="ot-rh"><i class="dw-sw ot-sw" style="background:${a.color}"></i><button type="button" class="lk ot-name" aria-pressed="${on}" aria-expanded="${on}" data-tip="${escHtml(nm)}" ${onEv("click",["otSel",n.id,a.id])}>${escHtml(nm)}</button>${bad?`<span class="ot-warn" data-tip="${i18n("Надпись выходит за край кадра")}" aria-label="${i18n("Надпись выходит за край кадра")}">${lu("triangle-alert")}</span>`:""}<span class="sub ot-meta">${escHtml(a.font)}, ${a.size}</span><button type="button" class="btn s pm-del" data-tip="${i18n("Убрать надпись")}" aria-label="${i18n("Убрать надпись")}: ${escHtml(nm)}" ${onEv("click",["otDel",n.id,a.id])}>${lu("trash")}</button></div>${on?otFormHtml(n,a,i):""}</div>`}).join("")
+    :`<p class="sub pm-empty">${i18n("Надписей нет. Client показывает кадр без текста.")}</p>`;
+  const head=`<div class="pm-h">${i18n("Надписи")}<span class="sub ot-cnt">${list.length} ${i18n("из")} ${OT_MAX}</span>${list.length>1?`<button type="button" class="lk pm-clr" ${onEv("click",["otClear",n.id])}>${i18n("Убрать все")}</button>`:""}</div>`;
+  const copy=list.length&&cpCanCopy(n)?`<div class="ot-copy"><button type="button" class="btn s" data-tip="${i18n("Поставить такие же надписи на другие камеры")}" ${onEv("click",["otCopy",n.id])}>${i18n("Применить к другим")}…</button></div>`:"";
+  const who=`<div class="nt pm-who"><div class="pm-h">${i18n("Кто и где видит надписи")}</div><ul>
+      <li>${i18n("Client показывает надписи поверх видео этой камеры всем операторам: в раскладках, на видеостене и в архиве.")}</li>
+      <li>${i18n("Камера не записывает надписи в видео. В экспорт и на снимки надписи не попадают.")}</li>
+    </ul></div>`;
+  const stub=`<p class="sub cv-stub">${i18n("Заглушка: в контракте API нет надписей камеры. Надписи живут только в этой странице, «Применить» оставит их как есть.")}</p>`;
+  return`<div class="pm-grid"><div class="pm-left">${tools}${stage}${under}</div><div class="pm-right">${head}<div class="pm-list ot-list">${rows}</div>${copy}${who}</div></div>${stub}`;
+}
+function otFormHtml(n,a,i){
+  const bad=!otFits(a),fid=`ot-${i}`,id=n.id,ev=(k,v)=>onEv("change",["otSet",id,a.id,k,v]);
+  const sel=(k,opts)=>`<select id="${fid}-${k}" ${ev(k,onEv.value)}>${opts.map(([v,t])=>`<option value="${escHtml(v)}" ${String(v)===String(a[k])?"selected":""}>${i18n(t)}</option>`).join("")}</select>`;
+  const quick=OT_COLORS.map(([c,l])=>`<button type="button" class="ot-c${a.color===c?" on":""}" role="radio" aria-checked="${a.color===c}" aria-label="${i18n(l)}" data-tip="${i18n(l)}" style="--c:${c}" ${onEv("click",["otSet",id,a.id,"color",c])}></button>`).join("");
+  const other=!OT_COLORS.some(x=>x[0]===a.color);
+  return`<div class="ot-form">
+    <div class="g ot-g">
+      <div class="sf-wide"><label for="${fid}-t">${i18n("Текст")}</label><input id="${fid}-t" class="ot-inp" type="text" maxlength="128" value="${escHtml(a.text)}" ${onEv("input",["otSet",id,a.id,"text",onEv.value])}></div>
+      <div><label for="${fid}-font">${i18n("Шрифт")}</label>${sel("font",OT_FONTS.map(f=>[f,f]))}</div>
+      <div><label for="${fid}-style">${i18n("Начертание")}</label>${sel("style",OT_STYLES)}</div>
+      <div><label for="${fid}-size">${i18n("Размер, пт")}</label><input id="${fid}-size" type="number" min="8" max="200" step="2" value="${a.size}" ${ev("size",onEv.value)}></div>
+      <div class="sf-wide"><label>${i18n("Цвет текста")}</label><div class="ot-cs" role="radiogroup" aria-label="${i18n("Цвет текста")}">${quick}<label class="ot-more${other?" on":""}" data-tip="${i18n("Другой цвет: полная палитра")}"><input type="color" value="${escHtml(colorFull(a.color))}" aria-label="${i18n("Другой цвет")}" ${ev("color",onEv.value)}>${i18n("Другой")}</label></div></div>
+      <div class="sf-wide ot-pair"><label class="chk"><input type="checkbox" ${a.outline?"checked":""} ${ev("outline",onEv.checked)}> ${i18n("Обводка")}</label>${a.outline?`<input type="color" class="exp-swatch" value="${escHtml(colorFull(a.outlineColor))}" aria-label="${i18n("Цвет обводки")}" data-tip="${i18n("Цвет обводки")}" ${ev("outlineColor",onEv.value)}><select aria-label="${i18n("Толщина обводки")}" ${ev("outlineW",onEv.value)}>${[1,2,3,4].map(w=>`<option value="${w}" ${a.outlineW===w?"selected":""}>${w} ${i18n("пт")}</option>`).join("")}</select>`:""}</div>
+      <div class="sf-wide ot-pair"><label class="chk"><input type="checkbox" ${a.bg?"checked":""} ${ev("bg",onEv.checked)}> ${i18n("Фон")}</label>${a.bg?`<input type="color" class="exp-swatch" value="${escHtml(colorFull(a.bgColor))}" aria-label="${i18n("Цвет фона")}" data-tip="${i18n("Цвет фона")}" ${ev("bgColor",onEv.value)}><span class="pos-range ot-range"><label for="${fid}-clr">${i18n("Прозрачность")}: ${a.bgClear} %</label><input id="${fid}-clr" type="range" min="0" max="90" step="5" value="${a.bgClear}" ${ev("bgClear",onEv.value)}></span>`:""}</div>
+      <div><label for="${fid}-x">${i18n("Слева, %")}</label><input id="${fid}-x" type="number" min="0" max="100" step="1" value="${Math.round(a.pos[0]*100)}" ${ev("x",onEv.value)}></div>
+      <div><label for="${fid}-y">${i18n("Сверху, %")}</label><input id="${fid}-y" type="number" min="0" max="100" step="1" value="${Math.round(a.pos[1]*100)}" ${ev("y",onEv.value)}></div>
+    </div>
+    ${bad?`<p class="sub ot-msg bad">${lu("triangle-alert")}${i18n("Надпись выходит за край кадра. Client обрежет текст. Уменьшить размер, сократить текст или сдвинуть надпись.")}</p>`:""}
+  </div>`;
+}
+function otHint(n){
+  const c=otCur(n);
+  if(c.view)return"Так кадр видит оператор. Чтобы изменить надписи, нажать «Как видит оператор» ещё раз.";
+  if(c.inl)return"Ввести текст. Enter сохраняет текст, Esc отменяет правку.";
+  if(c.tool)return"Щёлкнуть по кадру там, где начинается надпись. Esc отменяет.";
+  if(c.sel)return"Чтобы сдвинуть надпись, тянуть её за любое место или нажимать стрелки. Двойной щелчок по надписи изменяет текст. Delete убирает надпись.";
+  if(otOf(n).length)return"Щёлкнуть надпись на кадре или в списке, чтобы изменить её. Двойной щелчок изменяет текст сразу на кадре.";
+  return"Нажать «Добавить надпись» и щёлкнуть по кадру: например, там, где написать название улицы или направление взгляда камеры.";
+}
+function otGeoSvg(n){
+  const c=otCur(n);let h=`<defs><clipPath id="otc-frame"><rect width="${DW_X}" height="${DW_Y}"/></clipPath></defs><g clip-path="url(#otc-frame)">`;
+  otOf(n).forEach(a=>{
+    const b=otBox(a),on=c.sel===a.id,bad=!otFits(a),st=a.style;
+    if(a.bg)h+=`<rect x="${b.x.toFixed(2)}" y="${b.y.toFixed(2)}" width="${b.w.toFixed(2)}" height="${b.h.toFixed(2)}" fill="${a.bgColor}" fill-opacity="${(1-a.bgClear/100).toFixed(2)}"/>`;
+    if(c.inl!==a.id)h+=`<text class="ot-tx" x="${(b.x+b.pad).toFixed(2)}" y="${(b.y+b.h*.52).toFixed(2)}" font-family="${escHtml(a.font)}" font-weight="${/bold/.test(st)?700:400}" font-style="${/italic/.test(st)?"italic":"normal"}" font-size="${b.fs.toFixed(2)}" fill="${a.color}"${a.outline?` stroke="${a.outlineColor}" stroke-width="${(a.outlineW*b.fs/18).toFixed(2)}"`:""}>${escHtml(a.text)}</text>`;
+    if(!c.view)h+=`<rect class="ot-a${on?" sel":""}${bad?" bad":""}" data-o="${a.id}" x="${b.x.toFixed(2)}" y="${b.y.toFixed(2)}" width="${b.w.toFixed(2)}" height="${b.h.toFixed(2)}"><title>${escHtml(a.text)}</title></rect>`;
+  });
+  return h+"</g>";
+}
+function otStageEl(){return document.querySelector("#main [data-ot-stage]")}
+function otPaintGeo(n){const g=document.querySelector("#main [data-ot-geo]");if(g)g.innerHTML=otGeoSvg(n);const t=document.querySelector("#main [data-ot-hint]");if(t)t.textContent=i18n(otHint(n))}
+function otRepaint(n,keepFocus){
+  const b=document.querySelector("#main [data-ot-body]");if(!b){paint();return}
+  const ae=document.activeElement,had=ae===otStageEl(),fid=ae?.id,pos=ae?.selectionStart;
+  b.innerHTML=otBodyHtml(n);
+  const s=document.querySelector("#main [data-ot-sum]");if(s)s.textContent=otSum(n);
+  b.closest("[data-sec]")?.setAttribute("data-cs-sum",otSum(n));
+  const inl=b.querySelector(".ot-inl");
+  if(inl){inl.focus({preventScroll:true});inl.select();return}
+  if(had)otStageEl()?.focus({preventScroll:true});
+  else if(keepFocus&&fid){const el=document.getElementById(fid);if(el){el.focus({preventScroll:true});try{el.setSelectionRange(pos,pos)}catch(e){}}}
+}
+function otTool(id){const n=otNode(id);if(!n)return;otFocus(n);ot.tool=!ot.tool;ot.view=false;ot.inl=null;if(ot.tool)ot.sel=null;otRepaint(n);otStageEl()?.focus({preventScroll:true})}
+function otView(id){const n=otNode(id);if(!n)return;otFocus(n);ot.view=!ot.view;ot.tool=false;ot.sel=null;ot.inl=null;otRepaint(n)}
+function otSel(id,aid){const n=otNode(id);if(!n)return;otFocus(n);ot.view=false;ot.tool=false;ot.inl=null;ot.sel=ot.sel===aid?null:aid;otRepaint(n)}
+function otDel(id,aid){const n=otNode(id);if(!n)return;const l=otEdit(n),i=l.findIndex(x=>x.id===aid);if(i<0)return;l.splice(i,1);if(ot.sel===aid)ot.sel=null;if(ot.inl===aid)ot.inl=null;otRepaint(n)}
+function otClear(id){const n=otNode(id);if(!n)return;otEdit(n).length=0;ot.sel=null;ot.inl=null;otRepaint(n)}
+function otShot(id){const n=otNode(id);if(!n)return;otShots.set(n.id,Date.now());otRepaint(n)}
+const otClamp=v=>+Math.min(1,Math.max(0,v)).toFixed(4);
+function otSet(id,aid,k,v){
+  const n=otNode(id);if(!n)return;const a=otEdit(n).find(x=>x.id===aid);if(!a)return;
+  if(k==="size")a.size=Math.max(8,Math.min(200,Math.round(+v)||a.size));
+  else if(k==="outlineW"||k==="bgClear")a[k]=+v;
+  else if(k==="x"||k==="y"){const j=k==="x"?0:1,p=a.pos.slice();p[j]=otClamp((+v||0)/100);a.pos=p}
+  else a[k]=v;
+  otRepaint(n,k==="text");
+}
+function otAdd(n,p){
+  const l=otEdit(n);if(l.length>=OT_MAX){ot.tool=false;otRepaint(n);toast(`${i18n("Надписей не больше")} ${OT_MAX}`);return}
+  const a=otNew("n"+(Date.now()%1e7),n.name||i18n("Надпись"),[otClamp(p[0]),otClamp(p[1])]);
+  l.push(a);ot.sel=a.id;ot.tool=false;ot.inl=a.id;otRepaint(n);
+}
+function otDown(id,st,e){
+  const n=otNode(id);if(!n||e.button)return;
+  if(e.target.closest?.(".ot-inl"))return;
+  otFocus(n);
+  if(ot.inl){const el=document.querySelector("#main .ot-inl");if(el)otInlEnd(id,ot.inl,el.value)}
+  (otStageEl()||st).focus({preventScroll:true});
+  if(ot.view)return;
+  const p0=dwXY(st,e);if(!p0)return;
+  // Добавление: щелчок ставит надпись по умолчанию и сразу открывает ввод текста на кадре (PMD-5967, п. 3)
+  if(ot.tool){e.preventDefault();otAdd(n,p0);return}
+  const o=e.target.dataset?.o;
+  if(!o){if(ot.sel){ot.sel=null;otRepaint(n)}return}
+  e.preventDefault();
+  const a=otEdit(n).find(x=>x.id===o);if(!a)return;
+  if(ot.sel!==o){ot.sel=o;otRepaint(n)}
+  // Тянуть можно за любое место окна надписи (PMD-5967, п. 1)
+  const orig=a.pos.slice(),b=otBox(a),mw=Math.max(0,1-b.w/DW_X),mh=Math.max(0,1-b.h/DW_Y),stage=otStageEl()||st;
+  ot.drag=true;let moved=false;
+  const mm=ev=>{const q=dwXY(stage,ev);if(!q)return;moved=true;a.pos=[otClamp(Math.min(mw,Math.max(0,orig[0]+q[0]-p0[0]))),otClamp(Math.min(mh,Math.max(0,orig[1]+q[1]-p0[1])))];otPaintGeo(n)};
+  const up=()=>{window.removeEventListener("mousemove",mm);window.removeEventListener("mouseup",up);ot.drag=false;if(moved)otRepaint(n)};
+  window.addEventListener("mousemove",mm);window.addEventListener("mouseup",up);
+}
+// Двойной щелчок по надписи — ввод текста прямо на кадре (PMD-5967, п. 2)
+function otDbl(id,e){const n=otNode(id);if(!n||ot.view)return;const o=e.target.dataset?.o;if(!o)return;e.preventDefault();otFocus(n);ot.sel=o;ot.inl=o;otRepaint(n)}
+function otInlKey(id,aid,e){
+  e.stopPropagation();
+  if(e.key==="Enter"){e.preventDefault();otInlEnd(id,aid,e.target.value)}
+  else if(e.key==="Escape"){e.preventDefault();const n=otNode(id);if(!n)return;ot.inl=null;otRepaint(n);otStageEl()?.focus({preventScroll:true})}
+}
+function otInlEnd(id,aid,v){
+  const n=otNode(id);if(!n||ot.inl!==aid)return;ot.inl=null;
+  const a=otOf(n).find(x=>x.id===aid);
+  if(a&&a.text!==v){otEdit(n);a.text=v}
+  otRepaint(n);otStageEl()?.focus({preventScroll:true});
+}
+function otKey(id,e){
+  const n=otNode(id);if(!n)return;
+  if(e.target.closest?.(".ot-inl"))return;
+  const k=e.key,stop=()=>{e.preventDefault();e.stopPropagation()};
+  if(/^Arrow/.test(k))stop();
+  if(ot.id!==n.id)return;
+  if(k==="Escape"&&ot.tool){stop();ot.tool=false;otRepaint(n);return}
+  const a=ot.sel&&otOf(n).find(x=>x.id===ot.sel);if(!a)return;
+  if(k==="Enter"||k==="F2"){stop();ot.inl=a.id;otRepaint(n);return}
+  if(k==="Delete"||k==="Backspace"){stop();otDel(id,a.id);return}
+  const d=e.shiftKey?.05:.01,v={ArrowLeft:[-d,0],ArrowRight:[d,0],ArrowUp:[0,-d],ArrowDown:[0,d]}[k];if(!v)return;
+  const z=otEdit(n).find(x=>x.id===a.id),b=otBox(z);
+  z.pos=[otClamp(Math.min(Math.max(0,1-b.w/DW_X),z.pos[0]+v[0])),otClamp(Math.min(Math.max(0,1-b.h/DW_Y),z.pos[1]+v[1]))];otRepaint(n);
+}
+// «Применить к другим…»: окно камеры с отмеченной группой «Надписи на кадре» (PMD-5967, п. 1)
+function otCopy(id){openCopyDialog(id);if(cp&&cp.src.id===id){cp.groups.add("osd");renderCopyDialog()}}
+function otCopyText(src){const l=otOf(src);return l.length?l.map(a=>`«${a.text}»`).join(", "):i18n("нет надписей")}
+// Строки плана: надпись добавлена, изменена или убрана
+const OT_KEY_RU={text:"текст",font:"шрифт",style:"начертание",size:"размер",color:"цвет",outline:"обводка",outlineColor:"цвет обводки",outlineW:"толщина обводки",bg:"фон",bgColor:"цвет фона",bgClear:"прозрачность фона",pos:"место"};
+function otPlanRows(n,b,out){
+  if(!b?.ot)return;
+  const was=new Map(b.ot.map(a=>[a.id,a])),now=otOf(n),lb=a=>`${i18n("Надпись")} «${a.text}»`,look=a=>`${a.font}, ${a.size} ${i18n("пт")}, ${otColorName(a.color).toLowerCase()}`;
+  now.forEach(a=>{const w=was.get(a.id);
+    if(!w){out.push({node:n,stub:"ot",label:lb(a),fromT:"—",toT:`${i18n("консоль добавит")}: ${look(a)}`});return}
+    const ch=Object.keys(OT_KEY_RU).filter(k=>JSON.stringify(w[k])!==JSON.stringify(a[k]));
+    if(ch.length)out.push({node:n,stub:"ot",label:`${lb(w)}: ${ch.map(k=>i18n(OT_KEY_RU[k])).join(", ")}`,fromT:ch.includes("text")?`«${w.text}»`:look(w),toT:ch.includes("text")?`«${a.text}»`:look(a)})});
+  was.forEach((a,id)=>{if(!now.some(x=>x.id===id))out.push({node:n,stub:"ot",label:lb(a),fromT:look(a),toT:i18n("консоль уберёт")})});
+}
 // ── Раздел «Слежение Tag&Track Pro» на вкладке «Видео»: после «Поворотного устройства (PTZ)» ──
 // Раздел во всю ширину: режим и время на объекте, карточки обзорных камер (кадр с точками и сеткой, состояние),
 // калибровка — на месте карточек: кадр PTZ и кадр обзорной камеры рядом, под ними таблица точек
@@ -24787,7 +25029,7 @@ function lanTabOpen(n){
 // Карточки устройства плюс «Правила автоматизации»: где оно используется, видно, не заходя в раздел правил.
 function form(n){
   if(suiPage(n)&&tab==="gen")return suiCardHtml(n);
-  if(n.type==="camera"&&!isSchemaNode(n))return`<div class="cs-cq">${csModeLine(n,tab)}${csTabWrap(n,formBase(n)+(tab==="gen"?"":drvSecsHtml(n,tab)+(tab==="vid"?pmSecHtml(n)+ttSecHtml(n):"")+ruleUsesFor(n)))}</div>`;
+  if(n.type==="camera"&&!isSchemaNode(n))return`<div class="cs-cq">${csModeLine(n,tab)}${csTabWrap(n,formBase(n)+(tab==="gen"?"":drvSecsHtml(n,tab)+(tab==="vid"?pmSecHtml(n)+otSecHtml(n)+ttSecHtml(n):"")+ruleUsesFor(n)))}</div>`;
   if(handOf(n,"ipsrv")&&!isSchemaNode(n))return`<div class="cs-cq">${ipsModeLine(n,tab)}${csTabWrap(n,formBase(n)+(tab==="gen"?ruleUsesFor(n):""))}</div>`;
   return tab==="topo"&&(handOf(n,"domain")||handOf(n,"server"))?g7Html(n):formBase(n)+ruleUsesFor(n)}
 // Переключатель карточки: вид меняется сразу, значение уходит с «Применить»
@@ -41608,6 +41850,13 @@ function bulkChanges(draft,nodesIn){
     step("copyDet:"+i,`Детектор «${x.name}» (${i18n(x.kind)})`,ops,
       (x.builtin?`${i18n("встроен в камеру, только для модели")} ${d.detModel}`:i18n("работает на сервере, для любой модели"))+`; ${i18n("зону детекции задают на каждой камере отдельно")}`);
   });
+  // ЗАГЛУШКА: надписи на кадре (otStore) — копия надписей камеры-образца заменяет надписи получателя
+  if(d.osdCopy){
+    const k=d.osdCopy.length;
+    step("osd",k?`${i18n("Надписи на кадре")}: ${k}`:i18n("Убрать надписи на кадре"),nodes.filter(handCam).map(n=>{const prev=JSON.parse(JSON.stringify(otOf(n)));
+      return mkOp(n,i18n("Надписи на кадре"),"param",()=>{otStore.set(n.id,d.osdCopy.map((a,i)=>({...JSON.parse(JSON.stringify(a)),id:"c"+i})))},null,()=>{otStore.set(n.id,prev)})}),
+      i18n("заглушка: надписи остаются в странице; прежние надписи камеры заменятся"));
+  }
   if(d.rename){
     step("rename",`Имена по шаблону`,bulkScopeNodes().filter(bulkCanRename).map(n=>mkOp(n,"Переименование","rename",()=>{n.name=bulkName(n,d.rename)})));
   }
@@ -43609,6 +43858,7 @@ function cpGroups(src){
       {key:"arch",label:"Привязка к архиву",value:a?locName(a):i18n("архив не задан"),tag:cpArchScope(a),off:!a},
       {key:"rec",label:"Настройки записи",value:`${i18n(recordModeLabel(src.rec||"none"))} · ${i18n("предзапись основного хранилища")} ${src.pre??5} ${i18n("с")}`},
       {key:"video",label:"Видео",value:`${src._f?.["Разрешение"]||"—"} · ${src._f?.["к/с"]||"—"} ${i18n("к/с")}`,tag:i18n("только та же модель")},
+      {key:"osd",label:"Надписи на кадре",value:otCopyText(src),tag:i18n("заглушка"),off:!otOf(src).length},
       en,fGroup,
       {key:"creds",label:"Учётные данные",value:i18n("логин и пароль источника (консоль не показывает пароль)")}
     ];
@@ -43643,7 +43893,7 @@ function cpCanGet(n){
   const src=cp.src,g=cp.groups;
   if(!handCam(src)||!g.size&&!cp.dets.size)return true;
   const same=modelOf(n)===modelOf(src),a=g.has("arch")?archById(src.arch):null;
-  return g.has("rec")||g.has("enabled")||g.has("folders")||g.has("creds")||g.has("video")&&same||!!a&&!archForeignReason(n,a)
+  return g.has("rec")||g.has("enabled")||g.has("folders")||g.has("creds")||g.has("osd")||g.has("video")&&same||!!a&&!archForeignReason(n,a)
     ||camDetectors(src).some(d=>cp.dets.has(d.id)&&(!d.builtin||same));
 }
 function cpPickedIds(){return[...cp.picked].filter(id=>{const n=find(id)?.n;return n&&cpCanGet(n)})}
@@ -43800,6 +44050,7 @@ function cpShowPlan(){
   const dets=camDetectors(src).filter(x=>cp.dets.has(x.id));
   if(dets.length){d.copyDets=dets.map(x=>({name:locName(x),kind:x.kind||DET_TYPES[0],sens:x.sens||"12",builtin:!!x.builtin,template:x.template}));d.detModel=modelOf(src)}
   if(g.has("video"))d.onlyModel=modelOf(src);
+  if(g.has("osd"))d.osdCopy=JSON.parse(JSON.stringify(otOf(src)));
   const ids=cpPickedIds();
   cp=null;closeBulkModal();
   treeSel.clear();ids.forEach(id=>treeSel.add(id));
