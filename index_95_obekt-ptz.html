@@ -539,6 +539,14 @@ h1{margin:4px 0 10px;font-size:20px;display:flex;align-items:center;gap:10px}
 label{display:block;font-size:12px;color:var(--mu);margin-bottom:4px}
 .ln{display:flex;justify-content:space-between;align-items:center;padding:8px 0}.ln small{display:block;color:var(--mu)}
 .ln.ln-sw{justify-content:flex-start;gap:10px}
+/* Ровная сетка формы (docs/design-rules.md, «Поля формы — на одной линии»): переключатель — строка во всю ширину;
+   у поля ввода подпись, контрол и подсказка — дорожки общей строки сетки (subgrid), поэтому контролы соседей стоят
+   на одной линии, даже если подпись соседа в две строки */
+.g.g-form{row-gap:0;column-gap:16px}
+.g.g-form>.ln-sw{grid-column:1/-1;padding:6px 0 12px}
+.g.g-form>div:not(.ln-sw){display:grid;grid-row:span 3;grid-template-rows:subgrid;row-gap:4px;align-content:start;padding-bottom:12px;min-width:0}
+.g.g-form>div:not(.ln-sw)>label{align-self:end;margin:0}
+.g.g-form>div:not(.ln-sw)>.cs-hint{margin-top:0}
 .sw{width:36px;height:20px;background:var(--one-control-pressed);border-radius:var(--one-radius-pill);position:relative;flex:none;cursor:pointer}
 .sw:after{content:"";position:absolute;width:16px;height:16px;left:2px;top:2px;background:var(--one-accent-on);border-radius:50%}
 .sw.on{background:var(--bl)}.sw.on:after{left:18px}
@@ -17230,7 +17238,7 @@ function drvGroupCardHtml(n,g,fs,after=""){
   // поэтому он — строка состояния «Сейчас выключено»; в правке остаётся переключатель «Включить»
   const v=(f,p)=>drvVal(n,f,p),main=drvMain(fs),mainOn=main&&!!v(...main),rest=main?fs.filter(x=>x!==main):fs;
   const state=main?`<div class="cs-state">${i18n("Сейчас")} <b>${i18n(mainOn?"включено":"выключено")}</b>${drvChg(n,main[0])?`<span class="cs-chg">${i18n("изменено")}</span>`:""}</div>`:"";
-  const body=ed?`<div class="g">${fs.map(([f,p])=>drvHint(sfFieldHtml("drv",n.id,f,p,v(f,p),{ro:sfReadOnly(p)}),hint(p))).join("")}</div>`
+  const body=ed?`<div class="g g-form">${fs.map(([f,p])=>drvHint(sfFieldHtml("drv",n.id,f,p,v(f,p),{ro:sfReadOnly(p)}),hint(p))).join("")}</div>`
     :state+(rest.length?csDl(rest.map(([f,p])=>[propLabel(p,f),p.type==="boolean"?escHtml(v(f,p)?i18n("включено"):i18n("выключено")):sfText(p,v(f,p))==="—"?`<span class="cs-empty">—</span>`:escHtml(sfText(p,v(f,p))),drvChg(n,f)])):"");
   const sum=main?i18n(mainOn?"включено":"выключено"):`${fs.length} ${i18n(plural(fs.length,"параметр|параметра|параметров"))}`;
   const isPtz=fs.some(([,p])=>p["x-ui-group"]?.key===PTZ_DRV_GROUP);if(isPtz&&!after)after=ptzDrvAfterHtml(n);
