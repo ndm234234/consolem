@@ -17917,13 +17917,15 @@ function flFolderMenu(e,how){
   bulkOpenMenuAt(e.currentTarget,items.join(""));
 }
 // Перенос правит два списка, отмена возвращает оба
-async function flChange(changes,msg){
+// land — где моргать после переноса ([[uid, папка]]); нет — по добавленным в папки (объект, который уже лежал в целевой
+// папке, в add не попадает, поэтому перенос и вставка передают land сами)
+async function flChange(changes,msg,land){
   try{
     for(const[fid,add,rem] of changes)await folderChange(fid,add,rem);
   }catch(e){flStale(changes);paint();toast(problemText(e));return}
   flStale(changes);paint();
   // Прототип 96: строки моргают там, куда объекты попали (docs/design-rules.md, «Моргание после переноса»)
-  moveLanding(changes.flatMap(([fid,add])=>add.map(id=>[id,fid])));
+  moveLanding(land||changes.flatMap(([fid,add])=>add.map(id=>[id,fid])));
   toastAction("flmove",msg,i18n("Отменить"),async()=>{
     // Сначала возвращаем на старое место, потом убираем из нового: при сбое устройство не останется без папки
     try{for(const[fid,add,rem] of changes.slice().reverse())await folderChange(fid,rem,add)}
@@ -18173,7 +18175,7 @@ function treeToFolder(ids,tid,how){
   // Папку видно вместе с путём к ней: иначе объект пропал бы из дерева
   folderPath(tid).forEach(f=>open.add(f.id));
   const dom=folderDomain(tid);if(dom)open.add(dom);
-  flChange(changes,`${i18n(how==="move"?"Перемещено в":"Добавлено ещё в")} «${locName(target)}»: ${ids.length}`);
+  flChange(changes,`${i18n(how==="move"?"Перемещено в":"Добавлено ещё в")} «${locName(target)}»: ${ids.length}`,ids.map(id=>[id,tid]));
 }
 function flToFolder(tid,how){
   closeTreeCtx();
@@ -18182,7 +18184,7 @@ function flToFolder(tid,how){
   const changes=[[tid,fresh,[]]];
   if(how==="move")flGroupBy(f,devs).forEach((ids,fid)=>{if(fid&&fid!==tid)changes.push([fid,[],ids])});
   fl.cur=null;
-  flChange(changes,`${i18n(how==="move"?"Перемещено в":f.type==="nofolder"?"Положено в":"Добавлено ещё в")} «${locName(target)}»: ${devs.length}`);
+  flChange(changes,`${i18n(how==="move"?"Перемещено в":f.type==="nofolder"?"Положено в":"Добавлено ещё в")} «${locName(target)}»: ${devs.length}`,devs.map(it=>[it.n.id,tid]));
 }
 function flRemoveSel(){
   const f=flHolder(fl.owner),devs=flSelItems(f).filter(it=>!it.fld&&flHomes(f,it).length);if(!devs.length)return;
