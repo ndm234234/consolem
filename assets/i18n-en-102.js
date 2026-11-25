@@ -1,11 +1,11 @@
 // Английский прототипа 102 (docs/TEXTS.md, «Как менять текст безопасно»): подключён после assets/i18n-en.js
 Object.assign(window.I18N_EN,{
 "Указать размер тома.":"Enter the volume size.",
-"Размер тома — не меньше 1 ГБ.":"The volume size must be 1 GB or more.",
+"Указать размер тома не меньше 1 ГБ.":"Enter a volume size of 1 GB or more.",
 "На диске":"Disk",
 "свободно только":"has only this free space:",
 "Уменьшить размер тома.":"Decrease the volume size.",
-"Том больше 30 ТБ. Лучше сделать несколько томов до 30 ТБ: при сбое большого тома консоль теряет больше записей, а проверка тома идёт дольше.":"The volume is larger than 30 TB. Make some volumes of 30 TB or less: when a large volume fails, more records are lost, and the volume check takes more time.",
+"Том больше 30 ТБ. Лучше сделать несколько томов до 30 ТБ. При сбое большого тома сервер теряет больше записей и дольше проверяет том.":"The volume is larger than 30 TB. Make some volumes of 30 TB or less. When a large volume fails, the server loses more records and checks the volume for a longer time.",
 "Единица размера":"Size unit",
 "Свободно":"Free",
 "из":"of",
@@ -22,5 +22,7 @@ Object.assign(window.I18N_EN,{
 "Тома с записями в папке":"Volumes with records in the folder",
 "В папке нет томов с записями этого типа.":"The folder has no volumes with records of this type.",
 "Указать папку с записями":"Enter the folder with records",
-"Добавить в план":"Add to the plan"
+"Добавить в план":"Add to the plan",
+"Консоль не может отправить новый том вместе с этими правками. Сбросить черновик и добавить том снова.":"The console cannot send the new volume with these changes. Discard the draft and add the volume again.",
+"Консоль не может добавить том в план сейчас. Закрыть выбор нескольких объектов и добавить том снова.":"The console cannot add the volume to the plan now. Close the selection of many objects and add the volume again."
 });

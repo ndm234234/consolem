@@ -8112,33 +8112,32 @@ function gbStr(n){n=Math.max(1,Math.round(Number(n)||0));return n>=1024?fmtTb(n/
 // Прототип 102 (пробел F92): размер тома — число и единица, ГБ или ТБ. ТБ — с одним знаком после запятой.
 // Меньше 1 ГБ строка сохраняет как есть: поле показывает ошибку, а не подставляет 1 ГБ.
 const VOL_BIG_TB=30;
-function volUnit(v){return v.unit||(sizeTb(v.size)>=1?"ТБ":"ГБ")}
+// Единица поля: выбор человека (_unit — вид поля, не правка: ключ с «_» черновик пропускает), иначе — единица строки размера
+function volUnit(v){return v._unit||(/ТБ|TB/.test(v.size||"")?"ТБ":"ГБ")}
 function volNum(v){const t=sizeTb(v.size);if(!t)return"";return volUnit(v)==="ТБ"?Math.round(t*10)/10:Math.round(t*1024*10)/10}
+// Строка хранит то, что ввёл человек, в его единице: 1500 ГБ остаётся 1500 ГБ, без округления до 0,1 ТБ
 function volSizeStr(val,unit){
   const n=Number(String(val).replace(",","."));if(!(n>0))return"";
-  const r=Math.round(n*10)/10,t=unit==="ТБ"?r:r/1024;
-  return t>=1?fmtTb(t):String(Math.round(t*1024*10)/10).replace(".",",")+" "+i18n("ГБ");
+  const r=Math.round(n*10)/10,num=x=>String(x).replace(".",",");
+  if(unit==="ТБ")return r>=1?num(r)+" "+i18n("ТБ"):num(Math.round(r*1024*10)/10)+" "+i18n("ГБ");
+  return num(r)+" "+i18n("ГБ");
 }
-// ── ЗАГЛУШКА до правки контракта: status.disks[].freeBytes (vms.server/1 1.3) ──
-// Свободное место диска сервера в ТБ для тома v. Сервер прислал freeBytes — консоль берёт его (сервер уже вычел свои
-// тома, кроме черновика v). Нет поля — заглушка: размер диска − запас под систему и другие файлы (у системного диска
-// половина, у других 10 %) − тома всех хранилищ на этом диске, кроме самого v. Раздел целиком занимает весь диск.
+// Свободное место диска сервера в ТБ для тома v (vms.server/1 1.3, status.disks[].freeBytes, пробел F92). Сервер
+// вычел свои тома; консоль добавляет применённый объём самого v (его место доступно ему же) и вычитает тома из плана
+// на этом диске. Нет поля — система не сообщает место: null, поле размера не показывает место и не проверяет его
+// (правила дизайна, раздел 5)
 function diskFreeTb(sid,disk,v){
-  const d=serverDisks(sid).find(x=>x.disk===disk);if(!d)return null;
-  const use=diskUse(sid,disk),others=use.vols.filter(x=>x.v!==v&&!(v&&v.id&&x.v.id===v.id));
-  // Применённый объём самого тома: он уже на этом диске, поэтому его место тоже доступно тому
-  const base=v&&v.id?(cardBase&&cardBase.id===v.id&&cardBase.snap?cardBase.snap:volById(v.id)):null,own=base&&base.disk===disk?sizeTb(base.size):0;
-  if(d.free!=null)return Math.max(0,d.free+own);
-  if(others.some(x=>x.v.mode==="part"))return 0;
-  const tot=sizeTb(d.size);
-  return Math.max(own,Math.round((tot*(d.sys?0.5:0.9)-others.reduce((n,x)=>n+sizeTb(x.v.size),0))*1024)/1024);
+  const d=serverDisks(sid).find(x=>x.disk===disk);if(!d||d.free==null)return null;
+  const base=v&&v.id?(cardBase&&cardBase.id===v.id&&cardBase.snap?cardBase.snap:volById(v.id)):null,own=base&&!base._new&&base.disk===disk?sizeTb(base.size):0;
+  const planned=diskUse(sid,disk).vols.filter(x=>x.v._new&&x.v!==v).reduce((n,x)=>n+sizeTb(x.v.size),0);
+  return Math.max(0,Math.round((d.free+own-planned)*1024)/1024);
 }
 // Что сказать под полем размера: ошибка, предупреждение или подсказка. free — свободно в ТБ (null — диска нет)
 function volSizeMsg(t,free,disk,hint){
   if(!(t>0))return{cls:"err",txt:i18n("Указать размер тома.")};
-  if(t<1/1024)return{cls:"err",txt:i18n("Размер тома — не меньше 1 ГБ.")};
+  if(t<1/1024)return{cls:"err",txt:i18n("Указать размер тома не меньше 1 ГБ.")};
   if(free!=null&&t>free+1e-9)return{cls:"err",txt:`${i18n("На диске")} ${disk} ${i18n("свободно только")} ${fmtTb(free)}. ${i18n("Уменьшить размер тома.")}`};
-  if(t>VOL_BIG_TB)return{cls:"warn",txt:i18n("Том больше 30 ТБ. Лучше сделать несколько томов до 30 ТБ: при сбое большого тома консоль теряет больше записей, а проверка тома идёт дольше.")};
+  if(t>VOL_BIG_TB)return{cls:"warn",txt:i18n("Том больше 30 ТБ. Лучше сделать несколько томов до 30 ТБ. При сбое большого тома сервер теряет больше записей и дольше проверяет том.")};
   return{cls:"",txt:hint?i18n(hint):""};
 }
 // Ошибка размера тома v хранилища a или пустая строка: для кнопок окна и мастера
@@ -8228,10 +8227,12 @@ function volById(id){
 }
 function sizeTb(str){const m=/([\d.,]+)\s*(ТБ|ГБ|TB|GB)/.exec(str||"");if(!m)return 0;const n=parseFloat(m[1].replace(",","."));return/Г|G/.test(m[2])?n/1024:n}
 function fmtTb(n){return n>=1?String(Math.round(n*10)/10).replace(".",",")+" "+i18n("ТБ"):Math.round(n*1024)+" "+i18n("ГБ")}
-function archSizeTb(a){return archVols(a).reduce((t,v)=>t+sizeTb(v.size),0)}
+// Счётчики — по применённому состоянию: том из плана (_new) в них не входит (правила дизайна, раздел 4)
+function archVolsOn(a){return archVols(a).filter(v=>!v._new)}
+function archSizeTb(a){return archVolsOn(a).reduce((t,v)=>t+sizeTb(v.size),0)}
 function archSize(a){return fmtTb(archSizeTb(a))}
-function archUsed(a){const t=archSizeTb(a);if(!t)return"0%";const u=archVols(a).reduce((x,v)=>x+sizeTb(v.size)*(parseFloat(v.used)||0)/100,0);return Math.round(u/t*100)+"%"}
-function archDiskLabel(a){const v=archVols(a);return v.length===1?(archAddr(a)==="bucket"?volLabelOf(a,v[0]):v[0].disk):`${v.length} ${i18n(plural(v.length,"том|тома|томов"))}`}
+function archUsed(a){const t=archSizeTb(a);if(!t)return"0%";const u=archVolsOn(a).reduce((x,v)=>x+sizeTb(v.size)*(parseFloat(v.used)||0)/100,0);return Math.round(u/t*100)+"%"}
+function archDiskLabel(a){const v=archVolsOn(a);return v.length===1?(archAddr(a)==="bucket"?volLabelOf(a,v[0]):v[0].disk):`${v.length} ${i18n(plural(v.length,"том|тома|томов"))}`}
 function archById(id){const o=hwIdxGet().ar.get(id)||null;return IDX_GUARD.on?idxGuard("archById",id,o,()=>arch.find(a=>a.id===id)||null):o}
 // Камера без сервера (добавлена без него) подключается к серверу первого
 // своего хранилища — дальше сервер остаётся с ней и без записи.
@@ -9718,8 +9719,7 @@ function cancelEdits(){editClear();setD(false);paint();toast("Отменено")
 // внизу — «Сбросить · Показать план». План перечисляет «было → станет», дальше
 // та же очередь и отчёт: сервер без связи не примет правку, и это будет видно.
 let cardBase=null,cardDraft=null,cardFootRaf=0;
-// unit — единица поля размера тома (прототип 102): вид поля, а не правка
-const CARD_SKIP=new Set(["unit","devices","online","cpu","ram","net","disk","bytes","shrink","replicaLagSec","depthDays","recordState","recordReason","writableFields","web","webCert","webRes"]);
+const CARD_SKIP=new Set(["devices","online","cpu","ram","net","disk","bytes","shrink","replicaLagSec","depthDays","recordState","recordReason","writableFields","web","webCert","webRes"]);
 function cardClone(n){try{return JSON.parse(JSON.stringify(n))}catch(e){return{}}}
 function cardEnsureBase(n){
   if(cardDraft&&cardDraft.id!==n.id){
@@ -9938,7 +9938,20 @@ function cardPlanOpen(){
 // у предела длины нет отказа сервера, консоль — единственная проверка
 function cardEditBlock(){
   if(!cardDraft)return"";
+  // Прототип 102: размер тома в карточке — не меньше 1 ГБ и не больше свободного места диска
+  {const n=find(cardDraft.id)?.n,a=n?.type==="vol"&&archById(n.archId),p=a&&volSizeProblem(a,n,a.server);if(p)return p}
   return Object.keys(edits).map(k=>{const[id,f]=splitEditKey(k);return id===cardDraft.id?editError(id,f,edits[k]):""}).find(Boolean)||"";
+}
+// Прототип 102: свободное место дисков (freeBytes) считает сервер. Операция, которая добавила том или изменила его
+// объём, меняет место: после неё консоль перечитывает сервер этих дисков
+const VOL_SRV_DIRTY=new Set();
+function volSrvMark(n,d){
+  if(n.type==="archive"&&n.server&&d.some(r=>r.volAdd))VOL_SRV_DIRTY.add(n.server);
+  if(n.type==="vol"&&d.some(r=>r.key==="size")){const s=archById(n.archId)?.server;if(s)VOL_SRV_DIRTY.add(s)}
+}
+function volSrvRefresh(){
+  const ids=[...VOL_SRV_DIRTY];VOL_SRV_DIRTY.clear();
+  ids.forEach(id=>API.get(`/units/${id}`).then(u=>{hwApplyUnit(u);if(app==="hw")gear()}).catch(()=>{}));
 }
 function cardApply(ok){
   const all=cardDiff();if(!all.length)return;
@@ -9962,6 +9975,9 @@ function cardApply(ok){
     return;
   }
   less.forEach(x=>{x.set.confirmShrinkBytes=x.set.sizeBytes});
+  if(items)volSrvMark(n,d);
+  // Новый том создаёт только операция: без неё он остался бы в странице и не попал на сервер
+  if(!items&&d.some(r=>r.volAdd)){toast(i18n("Консоль не может отправить новый том вместе с этими правками. Сбросить черновик и добавить том снова."));return}
   if(items){
     // Своя страница подсистемы: «Применить» идёт с этой минуты. Иначе перерисовка между cardRestore и очередью
     // (startQueue → gear) увидела бы пустой черновик и отправила странице revert
@@ -9997,7 +10013,7 @@ function cardApply(ok){
     if(r.streamAdd)return mkOp(n,r.label,"param",()=>{(n.streams||(n.streams=[])).push(cardClone(r.streamAdd))},null,()=>{n.streams=(n.streams||[]).filter(x=>x.id!==r.streamAdd.id)});
     if(r.streamDel)return mkOp(n,r.label,"param",()=>{n.streams=(n.streams||[]).filter(x=>x.id!==r.streamDel.id)});
     if(r.folders){const t=r.node||n;return mkOp(t,`${r.label}: ${r.toT}`,"folder",()=>cardSetFolders(t.id,r.folders),null,()=>cardSetFolders(t.id,r.fromFolders))}
-    if(r.volAdd)return mkOp(n,r.label,"param",()=>{(n.vols||(n.vols=[])).push(r.volAdd)},null,()=>{n.vols=(n.vols||[]).filter(x=>x!==r.volAdd)});
+    if(r.volAdd)return mkOp(n,r.label,"param",()=>{(n.vols||(n.vols=[])).push(r.volAdd);hwIdxDrop()},null,()=>{n.vols=(n.vols||[]).filter(x=>x!==r.volAdd);hwIdxDrop()});
     if(r.add)return mkOp(r.node,r.label,"param",()=>{(r.node.devices||(r.node.devices=[])).push(r.add);hwIdxDrop()},null,()=>{r.node.devices=r.node.devices.filter(x=>x!==r.add);hwIdxDrop()});
     if(r.fld||r.edit){const k=r.prop,prev=k?n[k]:undefined,v=k==="port"||k==="ch"?Number(r.to)||r.to:String(r.to).trim();
       const pf=n._f?.[r.fld];
@@ -25790,7 +25806,7 @@ function formBase(n){
       ${spec.encryption?`<div class="ln ln-sw" data-needs="feature:archiveEncryption"${pfa(n,"encrypted")}><div>${i18n("Шифрование томов")} <span class="sub">${canEnc?"AES-256-GCM":i18n("— только у объектного хранилища")}</span></div><div class="sw ${n.enc&&canEnc?"on":""} ${canEnc?"":"dis"}" ${canEnc?`${onEv("click",["archEncToggle",onEv.el,n.id])}`:""}></div></div>`:""}
       <div class="mx" style="margin-top:10px">
         <button type="button" class="mc" ${onEv("click",["goTab","cams"])}><span>${i18n("Камер пишется")}</span><b>${cams.length}</b></button>
-        <div class="mc"><span>${i18n("Томов")}</span><b>${vols.length}</b></div>
+        <div class="mc"><span>${i18n("Томов")}</span><b>${vols.filter(v=>!v._new).length}</b></div>
         <div class="mc"><span>${i18n("Объём")}</span><b>${archSize(n)}</b></div>
         ${archUsedOff(n)?"":`<div class="mc"${pfa("volume","usedPercent")}><span>${i18n("Занято")}</span><b>${archUsed(n)}</b></div>`}
       </div>
@@ -37602,9 +37618,9 @@ function volFieldsHtml(a,v,set){
     const m=volSizeMsg(sizeTb(v.size),free,v.disk,hint);
     const all=free!=null&&free>=1/1024?(u==="ТБ"?Math.floor(free*10)/10:Math.floor(free*1024)):0;
     return`<div${vf("gb")} data-vsz data-free="${free??""}" data-disk="${escHtml(v.disk||"")}" data-hint="${escHtml(hint||"")}"><label>${i18n(label)}</label>
-      <div class="gb-in"><input type="number" min="${u==="ТБ"?0.1:1}" step="${u==="ТБ"?0.1:1}" value="${volNum(v)}" ${onEv("input",[...set,"gb",onEv.value,true],["volSizeLive",onEv.el])}>
+      <div class="gb-in"><input type="number" min="${u==="ТБ"?0.1:1}" step="${u==="ТБ"?0.1:1}" value="${volNum(v)}" ${onEv("input",[...set,"num",onEv.value,true],["volSizeLive",onEv.el])}>
       <select class="vsz-unit" aria-label="${i18n("Единица размера")}" ${onEv("change",[...set,"unit",onEv.value])}>${["ГБ","ТБ"].map(x=>`<option value="${x}" ${x===u?"selected":""}>${i18n(x)}</option>`).join("")}</select></div>
-      ${free!=null?`<div class="vsz-free"><span>${i18n("Свободно")} <b>${fmtTb(free)}</b> ${i18n("из")} ${escHtml(d?.size||"")} ${i18n("на диске")} ${escHtml(v.disk)}</span>${all?`<button type="button" class="btn s" ${onEv("click",[...set,"gb",String(all)])}>${i18n("Всё свободное")}</button>`:""}</div>`:""}
+      ${free!=null?`<div class="vsz-free"><span>${i18n("Свободно")} <b>${fmtTb(free)}</b> ${i18n("из")} ${escHtml(d?.size||"")} ${i18n("на диске")} ${escHtml(v.disk)}</span>${all?`<button type="button" class="btn s" ${onEv("click",[...set,"num",String(all)])}>${i18n("Всё свободное")}</button>`:""}</div>`:""}
       <div class="bk-hint vsz-msg${m.cls?" vsz-"+m.cls:""}" data-vsz-msg ${m.txt?"":"hidden"}>${escHtml(m.txt)}</div></div>`;
   };
   const dir=hint=>`<div${vf("dir")}><label>${i18n("Папка на диске")}</label><div class="gb-in"><input value="${escHtml(v.dir||"")}" ${onEv("input",[...set,"dir",onEv.value,true])}><button type="button" class="btn s" data-tip="${i18n("Выбрать папку на диске")}" ${onEv("click",["volPickDir",onEv.el,`${v.disk}`])}>${i18n("Обзор…")}</button></div>${hint?`<div class="bk-hint">${i18n(hint)}</div>`:""}</div>`;
@@ -37648,8 +37664,10 @@ function volPickDir(btn,disk){
   toast(i18n("Выбрана папка")+" "+inp.value);
 }
 function volApply(v,k,val){
-  if(k==="gb"){v.size=volSizeStr(val,volUnit(v));return}
-  if(k==="unit"){v.unit=val;return}
+  // gb — всегда гигабайты (так зовут volSet и тесты); num — число поля в его единице (ГБ или ТБ)
+  if(k==="gb"){v.size=volSizeStr(val,"ГБ");return}
+  if(k==="num"){v.size=volSizeStr(val,volUnit(v));return}
+  if(k==="unit"){v._unit=val;return}
   v[k]=k==="port"?Number(val)||0:val;
   if(k==="disk"&&v.dir)v.dir=v.dir.replace(/^[A-Z]:/i,val);
 }
@@ -37799,7 +37817,7 @@ function anPickFoundQuiet(key){
   else{const f=protoFoundIn(anDraft(),an.findPath).list.find(x=>x.key===key);if(f){an.vol=protoVolOf(f);an.found=key}}
 }
 // Папка с записями в мастере: ввод без перерисовки, смена (Enter, уход из поля, «Обзор…») — новый поиск
-function anPath(v,quiet){if(!an)return;an.findPath=v;if(quiet){anChrome();return}an.found=null;anFoundDefault();renderArchNew()}
+function anPath(v,quiet){if(!an)return;an.findPath=v;const run=()=>{if(!an)return false;an.found=null;anFoundDefault();renderArchNew();return true};if(quiet){anChrome();protoPathLater(run)}else run()}
 function anPickFound(key){anPickFoundQuiet(key);renderArchNew()}
 function anFoundOn(){return an.vsrc==="found"&&kindOf(an.kind).address!=="bucket"}
 function anSet(k,v,quiet){
@@ -38010,20 +38028,6 @@ function addVolume(archId){
   // У дисков сервера и у NAS окно ещё спрашивает, какой том нужен: новый или с записями
   avOpen(a);
 }
-function addVolumeNew(a,d0){
-  const d=d0||volDefaults(a);
-  if(!d){toast("Свободных дисков нет. На одном диске у хранилища один том, и другие хранилища уже используют свои разделы");return}
-  const rec=d.rec;
-  unitsCreate([Object.assign(volToUnit(volSpec(a,d),nodeKind(a)),{parentId:a.id})]).then(([u])=>{
-    const r=unitRec(u);
-    if(!volById(r.id)){a.vols.push(volNode(r));hwIdxDrop()}
-    const v=volById(r.id);if(rec&&v)protoMarkRec(v,rec);
-    closeBulkModal();av=null;
-    open.add(a.id);sel=r.id;tab="gen";setD(true);
-    toast(i18n(rec?"Сервер подключил том с записями без форматирования":"Том добавлен"));
-    paint();
-  }).catch(e=>toast(problemText(e)));
-}
 // Окно «Новый том»: новый том или том с записями
 let av=null;
 function avOpen(a){av={archId:a.id,src:"new",found:null,path:"",nas:{disk:"\\\\nas01\\vms",user:"",pass:""},vol:volDefaults(a)};avPaint()}
@@ -38033,11 +38037,13 @@ function avToPlan(a,vol){
   const n=find(a.id)?.n||a;
   sel=a.id;tab="arch";open.add(a.id);
   cardEnsureBase(n);
-  const v=Object.assign(cardClone(vol),{id:`new-vol-${++volTmp}`,archId:a.id,_new:true});delete v.unit;
+  const v=Object.assign(cardClone(vol),{id:`new-vol-${++volTmp}`,archId:a.id,_new:true});delete v._unit;
   v.name=volLabelOf(a,v);
-  (n.vols||(n.vols=[])).push(v);
+  (n.vols||(n.vols=[])).push(v);hwIdxDrop();
   closeBulkModal();av=null;
-  setD(true);paint();
+  setD(true);
+  if(cardDraft?.id!==a.id){n.vols=n.vols.filter(x=>x!==v);hwIdxDrop();paint();toast(i18n("Консоль не может добавить том в план сейчас. Закрыть выбор нескольких объектов и добавить том снова."));return}
+  paint();
   toast(i18n("Том в плане. Консоль создаст том, когда вы нажмёте «Применить»."));
 }
 // Папка с томами с записями: человек называет её сам, консоль ищет тома в ней
@@ -38049,14 +38055,18 @@ function protoPickPath(btn,sid,storage){
   const inp=btn.previousElementSibling;if(!inp)return;
   const sys=new Set(serverDisks(sid).filter(d=>d.sys).map(d=>d.disk)),fs=protoFoundAll(sid).sort((x,y)=>sys.has(x.disk)-sys.has(y.disk));
   const f=fs.find(x=>x.storage===storage)||fs[0];
-  inp.value=f?(f.mode==="part"?f.disk+"\\":f.dir):"D:\\Axxon";inp.dispatchEvent(new Event("input",{bubbles:true}));inp.dispatchEvent(new Event("change",{bubbles:true}));
+  inp.value=f?(f.mode==="part"?f.disk+"\\":f.dir):"D:\\Axxon";inp.dispatchEvent(new Event("input",{bubbles:true}));
 }
 function protoPathHtml(val,set,sid,storage){
-  return`<div class="g g-1" style="margin-top:10px"><div><label>${i18n("Папка с записями на сервере")}</label><div class="gb-in"><input value="${escHtml(val||"")}" placeholder="D:\\Axxon" ${onEv("input",[...set,onEv.value,true])} ${onEv("change",[...set,onEv.value])}>
+  return`<div class="g g-1" style="margin-top:10px"><div><label>${i18n("Папка с записями на сервере")}</label><div class="gb-in"><input data-ppath value="${escHtml(val||"")}" placeholder="D:\\Axxon" ${onEv("input",[...set,onEv.value,true])}>
     <button type="button" class="btn s" data-tip="${i18n("Выбрать папку на диске сервера")}" ${onEv("click",["protoPickPath",onEv.el,`${sid}`,`${storage}`])}>${i18n("Обзор…")}</button></div>
     <div class="bk-hint">${i18n("Папка, где лежит файл тома .afs, папка объектного хранилища или корень диска с разделом SolidStore, например D:\\.")}</div></div></div>`;
 }
-function avPath(v,quiet){if(!av)return;av.path=v;if(!quiet){av.found=null;avDefault();avPaint()}}
+// Ввод папки: список томов консоль строит через паузу после клавиши (TYPE_PAUSE_MS), фокус и курсор остаются в поле.
+// Перерисовка по change (уход из поля) потеряла бы клик по кнопке окна
+let protoPathT=0;
+function protoPathLater(fn){clearTimeout(protoPathT);protoPathT=setTimeout(()=>{if(!fn())return;const i=document.querySelector("[data-ppath]");if(i){i.focus();const l=i.value.length;i.setSelectionRange(l,l)}},TYPE_PAUSE_MS)}
+function avPath(v,quiet){if(!av)return;av.path=v;const run=()=>{if(!av)return false;av.found=null;avDefault();avPaint();return true};if(quiet)protoPathLater(run);else run()}
 // Поле нового тома в окне: диск, размещение, папка, размер — те же, что у карточки тома
 function avVol(k,val,quiet){
   const a=av&&archById(av.archId);if(!a||!av.vol)return;
@@ -44237,7 +44247,7 @@ function cardApiItemsOwn(n,d){
       if(r.node&&r.node!==n)return null;
       if(r.schemaProp){items.push(xp(r));continue}
       if(r.webKey){items.push(webItem(n,r));continue}
-      if(n.type==="archive"&&r.volAdd){const{id,archId,name,unit,rec,_new,...p}=r.volAdd;items.push({uid:n.id,createUnit:volToUnit(volSpec(n,p),nodeKind(n))});continue}
+      if(n.type==="archive"&&r.volAdd){const{id,archId,name,_unit,rec,_new,...p}=r.volAdd;items.push({uid:n.id,createUnit:volToUnit(volSpec(n,p),nodeKind(n))});continue}
       if(n.type==="archive"&&r.key==="vols"){const vs=volsToItems(r.from,r.to);if(!vs)return null;items.push(...vs);continue}
       const set=srvRowToApi(n,r);if(!set)return null;
       items.push({targetId:n.id,set});
@@ -44306,6 +44316,7 @@ function apiQueueCall(q,call){
 const opTouched=new Set();
 function opOnEvent(m){
   if(m.type==="operation.progress"&&m.payload?.item?.targetId)opTouched.add(m.payload.item.targetId);
+  if(m.type==="operation.finished")volSrvRefresh();
   if(m.type==="operation.finished"&&opTouched.size){const ids=[...opTouched];opTouched.clear();hwTouched(ids)}
   const w=opWait.get(m.entityId);
   if(m.type==="operation.finished"&&app==="log"&&logFilt==="ops")logOpsLoad();

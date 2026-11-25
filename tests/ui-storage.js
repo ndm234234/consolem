@@ -22,7 +22,10 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   ok(await until(() => document.querySelector("#bmodal.open .av-body")), "«＋ Том» открывает окно выбора");
   ok(av?.src === "new" && !document.querySelector("#bmFoot .btn.pri")?.disabled, "по умолчанию — новый том, «Добавить том» доступна");
   avCreate();
-  ok(await until(() => a.vols.length === 2 && sel === a.vols[1].id), "том добавлен, открыт");
+  // Прототип 102: новый том идёт в план хранилища и создаётся по «Применить»; без плана (index.html) — сразу
+  const planned = typeof cardDiff === "function" && cardDiff().some((r) => r.volAdd);
+  if (planned) cardApply();
+  ok(await until(() => a.vols.length === 2 && /^6/.test(a.vols[1].id) && (planned || sel === a.vols[1].id)), "том добавлен, открыт");
   const v2 = a.vols[1];
   // Правка тома через черновик и операцию
   pick(v2.id);
@@ -95,8 +98,11 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   anSet("storage", "block");
   anGo(2);
   anSrc("found");
-  ok(await until(() => !foundLoading() && an.found), "сервер назвал тома с записями (findVolumes)");
-  const found = protoFound(anDraft()).list, pickedKey = an.found;
+  // Прототип 102: том с записями консоль ищет в папке, которую называет человек
+  const byPath = typeof protoFoundIn === "function";
+  if (byPath) { const f0 = protoFound(anDraft()).list[0]; if (f0) anPath(protoFoundLabel(f0)); }
+  else ok(await until(() => !foundLoading() && an.found), "сервер назвал тома с записями (findVolumes)");
+  const found = (byPath ? protoFoundIn(anDraft(), an.findPath) : protoFound(anDraft())).list, pickedKey = an.found;
   ok(found.length > 0 && found.some((f) => f.key === pickedKey), "найдены тома с записями, первый выбран: " + pickedKey);
   ok(!anBlockVol(), "том выбран — «Далее» доступна");
   anGo(3);
@@ -105,8 +111,10 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   createArchive();
   ok(await until(() => arch.length === nF + 1), "хранилище из тома с записями создано");
   const fa = arch[arch.length - 1], fv = fa.vols[0];
-  ok(!!volRec(fv) && fv.state !== "unfmt", "том с записями не «Не отформатирован», период от сервера: " + volStateText(fv));
-  ok(!!(await uiRec(fv.id)).recordsFrom, "у тома на сервере есть recordsFrom");
+  // Прототип 102 сделан до findVolumes: том с записями там помечает страница (PROTO_REC), а не сервер
+  const srvRec = typeof volRec === "function";
+  ok((srvRec ? !!volRec(fv) : PROTO_REC.has(fv.id)) && fv.state !== "unfmt", "том с записями не «Не отформатирован»: " + volStateText(fv));
+  if (srvRec) ok(!!(await uiRec(fv.id)).recordsFrom, "у тома на сервере есть recordsFrom");
   ok(/без форматирования/.test(toastText()), "тост: «" + toastText() + "»");
   // Подключённый том второй раз не предлагается
   addArchive(srvFree.id);
@@ -114,20 +122,23 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   anSet("storage", "block");
   anGo(2);
   anSrc("found");
-  ok(await until(() => !foundLoading()), "список томов обновлён");
+  if (!byPath) ok(await until(() => !foundLoading()), "список томов обновлён");
   ok(!protoFound(anDraft()).list.some((f) => f.key === pickedKey), "подключённый том в списке больше нет");
   wzCancelQuiet("arch");
   an = null;
   // «＋ Том»: том с записями
   addVolume(fa.id);
   avSrc("found");
-  await until(() => !foundLoading());
+  if (byPath) { const f0 = protoFound(fa).list[0]; if (f0) avPath(protoFoundLabel(f0)); }
+  else await until(() => !foundLoading());
   const avL = avList(fa);
   if (avL.length) {
     ok(av.found === avL[0].key || avL.some((f) => f.key === av.found), "в окне «＋ Том» выбран найденный том");
     avCreate();
-    ok(await until(() => fa.vols.length === 2), "том с записями добавлен");
-    ok(!!volRec(fa.vols[1]), "второй том — с записями, период от сервера");
+    // Прототип 102: новый том идёт в план, на сервер — по «Применить»
+    if (typeof cardDiff === "function" && cardDiff().some((r) => r.volAdd)) cardApply();
+    ok(await until(() => fa.vols.length === 2 && !fa.vols[1]._new), "том с записями добавлен");
+    ok(srvRec ? !!volRec(fa.vols[1]) : PROTO_REC.has(fa.vols[1].id), "второй том — с записями");
   } else {
     ok(!!avBlock(fa), "томов с записями нет — «Подключить том» недоступна");
     avClose();
