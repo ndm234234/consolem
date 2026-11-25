@@ -17922,11 +17922,14 @@ async function flChange(changes,msg){
     for(const[fid,add,rem] of changes)await folderChange(fid,add,rem);
   }catch(e){flStale(changes);paint();toast(problemText(e));return}
   flStale(changes);paint();
+  // Прототип 96: строки моргают там, куда объекты попали (docs/design-rules.md, «Моргание после переноса»)
+  moveLanding(changes.flatMap(([fid,add])=>add.map(id=>[id,fid])));
   toastAction("flmove",msg,i18n("Отменить"),async()=>{
     // Сначала возвращаем на старое место, потом убираем из нового: при сбое устройство не останется без папки
     try{for(const[fid,add,rem] of changes.slice().reverse())await folderChange(fid,rem,add)}
-    catch(e){toast(problemText(e))}
+    catch(e){toast(problemText(e));flStale(changes);paint();return}
     flStale(changes);paint();
+    moveLanding(changes.flatMap(([fid,add,rem])=>rem.map(id=>[id,fid])));
   },8000);
 }
 // Кто вне папок, знает только сервер: убранное из папки появится в «Без папки» после нового чтения
@@ -18098,6 +18101,28 @@ function treePaste(tid){
 }
 function ctxCut(id){closeTreeCtx();treeCut(treeSel.size>1&&treeSel.has(id)?null:[id])}
 function ctxPaste(id){closeTreeCtx();treePaste(id)}
+// ── Моргание после переноса (прототип 96) ──
+// Перенос, вставка, «Добавить в папку» и их отмена подсвечивают строки дерева там, куда объекты попали: путь к папке
+// раскрыт, дерево прокручено к первой строке, вспышка — та же, что у перехода по ссылке (accFlash). Ветки дочитываются
+// после переноса, поэтому строки ждём до MOVE_LAND_MS. places: [[uid, папка]] — строка объекта в этой папке (data-ctx);
+// папка null — сама строка папки
+const MOVE_LAND_MS=3000;
+function moveLanding(places){
+  if(!places.length)return;
+  places.forEach(([,fid])=>{if(fid)folderPath(fid).forEach(x=>open.add(x.id))});
+  const sels=[...new Set(places.map(([id,fid])=>`#tree .n[data-pick="${id}"]`+(fid?`[data-ctx="f:${fid}"]`:"")))].slice(0,50);
+  const found=()=>sels.map(q=>document.querySelector(q)).filter(Boolean);
+  const t0=performance.now();
+  const wait=()=>{
+    renderTreeFlush();
+    // Ждём, пока появятся все строки или выйдет срок: ветка может прийти позже первой строки
+    if(found().length<sels.length&&performance.now()-t0<MOVE_LAND_MS){setTimeout(wait,100);return}
+    const els=found();if(!els.length)return;
+    els[0].scrollIntoView({block:"nearest"});
+    accFlash(found,true);flashKeepSet(sels);
+  };
+  setTimeout(wait,40);
+}
 // Ветки раскладки folders у прежнего и нового родителя (корень — домен) перечитываются, как по tree.changed
 function foldBrDrop(...ids){
   const dom=ids[ids.length-1];
@@ -18122,10 +18147,13 @@ async function folderMove(id,pid){
   if(pid)folderPath(pid).forEach(x=>open.add(x.id));
   const dom=folderDomain(id);if(dom)open.add(dom);
   foldBrDrop(was,pid,dom);paint();
+  moveLanding([[id,null]]);
   const to=pid?`«${locName(folderById(pid)||{})}»`:i18n("корень домена");
   toastAction("foldmove",`${i18n("Папка перемещена в")} ${to}: «${locName(f)}»`,i18n("Отменить"),async()=>{
     try{await folderMoveStep(id,was)}catch(e){toast(problemText(e));return}
+    if(was)folderPath(was).forEach(x=>open.add(x.id));
     foldBrDrop(was,pid,dom);paint();
+    moveLanding([[id,null]]);
   },8000);
 }
 // Перенос из дерева: те же изменения состава, что и на экране папки, с отменой в тосте
