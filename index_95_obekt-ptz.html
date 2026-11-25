@@ -544,9 +544,12 @@ label{display:block;font-size:12px;color:var(--mu);margin-bottom:4px}
    на одной линии, даже если подпись соседа в две строки */
 .g.g-form{row-gap:0;column-gap:16px}
 .g.g-form>.ln-sw{grid-column:1/-1;padding:6px 0 12px}
-.g.g-form>div:not(.ln-sw){display:grid;grid-row:span 3;grid-template-rows:subgrid;row-gap:4px;align-content:start;padding-bottom:12px;min-width:0}
-.g.g-form>div:not(.ln-sw)>label{align-self:end;margin:0}
-.g.g-form>div:not(.ln-sw)>.cs-hint{margin-top:0}
+.g.g-form>div:not(.ln-sw):not(.sw-grp){display:grid;grid-row:span 3;grid-template-rows:subgrid;row-gap:4px;align-content:start;padding-bottom:12px;min-width:0}
+.g.g-form>div:not(.ln-sw):not(.sw-grp)>label{align-self:end;margin:0}
+.g.g-form>div:not(.ln-sw):not(.sw-grp)>.cs-hint{margin-top:0}
+.g.g-form>.sw-grp{grid-column:1/-1;display:grid;grid-template-columns:fit-content(32em) max-content;column-gap:16px;padding-bottom:12px}
+.g.g-form>.sw-grp>.ln-sw{display:grid;grid-column:1/-1;grid-template-columns:subgrid;align-items:start;padding:6px 0}
+.g.g-form>.sw-grp>.ln-sw>.sw{margin-top:1px}
 .sw{width:36px;height:20px;background:var(--one-control-pressed);border-radius:var(--one-radius-pill);position:relative;flex:none;cursor:pointer}
 .sw:after{content:"";position:absolute;width:16px;height:16px;left:2px;top:2px;background:var(--one-accent-on);border-radius:50%}
 .sw.on{background:var(--bl)}.sw.on:after{left:18px}
@@ -17212,6 +17215,12 @@ function csOpenTabs(n){
   return out;
 }
 // Подсказка поля: у переключателя — под его подписью, у других полей — под полем
+// Два и больше переключателей подряд — один столбик: переключатели стоят на одной вертикали по самой длинной подписи
+// столбика (docs/design-rules.md, «Поля формы — на одной линии»). Одиночный переключатель — своей строкой, без столбика
+function swGroups(cells){
+  let out="",run=[];const flush=()=>{out+=run.length>1?`<div class="sw-grp">${run.join("")}</div>`:run.join("");run=[]};
+  cells.forEach(h=>{if(h.startsWith('<div class="ln ln-sw">'))run.push(h);else{flush();out+=h}});flush();return out;
+}
 function drvHint(html,h){if(!h)return html;return html.startsWith('<div class="ln ln-sw"><div>')?html.replace(/^(<div class="ln ln-sw"><div>[\s\S]*?)<\/div>/,(m,a)=>a+h+"</div>"):html.replace(/<\/div>$/,h+"</div>")}
 function drvSecsHtml(n,tabId){
   const groups=drvGroups(n,tabId),rtsp=camRtsp(n);
@@ -17238,7 +17247,7 @@ function drvGroupCardHtml(n,g,fs,after=""){
   // поэтому он — строка состояния «Сейчас выключено»; в правке остаётся переключатель «Включить»
   const v=(f,p)=>drvVal(n,f,p),main=drvMain(fs),mainOn=main&&!!v(...main),rest=main?fs.filter(x=>x!==main):fs;
   const state=main?`<div class="cs-state">${i18n("Сейчас")} <b>${i18n(mainOn?"включено":"выключено")}</b>${drvChg(n,main[0])?`<span class="cs-chg">${i18n("изменено")}</span>`:""}</div>`:"";
-  const body=ed?`<div class="g g-form">${fs.map(([f,p])=>drvHint(sfFieldHtml("drv",n.id,f,p,v(f,p),{ro:sfReadOnly(p)}),hint(p))).join("")}</div>`
+  const body=ed?`<div class="g g-form">${swGroups(fs.map(([f,p])=>drvHint(sfFieldHtml("drv",n.id,f,p,v(f,p),{ro:sfReadOnly(p)}),hint(p))))}</div>`
     :state+(rest.length?csDl(rest.map(([f,p])=>[propLabel(p,f),p.type==="boolean"?escHtml(v(f,p)?i18n("включено"):i18n("выключено")):sfText(p,v(f,p))==="—"?`<span class="cs-empty">—</span>`:escHtml(sfText(p,v(f,p))),drvChg(n,f)])):"");
   const sum=main?i18n(mainOn?"включено":"выключено"):`${fs.length} ${i18n(plural(fs.length,"параметр|параметра|параметров"))}`;
   const isPtz=fs.some(([,p])=>p["x-ui-group"]?.key===PTZ_DRV_GROUP);if(isPtz&&!after)after=ptzDrvAfterHtml(n);
