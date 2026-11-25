@@ -761,21 +761,20 @@ div.exp-ln{display:flex;align-items:center;padding:8px 0}
 .cv-zf-g{display:grid;grid-template-columns:auto auto;align-items:center;gap:4px 6px}.cv-zf-g span{grid-column:1/-1;font-size:12px;color:var(--mu)}
 .cv-hold{min-width:40px;justify-content:center}.cv-hold.on{background:var(--bl);color:#fff;border-color:var(--bl)}
 .cv-speed{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--mu);margin:10px 0 0}.cv-speed input{flex:1;min-width:0;width:auto}.cv-speed output{min-width:2ch;text-align:right;color:var(--tx)}
-/* Прототип 99: три раскладки блока «Поворот» (cvLay) и переключатель вариантов */
-.cv-ptz.lay1 .cv-zf,.cv-ptz.lay2 .cv-zf,.cv-ptz.lay3 .cv-zf{gap:4px}
-.cv-ptz.lay1 .cv-zf-g,.cv-ptz.lay2 .cv-zf-g,.cv-ptz.lay3 .cv-zf-g{gap:2px 4px}
-.cv-ptz.lay1 .cv-hold,.cv-ptz.lay2 .cv-hold,.cv-ptz.lay3 .cv-hold{height:28px;min-height:28px}
-.cv-more{display:inline-flex;align-items:center;gap:2px;border:0;background:none;color:var(--bl);font:inherit;font-size:12px;font-weight:400;padding:0;cursor:pointer;white-space:nowrap;border-radius:var(--one-radius-control)}.cv-ptz.lay2 .cv-ptz-say{margin-right:8px}
-.cv-more:focus-visible{outline:2px solid var(--one-focus-ring);outline-offset:2px}
-.cv-more svg{transition:transform .2s}.cv-more[aria-expanded="true"] svg{transform:rotate(90deg)}
-.cv-fold{display:inline-flex;align-items:center;gap:4px;border:0;background:none;color:var(--tx);font:inherit;font-weight:600;padding:0;cursor:pointer;border-radius:var(--one-radius-control)}
-.cv-fold svg{transition:transform .2s}.cv-fold[aria-expanded="true"] svg{transform:rotate(90deg)}
-.cv-fold:focus-visible{outline:2px solid var(--one-focus-ring);outline-offset:2px}
+/* Прототип 99: «Поворот» сворачивается плавно — высота тела идёт от 1fr к 0fr, список пресетов растёт за ним (flex:1) */
+.cv-ptz .cv-zf{gap:4px}.cv-ptz .cv-zf-g{gap:2px 4px}.cv-ptz .cv-hold{height:28px;min-height:28px}
+.cv-ptz-body{display:grid;grid-template-rows:1fr;transition:grid-template-rows .26s cubic-bezier(.2,.7,.2,1),opacity .2s}
+.cv-ptz{flex:none}.cv-ptz-in{min-height:0;overflow:hidden}
+.cv-ptz .cv-sec-h{transition:margin-bottom .26s cubic-bezier(.2,.7,.2,1)}
 .cv-ptz.folded .cv-sec-h{margin-bottom:0}
-.cv-ptz.folded .cv-ptz-say{color:var(--mu)!important}
-#p99-bar{position:fixed;left:8px;bottom:8px;z-index:50;display:flex;align-items:center;gap:4px;flex-wrap:wrap;max-width:calc(100vw - 16px);padding:8px;border:1px solid var(--ln);border-radius:var(--one-radius-window);background:var(--p);box-shadow:var(--one-shadow);font-size:12px}
-#p99-bar>span{color:var(--mu);margin-right:4px}
-#p99-bar .btn[aria-pressed="true"]{background:var(--bl);color:#fff;border-color:var(--bl)}
+.cv-ptz.folded .cv-ptz-body{grid-template-rows:0fr;opacity:0}
+.cv-fold{display:inline-flex;align-items:center;gap:4px;border:0;background:none;color:var(--tx);font:inherit;font-weight:600;padding:0;cursor:pointer;border-radius:var(--one-radius-control);white-space:nowrap}
+.cv-fold svg{transition:transform .26s cubic-bezier(.2,.7,.2,1)}.cv-fold[aria-expanded="true"] svg{transform:rotate(90deg)}
+.cv-fold:focus-visible{outline:2px solid var(--one-focus-ring);outline-offset:2px}
+.cv-fold-hint{margin:0!important;font-weight:400;color:var(--mu);opacity:0;transition:opacity .2s;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.cv-ptz.folded .cv-fold-hint{opacity:1}
+.cv-ptz .cv-sec-h{align-items:center}
+@media(prefers-reduced-motion:reduce){.cv-ptz-body,.cv-ptz .cv-sec-h,.cv-fold svg,.cv-fold-hint{transition:none}}
 @media(prefers-reduced-motion:reduce){.cv-more svg,.cv-fold svg{transition:none}}
 .cv-ptz-off{margin:8px 0 0}
 .cv-pre{flex:1;min-height:0;display:flex;flex-direction:column}
@@ -23124,52 +23123,42 @@ function cvPtzHtml(n){
   const off=n.online===false||n.direct===false;
   const dirs=CV_DIRS.map(([x,y,l],i)=>`<button type="button" class="joy-dir" data-joy-dir="${i}" style="--a:${i*45}deg" data-tip="${i18n(l)}" aria-label="${i18n(l)}" ${off?"disabled":""} ${onEv("mousedown",["cvDirDown",`${n.id}`,i])}><span>${lu("chevron-right",18)}</span></button>`).join("");
   const hold=(axis,sign,label,txt)=>`<button type="button" class="btn s cv-hold" data-cv-hold="${axis}${sign>0?"+":"-"}" data-tip="${i18n(label)}" aria-label="${i18n(label)}" ${off?"disabled":""} ${onEv("mousedown",["cvHoldDown",`${n.id}`,axis,sign])}>${txt}</button>`;
-  // Прототип 99: раскладка блока «Поворот» — вариант cvLay (1, 2, 3), переключатель внизу слева
-  const lay=cvLay,more=lay!==2||cvZfMore,fold=lay===3&&cvPtzFold;
-  const head=lay===3
-    ?`<div class="cv-sec-h"><button type="button" class="cv-fold" aria-expanded="${!fold}" data-tip="${i18n(fold?"Показать джойстик и кнопки поворота":"Скрыть джойстик и кнопки поворота. Камеру можно поворачивать мышью по кадру")}" ${onEv("click",["cvPtzFoldSet",`${n.id}`])}>${lu("chevron-right",14)}${i18n("Поворот")}</button><span class="cv-ptz-say sub" data-cv-say aria-live="polite">${fold?i18n("Тянуть кадр мышью — поворот, колесо — зум"):""}</span></div>`
-    :`<div class="cv-sec-h">${i18n("Поворот")}<span class="cv-ptz-say sub" data-cv-say aria-live="polite"></span>${lay===2?`<button type="button" class="cv-more" aria-expanded="${cvZfMore}" data-tip="${i18n(cvZfMore?(ptzIrisOn()?"Скрыть фокус, диафрагму и скорость стрелок":"Скрыть фокус и скорость стрелок"):(ptzIrisOn()?"Показать фокус, диафрагму и скорость стрелок":"Показать фокус и скорость стрелок"))}" ${onEv("click",["cvZfMoreSet",`${n.id}`])}>${i18n(ptzIrisOn()?"Фокус, диафрагма":"Фокус")}${lu("chevron-right",14)}</button>`:""}</div>`;
-  if(fold)return`<section class="cv-sec cv-ptz lay3 folded">${head}</section>`;
-  return`<section class="cv-sec cv-ptz lay${lay}">${head}
+  // Прототип 99: «Поворот» сворачивается в строку заголовка, список пресетов получает место. Сворачивание плавное:
+  // тело блока — сетка, у которой высота строки идёт от 1fr к 0fr (cvPtzFoldSet меняет только класс, без перерисовки)
+  const fold=cvPtzFold;
+  return`<section class="cv-sec cv-ptz ${fold?"folded":""}"><div class="cv-sec-h"><button type="button" class="cv-fold" aria-expanded="${!fold}" data-tip="${i18n(fold?"Показать джойстик и кнопки поворота":"Скрыть джойстик и кнопки поворота. Камеру можно поворачивать мышью по кадру")}" ${onEv("click",["cvPtzFoldSet"])}>${lu("chevron-right",14)}${i18n("Поворот")}</button><span class="cv-fold-hint sub" aria-hidden="${!fold}" data-tip="${i18n("Тянуть кадр мышью — поворот, колесо — зум")}">${i18n("Тянуть кадр мышью — поворот, колесо — зум")}</span><span class="cv-ptz-say sub" data-cv-say aria-live="polite"></span></div>
+    <div class="cv-ptz-body" ${fold?"inert":""}><div class="cv-ptz-in">
     <div class="cv-ptz-row">
       <div class="joy ${off?"off":""}" data-joy="${escHtml(n.id)}" tabindex="${off?-1:0}" role="application" aria-label="${i18n(ptzIrisOn()?"Джойстик поворота. Стрелки поворачивают камеру. Плюс и минус меняют зум. Home и End меняют фокус. PageUp и PageDown меняют диафрагму":"Джойстик поворота. Стрелки поворачивают камеру. Плюс и минус меняют зум. Home и End меняют фокус")}" data-tip="${i18n(ptzIrisOn()?"Клавиши: стрелки или NumPad 8, 2, 4, 6 — поворот; + и − или NumPad 9, 3 — зум; Home и End — фокус; PageUp и PageDown — диафрагма":"Клавиши: стрелки или NumPad 8, 2, 4, 6 — поворот; + и − или NumPad 9, 3 — зум; Home и End — фокус")}" ${onEv("keydown",["cvJoyKey",`${n.id}`])}>
         ${dirs}<div class="joy-well"><button type="button" class="joy-knob" data-joy-knob data-tip="${i18n("Тянуть ручку: чем дальше, тем быстрее")}" aria-label="${i18n("Ручка джойстика")}" ${off?"disabled":""} ${onEv("mousedown",["cvKnobDown",`${n.id}`])}></button></div>
       </div>
       <div class="cv-zf">
         <div class="cv-zf-g"><span>${i18n("Зум")}</span>${hold("zoom",1,"Приблизить",lu("plus",14))}${hold("zoom",-1,"Отдалить",lu("minus",14))}</div>
-        ${more?`<div class="cv-zf-g"><span>${i18n("Фокус")}</span>${hold("focus",1,"Фокус ближе",lu("plus",14))}${hold("focus",-1,"Фокус дальше",lu("minus",14))}</div>
-        ${ptzIrisOn()?`<div class="cv-zf-g" data-cv-iris><span>${i18n("Диафрагма")}</span>${hold("iris",1,"Открыть диафрагму",lu("plus",14))}${hold("iris",-1,"Закрыть диафрагму",lu("minus",14))}</div>`:""}`:""}
+        <div class="cv-zf-g"><span>${i18n("Фокус")}</span>${hold("focus",1,"Фокус ближе",lu("plus",14))}${hold("focus",-1,"Фокус дальше",lu("minus",14))}</div>
+        ${ptzIrisOn()?`<div class="cv-zf-g" data-cv-iris><span>${i18n("Диафрагма")}</span>${hold("iris",1,"Открыть диафрагму",lu("plus",14))}${hold("iris",-1,"Закрыть диафрагму",lu("minus",14))}</div>`:""}
       </div>
     </div>
-    ${more?`<label class="cv-speed">${i18n("Скорость стрелок")}<input type="range" min="1" max="10" value="${cvSpeed}" data-cv-speed ${off?"disabled":""} ${onEv("input",["cvSpeedSet",onEv.value])}><output data-cv-speed-v>${cvSpeed}</output></label>`:""}
+    <label class="cv-speed">${i18n("Скорость стрелок")}<input type="range" min="1" max="10" value="${cvSpeed}" data-cv-speed ${off?"disabled":""} ${onEv("input",["cvSpeedSet",onEv.value])}><output data-cv-speed-v>${cvSpeed}</output></label>
     ${off?`<p class="sub cv-ptz-off">${i18n(n.direct===false?"Камера за NAT. Связи с ней нет, поэтому отсюда нельзя поворачивать камеру":"Камера без связи. Поворот недоступен")}</p>`:""}
+    </div></div>
   </section>`;
 }
 // Диафрагма (PtzMove.iris) — с профиля vms.ptz/1 1.2: сервер старше — кнопок нет (правило 2, docs/design-rules.md, раздел 5)
 function ptzIrisOn(){const v=profileVer(KIND_PROFILES.get("vms.ptz/1"));return!v||profileVerCmp(v,"1.2")>=0}
-// ── Прототип 99: место под пресеты — три раскладки блока «Поворот» ──
-// 1 — плотная колонка: «Зум», «Фокус», «Диафрагма» не выше джойстика (кнопки 28 px, подпись над кнопками);
-// 2 — фокус и диафрагма по кнопке в заголовке: на виду зум, фокус, диафрагма и скорость стрелок открываются кнопкой (как Advanced mode в Genetec Security Desk);
-// 3 — «Поворот» сворачивается в строку: камеру поворачивают мышью по кадру, панель отдаёт место пресетам.
-// Выбор помнит браузер; ссылка ?ptz=1|2|3 открывает нужный вариант.
-let cvLay=(()=>{const q=+new URLSearchParams(location.search).get("ptz");if(q>=1&&q<=3)return q;try{return+localStorage.getItem("p99-lay")||1}catch{return 1}})();
-let cvZfMore=false,cvPtzFold=false;
-function cvLiveNode(){const id=document.querySelector("#main [data-live]")?.dataset.live;return id?find(id)?.n:null}
-function cvLaySet(k){
-  cvLay=+k;try{localStorage.setItem("p99-lay",k)}catch{}
-  document.querySelectorAll("[data-p99-lay]").forEach(b=>b.setAttribute("aria-pressed",String(+b.dataset.p99Lay===cvLay)));
-  const n=cvLiveNode();if(n)cvSidePaint(n,true);
+// ── Прототип 99: место под пресеты — «Поворот» сворачивается ──
+// Свёрнутый блок — одна строка заголовка с подсказкой: камеру поворачивают мышью по кадру, колесо — зум.
+// Состояние держит страница (cvPtzFold), перерисовка панели его сохраняет.
+let cvPtzFold=false;
+function cvPtzFoldSet(){
+  cvPtzFold=!cvPtzFold;
+  const sec=document.querySelector("#main .cv-ptz");if(!sec)return;
+  sec.classList.toggle("folded",cvPtzFold);
+  sec.querySelector(".cv-ptz-body")?.toggleAttribute("inert",cvPtzFold);
+  sec.querySelector(".cv-fold-hint")?.setAttribute("aria-hidden",String(!cvPtzFold));
+  const b=sec.querySelector(".cv-fold");
+  if(b){b.setAttribute("aria-expanded",String(!cvPtzFold));b.dataset.tip=i18n(cvPtzFold?"Показать джойстик и кнопки поворота":"Скрыть джойстик и кнопки поворота. Камеру можно поворачивать мышью по кадру")}
+  mainSeen.html=null;
 }
-function cvZfMoreSet(id){cvZfMore=!cvZfMore;const n=find(id)?.n;if(n)cvSidePaint(n,false);document.querySelector("#main .cv-more")?.focus()}
-function cvPtzFoldSet(id){cvPtzFold=!cvPtzFold;const n=find(id)?.n;if(n)cvSidePaint(n,false);document.querySelector("#main .cv-fold")?.focus()}
-function p99BarInit(){
-  if(document.getElementById("p99-bar"))return;
-  const v=[[1,"Плотная колонка","Зум, фокус и диафрагма не выше джойстика"],[2,"Фокус и диафрагма по кнопке","На виду только зум. Фокус, диафрагму и скорость стрелок открывает кнопка в заголовке «Поворот»"],[3,"Поворот сворачивается","Блок «Поворот» сворачивается в строку. Камеру поворачивают мышью по кадру"]];
-  const d=document.createElement("div");d.id="p99-bar";d.setAttribute("role","group");d.setAttribute("aria-label",i18n("Прототип 99: раскладка блока «Поворот»"));
-  d.innerHTML=`<span>${i18n("Прототип 99, раскладка «Поворот»")}</span>${v.map(([k,l,t])=>`<button type="button" class="btn s" data-p99-lay="${k}" aria-pressed="${k===cvLay}" data-tip="${escHtml(i18n(t))}" ${onEv("click",["cvLaySet",k])}>${k}. ${i18n(l)}</button>`).join("")}`;
-  document.body.appendChild(d);
-}
-document.addEventListener("DOMContentLoaded",p99BarInit);if(document.readyState!=="loading")p99BarInit();
 function cvSpeedSet(v){cvSpeed=Math.max(1,Math.min(10,+v||5));const o=document.querySelector("#main [data-cv-speed-v]");if(o)o.textContent=cvSpeed}
 function cvSay(body){
   const el=document.querySelector("#main [data-cv-say]");if(!el)return;
