@@ -553,6 +553,9 @@ label{display:block;font-size:12px;color:var(--mu);margin-bottom:4px}
 .g.g-form>.sw-grp{grid-column:1/-1;display:grid;grid-template-columns:fit-content(32em) max-content;column-gap:16px;padding-bottom:12px}
 .g.g-form>.sw-grp>.ln-sw{display:grid;grid-column:1/-1;grid-template-columns:subgrid;align-items:start;padding:6px 0}
 .g.g-form>.sw-grp>.ln-sw>.sw{margin-top:1px}
+/* Столбик переключателей вне сетки формы (карточка тома): та же вертикаль по самой длинной подписи */
+.sw-grp{display:grid;grid-template-columns:fit-content(32em) max-content;column-gap:16px}
+.sw-grp>.ln-sw{display:grid;grid-column:1/-1;grid-template-columns:subgrid;align-items:center}
 .sw{width:36px;height:20px;background:var(--one-control-pressed);border-radius:var(--one-radius-pill);position:relative;flex:none;cursor:pointer}
 .sw:after{content:"";position:absolute;width:16px;height:16px;left:2px;top:2px;background:var(--one-accent-on);border-radius:50%}
 .sw.on{background:var(--bl)}.sw.on:after{left:18px}
@@ -25747,8 +25750,7 @@ function formBase(n){
     const a=archById(n.archId),k=archAddr(a),spec=archSpec(a);
     return card("Том хранилища",`${n.shrink!=null?`<div class="nt err" data-vol-shrink${pfa(n,"shrinkPendingBytes")}>${i18n("Объявлен меньший объём")}: ${escHtml(bytesText(n.shrink))}. ${i18n("Сервер сотрёт старые записи, поэтому нужно второе подтверждение.")} <button type="button" class="lk lk-act" ${onEv("click",["volShrinkConfirm",`${n.id}`])}>${i18n("Подтвердить…")}</button></div>`:""}${PROTO_REC.has(n.id)?`<div class="nt ok" data-vol-rec>${i18n("Том подключён с записями")}: ${protoRecText(PROTO_REC.get(n.id))}. ${i18n("Сервер не форматировал том. Форматирование удалит эти записи.")}</div>`:""}${n.state==="unfmt"&&!PROTO_REC.has(n.id)?`<div class="nt err">${i18n("Раздел не отформатирован, поэтому запись на него невозможна. Отформатировать раздел, когда вы будете готовы. Форматирование удалит все данные на диске.")}</div>`:""}<div class="nt ok">${i18n("Том хранилища")} <button type="button" class="lk" ${onEv("click",["pick",`${a.id}`])}><b>${escHtml(locName(a))}</b></button> · ${escHtml(archKindLabel(a))}</div>
       ${volFieldsHtml(a,n,["volSet",n.id])}
-      <div class="ln ln-sw" data-vol-enabled><div>${i18n("Том включён")}</div><div class="sw ${n.enabled===false?"":"on"}" ${onEv("click",["volEnabledToggle",onEv.el,n.id])}></div></div>
-      ${nodeFieldOff(n,"writeStopped")?"":`<div class="ln ln-sw" data-vol-write-stopped${pfa(n,"writeStopped")}><div>${i18n("Только чтение")} <span class="sub">${i18n(n.writeStopped?"Сервер не пишет на том. Записи тома остаются в архиве и видны.":"Включить перед заменой диска. Сервер не будет писать на этот том. Старые записи останутся видны.")}</span></div><div class="sw ${n.writeStopped?"on":""}" role="switch" aria-checked="${!!n.writeStopped}" ${onEv("click",["volWriteToggle",onEv.el,n.id])}></div></div>`}
+      ${(rows=>rows.length>1?`<div class="sw-grp">${rows.join("")}</div>`:rows.join(""))([`<div class="ln ln-sw" data-vol-enabled><div>${i18n("Том включён")}</div><div class="sw ${n.enabled===false?"":"on"}" ${onEv("click",["volEnabledToggle",onEv.el,n.id])}></div></div>`].concat(nodeFieldOff(n,"writeStopped")?[]:[`<div class="ln ln-sw" data-vol-write-stopped${pfa(n,"writeStopped")}><div>${i18n("Только чтение")}</div><div class="sw ${n.writeStopped?"on":""}" role="switch" aria-checked="${!!n.writeStopped}" ${onEv("click",["volWriteToggle",onEv.el,n.id])}></div></div>`]))}
       <div class="mx" style="margin-top:10px">
         <div class="mc"${pfa(n,"state")}><span>${i18n("Состояние")}</span><b style="font-size:14px">${escHtml(volStateText(n))}</b></div>
         <div class="mc"><span>${i18n("Томов в хранилище")}</span><b>${archVols(a).length}</b></div>
@@ -25757,7 +25759,8 @@ function formBase(n){
         ${k==="disk"&&n.mode==="part"&&!nodeFieldOff(n,"mode")?`<button type="button" class="btn s" ${onEv("click",["formatVolume",`${n.id}`])} ${n.state==="format"?"disabled":""}>${i18n("Форматировать…")}</button>`:""}${spec.check?`<button type="button" class="btn s" ${onEv("click",["volCheck",`${n.id}`])}>${i18n(k==="bucket"?"Проверить подключение":"Подключиться")}</button>`:""}
         <button type="button" class="btn s" data-needs="kind:volume/delete" ${onEv("click",["deleteVolume",`${n.id}`])} ${volDelWhy(n)?`disabled data-tip="${escHtml(i18n(volDelWhy(n)))}"`:""}>${i18n("Удалить том")}</button>
       </div>
-      <p class="sub" style="margin-top:10px">${i18n("Глубину и шифрование задают у хранилища. У тома задают место и размер.")}</p>`);
+      <p class="sub" style="margin-top:10px">${i18n("Глубину и шифрование задают у хранилища. У тома задают место и размер.")}</p>
+      ${nodeFieldOff(n,"writeStopped")?"":`<p class="sub" data-vol-write-hint>${i18n(n.writeStopped?"Только чтение: сервер не пишет на том. Записи тома остаются в архиве и видны.":"Только чтение включают перед заменой диска: сервер больше не пишет на том, старые записи остаются видны.")}</p>`}`);
   }
   if(n.type==="gpu"){
     const sv=servers.find(x=>x.id===n.serverId),g=n.gpu||{};
