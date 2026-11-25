@@ -17,6 +17,7 @@
     ["Схемы видов:", "mechanism"],
     ["Потоки:", "profile:vms.stream/1"],
     ["Разрешение:", "profile:vms.stream/1"],
+    ["Адрес RTSP у потока", "profile:vms.stream/1"],
     ["Живое видео", "video"],
     ["Переразместить", "video"],
     ["Пресеты", "video"],
@@ -414,6 +415,21 @@
     assert.eq(await failedOf(env, { kind: "stream", parentId: det.uid, name: "x", properties: {} }), [["PARENT_MISMATCH", "/parentId"]], "только у камеры");
     assert.eq(await failedOf(env, { kind: "stream", parentId: c.uid, properties: {} }), [["NAME_REQUIRED", "/name"]], "имя обязательно");
   }, { needs: ["createUnits", "patchUnit", "deleteUnit", "kind:stream"] });
+
+  test("Адрес RTSP у потока (vms.stream/1 1.3): необязательный, хранится и правится; у камеры остаётся свой", async () => {
+    const env = await makeEnv();
+    const [c, streams] = await camWith(env, (u, st) => u.properties.rtspUrl && st.some((s) => s.properties.rtspUrl));
+    const own = streams.find((s) => s.properties.rtspUrl);
+    assert.eq(/^rtsp:\/\//.test(own.properties.rtspUrl) && own.properties.rtspUrl !== c.properties.rtspUrl, true, "в наборе у второго потока свой адрес");
+    assert.eq(streams[0].properties.rtspUrl, undefined, "у основного поля нет: он идёт по адресу камеры");
+    const url = c.properties.rtspUrl.replace(/\d+$/, "103");
+    const [st] = await made(env, { kind: "stream", parentId: c.uid, name: "Третий", properties: { rtspUrl: url } });
+    assert.eq(st.properties.rtspUrl, url, "адрес при создании");
+    const next = await env.ok("PATCH", U(st.uid), { properties: { rtspUrl: url + "?tcp" } }, v(st));
+    assert.eq((await get(env, next.uid)).properties.rtspUrl, url + "?tcp", "адрес правится");
+    assert.eq((await get(env, c.uid)).properties.rtspUrl, c.properties.rtspUrl, "адрес камеры не меняется");
+    assert.status(await env.call("PATCH", U(st.uid), { properties: { rtspUrl: 5 } }, v(next)), 422, "VALIDATION_FAILED", "строка");
+  }, { needs: ["createUnits", "patchUnit", "kind:stream"] });
 
   test("Разрешение: латинская x, из resOptions; нет списка — ввод руками; codec только чтение, у потока откат", async () => {
     const env = await makeEnv();
