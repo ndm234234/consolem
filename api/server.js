@@ -3919,7 +3919,7 @@
     }
     // Перенос к другому родителю: возможность move, родитель — из UnitKind.parents, не свой потомок, в том же домене
     // У вида со своим переносом (хук move: сервер — приём в домен и исключение) родителя и параметры судит хук (beforeMove),
-    // у остальных параметров переноса нет
+    // у остальных параметров переноса нет, а beforeMove без move добавляет условие к проверкам ядра
     function unitMoveErrs(u, parentId, params) {
       const out = kindErrs(u.kind);
       if (out.length) return out;
@@ -3935,7 +3935,9 @@
       if (!kinds.parentsOk(u.kind, par ? par.kind : null)) return [err("PARENT_MISMATCH", "/parentId", { kind: u.kind, parentKind: par ? par.kind : null })];
       if (par && unitSubtree(u).some((x) => x.uid === par.uid)) return [err("PARENT_MISMATCH", "/parentId", { reason: "cycle" })];
       if (par && par.domainId !== u.domainId) return [err("VALIDATION_FAILED", "/parentId", { keyword: "domain" })];
-      return [];
+      // Перенос ядра, но с условием профиля (папка: только «Администратор» и при связи с доменом) — beforeMove без move
+      const held = hooksProblem(u.kind, "beforeMove", [u, parentId == null ? null : parentId, {}]);
+      return held ? [hookErr(held, "", "/params/", u.kind)] : [];
     }
     // Перенос со смыслом (хук move профиля). moveBack хука — как вернуть объект туда, где он сейчас: снимок до переноса — шаг
     // отката, снимок после — то, что откат сверяет (here). Объект сменился (камера w2c вместо сервера) или стоит, где стоял, —

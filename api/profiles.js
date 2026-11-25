@@ -22,6 +22,7 @@
    - beforeMove(unit, parentId, params, ctx) → Problem|null, move(unit, parentId, params, ctx) → unit — свой перенос: сервер
      принимают в домен (parentId — домен) и исключают (null, params.domainId — в другой домен); ответ — объект после переноса
      (камера w2c — новая запись); moveBack(unit, ctx) → {parentId, params} — как вернуть объект туда, где он сейчас: откат переноса;
+     beforeMove без move — условие к переносу ядра (возможность move вида; родитель, цикл и домен проверяет ядро): папка;
    - actions[id] с scope kind (POST /kinds/{kind}/actions/{id}) зовутся без объекта: unit — черновик {uid: null, kind};
    - fixed — свойства, правку которых откат не возвращает;
    - treeHasChildren(unit, ctx) → true | undefined — стрелка узла дерева: true — у узла «может быть» дети (камера-кластер),
@@ -331,6 +332,10 @@
     dependents(u, ctx) {
       const gone = withSubfolders(u, ctx);
       return { remove: [...gone], detach: membersOf(gone, ctx) };
+    },
+    // Перенос папки с подпапками (возможность move): родителя, цикл и домен судит ядро, здесь — кто и при какой связи
+    beforeMove(u, parentId, params, ctx) {
+      return folderProblem(u.domainId, ctx);
     },
     beforeDelete(u, params, ctx) {
       const bad = folderProblem(u.domainId, ctx);

@@ -184,6 +184,16 @@
     assert.eq(res.failed.map((x) => [x.code, x.field]), [["SERVER_OFFLINE", "/folders"]], "создание с папкой");
   }, { needs: ["patchUnit", "deleteUnit", "createOperation", "createUnits", `implements:${FOLDER}`, "kind:camera", "testEvent"] });
 
+  test("Папки без связи с доменом, перенос: 409 SERVER_OFFLINE, шаг move — fail, папка на месте", async () => {
+    const f = FX.folders.find((x) => x.domainId === d1.id && x.parentId);
+    const env = await makeEnv();
+    await env.ok("POST", "/test/events", { type: "domain.link", domainId: d1.id, online: false });
+    assert.status(await env.call("POST", `/units/${f.id}/move`, { parentId: null }, { "If-Match": `"${f.version}"` }), 409, "SERVER_OFFLINE", "перенести");
+    const op = await env.runOperation({ idempotencyKey: ApiTest.key(), items: [{ uid: f.id, move: null }], expectedVersions: { [f.id]: f.version } });
+    assert.eq(op.items.map((x) => [x.state, x.code]), [["fail", "SERVER_OFFLINE"]], "шаг move");
+    assert.eq((await env.ok("GET", `/units/${f.id}`)).parentId, f.parentId, "родитель прежний");
+  }, { needs: ["moveUnit", "createOperation", `implements:${FOLDER}`, "cap:folder:move", "testEvent"] });
+
   test("Папки — не запись на сервер устройства: шаги folders и patch {folders}, PATCH {folders} при молчащем сервере проходят, как состав папки в базе", async () => {
     const env = await makeEnv();
     const quiet = FX.servers.filter((s) => s.allocated && s.online === false);

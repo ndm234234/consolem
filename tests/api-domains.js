@@ -316,6 +316,33 @@
     assert.status(await env.call("DELETE", U(rootFolder.id), undefined, v(rootFolder)), 404, "NOT_FOUND", "второй раз");
   }, { needs: ["deleteUnit", `implements:${FOLDER}`, "kind:camera"] });
 
+  // Перенос папки с подпапками (пробел F72 против Axxon One): возможность move вида папки. Родителя, цикл и домен судит ядро
+  test("Папка: перенести с подпапками в другую папку и в корень домена; под свою подпапку и в чужой домен — 422", async () => {
+    const env = await makeEnv();
+    const kids = FX.folders.filter((x) => x.parentId === rootFolder.id).map((x) => x.id);
+    const to = await made(env, { kind: "folder", name: "Куда", domainId: d1.id, properties: {} });
+    assert.status(await env.call("POST", `${U(rootFolder.id)}/move`, { parentId: to.uid }), 428, "PRECONDITION_REQUIRED", "без If-Match");
+    const res = await move(env, rootFolder, to.uid);
+    assert.status(res, 200, null, "в другую папку");
+    assert.eq([res.body.parentId, res.body.domainId], [to.uid, d1.id], "под новой папкой, в своём домене");
+    assert.ok(res.body.version !== rootFolder.version && res.headers.etag === `"${res.body.version}"`, "новая версия — в ETag");
+    const under = (await units(env, `parentId=${rootFolder.id}&kind=folder`)).map((x) => x.uid).sort();
+    assert.eq(under, kids.slice().sort(), "подпапки — с ней");
+    const tree = await env.pages(`/tree/children?layout=folders&parentId=${to.uid}`);
+    assert.ok(tree.some((n) => n.id === rootFolder.id), "в раскладке folders — под новой папкой");
+    const rec = { id: rootFolder.id, version: res.body.version };
+    if (kids.length) {
+      const cyc = await move(env, rec, kids[0]);
+      assert.status(cyc, 422, "PARENT_MISMATCH", "под свою подпапку");
+      assert.eq(cyc.body.field, "/parentId", "указатель — на родителя");
+    }
+    const alien = d2 && FX.folders.find((x) => x.domainId === d2.id);
+    if (alien) assert.status(await move(env, rec, alien.id), 422, "VALIDATION_FAILED", "папка другого домена");
+    const back = await move(env, rec, null);
+    assert.status(back, 200, null, "в корень");
+    assert.eq([back.body.parentId, back.body.domainId], [null, d1.id], "в корне своего домена");
+  }, { needs: ["moveUnit", "createUnits", "layout:folders", `implements:${FOLDER}`, "cap:folder:move"] });
+
   test("Метки сервера: PATCH; детектор просит метку, сервера нет — faultText", async () => {
     const env = await makeEnv();
     const s = FX.servers.find((x) => x.allocated && x.online);

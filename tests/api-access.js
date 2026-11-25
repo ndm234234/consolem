@@ -320,6 +320,18 @@
     assert.eq((await env.ok("GET", `/units/${dev.uid}`)).folders, dev.folders, "папки объекта на месте");
   }, { needs: ["createUnits", "patchUnit", "deleteUnit", "createOperation", `implements:${FOLDER}`, "kind:camera"] });
 
+  test("Перенос папки ведёт только «Администратор» — 403, папка на месте", async () => {
+    const adm = A.roles.find((r) => r.global.unr);
+    const reader = A.users.find((u) => u.enabled && !u.roleIds.includes(adm.id) && !A.groups.some((g) => g.memberIds.includes(u.id) && g.roleIds.includes(adm.id)));
+    const env = await makeEnv({ actAs: reader.login });
+    const f = FX.folders.find((x) => x.parentId);
+    const res = await env.call("POST", `/units/${f.id}/move`, { parentId: null }, { "If-Match": `"${f.version}"` });
+    assert.status(res, 403, "PERMISSION_DENIED", "перенести");
+    assert.eq((await env.ok("GET", `/units/${f.id}`)).parentId, f.parentId, "родитель прежний");
+    const op = await env.runOperation({ idempotencyKey: ApiTest.key(), items: [{ uid: f.id, move: null }], expectedVersions: { [f.id]: f.version } });
+    assert.eq(op.items.map((x) => [x.state, x.code]), [["fail", "PERMISSION_DENIED"]], "шаг move");
+  }, { needs: ["moveUnit", "createOperation", `implements:${FOLDER}`, "cap:folder:move"] });
+
   test("Учётки потоков: доступ к камерам через Access; ссылки проверяются; удаление учётки, камеры и папки убирает доступ", async () => {
     const env = await makeEnv();
     const a = await env.access();
