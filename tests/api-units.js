@@ -1002,6 +1002,29 @@
     invalid(await patch(env, cam.uid, { properties: { [nf]: nv } }), `/properties/${nf}`, "readOnly", "device: правка вложенного поля x-dev");
   }, { needs: ["getUnitSchema", "patchUnit", "kind:camera"] });
 
+  // Надписи на кадре overlayTexts (отчёт о пробелах, F37; профиль vms.camera/1 1.5): сервер хранит список как есть,
+  // пределы и цвет судит по схеме вида; null убирает надписи
+  test("Камера: overlayTexts — надписи на кадре хранятся, пределы и цвет по схеме", async () => {
+    const env = await makeEnv();
+    const cam = ofKind("camera").find((u) => u.properties.driver === "native");
+    assert.ok(cam, "в наборе есть камера нативного драйвера");
+    const s = await env.ok("GET", `/units/${cam.uid}/schema`);
+    assert.eq(s.properties.overlayTexts.maxItems, 8, "в схеме объекта не больше 8 надписей");
+    const one = { text: "Въезд", pos: [0.1, 0.2], font: "Verdana", style: "bold", size: 48, color: "#ffd60a", outline: true, outlineColor: "#000000", outlineW: 3, bg: true, bgColor: "#101010", bgClear: 50 };
+    const r = await patch(env, cam.uid, { properties: { overlayTexts: [one, { text: "Склад", pos: [0.5, 0.5] }] } });
+    assert.status(r, 200, null, "две надписи");
+    const u = await env.ok("GET", unitPath(cam.uid));
+    assert.eq(u.properties.overlayTexts, [one, { text: "Склад", pos: [0.5, 0.5] }], "сервер хранит надписи как есть");
+    invalid(await patch(env, cam.uid, { properties: { overlayTexts: [{ text: "x", pos: [0, 0], color: "red" }] } }), "/properties/overlayTexts/0/color", "pattern", "цвет не #rrggbb");
+    invalid(await patch(env, cam.uid, { properties: { overlayTexts: [{ text: "", pos: [0, 0] }] } }), "/properties/overlayTexts/0/text", "minLength", "пустой текст");
+    invalid(await patch(env, cam.uid, { properties: { overlayTexts: [{ text: "x", pos: [1.2, 0] }] } }), "/properties/overlayTexts/0/pos/0", "maximum", "место за краем кадра");
+    invalid(await patch(env, cam.uid, { properties: { overlayTexts: [{ text: "x", pos: [0, 0], font: "Comic" }] } }), "/properties/overlayTexts/0/font", "enum", "шрифт не из списка");
+    invalid(await patch(env, cam.uid, { properties: { overlayTexts: Array.from({ length: 9 }, (_, i) => ({ text: "n" + i, pos: [0, 0] })) } }), "/properties/overlayTexts", "maxItems", "девять надписей");
+    assert.eq((await env.ok("GET", unitPath(cam.uid))).properties.overlayTexts.length, 2, "отказ ничего не меняет");
+    assert.status(await patch(env, cam.uid, { properties: { overlayTexts: null } }), 200, null, "null убирает надписи");
+    assert.ok(!("overlayTexts" in (await env.ok("GET", unitPath(cam.uid))).properties), "после null поля нет");
+  }, { needs: ["getUnitSchema", "patchUnit", "kind:camera"] });
+
   test("запись ядром: вид без описания и вид с профилем vms.* — 422 NOT_SUPPORTED, field=/kind", async () => {
     const odd = { uid: "30009003-0000-4000-8000-000000000000", kind: "vendor.gone/THING", parentId: null, domainId: dom1(), name: "Объект без описания", version: "1", properties: { a: 1 } };
     const env = await makeEnv({ fixturePatch: { units: units().concat(odd) } });

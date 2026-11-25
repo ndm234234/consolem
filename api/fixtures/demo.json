@@ -3471,6 +3471,103 @@
       },
       "description": "С 0.17.0. Области маски приватности на кадре камеры: до 16 многоугольников, у каждого от 3 до 64 вершин. Маска закрывает области в живом видео и в архиве для тех, у кого нет права ALLOW_SHOW_PRIVACY_VIDEO_IN_ARCHIVE (reference.access.features). Это право снимает маску и в живом видео, и в архиве. Сервер хранит архив без маски: маску накладывают при показе. Маска привязана к кадру, а не к положению PTZ. Нет поля или пустой список — маски нет"
      },
+     "overlayTexts": {
+      "x-label": {
+       "key": "field.overlayTexts",
+       "text": "Надписи на кадре",
+       "lang": "ru"
+      },
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+       "type": "object",
+       "properties": {
+        "text": {
+         "type": "string",
+         "minLength": 1,
+         "maxLength": 128
+        },
+        "pos": {
+         "type": "array",
+         "minItems": 2,
+         "maxItems": 2,
+         "items": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+         }
+        },
+        "font": {
+         "type": "string",
+         "enum": [
+          "Arial",
+          "Segoe UI",
+          "Verdana",
+          "Courier New",
+          "Consolas"
+         ],
+         "default": "Arial"
+        },
+        "style": {
+         "type": "string",
+         "enum": [
+          "normal",
+          "bold",
+          "italic",
+          "bold-italic"
+         ],
+         "default": "normal"
+        },
+        "size": {
+         "type": "integer",
+         "minimum": 8,
+         "maximum": 200,
+         "default": 56
+        },
+        "color": {
+         "type": "string",
+         "pattern": "^#[0-9a-fA-F]{6}$",
+         "default": "#ffffff"
+        },
+        "outline": {
+         "type": "boolean",
+         "default": true
+        },
+        "outlineColor": {
+         "type": "string",
+         "pattern": "^#[0-9a-fA-F]{6}$",
+         "default": "#000000"
+        },
+        "outlineW": {
+         "type": "integer",
+         "minimum": 1,
+         "maximum": 4,
+         "default": 2
+        },
+        "bg": {
+         "type": "boolean",
+         "default": false
+        },
+        "bgColor": {
+         "type": "string",
+         "pattern": "^#[0-9a-fA-F]{6}$",
+         "default": "#000000"
+        },
+        "bgClear": {
+         "type": "integer",
+         "minimum": 0,
+         "maximum": 90,
+         "default": 40
+        }
+       },
+       "required": [
+        "text",
+        "pos"
+       ],
+       "additionalProperties": false
+      },
+      "description": "Надписи на кадре камеры: до 8 надписей поверх видео. Client рисует их для всех операторов в раскладках, на видеостене и в архиве; камера надписи не записывает, в экспорт и на снимки они не попадают. Надпись: pos — левый верхний угол в долях кадра, text, шрифт, начертание, size в пунктах для кадра высотой 1080, цвет, обводка, фон. Поля вида не заданы — берутся умолчания. Нет поля или пустой список — надписей нет. Axxon One: Camera.overlay_text_settings. Профиль vms.camera/1 1.5"
+     },
      "driver": {
       "x-label": {
        "key": "field.drv.driver",
@@ -14543,7 +14640,7 @@
     "text": "Камера",
     "lang": "ru"
    },
-   "version": "1.4",
+   "version": "1.5",
    "uses": [
     {
      "id": "vms.archive/1",
@@ -14600,6 +14697,7 @@
     "mac",
     "minDepthDays",
     "model",
+    "overlayTexts",
     "password",
     "port",
     "preRecordSec",
@@ -19075,7 +19173,17 @@
     "presetMax": 16,
     "decimation": "keyframes",
     "driver": "native",
-    "edgeStorage": true
+    "edgeStorage": true,
+    "overlayTexts": [
+     {
+      "text": "Главный вход",
+      "pos": [
+       0.03,
+       0.04
+      ],
+      "size": 64
+     }
+    ]
    },
    "status": {
     "link": "online",
