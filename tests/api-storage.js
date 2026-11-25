@@ -344,5 +344,19 @@
     assert.eq((await undo(env, await top(env))).items.map((x) => x.code), ["NOT_SUPPORTED"], "хранилище не возвращается");
   }, { needs: ["runUnitAction", "deleteUnit", "revertOperation"] });
 
+  // Пробел F92: свободное место дисков сервера (vms.server/1 1.3, status.disks[].freeBytes). Новый том хранилища
+  // этого сервера на диске уменьшает свободное место на свой объём
+  test("Диски сервера: freeBytes — не больше размера диска; новый том уменьшает его на свой объём", async () => {
+    assert.ok(srv && localArch, "в наборе есть сервер со свободными дисками и локальное хранилище");
+    const env = await makeEnv();
+    const disks = async () => (await env.ok("GET", U(srv.id))).status.observed.disks;
+    const before = await disks();
+    before.forEach((d) => assert.ok(Number.isInteger(d.freeBytes) && d.freeBytes >= 0 && d.freeBytes <= d.sizeBytes, `${d.disk}: freeBytes от 0 до sizeBytes`));
+    const disk = freeDisks[0], was = before.find((d) => d.disk === disk).freeBytes, size = 100 * GB;
+    assert.ok(was >= size, `на ${disk} свободно не меньше 100 ГБ`);
+    await made(env, vol(disk, { parentId: localArch.id, name: `${disk}\\AxxonArchive\\F92` }, { sizeBytes: size, mode: "file", dir: `${disk}\\AxxonArchive\\F92` }));
+    assert.eq((await disks()).find((d) => d.disk === disk).freeBytes, was - size, "свободно меньше на объём тома");
+  }, { needs: ["createUnits", "implements:vms.server/1", "implements:vms.volume/1"], layer: "profile:vms.server/1", since: "1.3" });
+
   ApiTest.loaded("api-storage.js");
 })();

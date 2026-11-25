@@ -223,7 +223,23 @@
   // Перенос ядра → приём: родитель — домен приёма (распределён), null — исключить: в свой домен или в params.domainId
   const assignOf = (u, parentId, params) => ({ domainId: parentId == null ? (params || {}).domainId || u.domainId : parentId, allocated: parentId != null, fingerprint: (params || {}).fingerprint });
 
+  // Свободное место диска (профиль 1.3, пробел F92): встроенный сервер считает его сам — размер диска без запаса под систему
+  // и другие файлы (у системного диска половина, у других 10 %) и без томов хранилищ этого сервера на диске. Раздел целиком — 0
+  function diskFree(sid, d, ctx) {
+    const arcs = new Set(ctx.db.archives.filter((a) => a.serverId === sid).map((a) => a.id));
+    const vols = ctx.db.volumes.filter((v) => arcs.has(v.archiveId) && v.disk === d.disk);
+    if (vols.some((v) => v.mode === "part")) return 0;
+    const left = Math.floor(d.sizeBytes * (d.system ? 0.5 : 0.9)) - vols.reduce((n, v) => n + (v.sizeBytes || 0), 0);
+    return Math.max(0, left);
+  }
   const server = {
+    view(out, ctx) {
+      const disks = out.status && out.status.observed && out.status.observed.disks;
+      if (!Array.isArray(disks)) return out;
+      out.status = Object.assign({}, out.status);
+      out.status.observed = Object.assign({}, out.status.observed, { disks: disks.map((d) => Object.assign({}, d, { freeBytes: diskFree(out.uid, d, ctx) })) });
+      return out;
+    },
     probe,
     assignCode,
     assign,
