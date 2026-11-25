@@ -20,17 +20,43 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   // Ещё том: «＋ Том» спрашивает, новый том или том с записями
   addVolume(a.id);
   ok(await until(() => document.querySelector("#bmodal.open .av-body")), "«＋ Том» открывает окно выбора");
-  ok(av?.src === "new" && !document.querySelector("#bmFoot .btn.pri")?.disabled, "по умолчанию — новый том, «Добавить том» доступна");
+  ok(av?.src === "new" && !document.querySelector("#bmFoot .btn.pri")?.disabled, "по умолчанию — новый том, «Добавить в план» доступна");
+  // Размер тома (пробел F92): диск со свободным местом от сервера (freeBytes, профиль vms.server/1 1.3)
+  const fd = serverDisks(a.server).filter((x) => x.free != null && x.free > 1 && !diskUse(a.server, x.disk).part && !archVols(a).some((v) => v.disk === x.disk)).sort((x, y) => y.free - x.free)[0];
+  ok(!!fd, "у сервера есть свободный диск, сервер называет его свободное место");
+  avVol("disk", fd.disk);
+  avVol("mode", "file");
+  ok(/Свободно/.test(document.querySelector("#bmodal .vsz-free")?.textContent || ""), "под полем — свободное место диска");
+  avVol("unit", "ТБ");
+  avVol("num", "9999");
+  ok(/свободно только/.test(avBlock(a)) && document.querySelector("#bmFoot .btn.pri")?.disabled, "том больше свободного места — ошибка, кнопка недоступна: " + avBlock(a));
+  avVol("unit", "ГБ");
+  avVol("num", "0.5");
+  ok(/не меньше 1 ГБ/.test(avBlock(a)), "меньше 1 ГБ — ошибка: " + avBlock(a));
+  avVol("num", "1500");
+  ok(av.vol.size === "1500 " + i18n("ГБ"), "1500 ГБ хранится как ввели, без округления до ТБ: " + av.vol.size);
+  ok(volSizeMsg(31, 100, "D:", "").cls === "warn" && !volSizeProblem({ kind: "local" }, { mode: "file", size: "31 ТБ" }, null), "больше 30 ТБ — предупреждение, кнопку не закрывает");
+  document.querySelector("#bmodal .vsz-free button")?.click();
+  ok(!avBlock(a) && sizeTb(av.vol.size) <= diskFreeTb(a.server, fd.disk, av.vol) + 1e-9, "«Всё свободное» — не больше свободного места: " + av.vol.size);
+  avVol("num", "2");
+  const tb0 = archSizeTb(a), nOn0 = archVolsOn(a).length;
   avCreate();
-  // Прототип 102: новый том идёт в план хранилища и создаётся по «Применить»; без плана (index.html) — сразу
-  const planned = typeof cardDiff === "function" && cardDiff().some((r) => r.volAdd);
-  if (planned) cardApply();
-  ok(await until(() => a.vols.length === 2 && /^6/.test(a.vols[1].id) && (planned || sel === a.vols[1].id)), "том добавлен, открыт");
+  // Новый том идёт в план хранилища, на сервер — по «Применить»
+  ok(sel === a.id && a.vols.length === 2 && a.vols[1]._new && cardDiff().some((r) => r.volAdd), "том в плане хранилища");
+  ok(archSizeTb(a) === tb0 && archVolsOn(a).length === nOn0, "счётчики хранилища — без тома из плана");
+  const free0 = serverDisks(a.server).find((x) => x.disk === fd.disk).free;
+  cardApply();
+  ok(await until(() => a.vols.length === 2 && /^6/.test(a.vols[1].id)), "том создан по «Применить»");
+  ok(await until(() => serverDisks(a.server).find((x) => x.disk === fd.disk).free < free0), "после операции консоль перечитала свободное место диска");
   const v2 = a.vols[1];
   // Правка тома через черновик и операцию
   pick(v2.id);
   goTab("gen");
+  // Карточка тома: размер больше свободного места «Применить» не пускает
+  volSet(v2.id, "gb", String(Math.ceil((diskFreeTb(a.server, v2.disk, v2) + 1) * 1024)), true);
+  ok(/свободно только/.test(cardEditBlock()), "карточка тома: больше свободного места — " + cardEditBlock());
   volSet(v2.id, "gb", "700", true);
+  ok(!cardEditBlock(), "700 ГБ — можно");
   const d = cardDiff();
   ok(d.some((r) => r.key === "size"), "в черновике тома — размер");
   // Чужая правка того же тома, пока черновик открыт
@@ -98,11 +124,18 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   anSet("storage", "block");
   anGo(2);
   anSrc("found");
-  // Прототип 102: том с записями консоль ищет в папке, которую называет человек
-  const byPath = typeof protoFoundIn === "function";
-  if (byPath) { const f0 = protoFound(anDraft()).list[0]; if (f0) anPath(protoFoundLabel(f0)); }
-  else ok(await until(() => !foundLoading() && an.found), "сервер назвал тома с записями (findVolumes)");
-  const found = (byPath ? protoFoundIn(anDraft(), an.findPath) : protoFound(anDraft())).list, pickedKey = an.found;
+  // Том с записями консоль ищет в папке, которую называет человек (findVolumes с path, профиль vms.volume/1 1.4).
+  // Папку тест берёт из ответа сервера без папки: первый блочный том на дисках сервера
+  const folderOf = async (sid, skip) => {
+    const r = await kindAction("archive.local", "findVolumes", { serverId: sid });
+    const f = (r?.items || []).map(foundOf).find((x) => x.storage === "block" && !(skip || []).includes(x.disk));
+    return f ? (f.mode === "part" ? f.disk + "\\" : f.dir) : "";
+  };
+  ok(!!anBlockVol() && /папку/.test(anBlockVol()), "без папки — «Указать папку с записями»: " + anBlockVol());
+  const folder = await folderOf(srvFree.id);
+  anPath(folder);
+  ok(await until(() => !foundLoading() && an.found), "сервер назвал тома с записями в папке " + folder);
+  const found = protoFound(anDraft(), true, an.findPath).list, pickedKey = an.found;
   ok(found.length > 0 && found.some((f) => f.key === pickedKey), "найдены тома с записями, первый выбран: " + pickedKey);
   ok(!anBlockVol(), "том выбран — «Далее» доступна");
   anGo(3);
@@ -111,10 +144,8 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   createArchive();
   ok(await until(() => arch.length === nF + 1), "хранилище из тома с записями создано");
   const fa = arch[arch.length - 1], fv = fa.vols[0];
-  // Прототип 102 сделан до findVolumes: том с записями там помечает страница (PROTO_REC), а не сервер
-  const srvRec = typeof volRec === "function";
-  ok((srvRec ? !!volRec(fv) : PROTO_REC.has(fv.id)) && fv.state !== "unfmt", "том с записями не «Не отформатирован»: " + volStateText(fv));
-  if (srvRec) ok(!!(await uiRec(fv.id)).recordsFrom, "у тома на сервере есть recordsFrom");
+  ok(!!volRec(fv) && fv.state !== "unfmt", "том с записями не «Не отформатирован», период от сервера: " + volStateText(fv));
+  ok(!!(await uiRec(fv.id)).recordsFrom, "у тома на сервере есть recordsFrom");
   ok(/без форматирования/.test(toastText()), "тост: «" + toastText() + "»");
   // Подключённый том второй раз не предлагается
   addArchive(srvFree.id);
@@ -122,25 +153,28 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   anSet("storage", "block");
   anGo(2);
   anSrc("found");
-  if (!byPath) ok(await until(() => !foundLoading()), "список томов обновлён");
-  ok(!protoFound(anDraft()).list.some((f) => f.key === pickedKey), "подключённый том в списке больше нет");
+  anPath(folder);
+  ok(await until(() => !foundLoading()), "список томов обновлён");
+  ok(!protoFound(anDraft(), true, an.findPath).list.some((f) => f.key === pickedKey), "подключённый том в списке больше нет");
   wzCancelQuiet("arch");
   an = null;
   // «＋ Том»: том с записями
   addVolume(fa.id);
   avSrc("found");
-  if (byPath) { const f0 = protoFound(fa).list[0]; if (f0) avPath(protoFoundLabel(f0)); }
-  else await until(() => !foundLoading());
+  ok(/папку/.test(avBlock(fa)), "окно без папки — «Указать папку с записями»");
+  avPath(await folderOf(fa.server, fa.vols.map((v) => v.disk)));
+  await until(() => !foundLoading());
   const avL = avList(fa);
   if (avL.length) {
     ok(av.found === avL[0].key || avL.some((f) => f.key === av.found), "в окне «＋ Том» выбран найденный том");
     avCreate();
-    // Прототип 102: новый том идёт в план, на сервер — по «Применить»
-    if (typeof cardDiff === "function" && cardDiff().some((r) => r.volAdd)) cardApply();
+    // Новый том идёт в план, на сервер — по «Применить»
+    ok(fa.vols.length === 2 && fa.vols[1]._new && cardDiff().some((r) => r.volAdd), "том в плане, на сервер ещё не ушёл");
+    cardApply();
     ok(await until(() => fa.vols.length === 2 && !fa.vols[1]._new), "том с записями добавлен");
-    ok(srvRec ? !!volRec(fa.vols[1]) : PROTO_REC.has(fa.vols[1].id), "второй том — с записями");
+    ok(!!volRec(fa.vols[1]), "второй том — с записями, период от сервера");
   } else {
-    ok(!!avBlock(fa), "томов с записями нет — «Подключить том» недоступна");
+    ok(!!avBlock(fa), "томов с записями нет — «Добавить в план» недоступна");
     avClose();
   }
   // Удалить том

@@ -216,6 +216,24 @@
     assert.status(await env.call("POST", "/kinds/archive.local/actions/findVolumes", { params: {} }), 422, "VALIDATION_FAILED", "локальное без сервера");
   }, { needs: ["createUnits", "runKindAction", "runUnitAction", "kind:volume", "kind:archive.local", "action:archive.local/findVolumes", "prop:volume.attachExisting"] });
 
+  // Пробел F92: том с записями ищут в папке, которую назвал человек (профиль 1.4, параметр path)
+  test("Том: findVolumes с папкой (профиль 1.4) — только тома в папке и в подпапках; корень диска — все тома диска; без папки — как раньше", async () => {
+    const env = await makeEnv();
+    const srv = FX.servers.find((s) => s.allocated && s.online && s.disks.filter((d) => !d.system).length >= 2);
+    const find = async (params) => (await env.ok("POST", "/kinds/archive.local/actions/findVolumes", { params })).result.items;
+    const all = await find({ serverId: srv.id });
+    const f = all.find((x) => x.mode === "file"), disk = f.disk;
+    const inDir = await find({ serverId: srv.id, path: f.dir });
+    assert.ok(inDir.length > 0 && inDir.every((x) => x.mode === "file" && x.dir === f.dir), "в папке файла — только файлы этой папки");
+    const root = await find({ serverId: srv.id, path: disk + "\\" });
+    assert.eq(root.length, all.filter((x) => x.disk === disk).length, "корень диска — все тома этого диска");
+    assert.eq((await find({ serverId: srv.id, path: f.dir.toLowerCase() + "\\" })).length, inDir.length, "регистр и косая черта в конце не важны");
+    assert.eq((await find({ serverId: srv.id, path: disk })).length, root.length, "«D:» без косой черты — корень диска");
+    assert.eq((await find({ serverId: srv.id, path: f.dir.replace(/\\/g, "/") })).length, inDir.length, "прямая косая черта — тот же путь");
+    assert.eq((await find({ serverId: srv.id, path: disk + "\\Нет такой папки" })).length, 0, "пустая папка — пустой список");
+    assert.eq((await find({ serverId: srv.id, path: "" })).length, all.length, "пустой path — все тома, как раньше");
+  }, { needs: ["runKindAction", "kind:archive.local", "action:archive.local/findVolumes"], layer: "profile:vms.volume/1", since: "1.4" });
+
   test("Том: «только чтение» (профиль 1.2) — writeStopped хранится, состояние не меняется, откат возвращает запись", async () => {
     const env = await makeEnv();
     const vol = FX.volumes.find((x) => x.state === "ready" && x.enabled !== false && !x.writeStopped && x.shrinkPendingBytes == null);

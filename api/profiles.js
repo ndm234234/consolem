@@ -491,7 +491,13 @@
       if (!trimmed(params.serverId)) return ctx.problem(422, "VALIDATION_FAILED", "Укажите сервер: тома ищут на его дисках", { field: "serverId" });
       const items = foundOnServer(params.serverId, ctx);
       if (!items) return ctx.problem(422, "VALIDATION_FAILED", "Такого сервера нет", { field: "serverId" });
-      return { result: { items } };
+      // Папка, которую назвал человек (профиль 1.4): только тома в ней и в её подпапках. Адрес тома — путь файла .afs,
+      // папка объектного хранилища или корень диска раздела
+      const path = trimmed(params.path);
+      if (!path) return { result: { items } };
+      const nm = (x) => String(x || "").toLowerCase().replace(/\//g, "\\").replace(/\\+$/, ""), p = nm(path);
+      const at = (f) => nm(f.mode === "part" ? f.disk : f.mode === "file" ? `${f.dir}\\${f.file}` : f.dir) + "\\";
+      return { result: { items: items.filter((f) => at(f).startsWith(p + "\\")) } };
     }
     if (address !== "nas") return ctx.problem(422, "NOT_SUPPORTED", `У вида ${kind} нет поиска томов`, { field: "kind" });
     if (!trimmed(params.disk)) return ctx.problem(422, "VALIDATION_FAILED", "Укажите путь к папке NAS", { field: "disk" });
