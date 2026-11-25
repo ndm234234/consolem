@@ -703,7 +703,7 @@ div.exp-ln{display:flex;align-items:center;padding:8px 0}
 /* вкладка «Видео» — видео и поворот на одном экране */
 .cv{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;align-items:stretch;margin-bottom:12px;transition:grid-template-columns .3s ease}
 .cv.cv-has-ptz{grid-template-columns:minmax(0,1fr) 300px}
-/* Вкладка «PTZ» (прототип 95) */
+/* Вкладка «PTZ» (прототип 96) */
 .nt.ptz-to{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.nt.ptz-to .lk{margin-left:auto}
 .nt.ptz-off{display:flex;align-items:center;gap:8px}
 .ptz-dev .cs-dl{margin-top:8px}
@@ -16816,7 +16816,7 @@ function drvParams(n,schema){
   const own=new Set(handScreenFields(nodeKind(n)));
   return Object.entries(schema?.properties||{}).filter(([f,p])=>p&&!own.has(f)&&!p["x-hidden"]&&!p["x-transient"]).map(([f,p])=>[f,ptzNoDev(p)]);
 }
-// ЗАГЛУШКА (прототип 95): параметры группы PTZ хранит сервер, консоль правит их без «Отправлять настройки устройству»
+// ЗАГЛУШКА (прототип 96): параметры группы PTZ хранит сервер, консоль правит их без «Отправлять настройки устройству»
 // (замка нет). Замена — снять x-dev у этих полей в схеме вида camera (api/fixtures/demo.json)
 // Сервер в режиме "device" объявляет поля x-dev только для чтения: у группы PTZ заглушка снимает и это
 function ptzNoDev(p){if(!p||p["x-ui-group"]?.key!==PTZ_DRV_GROUP||!p["x-dev"]&&!p.readOnly)return p;const q={...p};delete q["x-dev"];delete q.readOnly;return q}
@@ -16835,7 +16835,7 @@ function drvEveryProps(n){
 function drvGroupOf(p){const g=p?.["x-ui-group"];return g==null?SF_GROUP:typeof g==="string"?g:g.text||g.key||SF_GROUP}
 function drvTabOf(n,p){
   const t=p?.["x-ui-tab"],tabs=tabsForHand(n).filter(([id])=>id!=="view"),ids=tabs.map(([id])=>id);
-  // ЗАГЛУШКА (прототип 95): группа PTZ драйвера — на вкладке «PTZ». Замена — x-ui-tab tab.camera.ptz в схеме вида
+  // ЗАГЛУШКА (прототип 96): группа PTZ драйвера — на вкладке «PTZ». Замена — x-ui-tab tab.camera.ptz в схеме вида
   if(p?.["x-ui-group"]?.key===PTZ_DRV_GROUP&&ids.includes("ptz"))return"ptz";
   if(typeof t==="string"&&ids.includes(t))return t;
   if(t&&typeof t==="object"){
@@ -22663,7 +22663,7 @@ function cvStreamFps(n,s,i){return s.fps??(i?null:n.fps)}
 function cvKbpsText(k){return k>=1000?`${(k/1000).toFixed(k%1000?1:0).replace(".",",")} ${i18n("Мбит/с")}`:`${k} ${i18n("кбит/с")}`}
 
 function camVideoHtml(n){
-  // Прототип 95: поворот, пресеты, туры и слежение ушли на вкладку «PTZ». Здесь — видео и потоки
+  // Прототип 96: поворот, пресеты, туры и слежение ушли на вкладку «PTZ». Здесь — видео и потоки
   const cur=(lv?.id===n.id&&lv.stream)||camStreams(n)[0]?.id||"";
   const main=`<div class="card cv-main"><div class="ch cv-h"><span>${i18n("Видео")}</span>${bdg(n)}</div>
     <div class="cb">${liveFrameHtml(n)}${cvStreamPickHtml(n,cur)}</div></div>`;
@@ -22671,7 +22671,7 @@ function camVideoHtml(n){
   return`${to}<div class="cv-cq"><div class="cv">${main}</div></div>${cvStreamsCardHtml(n)}`;
 }
 
-// ── Вкладка «PTZ»: поворотное устройство камеры (прототип 95, пробел F38) ──
+// ── Вкладка «PTZ»: поворотное устройство камеры (прототип 96, пробел F38) ──
 // Всё о повороте — на одной вкладке: управление (видео, джойстик, пресеты, туры), «Поворотное устройство»
 // (включено ли, откуда идёт телеметрия), «Патрулирование и предустановки» (параметры драйвера), «Слежение Tag&Track Pro».
 // В Axxon One PTZ — отдельный объект под камерой (Enable, Name, Camera); у Genetec, Avigilon и Milestone — настройки
