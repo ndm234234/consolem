@@ -3757,6 +3757,7 @@ body:has(.ttu) #tst:not(.in-fs){bottom:144px}
 <!-- ONE PSIM: мост по ONE.PSIM.PrototypeKit, подключён после стилей прототипа -->
 <link rel="stylesheet" href="assets/one-psim/bridge.css">
 <script src="assets/i18n-en.js"></script>
+<script src="assets/i18n-en-96.js"></script>
 <!-- API: контракт, эталонный набор, встроенный сервер и клиент (api/README.md) -->
 <script src="api/openapi.js"></script>
 <script src="api/fixture.js"></script>
@@ -6626,6 +6627,19 @@ function hwApplyFolder(r){
   const f=folderById(r.id);if(!f)return;
   f.name=r.name;
   hwVer.set(r.id,r.version);
+  // Прототип 96: папку перенесли (свой перенос или чужой, по событию) — узел уходит к новому родителю вместе с подпапками
+  if(r.parentId!==undefined&&(folderParent(r.id)?.id||null)!==(r.parentId||null))folderRelocate(f,r.parentId||null,r.domainId);
+}
+function folderRelocate(f,pid,did){
+  const par=pid?folderById(pid):null;
+  const was=folderParent(f.id);
+  if(was)was.folders=was.folders.filter(x=>x.id!==f.id);
+  else{const i=folders.findIndex(x=>x.id===f.id);if(i>=0)folders.splice(i,1)}
+  // Нового родителя нет в кэше (его ветку ещё не читали): папка уходит из кэша и придёт с веткой родителя
+  if(pid&&!par){walkFolders(x=>hwVer.delete(x.id),[f]);hwIdxDrop();treeMatchCache.clear();searchMatchCache.clear();return}
+  f.domain=par?null:(did||f.domain||null);
+  (par?par.folders:folders).push(f);
+  hwIdxDrop();treeMatchCache.clear();searchMatchCache.clear();
 }
 // События объектов: kind — вид объекта (на старых путях — device, folder, server…). Запись перечитывается одним путём —
 // GET /units/{uid}, раскладывается hwApplyUnit по экрану вида
@@ -13698,6 +13712,8 @@ function openTreeCtx(n,xy){
     }else if(handOf(n,"folder")){
       if(needsMet(DOMAIN_TAB_NEEDS.cams))add.push(tctxItem(i18n("Добавить устройства…"),act("planOpen"),tctxPlusIcon()));
       add.push(tctxItem(i18n("Создать подпапку"),act("addSubfolder",id),tctxPlusIcon()));
+      // Прототип 96 (пробел F72): папку с подпапками — в другую папку или в корень домена
+      if(canFolderMove(n))add.push(tctxItem(i18n("Переместить папку…"),["tfFoldOpen",onEv.el,`${id}`],tctxFolderIcon()));
     }else if(canTreeCtxAdd(n))add.push(tctxItem(addTreeLabel(n),act("openW"),tctxPlusIcon()));
     if(WIZ.acfa&&typeIn(n,["acfa","acfa_lock","camera","ipsrv"]))add.push(tctxItem(i18n("Добавить единицу СКУД"),act("openW","unit"),tctxPlusIcon()));
     // Пункты экрана камеры — только у узла ручного экрана: камера без vms.camera/1 — форма по схеме
@@ -17944,10 +17960,11 @@ function tfOpen(el,ids,how){
 }
 function tfShown(){
   const q=(tfPickState.q||"").trim().toLowerCase();
-  const all=tfFolders(tfPickState.ids);
+  const all=tfPickState.how==="fold"?foldTargets(tfPickState.ids[0]):tfFolders(tfPickState.ids);
   return q?all.filter(f=>folderPathName(f.id).toLowerCase().includes(q)):all;
 }
 function tfListHtml(shown){
+  if(tfPickState.how==="fold")return foldListHtml(shown);
   if(!shown.length)return `<div class="tf-none">${i18n("Ничего не найдено")}</div>`;
   const ids=tfPickState.ids;
   return shown.map(f=>{
@@ -17962,6 +17979,7 @@ function tfListHtml(shown){
 }
 function tfMenuHtml(){
   const{ids,how}=tfPickState;
+  if(how==="fold")return foldMenuHtml();
   const all=tfFolders(ids),shown=tfShown();
   const who=ids.length===1?`«${escHtml(locName(find(ids[0])?.n||{}))}»`:`${ids.length} ${i18n(plural(ids.length,"объект|объекта|объектов"))}`;
   const head=`<div class="tctx-head">${i18n(how==="move"?"Переместить в папку":"Добавить в папку")}: ${who}</div>`;
@@ -17978,7 +17996,7 @@ function tfType(v){
   const shown=tfShown();
   list.innerHTML=tfListHtml(shown);
   const foot=document.querySelector("#tctx .tf-foot");
-  if(foot)foot.textContent=`${i18n("Показано")} ${shown.length} ${i18n("из")} ${tfFolders(tfPickState.ids).length}`;
+  if(foot)foot.textContent=`${i18n("Показано")} ${shown.length} ${i18n("из")} ${(tfPickState.how==="fold"?foldTargets(tfPickState.ids[0]):tfFolders(tfPickState.ids)).length}`;
 }
 function tfKey(e){
   const first=document.querySelector("#tctx .tf-list button[role=menuitem]:not(:disabled)");
@@ -17989,7 +18007,78 @@ function tfPick(fid){
   if(!tfPickState)return;
   const{ids,how}=tfPickState;
   tfPickState=null;closeTreeCtx();
+  if(how==="fold"){folderMove(ids[0],fid||null);return}
   treeToFolder(ids,fid,how);
+}
+// ── Перенос папки (прототип 96, пробел F72) ──
+// Папку с подпапками переносят в другую папку своего домена или в корень домена: POST /operations, шаг move
+// (возможность move вида папки). Родителя, цикл и домен судит сервер; меню не предлагает саму папку, её подпапки
+// и чужие домены. Отмена — в тосте: обратный шаг move
+function canFolderMove(n){
+  // Куда переносить есть: другая папка домена или корень домена (папка не в корне)
+  return!!n&&handOf(n,"folder")&&kindCan(nodeKind(n)||"folder","move")&&can("createOperation")&&hwVer.has(n.id)&&(!!folderParent(n.id)||foldTargets(n.id).length>0);
+}
+function foldTargets(id){
+  const f=folderById(id);if(!f)return[];
+  const mine=new Set([id]);walkFolders(x=>mine.add(x.id),f.folders||[]);
+  const did=folderDomain(id);
+  return flatFolders().filter(x=>!mine.has(x.id)&&folderDomain(x.id)===did);
+}
+function tfFoldOpen(el,id){
+  const f=folderById(id);if(!f)return;
+  const box=(el&&el.isConnected?el:document.getElementById("tree")).getBoundingClientRect();
+  tfPickState={ids:[id],how:"fold",q:""};
+  bulkOpenMenuAt({getBoundingClientRect:()=>box},tfMenuHtml());
+  setTimeout(()=>document.getElementById("tfq")?.focus(),30);
+}
+function foldListHtml(shown){
+  const id=tfPickState.ids[0],cur=folderParent(id)?.id||null;
+  const here=` <span class="tf-here">${i18n("уже здесь")}</span>`;
+  const d=domains.find(x=>x.id===folderDomain(id));
+  // Корень домена — первым пунктом; при поиске — если подходит его подпись
+  const q=(tfPickState.q||"").trim().toLowerCase();
+  const rootText=`${i18n("В корень домена")}${d?` «${locName(d)}»`:""}`;
+  const root=q&&!rootText.toLowerCase().includes(q)?"":tctxItem(`${i18n("В корень домена")}${d?` «${escHtml(locName(d))}»`:""}${cur?"":here}`,["tfPick",""],tctxFolderIcon(),!cur);
+  if(!shown.length&&!root)return `<div class="tf-none">${i18n("Ничего не найдено")}</div>`;
+  return root+shown.map(f=>tctxItem(hlText(folderPathName(f.id),tfPickState.q)+(f.id===cur?here:""),["tfPick",`${f.id}`],tctxFolderIcon(),f.id===cur)).join("");
+}
+function foldMenuHtml(){
+  const id=tfPickState.ids[0],all=foldTargets(id),shown=tfShown();
+  const head=`<div class="tctx-head">${i18n("Переместить папку")}: «${escHtml(locName(folderById(id)||{}))}»</div>`;
+  const long=all.length+1>=CBX_MIN;
+  const find_=long?`<div class="tf-q"><input id="tfq" type="text" autocomplete="off" placeholder="${i18n("Имя или путь папки…")}" aria-label="${i18n("Найти папку")}" value="${escHtml(tfPickState.q||"")}" ${onEv("input",["tfType",onEv.value])} ${onEv("keydown",["tfKey",onEv.event])}></div>`:"";
+  const foot=long?`<div class="tf-foot">${i18n("Показано")} ${shown.length} ${i18n("из")} ${all.length}</div>`:"";
+  return head+find_+`<div class="tf-list">${foldListHtml(shown)}</div>`+foot;
+}
+// Ветки раскладки folders у прежнего и нового родителя (корень — домен) перечитываются, как по tree.changed
+function foldBrDrop(...ids){
+  const dom=ids[ids.length-1];
+  new Set(ids.slice(0,-1).map(x=>x||dom)).forEach(x=>{if(!x)return;flCntDrop(x);treeBr.delete("folders|"+x)});
+}
+// Один шаг move; итог — запись папки после переноса
+async function folderMoveStep(id,pid){
+  const op=await opRun([{uid:id,move:pid}],{[id]:hwVer.get(id)});
+  const it=(op.items||[])[0];
+  if(!it||it.state!=="ok")throw{problem:{code:it?.code||"UNKNOWN",params:it?.params}};
+  const r=unitRec(await API.get(`/units/${id}`));
+  hwApplyFolder(r);
+  return r;
+}
+async function folderMove(id,pid){
+  const f=folderById(id);if(!f)return;
+  const was=folderParent(id)?.id||null;
+  if(was===pid)return;
+  if(busyRefuse(id))return;
+  try{await folderMoveStep(id,pid)}catch(e){toast(problemText(e));return}
+  // Папку видно на новом месте: путь к ней раскрыт
+  if(pid)folderPath(pid).forEach(x=>open.add(x.id));
+  const dom=folderDomain(id);if(dom)open.add(dom);
+  foldBrDrop(was,pid,dom);paint();
+  const to=pid?`«${locName(folderById(pid)||{})}»`:i18n("корень домена");
+  toastAction("foldmove",`${i18n("Папка перемещена в")} ${to}: «${locName(f)}»`,i18n("Отменить"),async()=>{
+    try{await folderMoveStep(id,was)}catch(e){toast(problemText(e));return}
+    foldBrDrop(was,pid,dom);paint();
+  },8000);
 }
 // Перенос из дерева: те же изменения состава, что и на экране папки, с отменой в тосте
 function treeToFolder(ids,tid,how){
