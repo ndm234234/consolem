@@ -176,6 +176,17 @@
     assert.eq([on.state, on.enabled ?? true], ["ready", true], "снова готов");
   }, { needs: ["patchUnit", "kind:volume"] });
 
+  test("Том: «только чтение» (профиль 1.2) — writeStopped хранится, состояние не меняется, откат возвращает запись", async () => {
+    const env = await makeEnv();
+    const vol = FX.volumes.find((x) => x.state === "ready" && x.enabled !== false && !x.writeStopped && x.shrinkPendingBytes == null);
+    const ro = await env.ok("PATCH", U(vol.id), { properties: { writeStopped: true } }, v(vol));
+    assert.eq([ro.properties.writeStopped, ro.properties.state, ro.properties.enabled ?? true], [true, "ready", true], "только чтение: том включён и готов");
+    assert.eq((await get(env, vol.id)).properties.writeStopped, true, "сервер хранит значение");
+    const back = await env.finished((await env.ok("POST", `/operations/${(await lastOp(env)).id}/revert`)).id);
+    assert.eq(back.ok, 1, "откатывается");
+    assert.eq((await get(env, vol.id)).properties.writeStopped ?? false, false, "запись снова идёт");
+  }, { needs: ["patchUnit", "kind:volume", "prop:volume.writeStopped"] });
+
   // replica: источник — встроенное хранилище или другой архив этой камеры
   const devs = FX.devices;
   const hasStorage = (d) => devs.some((x) => x.type === "storage" && x.parentId === d.id);

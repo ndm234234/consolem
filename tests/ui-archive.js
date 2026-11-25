@@ -207,4 +207,29 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   cardApply();
   ok(await until(() => bq && bq.finished), "план выполнен");
   ok((await uiRec(pend.id)).state === "off", "том выключен");
+  // Том «только чтение» (B2, профиль vms.volume/1 1.2): запись остановлена, том включён и готов.
+  // Хранилище с одним включённым томом: после правки писать некуда — карточка хранилища предупреждает
+  const one = arch.find((a) => a.vols.filter((x) => x.enabled !== false).length === 1 && a.vols.some((x) => x.enabled !== false && !x.state) && a.vols.every((x) => !x.writeStopped));
+  const rv = one.vols.find((x) => x.enabled !== false);
+  open(one.id, "arch");
+  ok(!main().querySelector("[data-arch-no-write]"), "до правки предупреждения нет");
+  open(rv.id, "gen");
+  ok(!!main().querySelector("[data-vol-write-stopped] .sw:not(.on)"), "переключатель «Только чтение» выключен");
+  volWriteToggle(main().querySelector("[data-vol-write-stopped] .sw"), rv.id);
+  ok(cardDiff().some((r) => r.key === "writeStopped"), "строка плана «Только чтение»");
+  cardApply();
+  ok(await until(() => bq && bq.finished), "план: только чтение — не ок " + bq?.fail);
+  const ro = await uiRec(rv.id);
+  ok(ro.writeStopped === true && ro.enabled !== false && ro.state === "ready", "на сервере writeStopped: true, том включён и готов: " + ro.state);
+  open(one.id, "arch");
+  ok(!!main().querySelector("[data-arch-no-write]"), "хранилище: писать некуда — предупреждение");
+  ok([...main().querySelectorAll(".it small")].some((x) => /только чтение/.test(x.textContent)), "строка тома: только чтение");
+  // Обратно: поле уходит false, узел без поля, предупреждения нет
+  open(rv.id, "gen");
+  volWriteToggle(main().querySelector("[data-vol-write-stopped] .sw.on"), rv.id);
+  cardApply();
+  ok(await until(() => bq && bq.finished), "план: запись снова идёт — не ок " + bq?.fail);
+  ok((await uiRec(rv.id)).writeStopped !== true && volById(rv.id).writeStopped === undefined, "на сервере и в узле запись идёт");
+  open(one.id, "arch");
+  ok(!main().querySelector("[data-arch-no-write]"), "предупреждения больше нет");
 });

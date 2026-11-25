@@ -5148,6 +5148,7 @@ function volNode(r){
   if("login" in r)v.user=r.login;
   v.bytes=r.sizeBytes;
   if(r.enabled===false)v.enabled=false;
+  if(r.writeStopped===true)v.writeStopped=true;
   if(r.shrinkPendingBytes!=null)v.shrink=r.shrinkPendingBytes;
   return v;
 }
@@ -9655,7 +9656,7 @@ function cardFld(el){
 const CARD_PROP={overlays:"Камеры титров",overlayFont:"Шрифт титров",overlayFontSize:"Размер шрифта титров",overlayColor:"Цвет текста титров",overlayBg:"Цвет фона титров",overlayBgTransparency:"Прозрачность фона титров",
   receiptStartWords:"Слова начала чека",receiptEndWords:"Слова конца чека",receiptSplit:"Как делить строки на чеки",ignoreCase:"Не учитывать регистр слов начала и конца",billsOnly:"Показывать только строки чека",eraseOnEnd:"Убирать строки после конца чека",
   protocol:"Протокол",comPort:"COM-порт",baudRate:"Скорость, бит/с",parity:"Чётность",udpMaxPacket:"Наибольший пакет, байт",encoding:"Кодировка",terminalType:"Тип терминала",parserFile:"Файл парсера",processing:"Обработка строк",timeoutMs:"Таймаут, мс",timeOffsetMs:"Сдвиг времени, мс",retalix:"Касса Retalix",words:"Подсветка слов",
-  decimation:"Прореживание",recordScheduleId:"Расписание записи",retentionDays:"Срок записи, дней",minDepthDays:"Глубина не меньше, дней",audioDeviceId:"Микрофон записи",replicaFrom:"Откуда забирать",size:"Объём",recordMode:"Когда писать",admits:"Принимает записи",zone:"Зона",labels:"Метки",alarmKinds:"Тревожные виды",enabled:"Включено",rec:"Режим записи",arch:"Архив",archx:"Дополнительные архивы",pre:"Предзапись, с",srvId:"Сервер",
+  decimation:"Прореживание",recordScheduleId:"Расписание записи",retentionDays:"Срок записи, дней",minDepthDays:"Глубина не меньше, дней",audioDeviceId:"Микрофон записи",replicaFrom:"Откуда забирать",size:"Объём",recordMode:"Когда писать",admits:"Принимает записи",zone:"Зона",labels:"Метки",alarmKinds:"Тревожные виды",enabled:"Включено",writeStopped:"Только чтение",rec:"Режим записи",arch:"Архив",archx:"Дополнительные архивы",pre:"Предзапись, с",srvId:"Сервер",
   recDets:"Запись по детекторам",name:"Имя",short:"Короткое имя",ip:"IP",port:"Порт",vendor:"Производитель",model:"Модель",
   days:"Глубина, дней",enc:"Шифрование",storage:"Тип хранения",vols:"Тома",kind:"Тип",sens:"Чувствительность",license:"Лицензия",
   codec:"Кодек",res:"Разрешение",fps:"к/с",stream:"Поток",recordingTarget:"Сервер записи",lat:"Широта",lon:"Долгота",azimuth:"Азимут",user:"Имя пользователя",pass:"Пароль"};
@@ -9667,6 +9668,7 @@ function cardFmt(k,v){
   const pf=typeof posFmt==="function"&&v!==undefined&&v!==null?posFmt(k,v):null;if(pf!==null)return pf;
   if(k==="zone"&&!v)return zoneText(v);
   if(k==="enabled")return v===false?i18n("выкл"):i18n("вкл");
+  if(k==="writeStopped")return v===true?i18n("вкл"):i18n("выкл");
   if(k==="decimation")return i18n((LAN_DEC.find(d=>d[0]===(v||""))||[v,v])[1]);
   if(v===undefined||v===null||v==="")return"—";
   if(k==="enabled"||k==="enc"||k==="ssl")return v===false?i18n("выкл"):i18n("вкл");
@@ -25687,12 +25689,13 @@ function formBase(n){
       </div>
       <p class="sub" style="margin-top:10px">${net?i18n("Камеры сетевого хранилища не закреплены за сервером. Любой сервер домена может записывать их видео.")
         :`${i18n("Сервер:")} <b>${escHtml(sv?locName(sv):"—")}</b>.${spec.recordModes.some(m=>m!=="backup")?` ${i18n("Камера получает сервер только через хранилище.")}`:""}`}</p>`)+
+      (archNoWrite(vols)?`<div class="nt bk-warn" data-arch-no-write>${lu("triangle-alert")} ${i18n("Сервер не пишет ни на один включённый том хранилища. Камеры этого хранилища не записываются. Добавить том или выключить «Только чтение» у тома.")}</div>`:"")+
       listCard({
         key:"avol:"+n.id,
         title:"Тома",
         items:vols,
         text:v=>[volLabel(v),v.size,volDesc(v)],
-        row:v=>`<div class="it" ${onEv("click",["pick",`${v.id}`])}><span>${ic("vol")}</span><span>${escHtml(volLabel(v))}<small>${escHtml(volDesc(v))}${volStateText(v)?` · <span class="${v.state==="error"||v.state==="broken"?"bk-bad":""}">${escHtml(volStateText(v))}</span>`:""}</small></span></div>`,
+        row:v=>`<div class="it" ${onEv("click",["pick",`${v.id}`])}><span>${ic("vol")}</span><span>${escHtml(volLabel(v))}<small>${escHtml(volDesc(v))}${v.writeStopped&&v.enabled!==false&&!nodeFieldOff(v,"writeStopped")?` · ${i18n("только чтение")}`:""}${volStateText(v)?` · <span class="${v.state==="error"||v.state==="broken"?"bk-bad":""}">${escHtml(volStateText(v))}</span>`:""}</small></span></div>`,
         empty:"Томов нет — записывать некуда",
         ph:"Путь, диск или бакет…",
         unit:"том|тома|томов",
@@ -25705,6 +25708,7 @@ function formBase(n){
     return card("Том хранилища",`${n.shrink!=null?`<div class="nt err" data-vol-shrink${pfa(n,"shrinkPendingBytes")}>${i18n("Объявлен меньший объём")}: ${escHtml(bytesText(n.shrink))}. ${i18n("Сервер сотрёт старые записи, поэтому нужно второе подтверждение.")} <button type="button" class="lk lk-act" ${onEv("click",["volShrinkConfirm",`${n.id}`])}>${i18n("Подтвердить…")}</button></div>`:""}${PROTO_REC.has(n.id)?`<div class="nt ok" data-vol-rec>${i18n("Том подключён с записями")}: ${protoRecText(PROTO_REC.get(n.id))}. ${i18n("Сервер не форматировал том. Форматирование удалит эти записи.")}</div>`:""}${n.state==="unfmt"&&!PROTO_REC.has(n.id)?`<div class="nt err">${i18n("Раздел не отформатирован, поэтому запись на него невозможна. Отформатировать раздел, когда вы будете готовы. Форматирование удалит все данные на диске.")}</div>`:""}<div class="nt ok">${i18n("Том хранилища")} <button type="button" class="lk" ${onEv("click",["pick",`${a.id}`])}><b>${escHtml(locName(a))}</b></button> · ${escHtml(archKindLabel(a))}</div>
       ${volFieldsHtml(a,n,["volSet",n.id])}
       <div class="ln ln-sw" data-vol-enabled><div>${i18n("Том включён")}</div><div class="sw ${n.enabled===false?"":"on"}" ${onEv("click",["volEnabledToggle",onEv.el,n.id])}></div></div>
+      ${nodeFieldOff(n,"writeStopped")?"":`<div class="ln ln-sw" data-vol-write-stopped${pfa(n,"writeStopped")}><div>${i18n("Только чтение")} <span class="sub">${i18n(n.writeStopped?"Сервер не пишет на том. Записи тома остаются в архиве и видны.":"Включить перед заменой диска. Сервер не будет писать на этот том. Старые записи останутся видны.")}</span></div><div class="sw ${n.writeStopped?"on":""}" role="switch" aria-checked="${!!n.writeStopped}" ${onEv("click",["volWriteToggle",onEv.el,n.id])}></div></div>`}
       <div class="mx" style="margin-top:10px">
         <div class="mc"${pfa(n,"state")}><span>${i18n("Состояние")}</span><b style="font-size:14px">${escHtml(volStateText(n))}</b></div>
         <div class="mc"><span>${i18n("Томов в хранилище")}</span><b>${archVols(a).length}</b></div>
@@ -37540,6 +37544,10 @@ function volSet(id,k,val,quiet){
 // Форматирование — отдельное действие тома: хранилище подключают и к
 // неотформатированному разделу, а форматируют, когда решат.
 function volEnabledToggle(el,id){const v=volById(id);if(!v)return;if(el.classList.contains("on"))v.enabled=false;else delete v.enabled;setD(true);gear()}
+// «Только чтение»: сервер не пишет на том, старые записи видны. Поля нет — запись идёт
+// Писать некуда: у хранилища есть включённые тома, и все они «только чтение»
+function archNoWrite(vols){if(kindFieldOff("volume","writeStopped"))return false;const on=(vols||[]).filter(v=>v.enabled!==false);return on.length>0&&on.every(v=>v.writeStopped)}
+function volWriteToggle(el,id){const v=volById(id);if(!v)return;if(el.classList.contains("on"))delete v.writeStopped;else v.writeStopped=true;setD(true);gear()}
 // Объявленное уменьшение: второе слово человека, то же число
 function volShrinkConfirm(id){
   const v=volById(id);if(!v||v.shrink==null)return;
@@ -43922,6 +43930,7 @@ function volFieldToApi(k,v){
   const f=VOL_API[k]||k;
   if(!VOLUME_PATCH.has(f))return null;
   if(f==="enabled")return{enabled:v!==false};
+  if(f==="writeStopped")return{writeStopped:v===true};
   if(f==="sizeBytes")return{sizeBytes:Math.round(sizeTb(v)*TB)};
   return{[f]:v===undefined?null:f==="port"?apiVal("port",v):v};
 }
