@@ -96,15 +96,21 @@ UiCheck(async ({ ok, until, sleep }) => {
   const dev = camDevFields(nc);
   ok(dev.length > 0, "x-dev fields: " + dev.map(([f]) => f).join());
   nc.xprops = nc.xprops || {}; nc.xprops.brightness = 70; setD(true);
-  const rows = camTargetRows(nc, camResetTarget(nc, []));
+  const rows = camTargetRows(nc, camResetTarget(nc, {}));
   ok(rows.some((r) => /Яркость/.test(r.label) && !r.stub), "reset row brightness, no stub: " + JSON.stringify(rows.map((r) => [r.label, r.fromT, r.toT, r.stub])));
   rows.forEach((r) => r.set());
   ok(!("brightness" in nc.xprops), "reset to default removes draft key when server equals default: " + JSON.stringify(nc.xprops));
   cardReset(); await sleep(20);
   // Load-from-device rows
-  const rep = camDevReported(nc, []);
+  // Сервер без полей профиля vms.camera/1 1.6: значения строит страница, строки — заглушка
+  const rep = camDevReported(nc, {});
   const lrows = camTargetRows(nc, rep);
   ok(lrows.every((r) => r.stub), "load rows stub: " + JSON.stringify(lrows.map((r) => [r.label, r.stub])));
+  // Сервер сообщил кодек потока и параметр драйвера (vms.camera/1 1.6): строки окна — не заглушка
+  const [ef, ep] = dev.find(([, p]) => Array.isArray(p.enum) && p.enum.length > 1) || [];
+  const srv = { streams: camStreams(nc).map((s) => ({ uid: s.uid, streamId: s.id, bitrateMode: "cbr" })), properties: ef ? { [ef]: ep.enum.find((v) => v !== drvVal(nc, ef, ep)) } : {} };
+  const srows = camTargetRows(nc, camDevReported(nc, srv));
+  ok(srows.length > 0 && srows.every((r) => !r.stub), "load rows from server, no stub: " + JSON.stringify(srows.map((r) => [r.label, r.stub])));
   // Base form round trip with drv edit
   goTab("gen"); await sleep(20);
   drvEditStart(c.uid, "Обмен с камерой");

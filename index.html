@@ -17161,7 +17161,7 @@ function camPlanRows(n,out){
 }
 // «Применить»: заглушки остаются как есть, база плана забывается
 function camPlanCommit(id){
-  // После применённого сброса камера сообщает то, что консоль в неё записала (заглушка camDevReported)
+  // После применённого сброса камера сообщает то, что консоль в неё записала (заглушка camDevStub; сервер без полей профиля vms.camera/1 1.6)
   const n=find(id)?.n;if(n&&camPlanBase.get(id)?.act==="reset")camDevRep.set(id,{cv:cardClone({v:cvCfgOf(n).streams}).v,drv:{}});
   camPlanBase.delete(id);onvifCommit(id);webPlanForget(id);
 }
@@ -17181,9 +17181,10 @@ function camPlanRestore(id){
 // Здесь — два пункта меню «Ещё» карточки камеры (то же меню открывает правая кнопка на строке дерева). Пункт спрашивает сервер
 // (команды камеры defaults и readConfig, контракт 0.10.0: обе только читают) и открывает окно «Параметр — Сейчас — Станет»;
 // «Добавить в план» меняет значения в черновике карточки, строки попадают в общий план, «Применить» отправляет их вместе
-// с другими правками камеры (разрешение и к/с — PATCH потока), «Сбросить» в подвале возвращает всё.
-// ЗАГЛУШКА: кодек, битрейт, опорный кадр и параметры драйвера в контракт пока не входят (запрос
-// api/requests/2026-11-09-182805Z-mockup-camera-driver-params-request.md): их умолчания и то, что о них сообщает камера, строит страница
+// с другими правками камеры (разрешение, к/с, кодек и битрейт — PATCH потока), «Сбросить» в подвале возвращает всё.
+// Кодек, битрейт и опорный кадр потока сообщают обе команды, параметры драйвера (x-dev) — readConfig в result.properties
+// (профиль vms.camera/1 1.6). Умолчания параметров драйвера — default в схеме объекта.
+// ЗАГЛУШКА только у сервера с профилем vms.camera/1 до 1.6: полей нет в ответе — их строит страница (строка окна «заглушка»)
 const CAM_DEF_CV=[{kbps:4096,gop:25},{kbps:512,gop:50}];
 const CAM_CV_KEYS=["codec","profile","brc","kbps","quality","gop"];
 const CAM_ACT_CMD={reset:"defaults",load:"readConfig"};
@@ -17212,30 +17213,51 @@ function camDevFields(n){
   const k=KINDS.get(nodeKind(n))?.schema,c=k?drvSolve(k,{...drvVals(n),streamsMode:"console"}).properties||{}:{};
   return drvParams(n,drvSchema(n)).filter(([f,p])=>p["x-dev"]&&!(drvSend(n)||!(f in c)?p.readOnly:c[f].readOnly));
 }
-// Потоки из ответа сервера (result.streams) — по потокам карточки: по uid, у камеры без объектов потоков — по streamId
+// Строка ответа сервера (result.streams) для потока карточки: по uid, у камеры без объектов потоков — по streamId
+function camSrvRow(s,rows){return(rows||[]).find(x=>s.uid?x.uid===s.uid:x.streamId===s.id)}
 function camSrvStreams(n,rows){
   const out={};
-  camStreams(n).forEach(s=>{const r=(rows||[]).find(x=>s.uid?x.uid===s.uid:x.streamId===s.id);if(r)out[s.id]={res:r.res,fps:r.fps}});
+  camStreams(n).forEach(s=>{const r=camSrvRow(s,rows);if(r)out[s.id]={res:r.res,fps:r.fps}});
   return out;
 }
-function camResetTarget(n,srvRows){
-  const out={streams:camSrvStreams(n,srvRows),cv:{},drv:{},drvStub:false};
-  camStreams(n).forEach((s,i)=>{const d=CAM_DEF_CV[Math.min(i,1)];out.cv[s.id]={codec:"H.264",profile:i?"Main":"High",brc:"vbr",kbps:d.kbps,quality:"5",gop:d.gop}});
+// Кодек, битрейт и опорный кадр из ответа сервера — в полях окна потоков (CV_SRV). Поля нет — undefined: сервер его не сообщил.
+// Поле, которое поток на сервере не принимает (cvSrvOk, профиль vms.stream/1 до 1.2), окно не берёт: план его не отправит
+function camSrvCv(n,rows){
+  const out={};
+  camStreams(n).forEach(s=>{const r=camSrvRow(s,rows);if(!r)return;const cv={};
+    CAM_CV_KEYS.forEach(k=>{const f=CV_SRV[k];if(r[f]!==undefined&&(!s.uid||cvSrvOk(f)))cv[k]=cvFromSrv(k,r[f])});
+    if(Object.keys(cv).length)out[s.id]=cv});
+  return out;
+}
+// Сервер не сообщил кодек потока (профиль до 1.6): поток берёт значения страницы, его строки окна — заглушка
+function camCvFill(n,t,stub){camStreams(n).forEach((s,i)=>{if(!t.cv[s.id]){t.cv[s.id]=stub(s,i);t.cvStub[s.id]=true}})}
+function camResetTarget(n,srv){
+  const out={streams:camSrvStreams(n,srv?.streams),cv:camSrvCv(n,srv?.streams),cvStub:{},drv:{},drvStub:false};
+  camCvFill(n,out,(s,i)=>{const d=CAM_DEF_CV[Math.min(i,1)];return{codec:"H.264",profile:i?"Main":"High",brc:"vbr",kbps:d.kbps,quality:"5",gop:d.gop}});
   camDevFields(n).forEach(([f,p])=>{if("default"in p)out.drv[f]=p.default});
   return out;
 }
-// ЗАГЛУШКА: что камера сообщает о кодеке, битрейте и драйвере. Страница один раз берёт значения консоли и меняет часть:
-// так выглядит камера, которую перенастроили в её веб-интерфейсе (режим и битрейт основного потока, один параметр драйвера)
+// Что камера сообщила: потоки — result.streams, параметры драйвера — result.properties (только x-dev, которые можно изменить).
+// ЗАГЛУШКА для сервера без этих полей: страница один раз берёт значения консоли и меняет часть — так выглядит камера,
+// которую перенастроили в её веб-интерфейсе (режим и битрейт основного потока, один параметр драйвера)
 const camDevRep=new Map();
-function camDevReported(n,srvRows){
+function camDevStub(n){
   if(!camDevRep.has(n.id)){
-    const c=cvCfgOf(n),rep={cv:{},drv:{},drvStub:true};
+    const c=cvCfgOf(n),rep={cv:{},drv:{}};
     camStreams(n).forEach((s,i)=>{const p=c.streams[s.id]||{};rep.cv[s.id]=i?{...p}:{...p,brc:"cbr",kbps:Math.max(256,Math.round((p.kbps||2048)*0.75/128)*128)}});
     const e=camDevFields(n).find(([,p])=>Array.isArray(p.enum)&&p.enum.length>1);
     if(e){const[f,p]=e;rep.drv[f]=p.enum.find(v=>v!==drvVal(n,f,p))}
     camDevRep.set(n.id,rep);
   }
-  return{streams:camSrvStreams(n,srvRows),...camDevRep.get(n.id)};
+  return camDevRep.get(n.id);
+}
+function camDevReported(n,srv){
+  const out={streams:camSrvStreams(n,srv?.streams),cv:camSrvCv(n,srv?.streams),cvStub:{},drv:{},drvStub:false};
+  camCvFill(n,out,s=>({...(camDevStub(n).cv[s.id]||{})}));
+  const told=srv?.properties;
+  if(told&&typeof told==="object")camDevFields(n).forEach(([f])=>{if(told[f]!==undefined)out.drv[f]=told[f]});
+  else{out.drv={...camDevStub(n).drv};out.drvStub=true}
+  return out;
 }
 function camStreamPut(n,sid,k,v){const o=(n.streams||[]).find(x=>x.id===sid);if(o)o[k]=v;else n[k]=v}
 // Строки окна: что изменится; set() меняет значение в черновике карточки
@@ -17247,11 +17269,11 @@ function camTargetRows(n,t){
       rows.push({label:`«${s.name}»: ${i18n(k==="res"?"разрешение":"к/с")}`,fromT:camStreamText(cur,[k]),toT:camStreamText(ts,[k]),set:()=>camStreamPut(n,s.id,k,ts[k])})});
     const tc=t.cv[s.id],cc=c.streams[s.id]||{};
     if(tc)CAM_CV_KEYS.forEach(k=>{if(tc[k]!==undefined&&JSON.stringify(tc[k])!==JSON.stringify(cc[k]))
-      rows.push({stub:true,label:`«${s.name}»: ${i18n(CV_KEY_RU[k])}`,fromT:cvValText(k,cc[k]),toT:cvValText(k,tc[k]),set:()=>{camPlanTouch(n,"cv");cvParamPut(n,s.id,k,tc[k])}})});
+      rows.push({stub:!!t.cvStub?.[s.id],label:`«${s.name}»: ${i18n(CV_KEY_RU[k])}`,fromT:cvValText(k,cc[k]),toT:cvValText(k,tc[k]),set:()=>{camPlanTouch(n,"cv");cvParamPut(n,s.id,k,tc[k])}})});
   });
   const props=new Map(camDevFields(n));
-  // Параметры драйвера — правка черновика карточки (шаг patch при «Применить»). При загрузке их значения пока строит
-  // страница (camDevReported), поэтому строка окна — заглушка; умолчания сброса — из схемы
+  // Параметры драйвера — правка черновика карточки (шаг patch при «Применить»). При загрузке значения сообщает камера
+  // (result.properties); у сервера без этого поля их строит страница — строка окна заглушка. Умолчания сброса — из схемы
   Object.entries(t.drv).forEach(([f,v])=>{const p=props.get(f);if(!p||JSON.stringify(drvVal(n,f,p))===JSON.stringify(v))return;
     rows.push({stub:!!t.drvStub,label:`${i18n(drvGroupOf(p))}: ${propLabel(p,f)}`,fromT:drvValText(p,drvVal(n,f,p)),toT:drvValText(p,v),
       set:()=>{(n.xprops||(n.xprops={}))[f]=v;if(JSON.stringify(v)===JSON.stringify(drvSrvVal(n,f,p)))delete n.xprops[f]}})});
@@ -17268,7 +17290,7 @@ async function camActOpen(id,act){
   const reset=act==="reset",why=reset?camResetWhy(n):camLoadWhy(n);if(why){toast(why);return}
   if([...csEdit].some(k=>k.startsWith(id+":"))){toast("Закончить правку блоков карточки: нажать «Добавить в план» или «Отменить»");return}
   let srv;
-  try{srv=(await API.post(`/units/${id}/actions/${CAM_ACT_CMD[act]}`,{idempotencyKey:opKey(),params:{}}))?.result?.streams||[]}
+  try{srv=(await API.post(`/units/${id}/actions/${CAM_ACT_CMD[act]}`,{idempotencyKey:opKey(),params:{}}))?.result||{}}
   catch(e){toast(`${i18n(reset?"Сбросить к умолчаниям":"Загрузить настройки с устройства")}: ${problemText(e,n)}`);return}
   // Пока сервер отвечал, могли открыть другой объект, начать правку блока или потерять связь: проверить заново
   const n2=find(id)?.n;if(sel!==id||!n2)return;
@@ -17286,8 +17308,8 @@ async function camActOpen(id,act){
     +(reset&&all.length?`<div class="nt bk-warn">${lu("triangle-alert",14)} ${i18n("После сброса камера может перезапустить потоки. Тогда видео и запись прервутся на несколько секунд.")}</div>`:"")
     +`<p class="sub" style="margin:10px 0 0">${i18n("Не изменятся: имя, адрес, учётные данные, архив, детекторы, папки и права.")}</p>`
     +(all.length?`<p class="sub" style="margin:6px 0 0">${i18n(reset?"Консоль изменит камеру, только когда вы нажмёте «Применить» в плане карточки.":"Консоль заменит значения, только когда вы нажмёте «Применить» в плане карточки.")}</p>`:"")
-    +(all.some(r=>r.stub)?`<p class="sub" data-cam-act-stub style="margin:6px 0 0">${i18n(reset?"Заглушка: команда defaults сообщает только разрешение и к/с потоков. Умолчания кодека и битрейта строит страница."
-      :"Заглушка: команда readConfig сообщает только разрешение и к/с потоков. Значения кодека, битрейта и параметров драйвера строит страница.")}</p>`:"");
+    +(all.some(r=>r.stub)?`<p class="sub" data-cam-act-stub style="margin:6px 0 0">${i18n(reset?"Заглушка: система не сообщает умолчания кодека и битрейта. Их строит страница."
+      :"Заглушка: система не сообщает кодек, битрейт или параметры драйвера с камеры. Их строит страница.")}</p>`:"");
   const title=`${i18n(reset?"Сбросить к умолчаниям":"Загрузить настройки с устройства")}: «${escHtml(locName(n2))}»`;
   const foot=all.length?`<button type="button" class="btn" ${onEv("click",["closeBulkModal"])}>${i18n("Отменить")}</button><button type="button" class="btn pri" data-cam-act-ok ${onEv("click",["camActAdd",`${id}`,act])}>${i18n("Добавить в план")} (${all.length})</button>`
     :`<button type="button" class="btn" ${onEv("click",["closeBulkModal"])}>${i18n("Закрыть")}</button>`;

@@ -613,5 +613,54 @@
     assert.status(await env.call("POST", `${U(cam.id)}/actions/readConfig`, {}), 409, "DEVICE_OFFLINE", "readConfig без связи");
   }, { needs: ["runUnitAction", "kind:camera", "action:camera/defaults", "action:camera/readConfig", "testEvent"] });
 
+  test("Команды камеры defaults и readConfig: кодек, битрейт, опорный кадр потока и параметры драйвера камеры (vms.camera/1 1.6)", async () => {
+    const mainUid = `${cam.id.slice(0, 9)}0001${cam.id.slice(13)}`;
+    const DEV = ["codec", "codecProfile", "bitrateMode", "bitrateKbps", "quality", "gopFrames"];
+    // Схема камеры — до стенда: параметр драйвера со списком значений, который стенд «перенастроит»
+    const env0 = await makeEnv();
+    const camSchema = (await env0.call("GET", `${U(cam.id)}/schema`)).body;
+    const devNames = Object.entries(camSchema.properties || {}).filter(([, p]) => p["x-dev"]).map(([f]) => f);
+    const enumDev = devNames.find((f) => Array.isArray(camSchema.properties[f].enum) && camSchema.properties[f].enum.length > 1);
+    const c0 = (await env0.call("GET", U(cam.id))).body;
+    const cur = (f) => (c0.properties[f] !== undefined ? c0.properties[f] : camSchema.properties[f].default);
+    const vals = enumDev ? camSchema.properties[enumDev].enum.filter((x) => x !== cur(enumDev)) : [];
+    const camTold = enumDev ? { [cam.id]: { [enumDev]: vals[0] } } : {};
+    const env = await makeEnv({ fixturePatch: { stand: { deviceConfig: Object.assign({ [mainUid]: { bitrateMode: "cbr", bitrateKbps: 3072 } }, camTold) } } });
+    const kids = (await env.pages(`/units?parentId=${cam.id}&kind=stream&limit=100`)).filter((u) => u.kind === "stream");
+    // Умолчания модели: у каждого потока все поля кодека, значения — по схеме вида stream
+    const def = (await env.call("POST", `${U(cam.id)}/actions/defaults`, {})).body.result.streams;
+    const sp = ((((await env.call("GET", "/kinds")).body.items || []).find((k) => k.kind === "stream") || {}).schema || {}).properties || {};
+    def.forEach((r) => DEV.forEach((f) => {
+      assert.ok(r[f] !== undefined, `defaults: у потока ${r.streamId} есть ${f}`);
+      if (sp[f] && sp[f].enum) assert.ok(sp[f].enum.includes(r[f]), `defaults: ${f} = ${r[f]} — из значений вида stream`);
+    }));
+    // Камера сообщает то, что хранит сервер, кроме полей стенда
+    const told = (await env.call("POST", `${U(cam.id)}/actions/readConfig`, {})).body.result;
+    told.streams.forEach((r) => {
+      const k = kids.find((x) => x.uid === r.uid);
+      DEV.forEach((f) => {
+        const want = r.uid === mainUid && f === "bitrateMode" ? "cbr" : r.uid === mainUid && f === "bitrateKbps" ? 3072 : k.properties[f];
+        assert.eq(r[f], want, `readConfig: ${f} потока ${k.name}`);
+      });
+    });
+    // Параметры драйвера: только x-dev схемы объекта; значение — то, что хранит сервер, или умолчание схемы у камеры
+    assert.ok(told.properties && typeof told.properties === "object", "readConfig: есть properties");
+    Object.keys(told.properties).forEach((f) => assert.ok(devNames.includes(f), `readConfig: ${f} — параметр x-dev камеры`));
+    if (enumDev) assert.eq(told.properties[enumDev], vals[0], `readConfig: ${enumDev} — как сообщила камера (стенд по uid камеры)`);
+    // Правку потока сервер передаёт камере: дальше камера сообщает новое значение, остальные поля стенда — как прежде
+    const mainKid = kids.find((k) => k.uid === mainUid);
+    assert.status(await env.call("PATCH", U(mainUid), { properties: { bitrateKbps: 2048 } }, at(mainKid.version)), 200, null, "PATCH битрейта");
+    const afterS = (await env.call("POST", `${U(cam.id)}/actions/readConfig`, {})).body.result.streams.find((r) => r.uid === mainUid);
+    assert.eq(afterS.bitrateKbps, 2048, "readConfig после правки битрейта — новое значение");
+    assert.eq(afterS.bitrateMode, "cbr", "readConfig: поле стенда без правки — как прежде");
+    // Так же — правку параметра драйвера
+    if (enumDev) {
+      const c = (await env.call("GET", U(cam.id))).body, v = vals[1] !== undefined ? vals[1] : cur(enumDev);
+      assert.status(await env.call("PATCH", U(cam.id), { properties: { streamsMode: "console", [enumDev]: v } }, at(c.version)), 200, null, `PATCH ${enumDev}`);
+      const after = (await env.call("POST", `${U(cam.id)}/actions/readConfig`, {})).body.result;
+      assert.eq(after.properties[enumDev], v, `readConfig после правки ${enumDev} — новое значение`);
+    }
+  }, { needs: ["runUnitAction", "patchUnit", "kind:camera", "kind:stream", "action:camera/defaults", "action:camera/readConfig", "getUnitSchema"], since: "1.6" });
+
   ApiTest.loaded("api-hardware.js");
 })();

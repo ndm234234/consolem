@@ -4481,8 +4481,8 @@ window.I18N_EN={
 "Если поток выключен, сервер не берёт его с камеры. Тогда у потока нет видео, записи и детекторов.":"If the stream is off, the server does not get it from the camera. Then the stream has no video, recording or detectors.",
 "Режимы H.264+ и H.265+ уменьшают битрейт на спокойной сцене. Этот режим есть не у всех камер.":"The H.264+ and H.265+ modes decrease the bitrate on a quiet scene. Not all cameras have this mode.",
 "Камера сама хранит кодек, битрейт, качество, опорный кадр, умный кодек, разрешение и к/с. Консоль изменит их, только когда включено «Отправлять настройки устройству».":"The camera itself keeps the codec, bitrate, quality, key frame, smart codec, resolution and fps. The console changes them only when “Send settings to device” is on.",
-"Заглушка: команда defaults сообщает только разрешение и к/с потоков. Умолчания кодека и битрейта строит страница.":"Stub: the defaults command sends only the resolution and fps of the streams. The page makes the codec and bitrate defaults.",
-"Заглушка: команда readConfig сообщает только разрешение и к/с потоков. Значения кодека, битрейта и параметров драйвера строит страница.":"Stub: the readConfig command sends only the resolution and fps of the streams. The page makes the codec, bitrate and driver parameter values.",
+"Заглушка: система не сообщает умолчания кодека и битрейта. Их строит страница.":"Stub: the system does not report the codec and bitrate defaults. The page makes them.",
+"Заглушка: система не сообщает кодек, битрейт или параметры драйвера с камеры. Их строит страница.":"Stub: the system does not report the codec, the bitrate or the driver parameters from the camera. The page makes them.",
 // Наложение текста на видео камеры — свойство overlayTexts (из прототипа 95)
 "нет надписей":"no text overlays",
 "надпись|надписи|надписей":"text overlay|text overlays|text overlays",

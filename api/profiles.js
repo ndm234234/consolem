@@ -1156,6 +1156,9 @@
           if (st) edgeChanged(st, ctx);
         }
         moveDepth(d, was);
+        // Стенд: правку параметра драйвера сервер передал камере — дальше камера сообщает на readConfig новое значение
+        const told = ((ctx.db.stand || {}).deviceConfig || {})[u.uid];
+        if (told) Object.keys(was).forEach((k) => delete told[k]);
         return syncMain(d, was);
       }
       applyProfile(d, Object.assign({}, rowProps(u), { vendor: d.vendor, model: d.model }), ctx);
@@ -1176,8 +1179,20 @@
   // Разрешение — из вариантов устройства, если устройство их назвало и умолчания среди них нет. Варианты основного потока
   // хранит запись камеры (Device.resOptions), а не объект потока: основной поток — это Device.res
   const SUB_DEFAULT = { res: "640x360", fps: 25 };
+  // Кодек, битрейт и опорный кадр по умолчанию (профиль vms.camera/1 1.6): основной поток и остальные
+  const CODEC_DEFAULT = [
+    { codec: "H.264", codecProfile: "high", bitrateMode: "vbr", bitrateKbps: 4096, quality: 5, gopFrames: 50 },
+    { codec: "H.264", codecProfile: "main", bitrateMode: "vbr", bitrateKbps: 512, quality: 5, gopFrames: 50 },
+  ];
+  // Параметры потока, которые камера хранит у себя и сообщает на readConfig (кроме res и fps)
+  const STREAM_DEV = ["codec", "codecProfile", "bitrateMode", "bitrateKbps", "quality", "gopFrames"];
+  // Параметры драйвера камеры, которые камера хранит у себя: x-dev в схеме объекта
+  const camDevNames = (u, ctx) => {
+    const sch = ctx.kinds.unitSchema && ctx.kinds.unitSchema(u.kind, props(u));
+    return Object.entries((sch && sch.properties) || {}).filter(([, p]) => p && p["x-dev"]).map(([f]) => f);
+  };
   function streamDefault(p, i, camOpts) {
-    const d = Object.assign({}, i ? SUB_DEFAULT : MODEL_DEFAULT), opts = p.resOptions || (i ? null : camOpts);
+    const d = Object.assign({}, i ? SUB_DEFAULT : MODEL_DEFAULT, CODEC_DEFAULT[i ? 1 : 0]), opts = p.resOptions || (i ? null : camOpts);
     if (opts && opts.length && !opts.includes(d.res)) d.res = opts[0];
     return d;
   }
@@ -1273,7 +1288,7 @@
       }
       // Стенд: правку потока сервер передал камере — дальше камера сообщает на readConfig новое значение (stand.deviceConfig)
       const told = ((ctx.db.stand || {}).deviceConfig || {})[u.uid];
-      if (told) ["res", "fps"].forEach((k) => { if (k in before.properties) delete told[k]; });
+      if (told) ["res", "fps", ...STREAM_DEV].forEach((k) => { if (k in before.properties) delete told[k]; });
       const cam = camOfStream(u, ctx);
       const main = cam && streamsOf(cam)[0];
       if (!main || main.id !== p.streamId || !("res" in before.properties || "fps" in before.properties)) return;
@@ -2212,14 +2227,19 @@
       const camOpts = recOf(u, ctx).resOptions;
       return { result: { streams: camStreamUnits(u, ctx).map((s, i) => Object.assign({ uid: s.uid, streamId: props(s).streamId }, streamDefault(props(s), i, camOpts))) } };
     },
+    // Камера сообщает то, что хранит сервер, кроме того, что задаёт стенд (stand.deviceConfig): ключ — uid потока или камеры.
+    // Поля нет у сервера и у стенда — камера его не сообщила
     readConfig(u, params, ctx) {
       const told = (ctx.db.stand || {}).deviceConfig || {};
+      const pick = (names, p, d) => Object.fromEntries(names.map((k) => [k, d[k] !== undefined ? d[k] : p[k]]));
+      const cp = props(u), cd = told[u.uid] || {};
       return {
         result: {
           streams: camStreamUnits(u, ctx).map((s) => {
             const p = props(s), d = told[s.uid] || {};
-            return stripUndefined({ uid: s.uid, streamId: p.streamId, res: d.res !== undefined ? d.res : p.res, fps: d.fps !== undefined ? d.fps : p.fps });
+            return stripUndefined(Object.assign({ uid: s.uid, streamId: p.streamId }, pick(["res", "fps", ...STREAM_DEV], p, d)));
           }),
+          properties: stripUndefined(pick(camDevNames(u, ctx), cp, cd)),
         },
       };
     },
