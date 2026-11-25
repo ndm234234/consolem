@@ -16803,13 +16803,18 @@ function drvSchema(n){
 // Поле без x-ui-tab и x-ui-group окно тоже показывает: блок «Параметры» на первой вкладке (drvGroupOf, drvTabOf)
 function drvParams(n,schema){
   const own=new Set(handScreenFields(nodeKind(n)));
-  return Object.entries(schema?.properties||{}).filter(([f,p])=>p&&!own.has(f)&&!p["x-hidden"]&&!p["x-transient"]);
+  return Object.entries(schema?.properties||{}).filter(([f,p])=>p&&!own.has(f)&&!p["x-hidden"]&&!p["x-transient"]).map(([f,p])=>[f,ptzNoDev(p)]);
 }
+// ЗАГЛУШКА (прототип 95): параметры группы PTZ хранит сервер, консоль правит их без «Отправлять настройки устройству»
+// (замка нет). Замена — снять x-dev у этих полей в схеме вида camera (api/fixtures/demo.json)
+// Сервер в режиме "device" объявляет поля x-dev только для чтения: у группы PTZ заглушка снимает и это
+function ptzNoDev(p){if(!p||p["x-ui-group"]?.key!==PTZ_DRV_GROUP||!p["x-dev"]&&!p.readOnly)return p;const q={...p};delete q["x-dev"];delete q.readOnly;return q}
 // Все параметры драйвера, какие может открыть схема (и в ветках): подпись строки плана, поля блока для «Отменить»
 function drvEveryProps(n){
   const out=new Map(),k=KINDS.get(nodeKind(n))?.schema;
   const walk=s=>{if(!s)return;(s.allOf||[]).forEach(walk);[s.then,s.else].forEach(b=>{if(!b)return;Object.entries(b.properties||{}).forEach(([f,p])=>out.set(f,{...out.get(f),...p}));walk(b)})};
   Object.entries(k?.properties||{}).forEach(([f,p])=>out.set(f,{...p}));walk(k);
+  out.forEach((p,f)=>out.set(f,ptzNoDev(p)));
   drvParams(n,drvSchema(n)).forEach(([f,p])=>out.set(f,{...out.get(f),...p}));
   const own=new Set(handScreenFields(nodeKind(n)));
   return new Map([...out].filter(([f,p])=>!own.has(f)&&!p["x-transient"]));
