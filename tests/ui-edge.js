@@ -143,7 +143,10 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   ok(rows().length >= 14, "строка на камеру: камеры с картой и все камеры регистратора");
   ok(/записи потеряны/.test(rows()[0].textContent), "проблемы наверху: первая строка — «записи потеряны»");
   ok(names.includes("Камера NVR 9") && rows().find((r) => /Камера NVR 9/.test(r.textContent)).textContent.includes("не входит"), "исключённая камера регистратора — «не входит»");
-  ok(rows().find((r) => /Лифт/.test(r.textContent)).textContent.includes("забирает"), "камера регистратора, которую сервер забирает сейчас, — «забирает»");
+  // Пропуск «Лифта» сервер забирает по настоящим часам (около 80 с): в самопроверке, где копии идут параллельно, забор мог уже кончиться
+  const liftNow = st(S.nvr).replicationStatus?.cameras?.find((c) => c.cameraId === NVR.lift)?.state;
+  const liftRow = rows().find((r) => /Лифт/.test(r.textContent)).textContent;
+  ok(liftNow === "running" ? liftRow.includes("забирает") : liftNow === "ok" && liftRow.includes("всё забрано"), "камера регистратора, которую сервер забирает сейчас, — «забирает»; забор кончился — «всё забрано»");
   ok(rows().find((r) => /Камера NVR 10/.test(r.textContent)).textContent.includes("нет связи"), "камера регистратора без связи — «нет связи»");
   const before = rows().length;
   eoFacet("state", "нет связи");

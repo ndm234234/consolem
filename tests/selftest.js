@@ -7,6 +7,7 @@
    Копии делят один фокус браузера: поле имени в дереве закрывается по blur, а его снимает любая соседняя копия, поставив
    курсор. Сценарии с таким полем (FOCUS_ALONE) идут по одному, после остальных: честная очередь, а не подмена focus.
    Там же ассистент: его сценарии сверяют, что ход не забирает курсор из строки поиска и поля под ответом.
+   Там же ui-nalozhenie-teksta.js: он сверяет, что поле надписи держит фокус после перерисовки.
    Там же ui-prompts.js: фокус ему не нужен, но срок вопроса в нём настоящий, две секунды, и в толпе копий он вышел бы раньше проверки.
    Сценарий, не отчитавшийся за LIMIT_SEC, — отказ со словом, где он остановился: отчёт приходит всегда.
    С ?api=<стенд> — против тестового стенда бэкенда: сценарии идут по одному, перед каждым — POST /test/reset
@@ -17,7 +18,7 @@
   // Сценарии не на эталонном наборе: страница сценария открывается с ?fixture=, стенд сбрасывается на него.
   // Отсюда же берёт наборы tools/check_ui.py
   const FIXTURE_OF = { "ui-profile.js": "one-domain", "ui-bez-vms.js": "agents" };
-  const FOCUS_ALONE = ["ui-hardware.js", "ui-domains.js", "ui-storage.js", "ui-live.js", "ui-view.js", "ui-prompts.js", "ui-assist.js", "ui-assist-service.js", "ui-plan.js", "ui-unknown.js", "ui-chat.js", "ui-learn.js", "ui-stranica-most.js"];
+  const FOCUS_ALONE = ["ui-hardware.js", "ui-domains.js", "ui-storage.js", "ui-live.js", "ui-view.js", "ui-prompts.js", "ui-assist.js", "ui-assist-service.js", "ui-plan.js", "ui-unknown.js", "ui-chat.js", "ui-learn.js", "ui-stranica-most.js", "ui-nalozhenie-teksta.js"];
   const LIMIT_SEC = 240;
   const load = (src) =>
     new Promise((resolve, reject) => {
