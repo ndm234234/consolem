@@ -4627,4 +4627,8 @@ window.I18N_EN={
 "тура":"tours",
 "туров":"tours",
 "скорость камеры":"camera speed",
+// Сворачивание блока «Поворот» на вкладке «PTZ»
+"Показать джойстик и кнопки поворота":"Show the joystick and the pan buttons",
+"Скрыть джойстик и кнопки поворота. Камеру можно поворачивать мышью по кадру":"Hide the joystick and the pan buttons. You can turn the camera with the mouse on the frame",
+"Тянуть кадр мышью — поворот, колесо — зум":"Drag the frame to turn, use the wheel to zoom",
 };
