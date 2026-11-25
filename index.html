@@ -769,6 +769,8 @@ div.exp-ln{display:flex;align-items:center;padding:8px 0}
 .cv-pl input{min-width:0;height:28px;padding:2px 6px}
 .cv-pn{height:28px;border:1px solid var(--ln);border-radius:var(--one-radius-container);background:var(--p2);color:var(--tx);font:inherit;font-size:12px;cursor:pointer;font-variant-numeric:tabular-nums}
 .cv-pn:hover:not(:disabled){border-color:var(--bl)}
+/* Пресет только с именем (vms.ptz/1 1.2, savedOnDevice: false): рамка номера пунктиром, причина — в подсказке */
+.cv-pn[data-preset-nopos]{border-style:dashed;color:var(--mu)}
 .cv-pl-empty{flex:1;margin:0}
 .cv-pre-add{display:flex;gap:6px;padding-top:8px;margin-top:4px;border-top:1px solid var(--ln)}.cv-pre-add input{flex:1;min-width:0}.cv-pre-add .btn{white-space:nowrap}
 .cv-mode{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px;margin-bottom:10px}
@@ -23107,26 +23109,30 @@ function cvPtzHtml(n){
   const hold=(axis,sign,label,txt)=>`<button type="button" class="btn s cv-hold" data-cv-hold="${axis}${sign>0?"+":"-"}" data-tip="${i18n(label)}" aria-label="${i18n(label)}" ${off?"disabled":""} ${onEv("mousedown",["cvHoldDown",`${n.id}`,axis,sign])}>${txt}</button>`;
   return`<section class="cv-sec cv-ptz"><div class="cv-sec-h">${i18n("Поворот")}<span class="cv-ptz-say sub" data-cv-say aria-live="polite"></span></div>
     <div class="cv-ptz-row">
-      <div class="joy ${off?"off":""}" data-joy="${escHtml(n.id)}" tabindex="${off?-1:0}" role="application" aria-label="${i18n("Джойстик поворота. Стрелки поворачивают камеру. Плюс и минус меняют зум. Home и End меняют фокус")}" data-tip="${i18n("Клавиши: стрелки или NumPad 8, 2, 4, 6 — поворот; + и − или NumPad 9, 3 — зум; Home и End — фокус")}" ${onEv("keydown",["cvJoyKey",`${n.id}`])}>
+      <div class="joy ${off?"off":""}" data-joy="${escHtml(n.id)}" tabindex="${off?-1:0}" role="application" aria-label="${i18n(ptzIrisOn()?"Джойстик поворота. Стрелки поворачивают камеру. Плюс и минус меняют зум. Home и End меняют фокус. PageUp и PageDown меняют диафрагму":"Джойстик поворота. Стрелки поворачивают камеру. Плюс и минус меняют зум. Home и End меняют фокус")}" data-tip="${i18n(ptzIrisOn()?"Клавиши: стрелки или NumPad 8, 2, 4, 6 — поворот; + и − или NumPad 9, 3 — зум; Home и End — фокус; PageUp и PageDown — диафрагма":"Клавиши: стрелки или NumPad 8, 2, 4, 6 — поворот; + и − или NumPad 9, 3 — зум; Home и End — фокус")}" ${onEv("keydown",["cvJoyKey",`${n.id}`])}>
         ${dirs}<div class="joy-well"><button type="button" class="joy-knob" data-joy-knob data-tip="${i18n("Тянуть ручку: чем дальше, тем быстрее")}" aria-label="${i18n("Ручка джойстика")}" ${off?"disabled":""} ${onEv("mousedown",["cvKnobDown",`${n.id}`])}></button></div>
       </div>
       <div class="cv-zf">
         <div class="cv-zf-g"><span>${i18n("Зум")}</span>${hold("zoom",1,"Приблизить",lu("plus",14))}${hold("zoom",-1,"Отдалить",lu("minus",14))}</div>
         <div class="cv-zf-g"><span>${i18n("Фокус")}</span>${hold("focus",1,"Фокус ближе",lu("plus",14))}${hold("focus",-1,"Фокус дальше",lu("minus",14))}</div>
+        ${ptzIrisOn()?`<div class="cv-zf-g" data-cv-iris><span>${i18n("Диафрагма")}</span>${hold("iris",1,"Открыть диафрагму",lu("plus",14))}${hold("iris",-1,"Закрыть диафрагму",lu("minus",14))}</div>`:""}
       </div>
     </div>
     <label class="cv-speed">${i18n("Скорость стрелок")}<input type="range" min="1" max="10" value="${cvSpeed}" data-cv-speed ${off?"disabled":""} ${onEv("input",["cvSpeedSet",onEv.value])}><output data-cv-speed-v>${cvSpeed}</output></label>
     ${off?`<p class="sub cv-ptz-off">${i18n(n.direct===false?"Камера за NAT. Связи с ней нет, поэтому отсюда нельзя поворачивать камеру":"Камера без связи. Поворот недоступен")}</p>`:""}
   </section>`;
 }
+// Диафрагма (PtzMove.iris) — с профиля vms.ptz/1 1.2: сервер старше — кнопок нет (правило 2, docs/design-rules.md, раздел 5)
+function ptzIrisOn(){const v=profileVer(KIND_PROFILES.get("vms.ptz/1"));return!v||profileVerCmp(v,"1.2")>=0}
 function cvSpeedSet(v){cvSpeed=Math.max(1,Math.min(10,+v||5));const o=document.querySelector("#main [data-cv-speed-v]");if(o)o.textContent=cvSpeed}
 function cvSay(body){
   const el=document.querySelector("#main [data-cv-say]");if(!el)return;
   if(!body){el.textContent="";return}
-  const p=body.pan||0,t=body.tilt||0,z=body.zoom||0,f=body.focus||0,bits=[];
+  const p=body.pan||0,t=body.tilt||0,z=body.zoom||0,f=body.focus||0,ir=body.iris||0,bits=[];
   if(p||t){const dir=CV_DIRS.find(([x,y])=>x===Math.sign(Math.round(p*2)/2||0)&&y===Math.sign(Math.round(t*2)/2||0));bits.push(`${dir?i18n(dir[2]).toLowerCase():i18n("поворот")} · ${Math.round(Math.hypot(p,t)/Math.SQRT2*100*(p&&t?1:Math.SQRT2))}%`)}
   if(z)bits.push(i18n(z>0?"приближаю":"отдаляю"));
   if(f)bits.push(i18n(f>0?"фокус ближе":"фокус дальше"));
+  if(ir)bits.push(i18n(ir>0?"открываю диафрагму":"закрываю диафрагму"));
   el.textContent=bits.join(", ");
 }
 function cvPut(){
@@ -23275,7 +23281,7 @@ document.addEventListener("pointerover",e=>{
 // PTZ-камеры поверх неё страница рисует панораму 360° и сама поворачивает «камеру». Скорость берётся из тех же команд,
 // которые уходят в PUT /units/{uid}/ptz (тело cvMove), пока идёт аренда: джойстик, стрелки, тяга по кадру, колесо, кнопки.
 // Поворот медленнее на большом зуме, как у настоящей камеры. «Перейти» в пресет и шаг тура ведут камеру к положению пресета.
-// Положения пресета в контракте нет: страница запоминает его сама при «Запомнить» (cvSimPre), а для старых пресетов
+// Положение пресета (pan, tilt, zoom) контракт отдаёт с профиля vms.ptz/1 1.2, но панорама берёт своё: запоминает его сама при «Запомнить» (cvSimPre), а для старых пресетов
 // берёт положение по номеру. С настоящим шлюзом (lv.stub — нет) панорамы нет: картинку двигает сама камера
 const CV_SIM={pan:80,tilt:40,zoom:1.4,focus:.6,goPan:120,goTilt:60,goZoom:1.5,fov:64,zMax:20,tMin:-80,tMax:12};
 const cvSimPos=new Map(),cvSimPre=new Map();
@@ -23359,12 +23365,12 @@ function cvSimTick(now){
 requestAnimationFrame(cvSimTick);
 // ── Джойстик: клавиатура ──────────────────────────────────────────────────
 // Клавиатура: стрелка — движение, пока клавиша нажата; + и − — зум; отпустили или ушли с круга — стоп
-// Как горячие клавиши Axxon One: NumPad 8/2/4/6 — поворот, 9/3 — зум, Home/End — фокус
+// Как горячие клавиши Axxon One: NumPad 8/2/4/6 — поворот, 9/3 — зум, Home/End — фокус; PageUp/PageDown — диафрагма (профиль 1.2)
 const CV_KEYS={ArrowUp:[0,1],ArrowDown:[0,-1],ArrowLeft:[-1,0],ArrowRight:[1,0],Numpad8:[0,1],Numpad2:[0,-1],Numpad4:[-1,0],Numpad6:[1,0]};
-const CV_ZKEYS={"+":["zoom",1],"=":["zoom",1],"-":["zoom",-1],Numpad9:["zoom",1],Numpad3:["zoom",-1],NumpadAdd:["zoom",1],NumpadSubtract:["zoom",-1],Home:["focus",1],End:["focus",-1]};
+const CV_ZKEYS={"+":["zoom",1],"=":["zoom",1],"-":["zoom",-1],Numpad9:["zoom",1],Numpad3:["zoom",-1],NumpadAdd:["zoom",1],NumpadSubtract:["zoom",-1],Home:["focus",1],End:["focus",-1],PageUp:["iris",1],PageDown:["iris",-1]};
 function cvJoyKey(id){
   const e=onEv.now,d=CV_KEYS[e.code]||CV_KEYS[e.key],z=CV_ZKEYS[e.code]||CV_ZKEYS[e.key],s=cvSpeed/10;
-  if(!d&&!z)return;
+  if(!d&&!z||z&&z[0]==="iris"&&!ptzIrisOn())return;
   // Клавиши джойстика не уходят дереву: оно слушает стрелки на window и сменило бы камеру
   e.stopPropagation();
   if(this?.classList.contains("off"))return;// камера не на связи: джойстик не двигает её
@@ -23421,10 +23427,16 @@ function cvSidePaint(n,anim){
   if(fk)inn.querySelector(fk)?.focus();
   mainSeen.html=null;
 }
+// Подсказка номера: переход и записанное положение (профиль vms.ptz/1 1.2: pan, tilt, zoom; полей нет — камера не сообщила)
+function presetTip(p){
+  if(p.savedOnDevice===false)return i18n("У пресета есть только имя. Камера не записала положение. Повернуть камеру и записать положение");
+  const num=v=>(Math.round(v*100)/100||0).toLocaleString(uiLang==="en"?"en-US":"ru-RU"),pos=["pan","tilt","zoom"].every(k=>typeof p[k]==="number");
+  return`${i18n("Повернуть камеру в этот пресет")}${pos?`. ${i18n("Положение")}: ${i18n("поворот по горизонтали")} ${num(p.pan)}, ${i18n("наклон")} ${num(p.tilt)}, ${i18n("зум")} ${num(p.zoom)}`:""}${p.savedOnDevice===true?`. ${i18n("Положение записано в камере")}`:""}`;
+}
 function cvPresetListHtml(n){
   const list=presetRows(n),nat=n.direct===false,off=n.online===false||nat,full=presetFree(n)==null;
   const rows=list.map(p=>`<li data-preset="${p.n}">
-      <button type="button" class="cv-pn" ${off?"disabled":""} data-tip="${i18n("Повернуть камеру в этот пресет")}" ${onEv("click",["cvPresetGo",`${n.id}`,p.n])}>${p.n}</button>
+      <button type="button" class="cv-pn" ${p.savedOnDevice===false?"data-preset-nopos":""} ${off?"disabled":""} data-tip="${escHtml(presetTip(p))}" ${onEv("click",["cvPresetGo",`${n.id}`,p.n])}>${p.n}</button>
       <input value="${escHtml(p.name)}" placeholder="${escHtml(`${i18n("Пресет")} ${p.n}`)}" aria-label="${i18n("Имя пресета")} ${p.n}" ${onEv("change",["presetName",`${n.id}`,p.n,onEv.value])}>
       <button type="button" class="btn s btn-icon" data-preset-save ${off?"disabled":""} data-tip="${escHtml(nat?i18n("Камера за NAT. Связи с ней нет, поэтому здесь нельзя запомнить положение"):i18n("Записать в этот пресет нынешнее положение камеры"))}" aria-label="${i18n("Записать нынешнее положение")} ${p.n}" ${onEv("click",["cvPresetOverwrite",`${n.id}`,p.n])}>${lu("crosshair",14)}</button>
       <button type="button" class="btn s btn-icon" data-tip="${i18n("Удалить пресет")}" aria-label="${i18n("Удалить пресет")} ${p.n}" ${onEv("click",["presetDel",`${n.id}`,p.n])}>${lu("trash",14)}</button></li>`).join("");
@@ -23666,12 +23678,16 @@ function cvPresetNew(id){
 function cvPresetFlash(no){const li=document.querySelector(`#main [data-cv-pl] [data-preset="${no}"]`);if(!li)return;li.scrollIntoView({block:"nearest"});li.classList.remove("acc-flash");void li.offsetWidth;li.classList.add("acc-flash")}
 function cvPresetOverwrite(id,no){
   const n=find(id)?.n,p=n&&presetRows(n).find(x=>x.n===no);if(!p)return;
+  // Положения у пресета нет (профиль 1.2, savedOnDevice: false) — терять нечего, вопрос не нужен
+  if(p.savedOnDevice===false){presetSave(id,no);return}
   const name=p.name||`${i18n("Пресет")} ${no}`;
   askConfirm("Записать новое положение?",`<ul class="bk-del"><li>${i18n("Консоль запишет в пресет")} «${escHtml(name)}» ${i18n("нынешнее положение камеры")}</li><li>${i18n("Прежнее положение пресета пропадёт")}</li><li>${i18n("Правила с этим номером будут наводить камеру в новое положение")}</li></ul>`,"",i18n("Записать"),()=>presetSave(id,no),{html:true});
 }
 // ЗАГЛУШКА: команда камеры preset — только шагом правила (ruleOnly, POST /units/{uid}/actions/preset → 404)
 function cvPresetGo(id,no){
   const n=find(id)?.n,p=n&&presetRows(n).find(x=>x.n===no);if(!p)return;
+  // Пресет только с именем (vms.ptz/1 1.2, savedOnDevice: false): положения нет — поворачивать некуда
+  if(p.savedOnDevice===false){toast(i18n("У пресета нет положения. Сначала записать положение"));return}
   document.querySelectorAll("#main [data-cv-pl] li").forEach(li=>li.classList.toggle("on",+li.dataset.preset===no));
   cvSimGo(id,no);
   toast(`${i18n("Камера поворачивается в пресет")} «${p.name||`${i18n("Пресет")} ${no}`}». ${i18n("Прототип: в API нет такой команды. На стенде камеру поворачивает симуляция")}`);

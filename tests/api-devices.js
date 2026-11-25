@@ -976,6 +976,8 @@
 
   const ptzCam = async (env) => (await env.pages("/units?kind=camera&limit=1000")).find((u) => u.properties.ptz && u.status.link === "online" && (u.properties.presetMax == null || u.properties.presetMax >= 9));
   const presets = (u) => u.properties.presets || [];
+  // Номер и имя пресета: поля профиля 1.2 (savedOnDevice, pan, tilt, zoom) судит свой тест
+  const nn = (p) => p && { n: p.n, name: p.name };
 
   test("Пресеты: задать, переименовать, удалить, откат; камера без PTZ — 422 field /properties/ptz", async () => {
     const env = await makeEnv();
@@ -985,17 +987,17 @@
     const put = (uid, n, body) => env.ok("PUT", `${U(uid)}/presets/${n}`, body);
     // PUT {} сохраняет положение и создаёт запись без подписи; ответ — объект камеры
     const pos = await put(c.uid, 9, {});
-    assert.eq([pos.uid, at(pos, 9)], [c.uid, { n: 9, name: "" }], "сохранённый без имени виден");
+    assert.eq([pos.uid, nn(at(pos, 9))], [c.uid, { n: 9, name: "" }], "сохранённый без имени виден");
     assert.ok(c.properties.presetMax >= 9, "предел в записи");
     const set = await put(c.uid, 9, { name: "Ворота" });
-    assert.eq(presets(set).at(-1), { n: 9, name: "Ворота" }, "имя задано, номера по порядку");
+    assert.eq(nn(presets(set).at(-1)), { n: 9, name: "Ворота" }, "имя задано, номера по порядку");
     assert.ok(set.version !== c.version, "версия объекта изменилась");
     const same = await put(c.uid, 9, {});
     assert.eq(at(same, 9).name, "Ворота", "без имени — положение, имя прежнее");
     const blank = await put(c.uid, 9, { name: "" });
-    assert.eq(at(blank, 9), { n: 9, name: "" }, "пустое снимает подпись, запись остаётся");
+    assert.eq(nn(at(blank, 9)), { n: 9, name: "" }, "пустое снимает подпись, запись остаётся");
     const made8 = await put(c.uid, 8, { name: "" });
-    assert.eq(at(made8, 8), { n: 8, name: "" }, "PUT {name} создаёт запись, пустое имя тоже");
+    assert.eq(nn(at(made8, 8)), { n: 8, name: "" }, "PUT {name} создаёт запись, пустое имя тоже");
     assert.status(await env.call("PUT", `${U(c.uid)}/presets/${c.properties.presetMax + 1}`, {}), 404, "NOT_FOUND", "выше предела");
     assert.status(await env.call("DELETE", `${U(c.uid)}/presets/${c.properties.presetMax + 1}`), 404, "NOT_FOUND", "и удаление");
     await env.ok("DELETE", `${U(c.uid)}/presets/8`);
@@ -1046,6 +1048,29 @@
     assert.status(on, 200);
     assert.ok(Date.parse((await env.ok("PUT", `${U(c.uid)}/ptz`, { pan: 0.5, ttlSec: 3 })).expiresAt) > 0, "включён — аренда снова есть");
   }, { needs: ["patchUnit", "putUnitPtz", "putUnitPreset", "implements:vms.ptz/1", "kind:server"], layer: "profile:vms.ptz/1", since: "1.1" });
+
+  test("Пресет: savedOnDevice и записанное положение (pan, tilt, zoom); диафрагма в аренде движения", async () => {
+    const env = await makeEnv();
+    const c = await ptzCam(env);
+    const at = (r, n) => presets(r).find((x) => x.n === n);
+    const inRange = (p) => ["pan", "tilt"].every((k) => p[k] == null || (p[k] >= -1 && p[k] <= 1)) && (p.zoom == null || (p.zoom >= 0 && p.zoom <= 1));
+    // Только имя: положение не записано — savedOnDevice не true, положения нет
+    const named = at(await env.ok("PUT", `${U(c.uid)}/presets/9`, { name: "Только имя" }), 9);
+    assert.ok(named.savedOnDevice !== true && named.pan == null, "запись только с именем — без положения");
+    // Движение с диафрагмой: поле iris принимается, вне диапазона — отказ
+    assert.ok(Date.parse((await env.ok("PUT", `${U(c.uid)}/ptz`, { pan: 0.5, iris: 0.5, ttlSec: 3 })).expiresAt) > 0, "iris в аренде");
+    assert.status(await env.call("PUT", `${U(c.uid)}/ptz`, { iris: 2, ttlSec: 3 }), 422, "VALIDATION_FAILED", "iris вне диапазона");
+    await env.advance(2);
+    assert.status(await env.call("DELETE", `${U(c.uid)}/ptz`), 204);
+    // Запомнить положение: savedOnDevice true, имя прежнее, положение в диапазоне
+    const saved = at(await env.ok("PUT", `${U(c.uid)}/presets/9`, {}), 9);
+    assert.eq([saved.name, saved.savedOnDevice], ["Только имя", true], "положение записано, имя прежнее");
+    assert.ok(inRange(saved), "pan, tilt от -1 до 1, zoom от 0 до 1");
+    // Подпись не трогает положение
+    const renamed = at(await env.ok("PUT", `${U(c.uid)}/presets/9`, { name: "Вход 2" }), 9);
+    assert.eq([renamed.savedOnDevice, renamed.pan, renamed.tilt, renamed.zoom], [saved.savedOnDevice, saved.pan, saved.tilt, saved.zoom], "имя не меняет положение");
+    await env.ok("DELETE", `${U(c.uid)}/presets/9`);
+  }, { needs: ["putUnitPreset", "deleteUnitPreset", "putUnitPtz", "deleteUnitPtz", "clock", "implements:vms.ptz/1"], layer: "profile:vms.ptz/1", since: "1.2" });
 
   /* ===== Источник событий ===== */
 

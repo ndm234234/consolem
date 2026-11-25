@@ -1588,7 +1588,7 @@
 
   /* ===== vms.ptz/1 — PTZ: аренда движения и пресеты; PTZ — свойство камеры ===== */
 
-  // Аренда — на человека и камеру (ctx.state.ptz). Встроенный сервер камерами не движет: только срок
+  // Аренда — на человека и камеру (ctx.state.ptz). Встроенный сервер камерами не движет: срок и положение по сумме движений
   const leasesOf = (ctx) => ctx.state.ptz || (ctx.state.ptz = new Map());
   const ptzKind = (rec, ctx) => ctx.kinds.profileOf(rec.type, "vms.ptz/1");
   function ptzProblem(rec, ctx) {
@@ -1599,6 +1599,29 @@
   }
   const presetCameraProblem = (rec, ctx) => (ptzKind(rec, ctx) ? null : ctx.problem(422, "NOT_SUPPORTED", "Пресеты бывают только у камеры", { field: "ptz" }));
   const presetNotFound = (ctx) => ctx.problem(404, "NOT_FOUND", "Пресет не найден(а)");
+  // Профиль 1.2: положение камеры на стенде — сумма движений по аренде (ctx.state.ptzPos, на камеру). Скорость 1 за 10 с
+  // даёт 1 по оси; поворот идёт по кругу от -1 до 1, наклон и зум упираются в края. Последняя аренда сменяет прежнюю
+  const PTZ_RATE = 0.1;
+  const posOf = (rec, ctx) => {
+    const m = ctx.state.ptzPos || (ctx.state.ptzPos = new Map());
+    if (!m.has(rec.id)) m.set(rec.id, { pan: 0, tilt: 0, zoom: 0, move: null });
+    return m.get(rec.id);
+  };
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const round2 = (v) => Math.round(v * 100) / 100 || 0;
+  // stop: аренда кончилась (DELETE своей аренды); без stop идущее движение продолжается с нынешнего момента
+  function ptzSettle(rec, ctx, stop) {
+    const s = posOf(rec, ctx), m = s.move;
+    if (m) {
+      const t = Math.min(m.until, ctx.now()), sec = Math.max(0, t - m.at) / 1000;
+      s.pan = ((((s.pan + (m.v.pan || 0) * PTZ_RATE * sec + 1) % 2) + 2) % 2) - 1;
+      s.tilt = clamp(s.tilt + (m.v.tilt || 0) * PTZ_RATE * sec, -1, 1);
+      s.zoom = clamp(s.zoom + (m.v.zoom || 0) * PTZ_RATE * sec, 0, 1);
+      if (stop || ctx.now() >= m.until) s.move = null;
+      else m.at = t;
+    }
+    return s;
+  }
 
   const ptz = {
     problem: ptzProblem,
@@ -1613,10 +1636,17 @@
       if (!Number.isInteger(n) || n < 1) return ctx.problem(422, "VALIDATION_FAILED", "Номер пресета — с 1", { field: "n" });
       if (rec.presetMax != null && n > rec.presetMax) return presetNotFound(ctx);
       const had = (rec.presets || []).find((x) => x.n === n);
-      // Без имени — положение: встроенный сервер камерами не движет, запись появляется с пустым именем
-      if (!named && had) return { same: true };
-      const name = named ? String(body.name).trim() : "";
-      return { presets: (rec.presets || []).filter((x) => x.n !== n).map(clone).concat([{ n, name }]) };
+      let entry;
+      if (named) {
+        // Только имя: положение и savedOnDevice прежние; новой записи положения нет — savedOnDevice: false (профиль 1.2)
+        entry = had ? Object.assign(clone(had), { name: String(body.name).trim() }) : { n, name: String(body.name).trim(), savedOnDevice: false };
+      } else {
+        // Без имени — положение: камера записывает нынешнее положение стенда, имя прежнее, у новой записи пустое
+        const s = ptzSettle(rec, ctx);
+        entry = Object.assign(had ? clone(had) : { n, name: "" }, { savedOnDevice: true, pan: round2(s.pan), tilt: round2(s.tilt), zoom: round2(s.zoom) });
+        if (had && ["savedOnDevice", "pan", "tilt", "zoom"].every((k) => had[k] === entry[k])) return { same: true };
+      }
+      return { presets: (rec.presets || []).filter((x) => x.n !== n).map(clone).concat([entry]) };
     },
     // DELETE presets/{n}: запись снимается всегда; просьба камере забыть положение у встроенного сервера не моделируется
     drop(rec, n, ctx) {
@@ -1631,10 +1661,14 @@
       if (bad) return bad;
       const expiresAt = ctx.iso(ctx.now() + body.ttlSec * 1000);
       leasesOf(ctx).set(`${rec.id}:${me}`, expiresAt);
+      ptzSettle(rec, ctx).move = { me, at: ctx.now(), until: ctx.now() + body.ttlSec * 1000, v: { pan: body.pan, tilt: body.tilt, zoom: body.zoom } };
       return { status: 200, body: { expiresAt } };
     },
     release(rec, me, ctx) {
       leasesOf(ctx).delete(`${rec.id}:${me}`);
+      // Стоп только своей аренды: движение другого человека идёт дальше
+      const m = posOf(rec, ctx).move;
+      ptzSettle(rec, ctx, !m || m.me === me);
       return { status: 204, body: null };
     },
   };

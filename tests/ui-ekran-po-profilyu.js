@@ -471,13 +471,13 @@ UiCheck(async ({ ok, until, sleep, absent }) => {
       try {
         K.schema = JSON.parse(JSON.stringify(schemaWas));
         K.schema.properties.pvNew = { type: "string", title: "pvNew" };
-        // 1. Сервер новее: 1.7 с полем pvNew
-        withProf("vms.camera/1", { version: "1.7", properties: (ps) => ps.concat("pvNew") });
-        ok(profileServerNewer("vms.camera/1") && JSON.stringify(kindNewerProps("camera")) === '{"pvNew":"1.7"}', "сервер 1.7 новее консоли: kindNewerProps — pvNew с версией 1.7: " + JSON.stringify(kindNewerProps("camera")));
+        // 1. Сервер новее: 1.99 с полем pvNew (заведомо выше версии в файле профиля)
+        withProf("vms.camera/1", { version: "1.99", properties: (ps) => ps.concat("pvNew") });
+        ok(profileServerNewer("vms.camera/1") && JSON.stringify(kindNewerProps("camera")) === '{"pvNew":"1.99"}', "сервер 1.99 новее консоли: kindNewerProps — pvNew с версией 1.99: " + JSON.stringify(kindNewerProps("camera")));
         ok(handScreenFields("camera").slice().sort().join() === fieldsWas, "поля своего экрана не изменились: pvNew консоль не знает");
         let html = formAll(), row = rowOf(html, "pvNew");
-        ok(!!row && /новое в версии профиля 1\.7/.test(row.querySelector("[data-prof-newer]")?.textContent || "") && !row.querySelector("[data-only-here]"),
-          "«Все параметры»: у pvNew метка «новое в версии профиля 1.7», без «сверх профиля»");
+        ok(!!row && /новое в версии профиля 1\.99/.test(row.querySelector("[data-prof-newer]")?.textContent || "") && !row.querySelector("[data-only-here]"),
+          "«Все параметры»: у pvNew метка «новое в версии профиля 1.99», без «сверх профиля»");
         ok(/Метка «новое в версии профиля» стоит у свойств/.test(html), "шапка «Все параметры» объясняет метку «новое в версии профиля»");
         // 2. Сервер той же версии с лишним полем — не «новое», а «сверх профиля», как раньше
         KIND_PROFILES.clear(); wasProf.forEach((v, k) => KIND_PROFILES.set(k, v));
@@ -487,8 +487,8 @@ UiCheck(async ({ ok, until, sleep, absent }) => {
           "сервер той же версии с лишним полем: pvNew — «сверх профиля», без «новое в версии профиля»");
         // 3. Версия не по формату — не новее
         KIND_PROFILES.clear(); wasProf.forEach((v, k) => KIND_PROFILES.set(k, v));
-        withProf("vms.camera/1", { version: "1.7.2", properties: (ps) => ps.concat("pvNew") });
-        ok(profileVer(KIND_PROFILES.get("vms.camera/1")) === null && JSON.stringify(kindNewerProps("camera")) === "{}", "версия «1.7.2» не по формату: сервер не новее, меток «новое» нет");
+        withProf("vms.camera/1", { version: "1.99.2", properties: (ps) => ps.concat("pvNew") });
+        ok(profileVer(KIND_PROFILES.get("vms.camera/1")) === null && JSON.stringify(kindNewerProps("camera")) === "{}", "версия «1.99.2» не по формату: сервер не новее, меток «новое» нет");
         // 4. Поле другого знакомого профиля экрана: fps есть у vms.camera/1, новый vms.ptz/1 его приносит — экран fps показывает
         KIND_PROFILES.clear(); wasProf.forEach((v, k) => KIND_PROFILES.set(k, v));
         if (profileProps(profileKnown("vms.camera/1")).includes("fps") && KIND_PROFILES.has("vms.ptz/1")) {
