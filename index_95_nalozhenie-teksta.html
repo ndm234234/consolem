@@ -3485,14 +3485,15 @@ body.dw-resizing,body.dw-resizing *{cursor:col-resize!important;user-select:none
 .ot-stage:focus-visible{outline:2px solid var(--one-focus-ring);outline-offset:2px}
 .ot-ov{position:absolute;inset:0;width:100%;height:100%}
 .ot-tx{paint-order:stroke;stroke-linejoin:round;dominant-baseline:central;white-space:pre;pointer-events:none}
-.ot-a{fill:transparent;stroke:#fff;stroke-opacity:.35;stroke-width:.3;stroke-dasharray:1 .8;cursor:move}
+.ot-a{fill:transparent;stroke:var(--one-accent-on);stroke-opacity:.35;stroke-width:.3;stroke-dasharray:1 .8;cursor:move}
 .ot-a:hover{stroke-opacity:.8}
-.ot-a.sel{stroke:var(--one-focus-ring);stroke-opacity:1;stroke-width:.6;stroke-dasharray:none;filter:drop-shadow(0 0 .4px #000)}
+.ot-a.sel{stroke:var(--one-focus-ring);stroke-opacity:1;stroke-width:.6;stroke-dasharray:none}
 .ot-a.bad{stroke:var(--one-danger);stroke-opacity:1;stroke-dasharray:1.2 .8}
 .ot-stage.draw,.ot-stage.draw .ot-a{cursor:crosshair}
 .ot-stage input.ot-inl{position:absolute;width:auto;min-width:30%;max-width:100%;height:auto;min-height:0;margin:0;padding:0 .2em;border:1px solid var(--one-focus-ring);border-radius:var(--one-radius-control);background:rgba(8,11,16,.55);line-height:1.3;box-shadow:none;outline:none}
 .ot-list{gap:4px}
 .ot-row{border:1px solid var(--ln);border-radius:var(--one-radius-container);transition:background .12s,border-color .12s}
+@media(prefers-reduced-motion:reduce){.ot-row{transition:none}}
 .ot-row.on{border-color:var(--bl);background:var(--one-info-bg)}
 .ot-rh{display:flex;align-items:center;gap:8px;padding:4px 4px 4px 8px;min-width:0}
 .ot-sw{box-shadow:0 0 0 1px var(--ln)}
@@ -3505,10 +3506,11 @@ body.dw-resizing,body.dw-resizing *{cursor:col-resize!important;user-select:none
 .ot-g input[type=number]{width:100%}
 .ot-cs{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
 .ot-c{width:24px;height:24px;border-radius:var(--one-radius-control);border:1px solid var(--ln);background:var(--c);cursor:pointer;padding:0}
-.ot-c.on{outline:2px solid var(--one-focus-ring);outline-offset:1px}
+.ot-c.on{box-shadow:inset 0 0 0 2px var(--one-surface),0 0 0 2px var(--tx)}
+.ot-c:focus-visible{outline:2px solid var(--one-focus-ring);outline-offset:3px}
 .ot-more{display:inline-flex;align-items:center;gap:4px;margin:0 0 0 4px;cursor:pointer}
 .ot-more input{width:24px;height:24px;padding:0;border:1px solid var(--ln);border-radius:var(--one-radius-control);background:none}
-.ot-more.on input{outline:2px solid var(--one-focus-ring);outline-offset:1px}
+.ot-more.on input{box-shadow:0 0 0 2px var(--tx)}
 .ot-pair{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .ot-pair .chk{margin:0;min-width:96px}
 .ot-pair select{width:auto}
@@ -3753,6 +3755,7 @@ body:has(.ttu) #tst:not(.in-fs){bottom:144px}
 <!-- ONE PSIM: мост по ONE.PSIM.PrototypeKit, подключён после стилей прототипа -->
 <link rel="stylesheet" href="assets/one-psim/bridge.css">
 <script src="assets/i18n-en.js"></script>
+<script src="assets/i18n-en-95.js"></script>
 <!-- API: контракт, эталонный набор, встроенный сервер и клиент (api/README.md) -->
 <script src="api/openapi.js"></script>
 <script src="api/fixture.js"></script>
@@ -23626,12 +23629,12 @@ function pmKey(id,e){
 // Надписи живут только в этой странице (otStore): «Применить» оставляет их, «Сбросить» возвращает значения до плана
 // (camPlanBase, часть "ot"). Предел числа надписей — константа заглушки OT_MAX.
 // Состояние для проверки вида — запрос ?ot=empty|one|many|long: заготовка надписей у камер без своих правок
-const OT_MAX=8,OT_C="#38bdf8";
+const OT_MAX=8;
 const OT_FONTS=["Arial","Segoe UI","Verdana","Courier New","Consolas"];
 const OT_STYLES=[["normal","Обычный"],["bold","Жирный"],["italic","Курсив"],["bold-italic","Жирный курсив"]];
 // Цвета — данные примера (как цвет титров кассы): быстрый выбор; «Другой цвет» открывает полную палитру
 const OT_COLORS=[["#ffffff","Белый"],["#ffd60a","Жёлтый"],["#3ddc84","Зелёный"],["#22d3ee","Голубой"],["#ff4d4f","Красный"],["#000000","Чёрный"]];
-const otStore=new Map(),otShots=new Map();
+const otStore=new Map(),otShots=new Map();let otSeq=0;
 let ot={id:null,tool:false,sel:null,view:false,drag:false,inl:null};
 function otNew(id,text,pos,o){return Object.assign({id,text,pos,font:"Arial",style:"normal",size:56,color:"#ffffff",outline:true,outlineColor:"#000000",outlineW:2,bg:false,bgColor:"#000000",bgClear:40},o||{})}
 function otSeed(n){
@@ -23656,6 +23659,13 @@ function otFs(a){return a.size/1080*DW_Y*1.33}
 function otBox(a){const fs=otFs(a),pad=fs*.25,w=Math.max(1,(a.text||" ").length)*fs*(OT_W[a.font]||.56)*(/bold/.test(a.style)?1.07:1)+pad*2;
   return{x:a.pos[0]*DW_X,y:a.pos[1]*DW_Y,w,h:fs*1.3,fs,pad}}
 function otFits(a){const b=otBox(a);return b.x+b.w<=DW_X+.01&&b.y+b.h<=DW_Y+.01}
+// Значения вида проверены: цвет — #rrggbb, шрифт и начертание — из списков (значения уходят в атрибуты style и SVG)
+const OT_HEX=/^#[0-9a-f]{6}$/i;
+function otSafe(a){
+  ["color","outlineColor","bgColor"].forEach(k=>{if(!OT_HEX.test(a[k]||""))a[k]=k==="color"?"#ffffff":"#000000"});
+  if(!OT_FONTS.includes(a.font))a.font=OT_FONTS[0];
+  if(!OT_STYLES.some(x=>x[0]===a.style))a.style="normal";
+  return a}
 function otEdit(n){otFocus(n);camPlanTouch(n,"ot");setD(true);return otOf(n)}
 
 function otSecHtml(n){
@@ -23664,17 +23674,17 @@ function otSecHtml(n){
 }
 function otBodyHtml(n){
   const c=otCur(n),list=otOf(n),full=list.length>=OT_MAX;
-  const add=`<button type="button" class="btn s${c.tool?" on":""}" aria-pressed="${c.tool}" ${full?`disabled data-tip="${i18n("Надписей уже")} ${OT_MAX}. ${i18n("Сначала убрать одну надпись.")}"`:""} ${onEv("click",["otTool",n.id])}>${lu("plus")}${i18n("Добавить надпись")}</button>`;
-  const tools=`<div class="dw-tools">${add}<span class="dw-lay"><button type="button" class="btn s${c.view?" on":""}" aria-pressed="${c.view}" data-tip="${i18n("Показать кадр так, как его видит оператор: без рамок")}" ${onEv("click",["otView",n.id])}>${lu(c.view?"eye-off":"eye")}${i18n("Как видит оператор")}</button></span></div>`;
+  const add=`<button type="button" id="ot-add" class="btn s${c.tool?" on":""}" aria-pressed="${c.tool}" ${full?`disabled data-tip="${i18n("Надписей уже")} ${OT_MAX}. ${i18n("Сначала убрать одну надпись.")}"`:""} ${onEv("click",["otTool",n.id])}>${lu("plus")}${i18n("Добавить надпись")}</button>`;
+  const tools=`<div class="dw-tools">${add}<span class="dw-lay"><button type="button" id="ot-view" class="btn s${c.view?" on":""}" aria-pressed="${c.view}" data-tip="${i18n("Показать кадр так, как его видит оператор: без рамок")}" ${onEv("click",["otView",n.id])}>${lu(c.view?"eye-off":"eye")}${i18n("Как видит оператор")}</button></span></div>`;
   const inl=c.inl&&list.find(a=>a.id===c.inl),ib=inl&&otBox(inl);
-  const inlEl=inl?`<input type="text" class="ot-inl" maxlength="128" value="${escHtml(inl.text)}" aria-label="${i18n("Текст надписи")}" style="left:${(ib.x/DW_X*100).toFixed(2)}%;top:${(ib.y/DW_Y*100).toFixed(2)}%;font-size:${(ib.fs/DW_X*100).toFixed(3)}cqw;font-family:'${inl.font}';color:${inl.color}" ${onEv("keydown",["otInlKey",n.id,inl.id,onEv.event])} ${onEv("blur",["otInlEnd",n.id,inl.id,onEv.value])}>`:"";
+  const inlEl=inl?`<input type="text" class="ot-inl" maxlength="128" value="${escHtml(inl.text)}" aria-label="${i18n("Текст надписи")}" style="left:${(ib.x/DW_X*100).toFixed(2)}%;top:${(ib.y/DW_Y*100).toFixed(2)}%;font-size:${(ib.fs/DW_X*100).toFixed(3)}cqw;font-family:'${escHtml(inl.font)}';color:${escHtml(inl.color)}" ${onEv("keydown",["otInlKey",n.id,inl.id,onEv.event])} ${onEv("blur",["otInlEnd",n.id,inl.id,onEv.value])}>`:"";
   const stage=`<div class="dw-stage ot-stage${c.tool?" draw":""}" tabindex="0" role="application" aria-label="${i18n("Кадр камеры: надписи поверх видео")}" data-ot-stage="${escHtml(n.id)}" ${onEv("mousedown",["otDown",n.id,onEv.el,onEv.event])} ${onEv("dblclick",["otDbl",n.id,onEv.event])} ${onEv("keydown",["otKey",n.id,onEv.event])}>
       ${dwSceneSvg()}<svg class="ot-ov" viewBox="0 0 ${DW_X} ${DW_Y}" preserveAspectRatio="none" data-ot-geo>${otGeoSvg(n)}</svg>${inlEl}
       <span class="pm-frame-t ot-frame-t">${i18n("Стоп-кадр")} · ${escHtml(otShotAt(n))}</span></div>`;
   const under=`<div class="pm-under"><p class="sub dw-hint" data-ot-hint>${i18n(otHint(n))}</p><button type="button" class="btn s" data-tip="${i18n("Взять с камеры новый кадр. Надписи остаются на своих местах кадра.")}" ${onEv("click",["otShot",n.id])}>${lu("refresh-cw")}${i18n("Новый кадр")}</button></div>`;
   const rows=list.length?list.map((a,i)=>{
       const on=c.sel===a.id,bad=!otFits(a),nm=a.text||i18n("Пустая надпись");
-      return`<div class="ot-row${on?" on":""}"><div class="ot-rh"><i class="dw-sw ot-sw" style="background:${a.color}"></i><button type="button" class="lk ot-name" aria-pressed="${on}" aria-expanded="${on}" data-tip="${escHtml(nm)}" ${onEv("click",["otSel",n.id,a.id])}>${escHtml(nm)}</button>${bad?`<span class="ot-warn" data-tip="${i18n("Надпись выходит за край кадра")}" aria-label="${i18n("Надпись выходит за край кадра")}">${lu("triangle-alert")}</span>`:""}<span class="sub ot-meta">${escHtml(a.font)}, ${a.size}</span><button type="button" class="btn s pm-del" data-tip="${i18n("Убрать надпись")}" aria-label="${i18n("Убрать надпись")}: ${escHtml(nm)}" ${onEv("click",["otDel",n.id,a.id])}>${lu("trash")}</button></div>${on?otFormHtml(n,a,i):""}</div>`}).join("")
+      return`<div class="ot-row${on?" on":""}"><div class="ot-rh"><i class="dw-sw ot-sw" style="background:${escHtml(a.color)}"></i><button type="button" id="ot-r-${escHtml(a.id)}" class="lk ot-name" aria-expanded="${on}"${on?` aria-controls="ot-f-${i}"`:""} data-tip="${escHtml(nm)}" ${onEv("click",["otSel",n.id,a.id])}>${escHtml(nm)}</button>${bad?`<span class="ot-warn" data-tip="${i18n("Надпись выходит за край кадра")}" aria-label="${i18n("Надпись выходит за край кадра")}">${lu("triangle-alert")}</span>`:""}<span class="sub ot-meta">${escHtml(a.font)}, ${a.size}</span><button type="button" class="btn s pm-del" data-tip="${i18n("Убрать надпись")}" aria-label="${i18n("Убрать надпись")}: ${escHtml(nm)}" ${onEv("click",["otDel",n.id,a.id])}>${lu("trash")}</button></div>${on?otFormHtml(n,a,i):""}</div>`}).join("")
     :`<p class="sub pm-empty">${i18n("Надписей нет. Client показывает кадр без текста.")}</p>`;
   const head=`<div class="pm-h">${i18n("Надписи")}<span class="sub ot-cnt">${list.length} ${i18n("из")} ${OT_MAX}</span>${list.length>1?`<button type="button" class="lk pm-clr" ${onEv("click",["otClear",n.id])}>${i18n("Убрать все")}</button>`:""}</div>`;
   const copy=list.length&&cpCanCopy(n)?`<div class="ot-copy"><button type="button" class="btn s" data-tip="${i18n("Поставить такие же надписи на другие камеры")}" ${onEv("click",["otCopy",n.id])}>${i18n("Применить к другим")}…</button></div>`:"";
@@ -23688,17 +23698,17 @@ function otBodyHtml(n){
 function otFormHtml(n,a,i){
   const bad=!otFits(a),fid=`ot-${i}`,id=n.id,ev=(k,v)=>onEv("change",["otSet",id,a.id,k,v]);
   const sel=(k,opts)=>`<select id="${fid}-${k}" ${ev(k,onEv.value)}>${opts.map(([v,t])=>`<option value="${escHtml(v)}" ${String(v)===String(a[k])?"selected":""}>${i18n(t)}</option>`).join("")}</select>`;
-  const quick=OT_COLORS.map(([c,l])=>`<button type="button" class="ot-c${a.color===c?" on":""}" role="radio" aria-checked="${a.color===c}" aria-label="${i18n(l)}" data-tip="${i18n(l)}" style="--c:${c}" ${onEv("click",["otSet",id,a.id,"color",c])}></button>`).join("");
   const other=!OT_COLORS.some(x=>x[0]===a.color);
-  return`<div class="ot-form">
+  const quick=OT_COLORS.map(([c,l],j)=>{const on=a.color===c,tab=on||other&&j===0;return`<button type="button" id="${fid}-c${j}" class="ot-c${on?" on":""}" role="radio" aria-checked="${on}" tabindex="${tab?0:-1}" aria-label="${i18n(l)}" data-tip="${i18n(l)}" style="--c:${c}" ${onEv("click",["otSet",id,a.id,"color",c])} ${onEv("keydown",["otColorKey",id,a.id,j,onEv.event])}></button>`}).join("");
+  return`<div class="ot-form" id="ot-f-${i}">
     <div class="g ot-g">
       <div class="sf-wide"><label for="${fid}-t">${i18n("Текст")}</label><input id="${fid}-t" class="ot-inp" type="text" maxlength="128" value="${escHtml(a.text)}" ${onEv("input",["otSet",id,a.id,"text",onEv.value])}></div>
       <div><label for="${fid}-font">${i18n("Шрифт")}</label>${sel("font",OT_FONTS.map(f=>[f,f]))}</div>
       <div><label for="${fid}-style">${i18n("Начертание")}</label>${sel("style",OT_STYLES)}</div>
       <div><label for="${fid}-size">${i18n("Размер, пт")}</label><input id="${fid}-size" type="number" min="8" max="200" step="2" value="${a.size}" ${ev("size",onEv.value)}></div>
-      <div class="sf-wide"><label>${i18n("Цвет текста")}</label><div class="ot-cs" role="radiogroup" aria-label="${i18n("Цвет текста")}">${quick}<label class="ot-more${other?" on":""}" data-tip="${i18n("Другой цвет: полная палитра")}"><input type="color" value="${escHtml(colorFull(a.color))}" aria-label="${i18n("Другой цвет")}" ${ev("color",onEv.value)}>${i18n("Другой")}</label></div></div>
-      <div class="sf-wide ot-pair"><label class="chk"><input type="checkbox" ${a.outline?"checked":""} ${ev("outline",onEv.checked)}> ${i18n("Обводка")}</label>${a.outline?`<input type="color" class="exp-swatch" value="${escHtml(colorFull(a.outlineColor))}" aria-label="${i18n("Цвет обводки")}" data-tip="${i18n("Цвет обводки")}" ${ev("outlineColor",onEv.value)}><select aria-label="${i18n("Толщина обводки")}" ${ev("outlineW",onEv.value)}>${[1,2,3,4].map(w=>`<option value="${w}" ${a.outlineW===w?"selected":""}>${w} ${i18n("пт")}</option>`).join("")}</select>`:""}</div>
-      <div class="sf-wide ot-pair"><label class="chk"><input type="checkbox" ${a.bg?"checked":""} ${ev("bg",onEv.checked)}> ${i18n("Фон")}</label>${a.bg?`<input type="color" class="exp-swatch" value="${escHtml(colorFull(a.bgColor))}" aria-label="${i18n("Цвет фона")}" data-tip="${i18n("Цвет фона")}" ${ev("bgColor",onEv.value)}><span class="pos-range ot-range"><label for="${fid}-clr">${i18n("Прозрачность")}: ${a.bgClear} %</label><input id="${fid}-clr" type="range" min="0" max="90" step="5" value="${a.bgClear}" ${ev("bgClear",onEv.value)}></span>`:""}</div>
+      <div class="sf-wide"><label id="${fid}-cl">${i18n("Цвет текста")}</label><div class="ot-cs" role="radiogroup" aria-labelledby="${fid}-cl">${quick}<label class="ot-more${other?" on":""}" data-tip="${i18n("Другой цвет: полная палитра")}"><input type="color" id="${fid}-color" value="${escHtml(colorFull(a.color))}" aria-label="${i18n("Другой цвет")}" ${ev("color",onEv.value)}>${i18n("Другой")}</label></div></div>
+      <div class="sf-wide ot-pair"><label class="chk"><input type="checkbox" id="${fid}-ol" ${a.outline?"checked":""} ${ev("outline",onEv.checked)}> ${i18n("Обводка")}</label>${a.outline?`<input type="color" id="${fid}-oc" class="exp-swatch" value="${escHtml(colorFull(a.outlineColor))}" aria-label="${i18n("Цвет обводки")}" data-tip="${i18n("Цвет обводки")}" ${ev("outlineColor",onEv.value)}><select id="${fid}-ow" aria-label="${i18n("Толщина обводки")}" ${ev("outlineW",onEv.value)}>${[1,2,3,4].map(w=>`<option value="${w}" ${a.outlineW===w?"selected":""}>${w} ${i18n("пт")}</option>`).join("")}</select>`:""}</div>
+      <div class="sf-wide ot-pair"><label class="chk"><input type="checkbox" id="${fid}-bg" ${a.bg?"checked":""} ${ev("bg",onEv.checked)}> ${i18n("Фон")}</label>${a.bg?`<input type="color" id="${fid}-bc" class="exp-swatch" value="${escHtml(colorFull(a.bgColor))}" aria-label="${i18n("Цвет фона")}" data-tip="${i18n("Цвет фона")}" ${ev("bgColor",onEv.value)}><span class="pos-range ot-range"><label for="${fid}-clr">${i18n("Прозрачность")}: ${a.bgClear} %</label><input id="${fid}-clr" type="range" min="0" max="90" step="5" value="${a.bgClear}" ${ev("bgClear",onEv.value)}></span>`:""}</div>
       <div><label for="${fid}-x">${i18n("Слева, %")}</label><input id="${fid}-x" type="number" min="0" max="100" step="1" value="${Math.round(a.pos[0]*100)}" ${ev("x",onEv.value)}></div>
       <div><label for="${fid}-y">${i18n("Сверху, %")}</label><input id="${fid}-y" type="number" min="0" max="100" step="1" value="${Math.round(a.pos[1]*100)}" ${ev("y",onEv.value)}></div>
     </div>
@@ -23709,7 +23719,7 @@ function otHint(n){
   const c=otCur(n);
   if(c.view)return"Так кадр видит оператор. Чтобы изменить надписи, нажать «Как видит оператор» ещё раз.";
   if(c.inl)return"Ввести текст. Enter сохраняет текст, Esc отменяет правку.";
-  if(c.tool)return"Щёлкнуть по кадру там, где начинается надпись. Esc отменяет.";
+  if(c.tool)return"Щёлкнуть по кадру там, где начинается надпись, или нажать Enter: надпись встанет в левый верхний угол. Esc отменяет.";
   if(c.sel)return"Чтобы сдвинуть надпись, тянуть её за любое место или нажимать стрелки. Двойной щелчок по надписи изменяет текст. Delete убирает надпись.";
   if(otOf(n).length)return"Щёлкнуть надпись на кадре или в списке, чтобы изменить её. Двойной щелчок изменяет текст сразу на кадре.";
   return"Нажать «Добавить надпись» и щёлкнуть по кадру: например, там, где написать название улицы или направление взгляда камеры.";
@@ -23718,9 +23728,9 @@ function otGeoSvg(n){
   const c=otCur(n);let h=`<defs><clipPath id="otc-frame"><rect width="${DW_X}" height="${DW_Y}"/></clipPath></defs><g clip-path="url(#otc-frame)">`;
   otOf(n).forEach(a=>{
     const b=otBox(a),on=c.sel===a.id,bad=!otFits(a),st=a.style;
-    if(a.bg)h+=`<rect x="${b.x.toFixed(2)}" y="${b.y.toFixed(2)}" width="${b.w.toFixed(2)}" height="${b.h.toFixed(2)}" fill="${a.bgColor}" fill-opacity="${(1-a.bgClear/100).toFixed(2)}"/>`;
-    if(c.inl!==a.id)h+=`<text class="ot-tx" x="${(b.x+b.pad).toFixed(2)}" y="${(b.y+b.h*.52).toFixed(2)}" font-family="${escHtml(a.font)}" font-weight="${/bold/.test(st)?700:400}" font-style="${/italic/.test(st)?"italic":"normal"}" font-size="${b.fs.toFixed(2)}" fill="${a.color}"${a.outline?` stroke="${a.outlineColor}" stroke-width="${(a.outlineW*b.fs/18).toFixed(2)}"`:""}>${escHtml(a.text)}</text>`;
-    if(!c.view)h+=`<rect class="ot-a${on?" sel":""}${bad?" bad":""}" data-o="${a.id}" x="${b.x.toFixed(2)}" y="${b.y.toFixed(2)}" width="${b.w.toFixed(2)}" height="${b.h.toFixed(2)}"><title>${escHtml(a.text)}</title></rect>`;
+    if(a.bg)h+=`<rect x="${b.x.toFixed(2)}" y="${b.y.toFixed(2)}" width="${b.w.toFixed(2)}" height="${b.h.toFixed(2)}" fill="${escHtml(a.bgColor)}" fill-opacity="${(1-a.bgClear/100).toFixed(2)}"/>`;
+    if(c.inl!==a.id)h+=`<text class="ot-tx" x="${(b.x+b.pad).toFixed(2)}" y="${(b.y+b.h*.52).toFixed(2)}" font-family="${escHtml(a.font)}" font-weight="${/bold/.test(st)?700:400}" font-style="${/italic/.test(st)?"italic":"normal"}" font-size="${b.fs.toFixed(2)}" fill="${escHtml(a.color)}"${a.outline?` stroke="${escHtml(a.outlineColor)}" stroke-width="${(a.outlineW*b.fs/18).toFixed(2)}"`:""}>${escHtml(a.text)}</text>`;
+    if(!c.view)h+=`<rect class="ot-a${on?" sel":""}${bad?" bad":""}" data-o="${escHtml(a.id)}" x="${b.x.toFixed(2)}" y="${b.y.toFixed(2)}" width="${b.w.toFixed(2)}" height="${b.h.toFixed(2)}"><title>${escHtml(a.text)}</title></rect>`;
   });
   return h+"</g>";
 }
@@ -23738,8 +23748,8 @@ function otRepaint(n,keepFocus){
   else if(keepFocus&&fid){const el=document.getElementById(fid);if(el){el.focus({preventScroll:true});try{el.setSelectionRange(pos,pos)}catch(e){}}}
 }
 function otTool(id){const n=otNode(id);if(!n)return;otFocus(n);ot.tool=!ot.tool;ot.view=false;ot.inl=null;if(ot.tool)ot.sel=null;otRepaint(n);otStageEl()?.focus({preventScroll:true})}
-function otView(id){const n=otNode(id);if(!n)return;otFocus(n);ot.view=!ot.view;ot.tool=false;ot.sel=null;ot.inl=null;otRepaint(n)}
-function otSel(id,aid){const n=otNode(id);if(!n)return;otFocus(n);ot.view=false;ot.tool=false;ot.inl=null;ot.sel=ot.sel===aid?null:aid;otRepaint(n)}
+function otView(id){const n=otNode(id);if(!n)return;otFocus(n);ot.view=!ot.view;ot.tool=false;ot.sel=null;ot.inl=null;otRepaint(n,true)}
+function otSel(id,aid){const n=otNode(id);if(!n)return;otFocus(n);ot.view=false;ot.tool=false;ot.inl=null;ot.sel=ot.sel===aid?null:aid;otRepaint(n,true)}
 function otDel(id,aid){const n=otNode(id);if(!n)return;const l=otEdit(n),i=l.findIndex(x=>x.id===aid);if(i<0)return;l.splice(i,1);if(ot.sel===aid)ot.sel=null;if(ot.inl===aid)ot.inl=null;otRepaint(n)}
 function otClear(id){const n=otNode(id);if(!n)return;otEdit(n).length=0;ot.sel=null;ot.inl=null;otRepaint(n)}
 function otShot(id){const n=otNode(id);if(!n)return;otShots.set(n.id,Date.now());otRepaint(n)}
@@ -23748,13 +23758,17 @@ function otSet(id,aid,k,v){
   const n=otNode(id);if(!n)return;const a=otEdit(n).find(x=>x.id===aid);if(!a)return;
   if(k==="size")a.size=Math.max(8,Math.min(200,Math.round(+v)||a.size));
   else if(k==="outlineW"||k==="bgClear")a[k]=+v;
-  else if(k==="x"||k==="y"){const j=k==="x"?0:1,p=a.pos.slice();p[j]=otClamp((+v||0)/100);a.pos=p}
-  else a[k]=v;
-  otRepaint(n,k==="text");
+  else if(k==="x"||k==="y"){const j=k==="x"?0:1,p=a.pos.slice(),b=otBox(a),lim=j?Math.max(0,1-b.h/DW_Y):Math.max(0,1-b.w/DW_X);p[j]=otClamp(Math.min(lim,(+v||0)/100));a.pos=p}
+  else if(k==="outline"||k==="bg")a[k]=!!v;
+  else if(k in a)a[k]=v;
+  otSafe(a);
+  // Текст — сразу, с фокусом в поле. Остальное — кадр сразу, блок после смены фокуса: Tab или щелчок по соседнему полю
+  // не теряется, фокус возвращается по id
+  if(k==="text")otRepaint(n,true);else{otPaintGeo(n);setTimeout(()=>{if(otNode(id))otRepaint(n,true)},0)}
 }
 function otAdd(n,p){
   const l=otEdit(n);if(l.length>=OT_MAX){ot.tool=false;otRepaint(n);toast(`${i18n("Надписей не больше")} ${OT_MAX}`);return}
-  const a=otNew("n"+(Date.now()%1e7),n.name||i18n("Надпись"),[otClamp(p[0]),otClamp(p[1])]);
+  const a=otNew("n"+(Date.now()%1e7)+"_"+(++otSeq),n.name||i18n("Надпись"),[otClamp(p[0]),otClamp(p[1])]);
   l.push(a);ot.sel=a.id;ot.tool=false;ot.inl=a.id;otRepaint(n);
 }
 function otDown(id,st,e){
@@ -23770,12 +23784,12 @@ function otDown(id,st,e){
   const o=e.target.dataset?.o;
   if(!o){if(ot.sel){ot.sel=null;otRepaint(n)}return}
   e.preventDefault();
-  const a=otEdit(n).find(x=>x.id===o);if(!a)return;
+  const a=otOf(n).find(x=>x.id===o);if(!a)return;
   if(ot.sel!==o){ot.sel=o;otRepaint(n)}
   // Тянуть можно за любое место окна надписи (PMD-5967, п. 1)
   const orig=a.pos.slice(),b=otBox(a),mw=Math.max(0,1-b.w/DW_X),mh=Math.max(0,1-b.h/DW_Y),stage=otStageEl()||st;
   ot.drag=true;let moved=false;
-  const mm=ev=>{const q=dwXY(stage,ev);if(!q)return;moved=true;a.pos=[otClamp(Math.min(mw,Math.max(0,orig[0]+q[0]-p0[0]))),otClamp(Math.min(mh,Math.max(0,orig[1]+q[1]-p0[1])))];otPaintGeo(n)};
+  const mm=ev=>{const q=dwXY(stage,ev);if(!q)return;if(!moved)otEdit(n);moved=true;a.pos=[otClamp(Math.min(mw,Math.max(0,orig[0]+q[0]-p0[0]))),otClamp(Math.min(mh,Math.max(0,orig[1]+q[1]-p0[1])))];otPaintGeo(n)};
   const up=()=>{window.removeEventListener("mousemove",mm);window.removeEventListener("mouseup",up);ot.drag=false;if(moved)otRepaint(n)};
   window.addEventListener("mousemove",mm);window.addEventListener("mouseup",up);
 }
@@ -23783,14 +23797,20 @@ function otDown(id,st,e){
 function otDbl(id,e){const n=otNode(id);if(!n||ot.view)return;const o=e.target.dataset?.o;if(!o)return;e.preventDefault();otFocus(n);ot.sel=o;ot.inl=o;otRepaint(n)}
 function otInlKey(id,aid,e){
   e.stopPropagation();
-  if(e.key==="Enter"){e.preventDefault();otInlEnd(id,aid,e.target.value)}
+  if(e.key==="Enter"){e.preventDefault();otInlEnd(id,aid,e.target.value,true)}
   else if(e.key==="Escape"){e.preventDefault();const n=otNode(id);if(!n)return;ot.inl=null;otRepaint(n);otStageEl()?.focus({preventScroll:true})}
 }
-function otInlEnd(id,aid,v){
+// Enter — весь блок заново, фокус на кадре. Уход фокуса — без перестройки блока: щелчок по другой кнопке не теряется
+// (и paint() во время ввода не оставляет второе поле). Пустой текст не сохраняется: надпись убирают корзиной
+function otInlEnd(id,aid,v,full){
   const n=otNode(id);if(!n||ot.inl!==aid)return;ot.inl=null;
-  const a=otOf(n).find(x=>x.id===aid);
-  if(a&&a.text!==v){otEdit(n);a.text=v}
-  otRepaint(n);otStageEl()?.focus({preventScroll:true});
+  const a=otOf(n).find(x=>x.id===aid),t=String(v??"").trim()?v:a?.text;
+  if(a&&a.text!==t){otEdit(n);a.text=t}
+  if(full){otRepaint(n);otStageEl()?.focus({preventScroll:true});return}
+  document.querySelectorAll("#main .ot-inl").forEach(el=>el.remove());
+  otPaintGeo(n);
+  const nm=a&&document.getElementById("ot-r-"+a.id);if(nm){nm.textContent=a.text;nm.dataset.tip=a.text}
+  const f=a&&document.querySelector("#main .ot-row.on .ot-inp");if(f&&document.activeElement!==f)f.value=a.text;
 }
 function otKey(id,e){
   const n=otNode(id);if(!n)return;
@@ -23799,6 +23819,8 @@ function otKey(id,e){
   if(/^Arrow/.test(k))stop();
   if(ot.id!==n.id)return;
   if(k==="Escape"&&ot.tool){stop();ot.tool=false;otRepaint(n);return}
+  // Добавление с клавиатуры (WCAG 2.1.1): Enter или пробел ставит надпись в левый верхний угол и открывает ввод
+  if((k==="Enter"||k===" ")&&ot.tool){stop();otAdd(n,[.03,.04]);return}
   const a=ot.sel&&otOf(n).find(x=>x.id===ot.sel);if(!a)return;
   if(k==="Enter"||k==="F2"){stop();ot.inl=a.id;otRepaint(n);return}
   if(k==="Delete"||k==="Backspace"){stop();otDel(id,a.id);return}
@@ -23806,18 +23828,38 @@ function otKey(id,e){
   const z=otEdit(n).find(x=>x.id===a.id),b=otBox(z);
   z.pos=[otClamp(Math.min(Math.max(0,1-b.w/DW_X),z.pos[0]+v[0])),otClamp(Math.min(Math.max(0,1-b.h/DW_Y),z.pos[1]+v[1]))];otRepaint(n);
 }
+// Быстрые цвета — группа radio: стрелки выбирают соседний цвет, Tab уходит из группы
+function otColorKey(id,aid,j,e){
+  const d={ArrowRight:1,ArrowDown:1,ArrowLeft:-1,ArrowUp:-1}[e.key];if(!d)return;
+  e.preventDefault();const k=(j+d+OT_COLORS.length)%OT_COLORS.length,fid=e.target.id.replace(/-c\d+$/,"");
+  otSet(id,aid,"color",OT_COLORS[k][0]);setTimeout(()=>document.getElementById(`${fid}-c${k}`)?.focus({preventScroll:true}),0);
+}
 // «Применить к другим…»: окно камеры с отмеченной группой «Надписи на кадре» (PMD-5967, п. 1)
 function otCopy(id){openCopyDialog(id);if(cp&&cp.src.id===id){cp.groups.add("osd");renderCopyDialog()}}
 function otCopyText(src){const l=otOf(src);return l.length?l.map(a=>`«${a.text}»`).join(", "):i18n("нет надписей")}
 // Строки плана: надпись добавлена, изменена или убрана
 const OT_KEY_RU={text:"текст",font:"шрифт",style:"начертание",size:"размер",color:"цвет",outline:"обводка",outlineColor:"цвет обводки",outlineW:"толщина обводки",bg:"фон",bgColor:"цвет фона",bgClear:"прозрачность фона",pos:"место"};
+// Значение ключа для колонок «Было» и «Станет»
+function otVal(a,k){
+  const on=v=>i18n(v?"вкл.":"выкл.");
+  if(k==="text")return`«${a.text}»`;
+  if(k==="size")return`${a.size} ${i18n("пт")}`;
+  if(k==="color")return otColorName(a.color).toLowerCase();
+  if(k==="style")return i18n((OT_STYLES.find(x=>x[0]===a.style)||OT_STYLES[0])[1]).toLowerCase();
+  if(k==="pos")return`${i18n("слева")} ${Math.round(a.pos[0]*100)} %, ${i18n("сверху")} ${Math.round(a.pos[1]*100)} %`;
+  if(k==="outline")return on(a.outline);
+  if(k==="outlineW")return`${a.outlineW} ${i18n("пт")}`;
+  if(k==="bg")return on(a.bg);
+  if(k==="bgClear")return`${a.bgClear} %`;
+  return String(a[k]);
+}
 function otPlanRows(n,b,out){
   if(!b?.ot)return;
-  const was=new Map(b.ot.map(a=>[a.id,a])),now=otOf(n),lb=a=>`${i18n("Надпись")} «${a.text}»`,look=a=>`${a.font}, ${a.size} ${i18n("пт")}, ${otColorName(a.color).toLowerCase()}`;
+  const was=new Map(b.ot.map(a=>[a.id,a])),now=otOf(n),lb=a=>`${i18n("Надпись")} «${a.text||i18n("Пустая надпись")}»`,look=a=>`${a.font}, ${a.size} ${i18n("пт")}, ${otColorName(a.color).toLowerCase()}`;
   now.forEach(a=>{const w=was.get(a.id);
     if(!w){out.push({node:n,stub:"ot",label:lb(a),fromT:"—",toT:`${i18n("консоль добавит")}: ${look(a)}`});return}
     const ch=Object.keys(OT_KEY_RU).filter(k=>JSON.stringify(w[k])!==JSON.stringify(a[k]));
-    if(ch.length)out.push({node:n,stub:"ot",label:`${lb(w)}: ${ch.map(k=>i18n(OT_KEY_RU[k])).join(", ")}`,fromT:ch.includes("text")?`«${w.text}»`:look(w),toT:ch.includes("text")?`«${a.text}»`:look(a)})});
+    if(ch.length)out.push({node:n,stub:"ot",label:`${lb(w)}: ${ch.map(k=>i18n(OT_KEY_RU[k])).join(", ")}`,fromT:ch.map(k=>otVal(w,k)).join("; "),toT:ch.map(k=>otVal(a,k)).join("; ")})});
   was.forEach((a,id)=>{if(!now.some(x=>x.id===id))out.push({node:n,stub:"ot",label:lb(a),fromT:look(a),toT:i18n("консоль уберёт")})});
 }
 // ── Раздел «Слежение Tag&Track Pro» на вкладке «Видео»: после «Поворотного устройства (PTZ)» ──
@@ -41854,7 +41896,9 @@ function bulkChanges(draft,nodesIn){
   if(d.osdCopy){
     const k=d.osdCopy.length;
     step("osd",k?`${i18n("Надписи на кадре")}: ${k}`:i18n("Убрать надписи на кадре"),nodes.filter(handCam).map(n=>{const prev=JSON.parse(JSON.stringify(otOf(n)));
-      return mkOp(n,i18n("Надписи на кадре"),"param",()=>{otStore.set(n.id,d.osdCopy.map((a,i)=>({...JSON.parse(JSON.stringify(a)),id:"c"+i})))},null,()=>{otStore.set(n.id,prev)})}),
+      const run=()=>{otStore.set(n.id,d.osdCopy.map((a,i)=>otSafe({...JSON.parse(JSON.stringify(a)),id:"c"+i})))};
+      // api с пустым set: opsToItems не выполняет шаг в пробном проходе, очередь сервера отмечает его и выполняет здесь
+      return{...mkOp(n,i18n("Надписи на кадре"),"param",run,null,()=>{otStore.set(n.id,prev)}),api:{set:{}},local:run}}),
       i18n("заглушка: надписи остаются в странице; прежние надписи камеры заменятся"));
   }
   if(d.rename){
@@ -43400,7 +43444,7 @@ function apiQueue(steps,title,opts,call,apiOps,noopOps){
   startQueue(steps,title,Object.assign({},opts,{api:"pending"}));
   const q=bq;if(!q||q.api!=="pending")return;
   if(noopOps&&noopOps.length){
-    noopOps.forEach(o=>{o.state="ok";o.msg="";o.done=true;q.ok++;q.done++});
+    noopOps.forEach(o=>{o.local?.();o.state="ok";o.msg="";o.done=true;q.ok++;q.done++});
     q.steps.forEach(s=>s.ops.forEach(x=>{if(x.state==="run")x.state="wait"}));
     const nx=queueNext();if(nx){nx.o.state="run";q.cur=nx.s.label}
     renderRailStatus();renderTree();
