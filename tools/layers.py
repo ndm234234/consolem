@@ -33,6 +33,7 @@ KNOWN_LEAKS = {
     "AssistEvent.export": "API видео",
     "AssistFoundFilter.noDetector": "после части 04",
     "AssistFoundFilter.noRecord": "после части 04",
+    "Me.serverId": "0.39.0: сервер сессии, пробел F85",
     "RuleTrigger.match.detector": "после части 04",
     "TestEventRequest.eventId": "после части 04",
     "TestEventRequest.status": "после части 04",

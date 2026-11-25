@@ -1,0 +1,25 @@
+// Английский прототипа 101 (docs/TEXTS.md, «Как менять текст безопасно»): подключён после assets/i18n-en.js
+Object.assign(window.I18N_EN,{
+"Исключить":"Remove",
+"Исключить сервер из домена?":"Remove the server from the domain?",
+"Исключить серверы из домена?":"Remove the servers from the domain?",
+"выйдет из домена":"will leave the domain",
+"Серверы выйдут из доменов":"These servers will leave their domains",
+"Останется: сервер в списке нераспределённых серверов этого домена. Его можно добавить снова.":"Kept: the server stays in the list of unallocated servers of this domain. You can add it again.",
+"Останется: серверы в списке нераспределённых серверов своих доменов. Их можно добавить снова.":"Kept: the servers stay in the lists of unallocated servers of their domains. You can add them again.",
+"Сервер удалит настройки, которые создали на этом сервере: макросы, раскладки, карты, группы объектов, роли и пользователей. Сервер не сообщил их число.":"The server will delete the settings that users made on this server: macros, layouts, maps, object groups, roles and users. The server did not send their number.",
+"Серверы удалят настройки, которые создали на этих серверах: макросы, раскладки, карты, группы объектов, роли и пользователей. Не все серверы сообщили их число.":"The servers will delete the settings that users made on these servers: macros, layouts, maps, object groups, roles and users. Not all servers sent their number.",
+"На этом сервере не создали настроек: макросов, раскладок, карт, групп объектов, ролей и пользователей. Сервер ничего не удалит.":"Nobody made settings on this server: macros, layouts, maps, object groups, roles or users. The server will delete nothing.",
+"На этих серверах не создали настроек: макросов, раскладок, карт, групп объектов, ролей и пользователей. Серверы ничего не удалят.":"Nobody made settings on these servers: macros, layouts, maps, object groups, roles or users. The servers will delete nothing.",
+"Сервер удалит настройки, которые создали на этом сервере":"The server will delete the settings that users made on this server",
+"Серверы удалят настройки, которые создали на этих серверах":"The servers will delete the settings that users made on these servers",
+"Консоль не сможет вернуть эти настройки.":"The console cannot restore these settings.",
+"Консоль вошла через этот сервер. Когда сервер выйдет из домена, консоль закроет сессию. Чтобы продолжить, войти через другой сервер домена.":"The console signed in through this server. When the server leaves the domain, the console will close the session. To continue, sign in through another server of the domain.",
+"Консоль вошла через один из этих серверов. Когда сервер выйдет из домена, консоль закроет сессию. Чтобы продолжить, войти через другой сервер домена.":"The console signed in through one of these servers. When the server leaves the domain, the console will close the session. To continue, sign in through another server of the domain.",
+"Чтобы подтвердить, ввести число серверов":"To confirm, type the number of servers",
+"Консоль исключила сервер «{сервер}» из домена «{домен}»":"The console removed the server “{сервер}” from the domain “{домен}”",
+"Сессия закрыта":"Session closed",
+"вышел из домена. Консоль вошла через этот сервер, поэтому консоль закрыла сессию.":"left the domain. The console signed in through this server, so the console closed the session.",
+"Чтобы продолжить, войти через другой сервер домена.":"To continue, sign in through another server of the domain.",
+"Войти снова":"Sign in again"
+});

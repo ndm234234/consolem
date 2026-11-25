@@ -162,6 +162,26 @@
     assert.status(await move(env, unalloc2 || unalloc, folder.id), 422, "PARENT_MISMATCH", "сервер принимают только в домен");
   }, { needs: ["moveUnit", "implements:vms.server/1"] });
 
+  // Пробел F85: исключение удаляет то, что создали на сервере (status.observed.ownConfig, профиль 1.2), и закрывает вход через
+  // сервер сессии (Me.serverId, контракт 0.39.0). Откат возвращает сервер в домен, но не настройки
+  test("Серверы: ownConfig — исключение обнуляет числа, откат их не возвращает; Me.serverId — сервер сессии", async () => {
+    const env = await makeEnv();
+    const s = FX.servers.find((x) => x.allocated && x.ownConfig && Object.values(x.ownConfig).some((n) => n > 0));
+    assert.ok(s, "в наборе есть сервер с ownConfig");
+    const before = (await env.ok("GET", U(s.id))).status.observed.ownConfig;
+    assert.eq(Object.keys(before).sort(), ["groups", "layouts", "macros", "maps", "roles", "users"], "виды настроек");
+    assert.status(await move(env, s, null), 200);
+    const after = (await env.ok("GET", U(s.id))).status.observed.ownConfig;
+    assert.eq(Object.values(after).filter((n) => n !== 0), [], "после исключения все числа 0");
+    const op = (await env.ok("GET", "/operations")).items[0];
+    await env.finished((await env.ok("POST", `/operations/${op.id}/revert`, {})).id);
+    const back = await env.ok("GET", U(s.id));
+    assert.eq([back.properties.allocated, Object.values(back.status.observed.ownConfig).filter((n) => n !== 0)], [true, []], "откат: снова в домене, настройки не вернулись");
+    const me = await env.ok("GET", "/me");
+    if (FX.me.serverId) assert.eq(me.serverId, FX.me.serverId, "Me.serverId — сервер сессии из набора");
+    if (me.serverId) assert.ok((await env.ok("GET", U(me.serverId))).kind === "server", "Me.serverId — объект вида server");
+  }, { needs: ["moveUnit", "revertOperation", "implements:vms.server/1"], since: "1.2" });
+
   test("Серверы: групповой перенос — частичный успех; чужая версия и неизвестный сервер — отказ до выполнения", async () => {
     const env = await makeEnv();
     const op = await env.runOperation({ idempotencyKey: key(), items: [

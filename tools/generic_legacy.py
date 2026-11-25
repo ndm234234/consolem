@@ -21,7 +21,7 @@ UNIT_FIELDS = {"id", "type", "kind", "parentId", "domainId", "name", "version"}
 OBSERVED = {
     "devices": ["fault", "faultText", "licenseExceeded", "recordState", "recordReason", "replicaLagSec", "depthDays", "armed", "disabledByRuleId",
                 "disabledByRuleAt", "archiveJobs", "direct", "recordingTarget", "detectorKinds", "derived"],
-    "servers": ["telemetry", "gpu", "disks", "class", "fingerprint", "webCertificate", "webReservedPorts"],
+    "servers": ["telemetry", "gpu", "disks", "class", "fingerprint", "webCertificate", "webReservedPorts", "ownConfig"],
     "domains": ["stateSummary"],
     "volumes": ["usedPercent", "shrinkPendingBytes", "heldBy", "incidentsLost", "incidentsAtRisk"],
     "archives": [],

@@ -48,7 +48,9 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   delete window.CONSOLEM_TRACE;
   cardReset();
   // Сервер: исключить и вернуть
-  const d1=domains[0],s=d1.servers.find(x=>x.online!==false);
+  // Не сервер сессии (Me.serverId, прототип 101): его исключение закрывает сессию
+  const meSrv=typeof ME_SERVER!=="undefined"?ME_SERVER:null;
+  const d1=domains[0],s=d1.servers.find(x=>x.online!==false&&x.id!==meSrv);
   excludeFromDomain(s.id);
   if(document.getElementById("confirm").classList.contains("open"))await confirmWith(1);   // прототип с подтверждением числом
   ok(await until(()=>d1.unallocServers.includes(s)&&!d1.servers.includes(s)),"исключён: в «Нераспределённых»");
@@ -58,10 +60,11 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   ok(added&&await until(()=>d1.servers[d1.servers.length-1]===s),"добавлен обратно — в конец списка");
   ok(unallocDisplayCache[d1.id]?.find(r=>r.id===s.id)?.added,"строка «Нераспределённых» помечена «Добавлен»");
   // Групповое исключение и «Отменить»: серверы — на прежних местах
-  const two=d1.servers.slice(0,2),pos=two.map(x=>d1.servers.indexOf(x));
+  const two=d1.servers.filter(x=>x.id!==meSrv).slice(0,2),pos=two.map(x=>d1.servers.indexOf(x));
   treeSel.clear();two.forEach(x=>treeSel.add(x.id));
   window.CONSOLEM_TRACE=[];
   bulkExcludeServers();
+  if(document.getElementById("confirm").classList.contains("open"))await confirmWith(2);   // прототип с подтверждением числом
   ok(await until(()=>two.every(x=>d1.unallocServers.includes(x))),"групповое исключение: 2 сервера");
   // Как база одним POST /servers/assign: одна операция с шагами move, не перенос на каждый сервер
   const exclTrace=CONSOLEM_TRACE.filter(t=>t.method==="POST"&&(t.path==="/operations"||/\/move$/.test(t.path)));

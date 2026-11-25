@@ -48,6 +48,7 @@
 | 0.36.0 | Поиск в сети: сервер и категория оборудования в необязательном теле `startDiscovery`; профиль `vms.discovery/1` 1.1. Механизм — только поведение встроенного сервера | `vms.discovery/1`; механизм | `DiscoveryStart`, `Discovery.serverId`, `Discovery.category`, `DiscoveryCandidate.category`, `DiscoveryCandidate.serverId` |
 | 0.37.0 | Пресет PTZ: записано ли положение и какое; диафрагма в аренде движения; профили `vms.ptz/1` 1.2 и `vms.camera/1` 1.7 | `vms.ptz/1`; `vms.camera/1` | `PtzMove.iris`; свойство профиля `presets[]`: `savedOnDevice`, `pan`, `tilt`, `zoom` |
 | 0.38.0 | Правила имени объекта в описании вида: `UnitKind.nameSchema` (`minLength`, `maxLength`, `pattern`); у домена набора — до 100 знаков. Клиент проверяет имя сам, сервер правила пока не судит | механизм | `UnitKind.nameSchema` |
+| 0.39.0 | Исключение сервера из домена: что удалит исключение (`ownConfig` в status, профиль `vms.server/1` 1.2) и сервер сессии (`Me.serverId`, поле подсистемы в общей схеме — `KNOWN_LEAKS`) | `vms.server/1` | `Me.serverId`; поле профиля в status: `ownConfig` |
 
 ## Как дополнять
 

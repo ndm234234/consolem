@@ -91,7 +91,7 @@
   const OBSERVED = {
     devices: ["fault", "faultText", "licenseExceeded", "recordState", "recordReason", "replicaLagSec", "depthDays", "armed", "disabledByRuleId", "disabledByRuleAt", "archiveJobs",
       "direct", "recordingTarget", "detectorKinds", "derived"],
-    servers: ["telemetry", "gpu", "disks", "class", "fingerprint", "webCertificate", "webReservedPorts"],
+    servers: ["telemetry", "gpu", "disks", "class", "fingerprint", "webCertificate", "webReservedPorts", "ownConfig"],
     domains: ["stateSummary"],
     volumes: ["usedPercent", "shrinkPendingBytes", "heldBy", "incidentsLost", "incidentsAtRisk"],
     archives: [],
@@ -4643,7 +4643,10 @@
         "/me",
         () => {
           const u = db.access.users.find((x) => x.id === me);
-          return { status: 200, body: { userId: u.id, login: u.login, name: u.name, serverTime: iso(now()), timezone: db.timezone } };
+          // serverId — сервер, через который вошла сессия (с 0.39.0); у набора без него поля нет
+          const body = { userId: u.id, login: u.login, name: u.name, serverTime: iso(now()), timezone: db.timezone };
+          if (db.me.serverId) body.serverId = db.me.serverId;
+          return { status: 200, body };
         },
       ],
       ["GET", "/reference", () => ({ status: 200, body: clone(db.reference) })],

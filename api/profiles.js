@@ -203,6 +203,8 @@
   function assign(s, x, ctx) {
     const db = ctx.db;
     if (s.domainId !== x.domainId || s.allocated !== x.allocated) {
+      // Исключение и перенос в другой домен удаляют то, что создали на сервере (ownConfig, профиль 1.2): числа — 0, откат их не возвращает
+      if (s.allocated && (!x.allocated || x.domainId !== s.domainId) && s.ownConfig) s.ownConfig = Object.fromEntries(Object.keys(s.ownConfig).map((k) => [k, 0]));
       Object.assign(s, { domainId: x.domainId, allocated: x.allocated });
       ctx.bump(s);
       db.servers = db.servers.filter((r) => r !== s).concat(s);
