@@ -48,7 +48,7 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   delete window.CONSOLEM_TRACE;
   cardReset();
   // Сервер: исключить и вернуть
-  // Не сервер сессии (Me.serverId, прототип 101): его исключение закрывает сессию
+  // Не сервер сессии (Me.serverId, пробел F85): его исключение закрывает сессию
   const meSrv=typeof ME_SERVER!=="undefined"?ME_SERVER:null;
   const d1=domains[0],s=d1.servers.find(x=>x.online!==false&&x.id!==meSrv);
   excludeFromDomain(s.id);

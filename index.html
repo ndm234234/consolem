@@ -2508,6 +2508,7 @@ html[data-theme="light"] .sel-bar.sel-flash::after{animation-name:selFlashL}
 .bk-prog{margin-bottom:12px}.bk-prog-l{font-size:12px;margin-bottom:6px}
 .bk-prev{margin:6px 0 10px;padding-left:18px;font-size:12px}
 .bk-del{margin:0 0 10px;padding-left:18px}
+.bk-del .bk-loss{margin:4px 0}
 .bk-table .empty{padding:20px;text-align:center;color:var(--mu)}
 .rs-btn{flex:1;min-width:0;border:0;background:0;color:var(--tx);text-align:left;padding:4px;border-radius:var(--one-radius-container);cursor:pointer;display:flex;flex-direction:column;gap:3px;font:inherit}
 .rs-btn:hover{background:var(--one-control-hover)}
@@ -5117,6 +5118,8 @@ function srvNode(r){
   if(r.port!==20111)s.port=r.port;
   s.online=r.online;s.role=ROLE_RU[r.role]||r.role;
   if(r.fingerprint)s.fingerprint=r.fingerprint;
+  // Что создали на сервере и что удалит исключение из домена (vms.server/1 1.2, status.observed.ownConfig). Нет поля — система не сообщает
+  if(r.ownConfig)s.ownCfg={...r.ownConfig};
   if(r.class)s.cls=r.class;
   if(r.labels?.length)s.labels=r.labels;
   Object.assign(s,r.telemetry);s.devices=[];
@@ -8534,7 +8537,7 @@ async function appLoad(){
   // 403 — раздела нет. Другой отказ (без связи с доменом это штатно) запуск не роняет: раздел говорит, что права недоступны, и спросит снова при заходе
   const access=()=>Promise.resolve(get("getAccess","/access",ACC_EMPTY)).then(a=>{accDown=false;return a}).catch(e=>{if(e?.status===403)accDenied=true;else accDown=true;return ACC_EMPTY});
   const [me,st,acc]=await Promise.all([API.get("/me"),get("getSettings","/settings",{version:"1",values:{}}),access()]);
-  sysTz=me.timezone||sysTz;ACC_ME=me.login;promptClock(me.serverTime);
+  sysTz=me.timezone||sysTz;ACC_ME=me.login;ME_SERVER=me.serverId||null;promptClock(me.serverTime);
   accSetSnapshot(accSkeleton(acc));accLast=accSkeleton(acc);
   settingsApply(st);
   appEnsureShown();
@@ -9331,10 +9334,35 @@ function takeServer(serverId){
   }
   return null;
 }
+// Что удалит исключение сервера из домена — по Axxon One: макросы, раскладки, карты, группы объектов, роли и пользователи,
+// которые создали на сервере. Числа — от сервера (ownCfg). Нет поля или нет одного из чисел — окно называет только виды настроек.
+// Английские формы здесь, а не в словаре: «карта» в словаре — card (SD-карта)
+const OWN_CFG=[["macros","макрос|макроса|макросов","macro|macros"],["layouts","раскладка|раскладки|раскладок","layout|layouts"],["maps","карта|карты|карт","map|maps"],["groups","группа объектов|группы объектов|групп объектов","object group|object groups"],["roles","роль|роли|ролей","role|roles"],["users","пользователь|пользователя|пользователей","user|users"]];
+const ownCfgWord=(n,ru,en)=>uiLang==="en"?en.split("|")[n===1?0:1]:plural(n,ru);
+// Сумма по серверам; null — хотя бы один сервер не сообщил чисел
+function ownCfgSum(list){
+  const sum={};
+  for(const s of list){
+    const c=s.ownCfg;
+    if(!c||OWN_CFG.some(([k])=>typeof c[k]!=="number"))return null;
+    OWN_CFG.forEach(([k])=>sum[k]=(sum[k]||0)+c[k]);
+  }
+  return sum;
+}
+function excludeLossHtml(list){
+  const c=ownCfgSum(list),one=list.length===1;
+  if(!c)return`<li>${i18n(one?"Сервер удалит настройки, которые создали на этом сервере: макросы, раскладки, карты, группы объектов, роли и пользователей. Сервер не сообщил их число.":"Серверы удалят настройки, которые создали на этих серверах: макросы, раскладки, карты, группы объектов, роли и пользователей. Не все серверы сообщили их число.")}</li>`;
+  const have=OWN_CFG.filter(([k])=>c[k]>0);
+  if(!have.length)return`<li>${i18n(one?"На этом сервере не создали настроек: макросов, раскладок, карт, групп объектов, ролей и пользователей. Сервер ничего не удалит.":"На этих серверах не создали настроек: макросов, раскладок, карт, групп объектов, ролей и пользователей. Серверы ничего не удалят.")}</li>`;
+  return`<li>${i18n(one?"Сервер удалит настройки, которые создали на этом сервере":"Серверы удалят настройки, которые создали на этих серверах")}:<ul class="bk-del bk-loss">${have.map(([k,ru,en])=>`<li><b>${c[k]}</b> ${escHtml(ownCfgWord(c[k],ru,en))}</li>`).join("")}</ul>${i18n("Консоль не сможет вернуть эти настройки.")}</li>`;
+}
+const SESSION_WARN="Консоль вошла через этот сервер. Когда сервер выйдет из домена, консоль закроет сессию. Чтобы продолжить, войти через другой сервер домена.";
 function excludeFromDomain(serverId){
   const dom=domainOf(serverId),s=servers.find(x=>x.id===serverId);
   if(!s||!dom)return;
-  askConfirm("Исключить сервер из домена?",`<ul class="bk-del"><li>${i18n("Сервер")} «${escHtml(locName(s))}» ${i18n("выйдет из домена")} «${escHtml(locName(dom))}».</li><li>${i18n("Останется: сервер в списке нераспределённых серверов этого домена. Его можно добавить снова.")}</li></ul>`,"",i18n("Исключить"),()=>excludeFromDomainRun(serverId),{html:true,typeCount:1});
+  askConfirm("Исключить сервер из домена?",`<ul class="bk-del"><li>${i18n("Сервер")} «${escHtml(locName(s))}» ${i18n("выйдет из домена")} «${escHtml(locName(dom))}».</li>${excludeLossHtml([s])}<li>${i18n("Останется: сервер в списке нераспределённых серверов этого домена. Его можно добавить снова.")}</li></ul>`,
+    ME_SERVER===serverId?SESSION_WARN:"",
+    i18n("Исключить"),()=>excludeFromDomainRun(serverId),{html:true,typeCount:1,countLabel:"Чтобы подтвердить, ввести число серверов"});
 }
 function excludeFromDomainRun(serverId){
   const dom=domainOf(serverId),s=servers.find(x=>x.id===serverId);
@@ -9344,8 +9372,18 @@ function excludeFromDomainRun(serverId){
     hwApplyServer(res.done[0]);
     open.add(dom.id);open.add(unallocId(dom.id));sel=s.id;
     resetUnallocDisplay(dom.id);
-    toast(s.name+" исключён из домена");paint();
+    toast(i18n("Консоль исключила сервер «{сервер}» из домена «{домен}»").replace("{сервер}",locName(s)).replace("{домен}",locName(dom)));paint();
+    if(ME_SERVER===serverId)sessionClosedByExclude(s);
   }).catch(e=>toast(problemText(e,s)));
+}
+// Сервер сессии исключён: вход через него больше не действует (Axxon One выгружает интерфейс и просит войти снова).
+// В консоли VMS — на страницу входа; на стенде без адреса входа — окно, «Войти снова» перезагружает страницу
+function sessionClosedByExclude(s){
+  apiLoggedOut=true;
+  const login=pageMeta("consolem-login");
+  if(login){location.assign(new URL(login,location.href).href);return}
+  const again=()=>location.reload();
+  askConfirm("Сессия закрыта",`<p>${i18n("Сервер")} «${escHtml(locName(s))}» ${i18n("вышел из домена. Консоль вошла через этот сервер, поэтому консоль закрыла сессию.")}</p><p>${i18n("Чтобы продолжить, войти через другой сервер домена.")}</p>`,"","Войти снова",again,{html:true,noCancel:true,onCancel:again});
 }
 // Серверы в домен и из него — групповым переносом, как база одним POST /servers/assign: одна операция POST /operations
 // с шагами move (родитель — домен приёма, null — исключить в своём домене; отпечаток — в params шага).
@@ -10971,6 +11009,8 @@ function askConfirm(title,msg,warn,okLabel,onOk,opts={}){
   document.getElementById("confirmWarn").textContent=warn?i18n(warn):"";
   document.getElementById("confirmOk").textContent=opts.rawOk?okLabel:i18n(okLabel||"Удалить");
   document.getElementById("confirmCancel").textContent=i18n(opts.cancelLabel||"Отменить");
+  // noCancel — сообщение с одним действием (сессия закрыта): отменять нечего
+  document.getElementById("confirmCancel").style.display=opts.noCancel?"none":"";
   confirmOkCb=onOk;confirmCancelCb=opts.onCancel||null;
   // Удаление подтверждают числом: сколько объектов удалится. Кнопку не нажать
   // по привычке — сначала надо прочитать, что именно пропадёт.
@@ -30588,6 +30628,8 @@ function ruleFromLink(){
 // Все правки — в черновик, на «сервер» они уходят только через «Применить…».
 // Кто вошёл — с сервера (GET /me): appLoad
 let ACC_ME="";
+// Сервер, через который вошла сессия (Me.serverId, контракт 0.39.0): его исключение из домена закрывает сессию. null — система не сообщает
+let ME_SERVER=null;
 // Доступ к функциям — по группам, как их читает администратор, а не как они
 // лежат в EFeatureAccess.
 // Подписи и группы функций по коду. Что есть в системе — reference.access.features
@@ -42272,9 +42314,17 @@ function bulkMarkSoloCams(){
 }
 // Сервер не удаляют, а исключают из домена — он уходит в «Нераспределённые»
 // и возвращается оттуда же, поэтому сразу и с «Отменить».
+// Сначала окно — что удалят серверы (пробел F85) и закроется ли сессия; затем исключение
 function bulkExcludeServers(){
   closeTreeCtx();
   const list=bulkScopeNodes().filter(n=>handOf(n,"server")&&!isUnallocated(n.id)&&domainOf(n.id));if(!list.length)return;
+  const N=list.length,names=list.slice(0,5).map(s=>`«${escHtml(locName(s))}»`).join(", ")+(N>5?` ${i18n("и ещё")} ${N-5}`:"");
+  const mine=list.some(s=>s.id===ME_SERVER);
+  askConfirm("Исключить серверы из домена?",`<ul class="bk-del"><li>${i18n("Серверы выйдут из доменов")}: ${names}.</li>${excludeLossHtml(list)}<li>${i18n("Останется: серверы в списке нераспределённых серверов своих доменов. Их можно добавить снова.")}</li></ul>`,
+    mine?"Консоль вошла через один из этих серверов. Когда сервер выйдет из домена, консоль закроет сессию. Чтобы продолжить, войти через другой сервер домена.":"",
+    i18n("Исключить"),()=>bulkExcludeServersRun(list),{html:true,typeCount:N,countLabel:"Чтобы подтвердить, ввести число серверов"});
+}
+function bulkExcludeServersRun(list){
   const back=list.map(s=>{const d=domainOf(s.id);return{s,d,i:d.servers.indexOf(s)}});
   serversAssign(back.map(({s,d})=>({s,domainId:d.id,allocated:false}))).then(res=>{
     res.done.forEach(hwApplyServer);
@@ -42283,6 +42333,8 @@ function bulkExcludeServers(){
     treeSel.clear();treeMatchCache.clear();searchMatchCache.clear();
     sel=list[0].id;afterSelChange(null);paint();
     if(!done.length){toast(problemText(res.failed[0]?.code));return}
+    const mineDone=done.find(b=>b.s.id===ME_SERVER);
+    if(mineDone){sessionClosedByExclude(mineDone.s);return}
     toastAction("bkexcl",`${i18n("Исключено из домена серверов")}: ${done.length}`,i18n("Отменить"),()=>{
       // «Отменить» — обратный запрос; серверы встают на прежние места в списке
       serversAssign(done.map(({s,d})=>({s,domainId:d.id,allocated:true}))).then(r2=>{
