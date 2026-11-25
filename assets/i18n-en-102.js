@@ -11,5 +11,16 @@ Object.assign(window.I18N_EN,{
 "из":"of",
 "на диске":"on disk",
 "свободно":"free",
-"Всё свободное":"All free space"
+"Всё свободное":"All free space",
+"Новый том":"New volume",
+"с записями, без форматирования":"with records, no formatting",
+"в плане":"in the plan",
+"Том в плане. Консоль создаст том, когда вы нажмёте «Применить».":"The volume is in the plan. The console creates the volume when you click «Apply».",
+"Папка с записями на сервере":"Folder with records on the server",
+"Выбрать папку на диске сервера":"Select a folder on a server disk",
+"Папка, где лежит файл тома .afs, папка объектного хранилища или корень диска с разделом SolidStore, например D:\\.":"The folder with the .afs volume file, the object storage folder, or the root of a disk with a SolidStore partition, for example D:\\.",
+"Тома с записями в папке":"Volumes with records in the folder",
+"В папке нет томов с записями этого типа.":"The folder has no volumes with records of this type.",
+"Указать папку с записями":"Enter the folder with records",
+"Добавить в план":"Add to the plan"
 });
