@@ -245,7 +245,7 @@ UiCheck(async ({ ok, until, confirmWith }) => {
 
   // Пресеты: движение арендой, пресет запоминается, в правиле — выбор из списка
   const ptz = of("camera", (d) => d.ptz && d.presets?.length);
-  // Пресеты — на вкладке «PTZ», если она есть у камеры (прототип 97), иначе на «Видео»
+  // Пресеты — на вкладке «PTZ», если она есть у камеры (пробел F38), иначе на «Видео»
   open(ptz.id, tabsForHand(ptz).some(([id]) => id === "ptz") ? "ptz" : "vid");
   ok(main().textContent.includes("Пресеты") && main().querySelector("[data-preset]"), "карточка пресетов");
   ok(!!main().querySelector("[data-preset] input") && !!main().querySelector("[data-preset-max]"), "имя вводится, предел номера виден");
@@ -254,7 +254,7 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   const realPut = API.put, realDel = API.del;
   API.put = (p, ...a) => (calls.push("PUT " + p), realPut(p, ...a));
   API.del = (p, ...a) => (calls.push("DEL " + p), realDel(p, ...a));
-  // Кнопка поворота: прежняя [data-ptz] или кнопка джойстика [data-joy-dir] вкладки «Видео»
+  // Кнопка поворота: прежняя [data-ptz] или кнопка джойстика [data-joy-dir] вкладки «PTZ»
   const moving = () => (typeof cvMove !== "undefined" ? cvMove : ptzMove);
   (main().querySelector('[data-ptz="0"]') || main().querySelector('[data-joy-dir="0"]')).dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
   ok(await until(() => calls.includes(`PUT /units/${ptz.id}/ptz`)), "кнопка нажата — аренда");

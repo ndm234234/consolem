@@ -542,6 +542,17 @@ h1{margin:4px 0 10px;font-size:20px;display:flex;align-items:center;gap:10px}
 label{display:block;font-size:12px;color:var(--mu);margin-bottom:4px}
 .ln{display:flex;justify-content:space-between;align-items:center;padding:8px 0}.ln small{display:block;color:var(--mu)}
 .ln.ln-sw{justify-content:flex-start;gap:10px}
+/* Ровная сетка формы (docs/design-rules.md, «Поля формы — на одной линии»): переключатель — строка во всю ширину;
+   у поля ввода подпись, контрол и подсказка — дорожки общей строки сетки (subgrid), поэтому контролы соседей стоят
+   на одной линии, даже если подпись соседа в две строки */
+.g.g-form{row-gap:0;column-gap:16px}
+.g.g-form>.ln-sw{grid-column:1/-1;padding:6px 0 12px}
+.g.g-form>div:not(.ln-sw):not(.sw-grp){display:grid;grid-row:span 3;grid-template-rows:subgrid;row-gap:4px;align-content:start;padding-bottom:12px;min-width:0}
+.g.g-form>div:not(.ln-sw):not(.sw-grp)>label{align-self:end;margin:0}
+.g.g-form>div:not(.ln-sw):not(.sw-grp)>.cs-hint{margin-top:0}
+.g.g-form>.sw-grp{grid-column:1/-1;display:grid;grid-template-columns:fit-content(32em) max-content;column-gap:16px;padding-bottom:12px}
+.g.g-form>.sw-grp>.ln-sw{display:grid;grid-column:1/-1;grid-template-columns:subgrid;align-items:start;padding:6px 0}
+.g.g-form>.sw-grp>.ln-sw>.sw{margin-top:1px}
 .sw{width:36px;height:20px;background:var(--one-control-pressed);border-radius:var(--one-radius-pill);position:relative;flex:none;cursor:pointer}
 .sw:after{content:"";position:absolute;width:16px;height:16px;left:2px;top:2px;background:var(--one-accent-on);border-radius:50%}
 .sw.on{background:var(--bl)}.sw.on:after{left:18px}
@@ -692,9 +703,20 @@ div.exp-ln{display:flex;align-items:center;padding:8px 0}
 .exp-dot{margin-left:auto;font-size:11px;color:var(--mu)}.exp-dot.ok:after,.exp-dot.bad:after{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--one-success-icon)}.exp-dot.bad:after{background:var(--one-danger)}
 .live-row [hidden]{display:none}.live-row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.live-row label{display:inline-flex;gap:6px;align-items:center;margin:0}.live-row select{width:auto}
 .vid{aspect-ratio:16/9;max-width:460px;background:#080b10;border:1px solid var(--ln);border-radius:var(--one-radius-container);display:grid;place-items:center;position:relative;margin:10px 0}
-/* вкладка «Видео» — видео и поворот на одном экране */
+/* вкладки «Видео» и «PTZ» — видео и поворот на одном экране */
 .cv{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;align-items:stretch;margin-bottom:12px;transition:grid-template-columns .3s ease}
 .cv.cv-has-ptz{grid-template-columns:minmax(0,1fr) 300px}
+/* Вкладка «PTZ» камеры (пробел F38) */
+.nt.ptz-to{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.nt.ptz-to .lk{margin-left:auto}
+.nt.ptz-off{display:flex;align-items:center;gap:8px}
+.ptz-dev .cs-dl{margin-top:8px}
+.ptz-test{display:flex;align-items:center;gap:8px;margin-top:12px;flex-wrap:wrap}
+.ptz-sw{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.ptz-fld>label{display:block;margin-bottom:4px}
+.ptz-rbs{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px}.ptz-rb{display:flex;align-items:center;gap:4px}
+.ptz-g{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}
+.ptz-pt{margin:12px 0 0}.ptz-pt .lk{margin-left:4px}
+.ptz-empty .btn{margin-top:8px;display:inline-flex;align-items:center;gap:4px}
 .cv-cq{container:cv / inline-size}
 /* Потоки под видео: строка на поток, выбранная — с меткой и подсветкой, как выбранный пункт меню кита */
 .cv-sps{display:grid;gap:2px;margin-top:10px}.cv-sps-h{font-size:12px;color:var(--mu);margin:0 0 2px}
@@ -766,7 +788,7 @@ div.exp-ln{display:flex;align-items:center;padding:8px 0}
 .cv-warn{margin:8px 0 0;padding-left:18px;font-size:12px;color:var(--one-warning-text)}
 .cv-stub{font-size:12px;border-left:3px dashed var(--one-warning-text);padding-left:8px;margin-top:10px}
 @media(prefers-reduced-motion:reduce){.joy-knob{transition:none}}
-/* Tag&Track Pro: раздел «Слежение Tag&Track Pro» на вкладке «Видео», после «Поворотного устройства» */
+/* Tag&Track Pro: раздел «Слежение Tag&Track Pro» на вкладке «PTZ», после «Патрулирования и предустановок» */
 .tt-top{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px 24px;align-items:start}
 .tt-f{display:grid;gap:4px;font-size:12px;color:var(--mu);margin:0}.tt-f>small{line-height:1.35}
 .tt-f select{field-sizing:content;max-width:100%;justify-self:start}.tt-f .cv-num{justify-self:start}.tt-f .cv-num input{width:72px;flex:none}
@@ -6132,6 +6154,8 @@ function schemaDiffX(live,snap,owner,out){
   Object.keys(a).sort((x,y)=>ord(x)-ord(y)).forEach(f=>{
     if(JSON.stringify(a[f])===JSON.stringify(srv[f]))return;
     const d=dp?.get(f),p=d||ps[f]||{},from=srv[f]===undefined?undefined:cardClone({v:srv[f]}).v,to=a[f]===undefined?undefined:cardClone({v:a[f]}).v;
+    // Поворотное устройство (профиль vms.ptz/1 1.1) — словами блока
+    if(PTZ_PROPS.includes(f)){out.push({node:live,key:"xprops",schemaProp:f,from,to,label:(live!==owner?`«${locName(live)}»: `:"")+`${i18n("Поворотное устройство")}: `+propLabel(p,f),fromT:ptzValText(f,from),toT:ptzValText(f,to)});return}
     // Режим настроек устройства — словами переключателя; нет поля — "device"
     if(f==="streamsMode"){const t=v=>i18n(v==="console"?"включено":"выключено");
       out.push({node:live,key:"xprops",schemaProp:f,from,to,label:(live!==owner?`«${locName(live)}»: `:"")+i18n("Отправлять настройки устройству"),fromT:t(from),toT:t(to)});return}
@@ -14844,7 +14868,7 @@ function tabsForHand(n){
 
   // У папки одно окно содержимого, как в Проводнике: вложенные — переключателем, а добавление — отдельным шагом
   if(handOf(n,"folder"))return[];
-  if(n.type==="camera")return(can("startUnitLive")?[["view","Просмотр"]]:[]).concat([["gen","Подключение"],["vid","Видео"],["rec","Архив"],["det","Детекторы"],["io","Периферия"],["acc","Доступ"]]);
+  if(n.type==="camera")return(can("startUnitLive")?[["view","Просмотр"]]:[]).concat([["gen","Подключение"],["vid","Видео"],["ptz","PTZ"],["rec","Архив"],["det","Детекторы"],["io","Периферия"],["acc","Доступ"]]);
   // Регистратор (прототип 65): вкладки как у камеры. «Каналы» — таблица его камер и каналов вместо списка «Дочерние»
   if(handOf(n,"ipsrv"))return[["gen","Подключение"],["chan","Каналы"]].concat(ipsrvCameras(n).length?[["rec","Архив"]]:[]);
   if(handOf(n,"channel"))return[["gen","Основные"],["kids","Дочерние"]];
@@ -16997,7 +17021,7 @@ function csLockHtml(){const t=i18n("Настройки самой камеры. 
 // Строка есть, только если на вкладке есть настройки самой камеры (блок с замком); на «Подключении» и «Доступе» её нет.
 // У камеры RTSP переключателя нет: консоль не меняет настройки такой камеры
 function csModeLine(n,tabId){
-  if(!["vid","io","det","rec"].includes(tabId))return"";
+  if(!["vid","ptz","io","det","rec"].includes(tabId))return"";
   const rtsp=camRtsp(n);
   if(rtsp)return tabId==="vid"?`<div class="cs-mode">${lu("lock",14)}<span>${i18n("Консоль показывает параметры потоков так, как их сообщила камера. У камеры RTSP их меняют в веб-интерфейсе камеры.")}</span></div>`:"";
   const dev=tabId==="vid"||[...drvGroups(n,tabId).values()].some(fs=>fs.some(([,p])=>p["x-dev"]));
@@ -17284,11 +17308,17 @@ function csOpenTabs(n){
   const out=new Set(),pre=n.id+":";
   csEdit.forEach(x=>{if(!x.startsWith(pre))return;const k=x.slice(pre.length);
     if(k==="ident"||k==="conn"||k==="place")out.add("gen");else if(k==="streams")out.add("vid");
-    else if(k.startsWith("blk:"))out.add(k.split(":")[1]);
+    else if(k.startsWith("blk:"))out.add(k.split(":")[1]);else if(k==="ptzdev")out.add("ptz");
     else if(k.startsWith("drv:")){const p=drvGroupProps(n,k.slice(4)).values().next().value;if(p)out.add(drvTabOf(n,p))}});
   return out;
 }
 // Подсказка поля: у переключателя — под его подписью, у других полей — под полем
+// Два и больше переключателей подряд — один столбик: переключатели стоят на одной вертикали по самой длинной подписи
+// столбика (docs/design-rules.md, «Поля формы — на одной линии»). Одиночный переключатель — своей строкой, без столбика
+function swGroups(cells){
+  let out="",run=[];const flush=()=>{out+=run.length>1?`<div class="sw-grp">${run.join("")}</div>`:run.join("");run=[]};
+  cells.forEach(h=>{if(h.startsWith('<div class="ln ln-sw">'))run.push(h);else{flush();out+=h}});flush();return out;
+}
 function drvHint(html,h){if(!h)return html;return html.startsWith('<div class="ln ln-sw"><div>')?html.replace(/^(<div class="ln ln-sw"><div>[\s\S]*?)<\/div>/,(m,a)=>a+h+"</div>"):html.replace(/<\/div>$/,h+"</div>")}
 function drvSecsHtml(n,tabId){
   const groups=drvGroups(n,tabId),rtsp=camRtsp(n);
@@ -17315,10 +17345,11 @@ function drvGroupCardHtml(n,g,fs,after=""){
   // поэтому он — строка состояния «Сейчас выключено»; в правке остаётся переключатель «Включить»
   const v=(f,p)=>drvVal(n,f,p),main=drvMain(fs),mainOn=main&&!!v(...main),rest=main?fs.filter(x=>x!==main):fs;
   const state=main?`<div class="cs-state">${i18n("Сейчас")} <b>${i18n(mainOn?"включено":"выключено")}</b>${drvChg(n,main[0])?`<span class="cs-chg">${i18n("изменено")}</span>`:""}</div>`:"";
-  const body=ed?`<div class="g">${fs.map(([f,p])=>drvHint(sfFieldHtml("drv",n.id,f,p,v(f,p),{ro:sfReadOnly(p)}),hint(p))).join("")}</div>`
+  const body=ed?`<div class="g g-form">${swGroups(fs.map(([f,p])=>drvHint(sfFieldHtml("drv",n.id,f,p,v(f,p),{ro:sfReadOnly(p)}),hint(p))))}</div>`
     :state+(rest.length?csDl(rest.map(([f,p])=>[propLabel(p,f),p.type==="boolean"?escHtml(v(f,p)?i18n("включено"):i18n("выключено")):sfText(p,v(f,p))==="—"?`<span class="cs-empty">—</span>`:escHtml(sfText(p,v(f,p))),drvChg(n,f)])):"");
   const sum=main?i18n(mainOn?"включено":"выключено"):`${fs.length} ${i18n(plural(fs.length,"параметр|параметра|параметров"))}`;
-  return`<div class="card" data-sec="${escHtml(k)}" data-cs-sum="${escHtml(sum)}"><div class="ch">${escHtml(i18n(g))}${lock?csLockHtml():""}<span class="cs-acts">${acts}</span></div><div class="cb">${body}${after?`<div class="cs-after">${after}</div>`:""}</div></div>`;
+  const isPtz=fs.some(([,p])=>p["x-ui-group"]?.key===PTZ_DRV_GROUP);if(isPtz&&!after)after=ptzDrvAfterHtml(n);
+  return`<div class="card" data-sec="${escHtml(k)}" data-cs-sum="${escHtml(sum)}"><div class="ch">${escHtml(i18n(isPtz?"Патрулирование и предустановки":g))}${lock?csLockHtml():""}<span class="cs-acts">${acts}</span></div><div class="cb">${body}${after?`<div class="cs-after">${after}</div>`:""}</div></div>`;
 }
 
 // ── «Разделы с оглавлением» на любой вкладке камеры ───────────────────────────────────────────────────────
@@ -21047,7 +21078,7 @@ function dzBarHtml(cam,d){
 }
 
 // ── Живое видео ───────────────────────────────────────────────────────────
-// Один клиент на страницу и одна камера: закладка «Просмотр», вкладка «Видео», «Зона» детектора, область титров.
+// Один клиент на страницу и одна камера: закладка «Просмотр», вкладки «Видео» и «PTZ», «Зона» детектора, область титров.
 // POST /devices/{id}/live даёт дверь и токен, офер WHEP идёт прямо на шлюз; порядок повторов и отбоя — V/08.3 Н1.2.
 // Разметка рамки постоянна, состояние пишет liveShow, поэтому смена слов не перерисовывает карточку.
 // Элемент видео один и живёт вне разметки: перерисовка карточки его не убивает, liveSync возвращает его в рамку.
@@ -22827,7 +22858,7 @@ function resInput(opts,cur,on){
   return opts?.length?`<select ${onEv("change",on)}>${[...new Set(["",cur||"",...opts])].map(o=>`<option value="${escHtml(o)}" ${o===(cur||"")?"selected":""}>${escHtml(o||"—")}</option>`).join("")}</select>`
     :`<input value="${escHtml(cur||"")}" placeholder="1920x1080" ${onEv("change",on)}>`;
 }
-// ── Вкладка «Видео»: видео, поток, поворот и пресеты на одном экране ──
+// ── Вкладка «Видео»: видео и потоки (поворот и пресеты — на вкладке «PTZ») ──
 // Слева видео с выбором потока, справа джойстик и пресеты: камеру наводят и запоминают, не теряя кадр из виду.
 // Ниже — «Параметры потоков»: режим «Настройки камеры» (по умолчанию, консоль ничего не меняет в камере) или
 // «Настройки консоли» (консоль передаёт параметры в камеру, как «Send settings to device» в Axxon One).
@@ -22878,15 +22909,143 @@ function cvStreamFps(n,s,i){return s.fps??(i?null:n.fps)}
 function cvKbpsText(k){return k>=1000?`${(k/1000).toFixed(k%1000?1:0).replace(".",",")} ${i18n("Мбит/с")}`:`${k} ${i18n("кбит/с")}`}
 
 function camVideoHtml(n){
-  const ptz=!!n.ptz&&!nodeFieldOff(n,"ptz")&&can("putUnitPtz");
-  // «Авто» нет: в превью одного размера оно прячет, какой поток на экране (как вкладки Main / Second stream в Axxon One)
+  // Поворот, пресеты, туры и слежение — на вкладке «PTZ» (пробел F38). Здесь — видео и потоки
   const cur=(lv?.id===n.id&&lv.stream)||camStreams(n)[0]?.id||"";
   const main=`<div class="card cv-main"><div class="ch cv-h"><span>${i18n("Видео")}</span>${bdg(n)}</div>
-    <div class="cb">${liveFrameHtml(n,ptz?cvSimHtml(n)+cvTourOvHtml(n)+cvOnVidHtml(n):"")}${cvStreamPickHtml(n,cur)}</div></div>`;
-  const side=ptz?`<aside class="card cv-side" data-cv-side><div class="cv-side-in">${cvTourEdit?.id===n.id?"":cvPtzHtml(n)}${cvPresetsHtml(n)}</div></aside>`:"";
-  // .cv-cq — контейнер: узкая область ставит «Поворот» под видео, широкая — рядом. Строка оглавления (csTabWrap) — над видео, как на других вкладках
-  return`<div class="cv-cq"><div class="cv ${ptz?"cv-has-ptz":""} ${ptz&&cvTourEdit?.id===n.id?"cv-editing":""}">${main}${side}</div></div>${cvStreamsCardHtml(n)}`;
+    <div class="cb">${liveFrameHtml(n)}${cvStreamPickHtml(n,cur)}</div></div>`;
+  const to=ptzHas(n)?`<div class="nt ptz-to">${lu("crosshair",14)}<span>${i18n("Поворот, пресеты, туры и слежение настраивают на вкладке «PTZ».")}</span><button type="button" class="lk" ${onEv("click",["goTab","ptz"])}>${i18n("Открыть вкладку «PTZ»")}</button></div>`:"";
+  return`${to}<div class="cv-cq"><div class="cv">${main}</div></div>${cvStreamsCardHtml(n)}`;
 }
+
+// ── Вкладка «PTZ»: поворотное устройство камеры (пробел F38) ──
+// Всё о повороте — на одной вкладке: управление (видео, джойстик, пресеты, туры), «Поворотное устройство»
+// (включено ли, откуда идёт телеметрия), «Патрулирование и предустановки» (параметры драйвера), «Слежение Tag&Track Pro».
+// В Axxon One PTZ — отдельный объект под камерой (Enable, Name, Camera); у Genetec, Avigilon и Milestone — настройки
+// камеры. Консоль показывает его вкладкой камеры: администратор ищет поворот у камеры, а не в дереве.
+// Включение и телеметрия — свойства профиля vms.ptz/1 1.1: ptzEnabled, ptzSource, ptzPort {unitId, port}, ptzProtocol,
+// ptzAddress. Правка идёт черновиком карточки (n.xprops) и планом, как параметры драйвера. Скорость и чётность — у порта:
+// они общие для всех поворотных устройств на одной линии RS-485.
+const PTZ_DRV_GROUP="group.camera.ptz";
+const PTZ_PROPS=["ptzEnabled","ptzSource","ptzPort","ptzProtocol","ptzAddress"];
+// Поле блока → свойство объекта; значение порта в списке — "uid|порт"
+// Умолчания профиля: нет поля — так
+const PTZ_DEF={ptzEnabled:true,ptzSource:"self",ptzAddress:1};
+const PTZ_PROP_OF={on:"ptzEnabled",src:"ptzSource",port:"ptzPort",proto:"ptzProtocol",addr:"ptzAddress"};
+const ptzPortKey=v=>v?.unitId?`${v.unitId}|${v.port}`:"";
+function ptzPortVal(k){const i=String(k||"").indexOf("|");return i<0?null:{unitId:k.slice(0,i),port:k.slice(i+1)}}
+function ptzDevFrom(v){return{on:v.ptzEnabled!==false,src:v.ptzSource||"self",port:ptzPortKey(v.ptzPort),proto:v.ptzProtocol||"",addr:v.ptzAddress??1}}
+// Схема свойства PTZ у вида камеры: подсказки протокола и портов — examples сервера
+function ptzSchema(n,f){return KINDS.get(nodeKind(n))?.schema?.properties?.[f]||{}}
+function ptzProtoOpts(n,cur){const ex=ptzSchema(n,"ptzProtocol").examples||[];return[...(cur?[]:[["","Выбрать протокол"]]),...[...new Set([...ex,cur].filter(Boolean))].map(x=>[x,x])]}
+// Сервер старше профиля 1.1 (полей нет) — блока «Поворотное устройство» нет: правку сервер не примет (правило 2)
+function ptzDevOk(n){return!nodeFieldOff(n,"ptzEnabled")&&!!ptzSchema(n,"ptzEnabled").type}
+// Значения блока: черновик карточки поверх значений сервера; нет поля — умолчание профиля
+function ptzDevOf(n){return ptzDevFrom(drvVals(n))}
+function ptzSrvOf(n){return ptzDevFrom(unitProps.get(n.id)||{})}
+// Камера поворачивается: сама (ptz) или через телеметрию другого устройства
+function ptzHas(n){const d=ptzDevOf(n);return!!n.ptz&&!nodeFieldOff(n,"ptz")||d.src==="port"&&!!d.port}
+function ptzLive(n){return ptzHas(n)&&ptzDevOf(n).on&&can("putUnitPtz")}
+// Порты телеметрии: каналы IP-серверов (RS-485 кодера) и COM-порты серверов. Имена портов — examples схемы
+// (ptzPort.port); выбранный порт есть в списке, даже если его нет в подсказках
+function ptzPorts(n,cur){
+  const ex=n?ptzSchema(n,"ptzPort").properties?.port?.examples||[]:[],com=ex.filter(x=>/^COM/.test(x)),out=[];
+  allNodes().forEach(x=>{
+    if(handOf(x,"channel")){const o=ipsrvOwnerNode(x)||find(x.parentId||"")?.n;out.push([`${x.id}|RS-485`,`${o?.name?o.name+" · ":""}${x.name} (RS-485)`])}
+    else if(handOf(x,"server"))(com.length?com:["COM1"]).forEach(c=>out.push([`${x.id}|${c}`,`${x.name} · ${c}`]));
+  });
+  if(cur&&!out.some(([v])=>v===cur))out.push([cur,ptzPortText(cur)]);
+  return out;
+}
+function ptzPortText(k){
+  if(!k)return"—";const i=k.indexOf("|"),u=find(k.slice(0,i))?.n,port=k.slice(i+1);
+  if(!u)return port;const o=handOf(u,"channel")?ipsrvOwnerNode(u)||find(u.parentId||"")?.n:null;
+  return handOf(u,"channel")?`${o?.name?o.name+" · ":""}${u.name} (${port})`:`${u.name} · ${port}`;
+}
+// Текст значения в строке плана
+function ptzValText(f,v){
+  if(f==="ptzEnabled")return i18n(v===false?"выключен":"включён");
+  if(f==="ptzSource")return i18n(v==="port"?"Порт другого устройства":"Сама камера (ONVIF)");
+  if(f==="ptzPort")return v?ptzPortText(ptzPortKey(v)):i18n("не выбран");
+  if(f==="ptzAddress")return String(v??1);
+  return v==null||v===""?"—":String(v);
+}
+function ptzSrcText(n){const d=ptzDevOf(n);return d.src==="port"?`${ptzPortText(d.port)} · ${d.proto||"—"} · ${i18n("адрес")} ${d.addr}`:i18n("Сама камера (ONVIF)")}
+function camPtzHtml(n){
+  const d=ptzDevOf(n),ed=csEditOn(n.id,"ptzdev");
+  if(!ptzHas(n)&&!ed)return ptzEmptyHtml(n);
+  let ctl="";
+  if(ptzLive(n)&&n.ptz){
+    const cur=(lv?.id===n.id&&lv.stream)||camStreams(n)[0]?.id||"";
+    const main=`<div class="card cv-main"><div class="ch cv-h"><span>${i18n("Управление")}</span>${bdg(n)}</div>
+      <div class="cb">${liveFrameHtml(n,cvSimHtml(n)+cvTourOvHtml(n)+cvOnVidHtml(n))}</div></div>`;
+    const side=`<aside class="card cv-side" data-cv-side><div class="cv-side-in">${cvTourEdit?.id===n.id?"":cvPtzHtml(n)}${cvPresetsHtml(n)}</div></aside>`;
+    ctl=`<div class="cv-cq"><div class="cv cv-has-ptz ${cvTourEdit?.id===n.id?"cv-editing":""}">${main}${side}</div></div>`;
+  }else if(!d.on)ctl=`<div class="nt ptz-off">${lu("triangle-alert",14)}<span>${i18n("PTZ выключен. Оператор не может поворачивать камеру, туры и патрулирование не работают.")}</span></div>`;
+  else if(!n.ptz)ctl=`<div class="nt">${i18n("Управление появится, когда сервер применит подключение поворотного устройства.")}</div>`;
+  return ctl+(ptzDevOk(n)?ptzDevCardHtml(n):"");
+}
+function ptzEmptyHtml(n){
+  if(!ptzDevOk(n))return`<div class="card ptz-empty"><div class="ch">${i18n("Поворотное устройство")}</div><div class="cb"><p>${i18n("Камера не сообщает, что умеет поворачиваться.")}</p></div></div>`;
+  return`<div class="card ptz-empty" data-sec="ptzdev"><div class="ch">${i18n("Поворотное устройство")}</div><div class="cb">
+    <p>${i18n("Камера не сообщает, что умеет поворачиваться.")}</p>
+    <p class="sub">${i18n("Если поворотом управляет другое устройство (порт RS-485 IP-сервера или COM-порт сервера), подключить его здесь.")}</p>
+    <button type="button" class="btn s" ${onEv("click",["ptzConnect",`${n.id}`])}>${lu("plus",14)}${i18n("Подключить поворотное устройство")}</button></div></div>`;
+}
+function ptzDevCardHtml(n){
+  const d=ptzDevOf(n),ed=csEditOn(n.id,"ptzdev"),w=ptzSrvOf(n),chg=f=>w[f]!==d[f];
+  let body;
+  if(!ed){
+    body=`<div class="cs-state">${i18n("Сейчас")} <b>${i18n(d.on?"включено":"выключено")}</b>${chg("on")?`<span class="cs-chg">${i18n("изменено")}</span>`:""}</div>`+
+      csDl([["Телеметрия",escHtml(ptzSrcText(n)),chg("src")||chg("port")||chg("proto")||chg("addr")]])+
+      (d.on&&n.ptz&&n.online!==false?`<div class="ptz-test"><button type="button" class="btn s" ${onEv("click",["ptzTest",`${n.id}`])}>${i18n("Проверить поворот")}</button><span class="sub">${i18n("Камера повернётся на один шаг и вернётся.")}</span></div>`:"");
+  }else{
+    const sw=`<div class="ptz-sw">${accSw(d.on,["ptzSet",`${n.id}`,"on",!d.on],false,i18n("Включить"))}<span>${i18n("Включить")}</span></div>`;
+    const rb=(v,l)=>`<label class="ptz-rb"><input type="radio" name="ptz-src" value="${v}" ${d.src===v?"checked":""} ${onEv("change",["ptzSet",`${n.id}`,"src",v])}>${i18n(l)}</label>`;
+    const srcs=`<div class="ptz-fld"><label>${i18n("Телеметрия")}</label><div class="ptz-rbs">${n.ptz?rb("self","Сама камера (ONVIF)"):""}${rb("port","Порт другого устройства")}</div></div>`;
+    const port=d.src!=="port"?"":`<div class="g ptz-g">
+      <div><label>${i18n("Порт")}</label>${selHtml([["","Выбрать порт"],...ptzPorts(n,d.port)],d.port,["ptzSetV",`${n.id}`,"port",onEv.value],"Порт")}</div>
+      <div><label>${i18n("Протокол")}</label>${selHtml(ptzProtoOpts(n,d.proto),d.proto,["ptzSetV",`${n.id}`,"proto",onEv.value],"Протокол")}</div>
+      <div><label>${i18n("Адрес")}</label><input type="number" min="0" max="255" value="${d.addr}" aria-label="${i18n("Адрес")}" ${onEv("change",["ptzSetV",`${n.id}`,"addr",onEv.value])}></div>
+    </div><small class="sub cs-hint">${i18n("Адрес совпадает с переключателями на поворотном устройстве. Скорость и чётность задают у порта: они общие для всех устройств на линии.")}</small>`;
+    body=sw+srcs+port;
+  }
+  const acts=ed?`<button type="button" class="btn s" ${onEv("click",["ptzCancel",`${n.id}`])}>${i18n("Отменить")}</button><button type="button" class="btn pri s" ${onEv("click",["csEditSet",`${n.id}`,"ptzdev",false])}>${i18n("Добавить в план")}</button>`
+    :`<button type="button" class="btn s" ${onEv("click",["ptzEdit",`${n.id}`])}>${i18n("Изменить")}</button>`;
+  return`<div class="card ptz-dev" data-sec="ptzdev" data-cs-sum="${escHtml(i18n(d.on?"включено":"выключено"))}"><div class="ch">${i18n("Поворотное устройство")}<span class="cs-acts">${acts}</span></div><div class="cb">${body}</div></div>`;
+}
+// Под «Патрулированием и предустановками»: чем патруль отличается от тура — туры стоят рядом, в управлении
+function ptzDrvAfterHtml(n){
+  return`<p class="sub ptz-pt">${i18n("Патрулирование обходит все пресеты по номерам через «Интервал переключения». Свой порядок пресетов, время и скорость на каждом — в турах.")}
+    ${ptzLive(n)&&n.ptz?`<button type="button" class="lk" ${onEv("click",["ptzToTours",`${n.id}`])}>${i18n("Открыть туры")}</button>`:""}</p>`;
+}
+const ptzSnap=new Map();
+// Снимок полей блока в черновике при «Изменить»: «Отменить» возвращает черновик к нему
+function ptzTake(n){const x=n.xprops||{},o={};PTZ_PROPS.forEach(f=>{if(Object.prototype.hasOwnProperty.call(x,f))o[f]=cardClone({v:x[f]}).v});return o}
+function ptzEdit(id){const n=find(id)?.n;if(!n)return;ptzSnap.set(id,ptzTake(n));csEditSet(id,"ptzdev",true)}
+function ptzConnect(id){const n=find(id)?.n;if(!n)return;ptzSnap.set(id,ptzTake(n));ptzPut(n,"src","port");ptzPut(n,"on",true);setD(true);csEditSet(id,"ptzdev",true)}
+function ptzCancel(id){
+  const n=find(id)?.n,w=ptzSnap.get(id);
+  if(n&&w){const x=n.xprops||(n.xprops={});PTZ_PROPS.forEach(f=>{if(f in w)x[f]=w[f];else delete x[f]})}
+  ptzSnap.delete(id);setD(true);csEditSet(id,"ptzdev",false);
+}
+// Значение блока в черновик: равное значению сервера уходит из черновика. Порт выбран впервые — протокол идёт вместе
+// с ним: у протокола нет умолчания, а устройство на линии без него не ответит. Адрес без поля — 1
+function ptzPut(n,k,v){
+  const f=PTZ_PROP_OF[k],x=n.xprops||(n.xprops={}),srv=(unitProps.get(n.id)||{})[f]??PTZ_DEF[f]??null;
+  const val=k==="port"?ptzPortVal(v):v;
+  x[f]=val;if(JSON.stringify(val??null)===JSON.stringify(srv))delete x[f];
+  if(k==="port"&&val&&drvVals(n).ptzProtocol==null){const p0=ptzSchema(n,"ptzProtocol").examples?.[0];if(p0)x.ptzProtocol=p0}
+}
+function ptzSet(id,k,v){const n=find(id)?.n;if(!n)return;ptzPut(n,k,v);setD(true);gear()}
+// Пустое поле адреса — без правки: 0 тоже адрес
+function ptzSetV(id,k,v){if(k==="addr"){const a=parseInt(v,10);if(!Number.isFinite(a)){gear();return}v=Math.max(0,Math.min(255,a))}ptzSet(id,k,v)}
+// «Проверить поворот»: короткая аренда движения и стоп — тот же путь, что у джойстика. Отказ сервера — словами
+async function ptzTest(id){
+  const n=find(id)?.n;if(!n)return;
+  try{await API.put(`/units/${id}/ptz`,{pan:0.3,ttlSec:1});await API.del(`/units/${id}/ptz`);toast(i18n("Камера повернулась на один шаг и вернулась."))}
+  catch(e){toast(`${i18n("Поворот не проверен")}: ${problemText(e,n)}`)}
+}
+function ptzToTours(id){cvSideTabSet(id,"tours");document.querySelector("#main [data-cv-side]")?.scrollIntoView({behavior:"smooth",block:"nearest"})}
 // Под видео — потоки камеры списком: строка на поток (имя, разрешение, к/с, кодек, битрейт), выбранная строка — поток
 // в просмотре. Список растёт вниз, поэтому третий и следующие потоки помещаются при любой ширине
 function cvStreamPickHtml(n,cur){
@@ -24128,7 +24287,7 @@ function otDiffText(n,from,to){
   was.forEach((a,id)=>{if(!now.some(x=>x.id===id))out.push(`${i18n("убрана")} «${a.text}»`)});
   return out.join("; ")
 }
-// ── Раздел «Слежение Tag&Track Pro» на вкладке «Видео»: после «Поворотного устройства (PTZ)» ──
+// ── Раздел «Слежение Tag&Track Pro» на вкладке «PTZ»: после «Патрулирования и предустановок» ──
 // Раздел во всю ширину: режим и время на объекте, карточки обзорных камер (кадр с точками и сеткой, состояние),
 // калибровка — на месте карточек: кадр PTZ и кадр обзорной камеры рядом, под ними таблица точек
 function ttSecHtml(n){
@@ -25337,7 +25496,7 @@ function lanTabOpen(n){
 // Карточки устройства плюс «Правила автоматизации»: где оно используется, видно, не заходя в раздел правил.
 function form(n){
   if(suiPage(n)&&tab==="gen")return suiCardHtml(n);
-  if(n.type==="camera"&&!isSchemaNode(n))return`<div class="cs-cq">${csModeLine(n,tab)}${csTabWrap(n,formBase(n)+(tab==="gen"?"":drvSecsHtml(n,tab)+(tab==="vid"?pmSecHtml(n)+otSecHtml(n)+ttSecHtml(n):"")+ruleUsesFor(n)))}</div>`;
+  if(n.type==="camera"&&!isSchemaNode(n))return`<div class="cs-cq">${csModeLine(n,tab)}${csTabWrap(n,formBase(n)+(tab==="gen"?"":drvSecsHtml(n,tab)+(tab==="vid"?pmSecHtml(n)+otSecHtml(n):tab==="ptz"&&ptzHas(n)?ttSecHtml(n):"")+ruleUsesFor(n)))}</div>`;
   if(handOf(n,"ipsrv")&&!isSchemaNode(n))return`<div class="cs-cq">${ipsModeLine(n,tab)}${csTabWrap(n,formBase(n)+(tab==="gen"?ruleUsesFor(n):""))}</div>`;
   return tab==="topo"&&(handOf(n,"domain")||handOf(n,"server"))?g7Html(n):formBase(n)+ruleUsesFor(n)}
 // Переключатель карточки: вид меняется сразу, значение уходит с «Применить»
@@ -25603,6 +25762,7 @@ function formBase(n){
     const a=arch.find(x=>x.id===n.arch)||null;
     if(tab==="view")return camViewHtml(n);
     if(tab==="vid")return camVideoHtml(n);
+    if(tab==="ptz")return camPtzHtml(n);
     if(tab==="det")return camDetectorsHtml(n);
     if(tab==="io")return periphCardHtml(n);
     if(tab==="acc")return accCamAccessHtml(n);

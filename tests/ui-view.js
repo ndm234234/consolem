@@ -52,7 +52,7 @@ UiCheck(async ({ ok, until, sleep, confirmWith }) => {
     const c0 = lv;
     await open(ptzCam, "view");
     const zin = () => q("[data-cv-onvid] .cv-hold");
-    ok(!!q("[data-cv-onvid]") && !!zin(), "поворот по кадру, как на вкладке «Видео»");
+    ok(!!q("[data-cv-onvid]") && !!zin(), "поворот по кадру, как на вкладке «PTZ»");
     ok(!/Запомнить/.test(document.getElementById("main").textContent), "задания пресетов здесь нет");
     zin().dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }));
     ok(await until(() => puts.length >= 1), "движение: аренда");

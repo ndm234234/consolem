@@ -849,9 +849,9 @@ Tour.add({
     const card = () => document.querySelector(`#main [data-tt-ov-row="${CSS.escape(ovId() || "")}"]`);
     return [
       { ch: { id: "ov", title: "Обзорная камера", why: "Выбрать камеру, которая видит всю зону и находит объекты." },
-        say: "Tag&Track Pro настраивают у PTZ-камеры: вкладка «Видео», раздел «Слежение Tag&Track Pro» сразу после «Поворотного устройства».",
+        say: "Tag&Track Pro настраивают у PTZ-камеры: вкладка «PTZ», раздел «Слежение Tag&Track Pro» после «Патрулирования и предустановок».",
         before: async () => {
-          goApp("hw"); pick(PTZ, { tab: "vid" });
+          goApp("hw"); pick(PTZ, { tab: "ptz" });
           // Дерево приходит частями: ждём, пока обзорная камера попадёт в список кандидатов, и рисуем раздел заново
           for (let k = 0; k < 100 && !(document.querySelector("#main .tt-sec") && ovId()); k++) await wait(50);
           const n = find(PTZ)?.n; if (n) ttRepaint(n);

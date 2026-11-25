@@ -1,11 +1,11 @@
-/* Вкладка «PTZ» камеры (пробел F38 против Axxon One, прототип 97): управление, пресеты и «Патрулирование и предустановки»
+/* Вкладка «PTZ» камеры (пробел F38 против Axxon One, из прототипа 97): управление, пресеты и «Патрулирование и предустановки»
    на своей вкладке, на «Видео» — только ссылка. Блок «Поворотное устройство» — свойства профиля vms.ptz/1 1.1 (ptzEnabled,
    ptzSource, ptzPort, ptzProtocol, ptzAddress): правка идёт черновиком карточки, план показывает «было → станет»,
    «Отменить» и «Сбросить» возвращают значения, «Применить» пишет их на сервер. Блок параметров PTZ драйвера правится без
    «Отправлять настройки устройству» (полей x-dev в нём нет). На странице без вкладки «PTZ» сценарий ничего не проверяет.
-   Запуск: python3 tools/check_ui.py --page index_97_obekt-ptz.html tests/ui-ptz-vkladka.js */
+   Запуск: python3 tools/check_ui.py tests/ui-ptz-vkladka.js */
 UiCheck(async ({ ok, until }) => {
-  if (typeof camPtzHtml !== "function") { ok(true, "вкладки «PTZ» на странице нет: сценарий прототипа 97"); return; }
+  if (typeof camPtzHtml !== "function") { ok(true, "вкладки «PTZ» на странице нет: прототип скопирован с index.html до переноса"); return; }
   const CAM = "30000013-0000-4000-8000-000000000000"; // «1. Главный вход», PTZ
   const main = () => document.getElementById("main");
   const card = () => main().querySelector('[data-sec="ptzdev"]');
