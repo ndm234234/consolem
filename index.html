@@ -2629,6 +2629,7 @@ html[data-theme="light"] .busy-chip{background:var(--one-control-hover);color:va
 .cp-group.off{opacity:.5;cursor:default}
 .cp-det-list{flex:1;min-height:0;overflow:auto;border:1px solid var(--ln);border-radius:var(--one-radius-container);padding:2px 4px;scrollbar-width:thin}
 .cp-det{display:flex;gap:8px;align-items:flex-start;padding:5px 4px;cursor:pointer;border-radius:var(--one-radius-control);font-size:12px}
+.cp-det[hidden],.dc-what2>[hidden]{display:none}
 .cp-det:hover{background:var(--one-control-hover)}
 .cp-det input{margin-top:2px}
 .cp-det-nm{flex:1;min-width:0}
@@ -5095,6 +5096,20 @@ const DET_KIND_CODE=Object.fromEntries(Object.entries(DET_KIND_RU).map(([k,v])=>
 // Несовместимые виды (с 0.21.0) — x-conflicts у analyticsKind вида детектора: пакеты распознавания лиц TV, VA и VL не работают вместе
 // на одном сервере. Сервер отказывает сам (409 BUSY, reason: incompatible); консоль заранее показывает причину
 const DET_AK={meta:"Мета-детектор",faceTV:"Лица TV",faceVA:"Лица VA",faceVL:"Лица VL"};
+// Семейства серверных детекторов Axxon One (контракт 0.40.0, vms.detector/1 1.3): значения analyticsKind вида детектора
+// с подписью из x-enum-labels, события камеры — x-events. Консоль добавляет их в DET_AK при чтении /kinds (detAkFamSet)
+const DET_AK_OWN=new Set(["tracker","neural",...Object.keys(DET_AK)]),DET_AK_EV={};
+function detAkFamSet(ks){
+  ks.forEach(k=>{const p=k.schema?.properties?.analyticsKind;if(!p)return;
+    (p.enum||[]).filter(v=>!DET_AK_OWN.has(v)).forEach(v=>{const l=p["x-enum-labels"]?.[v];DET_AK[v]=l?textOf(l):v;DET_AK_EV[v]=(p["x-events"]||{})[v]||[]})});
+}
+// Подпись под семейством в мастере: какие события камеры поднимает детектор
+function detAkEvText(ak){
+  const ev=DET_AK_EV[ak];if(!ev)return"";
+  if(!ev.length)return i18n("Нет событий для правил");
+  const cam=[...KINDS.values()].find(k=>(k.implements||[]).includes("vms.camera/1"));
+  return`${i18n("События")}: ${ev.map(c=>{const e=(cam?.events||[]).find(x=>x.id===c);return e?textOf(e.label):c}).join(", ")}`;
+}
 // Вид аналитики есть в мастере, только если схема вида детектора на сервере знает это значение analyticsKind
 // n — узел детектора или, в мастере создания, камера, на которой консоль создаст детектор (null — любая камера):
 // схема — вида детектора, которого консоль создаст под этой камерой (kindToCreate)
@@ -8755,6 +8770,7 @@ function autoRefLists(ref,kinds){
   // Несовместимые виды аналитики: x-conflicts {значение: [значения]} у analyticsKind видов детектора
   const cf=ks.map(k=>props(k).analyticsKind?.["x-conflicts"]).filter(Boolean);
   detAkClashSet(cf.flatMap(x=>Object.entries(x).map(([analyticsKind,conflicts])=>({analyticsKind,conflicts}))));
+  detAkFamSet(ks.filter(k=>im(k,"vms.detector/1")));
   // Виды событий сценариев — ScenarioDoc.kinds при чтении документа (scenLoad): новое чтение /kinds их не стирает
   // Раскладки и мониторы правил: enum и x-enum-labels в schema поля layoutId действия client.layout и параметра
   // monitorId команды объекта (camera.wall). Имя — в правиле, id — на сервере
@@ -18683,7 +18699,7 @@ const DW_CLS={person:"Человек",car:"Машина",bike:"Велосипе�
 const DW_SUBC=["#c084fc","#f59e0b","#22d3ee","#f472b6"];
 // ── Поддетекторы, как в Axxon One: детектор находит объекты, поддетектор решает, когда сработать ──
 // Поддетектор — объект вида subdet под детектором (профиль vms.subdetector/1): свой uid, версия, события и удаление
-const DW_SUBP=new Set(["motion","tracker","neural"]);
+const DW_SUBP=new Set(["motion","tracker","neural","operatorControl"]);
 const DW_SUBK=[
   ["line","Пересечение линии","Объект пересёк линию в выбранном направлении."],
   ["enter","Вход в область","Объект вошёл в область."],
@@ -18697,7 +18713,18 @@ const DW_SUBK=[
   ["mask","Маскирование треков","Детектор не ведёт объекты в области. Поддетектор не создаёт событий."]];
 const DW_SUBN=Object.fromEntries(DW_SUBK.map(([k,n])=>[k,n]));
 LU["list-tree"]='<path d="M21 12h-8"/><path d="M21 6H8"/><path d="M21 18h-8"/><path d="M3 6v4c0 1.1.9 2 2 2h3"/><path d="M3 10v6c0 1.1.9 2 2 2h3"/>';
-function dwSubKinds(k){return DW_SUBK.filter(([x])=>x!=="abandoned"||k==="tracker")}
+// Виды поддетектора — из GET /units/{uid}/creatable (schema вида subdet, суженная под детектор, контракт 0.40.0).
+// Ответа ещё нет или сервер схему не сузил — прежнее правило: «Оставленный предмет» только у трекера
+const DW_SUB_OK=new Map();
+function dwSubKinds(k,id){const ok=DW_SUB_OK.get(id);return DW_SUBK.filter(([x])=>ok?ok.includes(x):x!=="abandoned"||k==="tracker")}
+async function dwSubOkLoad(id){
+  if(!id||DW_SUB_OK.has(id))return;
+  try{
+    const row=((await API.get(`/units/${id}/creatable`)).items||[]).find(x=>isSubdetKind(x.kind));
+    const en=row?.schema?.properties?.subdetectorKind?.enum;
+    if(Array.isArray(en)){DW_SUB_OK.set(id,en);if(dw.subNew&&sel===id)gear()}
+  }catch(e){}
+}
 // Поддетекторы есть у видов из DW_SUBP, если сервер знает вид с vms.subdetector/1 и его можно создавать
 function dwSubsOk(){return profileKinds("vms.subdetector/1").some(k=>kindCan(k,"create"))}
 // Вид поддетектора — по профилю; описаний нет — по коду subdet
@@ -18775,6 +18802,7 @@ function dwKindOf(d){
   const code=DET_KIND_CODE[d.kind];
   if(code==="other"&&(d.analyticsKind==="tracker"||d.analyticsKind==="neural"))return d.analyticsKind;
   if(code==="other"&&d.analyticsKind==="meta")return"meta";
+  if(code==="other"&&d.analyticsKind==="operatorControl")return"operatorControl";
   if(code==="other"&&DET_AK_CLASH[d.analyticsKind])return"face";
   return DW_CODES.has(code)?code:"other";
 }
@@ -19659,7 +19687,7 @@ function dwSubBodyHtml(id,k,s){
 }
 // Выбор типа: 10 типов — список с поиском, как у шаблонов правил
 function dwSubNewHtml(id,k){
-  const L=dwSubKinds(k);
+  const L=dwSubKinds(k,id);
   return`<div class="dw-new" data-dw-new>
     <div class="dw-new-h"><b>${i18n("Создать поддетектор")}</b><span class="sub">${i18n("Выбрать тип. Консоль добавит поддетектор в черновик. Детектор начнёт работать с ним после «Применить».")}</span></div>
     <input type="search" class="dw-new-q" placeholder="${i18n("Найти тип поддетектора…")}" aria-label="${i18n("Найти тип поддетектора")}" ${onEv("input",["dwSubFilter",onEv.value])} ${onEv("keydown",["dwSubKey",id,onEv.event])}>
@@ -20015,7 +20043,7 @@ function dwSubGrp(id,sid){const s=dwSubOf(id,sid);if(s)s.grp=!s.grp;dw.subAdv=tr
 function dwSubName(id,sid,v){const s=dwSubOf(id,sid);if(!s)return;s.name=v;const b=dwRoot()?.querySelector(`[data-dw-sub="${CSS.escape(sid)}"] .dw-sub-t b`);if(b)b.textContent=v;dwSoon()}
 function dwSubClass(id,sid,cl){const s=dwSubOf(id,sid);if(!s)return;const i=s.classes.indexOf(cl);if(i<0)s.classes.push(cl);else s.classes.splice(i,1);gear()}
 function dwSubSel(sid){dw.subSel=dw.subSel===sid?null:sid;dw.subAdv=false;if(/^sub2?:/.test(dw.sel||"")){dw.sel=null;dw.pt=null}gear();renderTree()}
-function dwSubNewOpen(){dw.subNew=!dw.subNew;gear();if(dw.subNew)setTimeout(()=>dwRoot()?.querySelector(".dw-new-q")?.focus(),0)}
+function dwSubNewOpen(){dw.subNew=!dw.subNew;if(dw.subNew)dwSubOkLoad(sel);gear();if(dw.subNew)setTimeout(()=>dwRoot()?.querySelector(".dw-new-q")?.focus(),0)}
 function dwSubAdd(id,kind){
   const c=dwC(detNodeOf(id)),n=c.subs.filter(s=>s.kind===kind).length+1,sid="s"+Date.now()%1e7;
   c.subs.push(dwSubNew(kind,`${i18n(DW_SUBN[kind])}${n>1?" "+n:""}`,sid));
@@ -20077,7 +20105,7 @@ function dwSubTreeOn(did,sid){closeTreeCtx();dwSubPick(did,sid);dwSubOn(did,sid)
 function dwSubTreeDel(did,sid){closeTreeCtx();dwSubPick(did,sid);dwSubDel(did,sid)}
 function dwSubCreate(did){
   const d=detNodeOf(did);if(!d||dw.sent[did])return;
-  dw.id=did+dwKindOf(d);dw.sel=null;dw.tool=null;dw.pt=null;dw.poly=null;dw.subSel=null;dw.subNew=true;
+  dw.id=did+dwKindOf(d);dw.sel=null;dw.tool=null;dw.pt=null;dw.poly=null;dw.subSel=null;dw.subNew=true;dwSubOkLoad(did);
   if(sel===did){gear();renderTree()}else pick(did);
 }
 function dwLand(){
@@ -20913,21 +20941,26 @@ function dcRuleOk(gs){
 function dcTrigs(plan,tpl){
   const by=new Map();
   plan.filter(p=>p.fit.length).forEach(p=>{
-    const o=tpl.find(t=>t.key===p.key)?.o,tr=o?detTrig(o.kind,o.template):detTrig(DET_KIND_CODE[p.key.slice(2)]||"other");
-    const k=tr.kind+"|"+matchKey(tr.match);
-    if(!by.has(k))by.set(k,{...tr,names:[],cams:new Set()});
-    const g=by.get(k);g.names.push(p.name);p.fit.forEach(c=>g.cams.add(c.id));
+    const o=tpl.find(t=>t.key===p.key)?.o,ev=p.key.startsWith("a:")?DET_AK_EV[p.key.slice(2)]:null;
+    // Семейство с x-events: правило слушает события камеры этого семейства (sub unit), а не det/other.
+    // Семейство без событий (тепловая карта, контроль оператора) событий правилу не даёт
+    const trs=ev?ev.map(code=>({sub:"unit",kind:code,match:{}})):[o?detTrig(o.kind,o.template):detTrig(DET_KIND_CODE[p.key.slice(2)]||"other")];
+    trs.forEach(tr=>{
+      const k=(tr.sub||"det")+"|"+tr.kind+"|"+matchKey(tr.match);
+      if(!by.has(k))by.set(k,{...tr,names:[],cams:new Set()});
+      const g=by.get(k);g.names.push(p.name);p.fit.forEach(c=>g.cams.add(c.id));
+    });
   });
   return[...by.values()];
 }
-function dcRuleWhen(g){return{sub:"det",kind:g.kind,ref:refMake([...g.cams],[]),match:{...g.match}}}
+function dcRuleWhen(g){return{sub:g.sub||"det",kind:g.kind,ref:refMake([...g.cams],[]),match:{...g.match}}}
 function dcRuleCands(gs){
-  return rules.filter(r=>r.start==="event"&&gs.some(g=>r.when.some(t=>t.sub==="det"&&t.kind===g.kind&&matchKey(t.match)===matchKey(g.match))));
+  return rules.filter(r=>r.start==="event"&&gs.some(g=>r.when.some(t=>t.sub===(g.sub||"det")&&t.kind===g.kind&&matchKey(t.match)===matchKey(g.match))));
 }
 // Виды, которых в выбранном правиле нет: их камеры в него не встанут
 function dcPickMiss(gs,id){
   const r=rules.find(x=>x.id===id);
-  return r?gs.filter(g=>!r.when.some(t=>t.sub==="det"&&t.kind===g.kind&&matchKey(t.match)===matchKey(g.match))):[];
+  return r?gs.filter(g=>!r.when.some(t=>t.sub===(g.sub||"det")&&t.kind===g.kind&&matchKey(t.match)===matchKey(g.match))):[];
 }
 // Простой вид — тот же черновик правила dc.custom: выбор только заполняет его «То». Подробный вид правит то же самое
 function dcActNew(k,c){
@@ -21051,6 +21084,10 @@ function renderDetCreate(){
   const lockWhy=key=>lock&&dc.ready?dcWhy(lock,key)||"":"";
   const plan=dcPlan(cams,tpl),total=plan.reduce((s,p)=>s+p.fit.length,0),camsHit=new Set(plan.flatMap(p=>p.fit.map(c=>c.id))).size;
   const gs=dcTrigs(plan,tpl);
+  // Выбранные детекторы не поднимают событий (тепловая карта, контроль оператора): правило не из чего строить —
+  // консоль выбирает «Ничего не делать» и возвращает прежний выбор, когда событие появится
+  if(dc.ready&&total&&!gs.length&&dc.rule.mode!=="none"){dc.rule.was=dc.rule.mode;dc.rule.mode="none"}
+  else if(gs.length&&dc.rule.was){dc.rule.mode=dc.rule.was;delete dc.rule.was}
   if(gs.length&&dc.rule.pick&&!dcRuleCands(gs).some(x=>x.id===dc.rule.pick))dc.rule.pick="";
   // Подходящих правил не осталось: варианта «Добавить к правилу» нет, выбранным остаётся то, что он и делал бы
   if(gs.length&&dc.rule.mode==="add"&&!dcRuleCands(gs).length)dc.rule.mode="none";
@@ -21061,10 +21098,12 @@ function renderDetCreate(){
     // Виды аналитики (C28, C29). Семейство, которое мешает выбранному здесь или работающему на сервере камеры из «Добавить к камере», недоступно; у остальных камер причина — в шаге камер (dcWhy)
     const akOff=ak=>{const cl=lock?detAkClash(ak,null,false,detSrvOf(lock)):[];if(cl.length)return detAkClashText(ak,cl);const hit=Object.keys(DET_AK_CLASH).find(x=>x!==ak&&dc.items.has("a:"+x)&&(DET_AK_CLASH[ak]||[]).includes(x));return hit?`${i18n("Нельзя вместе с")} «${i18n(DET_AK[hit])}»`:""};
     const akSmall={meta:"Ищет сцену по текстовому описанию",faceTV:"Пакет распознавания лиц TV",faceVA:"Пакет распознавания лиц VA",faceVL:"Пакет распознавания лиц VL"};
-    const srvItems=[...DET_TYPES.map(k=>dcItemRow("s:"+k,i18n(k),"","","",lockWhy("s:"+k))),...(DET_TYPES.length?Object.keys(DET_AK).filter(ak=>detAkOn(ak,lock)):[]).map(ak=>{const off=akOff(ak)||lockWhy("a:"+ak);return dcItemRow("a:"+ak,i18n(DET_AK[ak]),akOff(ak)||i18n(akSmall[ak]),"","",off)})];
+    const srvItems=[...DET_TYPES.map(k=>dcItemRow("s:"+k,i18n(k),"","","",lockWhy("s:"+k))),...(DET_TYPES.length?Object.keys(DET_AK).filter(ak=>detAkOn(ak,lock)):[]).map(ak=>{const off=akOff(ak)||lockWhy("a:"+ak);return dcItemRow("a:"+ak,i18n(DET_AK[ak]),akOff(ak)||(akSmall[ak]?i18n(akSmall[ak]):detAkEvText(ak)),"","",off)})];
     const noSrv=`<p class="sub">${i18n("Сервер не сообщил виды детекторов.")}</p>`;
     const camItems=tpl.map(t=>{const m=[...t.models];return dcItemRow(t.key,t.o.name,lock?"":`${t.cams} ${i18n(plural(t.cams,"камера умеет|камеры умеют|камер умеют"))}${m.length?" · "+m.slice(0,2).join(", ")+(m.length>2?` +${m.length-2}`:""):""}`,"","",clash(t.key)||lockWhy(t.key))});
-    return`<section class="cp-col"><div class="cp-scroll dc-what2" data-cp-scroll="i">
+    // Длинный список выбора — с полем поиска (docs/design-rules.md, «Длинный список — с поиском»), как у шаблонов правил
+    const qOn=srvItems.length+camItems.length>=CBX_MIN;
+    return`<section class="cp-col">${qOn?`<input type="text" class="rl-tpl-q" placeholder="${i18n("Найти вид детектора…")}" aria-label="${i18n("Найти вид детектора")}" autocomplete="off" value="${escHtml(dc.wq||"")}" ${onEv("input",["dcWhatType",onEv.value])}>`:""}<p class="sub rl-tpl-none" data-dcw-none hidden>${i18n("Ничего не найдено")}</p><div class="cp-scroll dc-what2" data-cp-scroll="i" data-dcw>
       <div><div class="dc-sec">${i18n("Серверные")}<small>${i18n("Подойдёт любая камера")}</small></div>${srvItems.join("")||noSrv}</div>
       <div><div class="dc-sec">${i18n("Встроенные")}<small>${i18n(lock?"Работают на камере: то, что камера умеет":"Работают на камере: только на камерах, которые это умеют")}</small></div>${dc.ready?(camItems.join("")||`<p class="sub">${i18n(lock?"Камера не сообщила встроенные детекторы.":"Камеры не сообщили встроенные детекторы.")}</p>`):`<p class="sub">${i18n("Читаю, что умеют камеры…")}</p>`}</div>
     </div></section>`;
@@ -21118,7 +21157,7 @@ function renderDetCreate(){
       ${same?`<p class="sub dc-note">${i18n("У камер разные кадры. Консоль поставит зону на то же место кадра, а не на тот же объект. Консоль не заменит зоны, нарисованные вручную.")}</p>`:""}
     </div></div></section>`;
   };
-  const secRule=()=>`<section class="cp-col"><div class="cp-scroll" data-cp-scroll="r">${dc.ready?dcRuleHtml(gs):`<p class="sub">${i18n("Читаю, что умеют камеры…")}</p>`}</div></section>`;
+  const secRule=()=>`<section class="cp-col"><div class="cp-scroll" data-cp-scroll="r">${dc.ready&&!gs.length?`<p class="sub">${i18n("Выбранные детекторы не поднимают событий для правил. Консоль не создаст правило.")}</p>`:dc.ready?dcRuleHtml(gs):`<p class="sub">${i18n("Читаю, что умеют камеры…")}</p>`}</div></section>`;
   // Последний шаг и есть план: ничего ещё не записано, здесь видно всё, что произойдёт
   const secEnd=()=>{
     const rows=dcRowsOf(plan),noLine=rows.filter(dcNeedsLine).length;
@@ -21149,7 +21188,20 @@ function renderDetCreate(){
     `<button type="button" class="btn" ${onEv("click",["dcCancel"])}>${i18n("Отмена")}</button><span class="tfoot-gap"></span><span class="dc-sum">${sum}</span>${dc.step?`<button type="button" class="btn" ${onEv("click",["dcStepGo",`${dc.step-1}`])}>${i18n("Назад")}</button>`:""}${go}`,`bbox-wide bbox-copy dc-box dc-w-${fitKey}`);
   dcFit(fitWas,fitKey);
   requestAnimationFrame(()=>{document.querySelectorAll("#bmBody [data-cp-scroll]").forEach(el=>{if(keep[el.dataset.cpScroll])el.scrollTop=keep[el.dataset.cpScroll]});document.querySelector("#bmBody .dc-z-row.on")?.scrollIntoView({block:"nearest"})});
+  if(dc.wq&&st.k==="what")dcWhatFilter(dc.wq);
   dcSave();liveSync();dcFrzApply();
+}
+// Поиск по видам детекторов на шаге «Что создать»: прячет строки, выбор и черновик не меняет
+function dcWhatType(v){dc.wq=v;typeLater("dcWhat",()=>dcWhatFilter(dc.wq),!String(v||"").trim())}
+function dcWhatFilter(v){
+  const host=document.querySelector("#bmodal [data-dcw]");if(!host)return;
+  let shown=0;
+  [...host.children].forEach(col=>{
+    let n=0;
+    col.querySelectorAll(".cp-det").forEach(el=>{const on=matchesText(String(v||"").trim(),el.textContent);el.hidden=!on;if(on)n++});
+    col.hidden=!n;shown+=n;
+  });
+  const no=document.querySelector("#bmodal [data-dcw-none]");if(no)no.hidden=shown>0;
 }
 // Стоп-кадр и скрытие зоны (CX3) на шаге «Зоны»
 function dcFrzHtml(draw){
@@ -21201,7 +21253,7 @@ function dcRuleAdd(gs,id){
   const r=rules.find(x=>x.id===id);if(!r)return;
   const next=ruleClone(r);let added=0;
   gs.forEach(g=>{
-    const t=next.when.find(w=>w.sub==="det"&&w.kind===g.kind&&matchKey(w.match)===matchKey(g.match));if(!t)return;
+    const t=next.when.find(w=>w.sub===(g.sub||"det")&&w.kind===g.kind&&matchKey(w.match)===matchKey(g.match));if(!t)return;
     const fresh=[...g.cams].filter(c=>!ruleRefCovers(t.ref,c,triggerKind(t).devTypes));if(!fresh.length)return;
     const p=refParts(t.ref);t.ref=refMake([...p.inc,...fresh],p.ex);added+=fresh.length;
   });
