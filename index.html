@@ -29371,8 +29371,11 @@ function schBlank(o={}){
   return s;
 }
 // Ошибки, из-за которых сохранить нельзя.
+// Название расписания — не длиннее 100 знаков, как у Axxon One (web-configurator TimeZoneEditor). В контракте предела нет: решение владельца макета (F108)
+const SCH_NAME_MAX=100;
 function schErr(s){
   if(!String(s.name||"").trim())return"Указать название расписания";
+  if([...String(s.name).trim()].length>SCH_NAME_MAX)return"Название расписания — не длиннее 100 знаков";
   const bad=l=>(l||[]).some(iv=>!/^\d\d:\d\d$/.test(iv[0]||"")||!/^\d\d:\d\d$/.test(iv[1]||""));
   if(s.kind==="week"&&s.week.some(bad))return"У интервала не задано начало или конец";
   if(s.kind==="cycle"){if(!s.cycle.start)return"Указать дату начала цикла";if(s.cycle.days.some(bad))return"У интервала не задано начало или конец"}
@@ -29569,7 +29572,7 @@ function schKindBody(e){
 function schMainCard(e){
   const s=e.d,k=e.k,ro=schRO(e),kind=SCH_KINDS.find(x=>x.id===s.kind);
   const seg=s.builtin?"":`<div class="rl-seg sch-kinds" role="radiogroup" aria-label="${i18n("Тип расписания")}">${SCH_KINDS.map(x=>`<button type="button" role="radio" aria-checked="${s.kind===x.id}" class="${s.kind===x.id?"on":""}" ${ro?"disabled":""} ${onEv("click",["schSetKind",`${k}`,`${x.id}`])}>${i18n(x.name)}</button>`).join("")}</div>`;
-  return card("Расписание",`<div class="g"><div><label for="schName-${k}">${i18n("Название")}</label><input type="text" id="schName-${k}" value="${escHtml(s.name)}" ${ro?"disabled":""} ${onEv("change",["schSetName",`${k}`,onEv.value])}></div><div></div></div>
+  return card("Расписание",`<div class="g"><div><label for="schName-${k}">${i18n("Название")}</label><input type="text" id="schName-${k}" maxlength="${SCH_NAME_MAX}" value="${escHtml(s.name)}" ${ro?"disabled":""} ${onEv("change",["schSetName",`${k}`,onEv.value])}></div><div></div></div>
     ${seg?`<label class="sch-lb">${i18n("Тип")}</label>${seg}`:""}
     <p class="sub sch-hint">${i18n(kind?kind.hint:s.kind==="never"?"Встроенное расписание «Никогда».":"")}</p>
     ${schKindBody(e)}`);
@@ -29758,7 +29761,7 @@ function schMore(ev,id){
 function schDup(id){
   if(ruleGuard(()=>schDup(id)))return;
   const s=schById(id);if(!s)return;
-  const c=schBlank({from:s.builtin?null:s,name:`${s.name} (${i18n("копия")})`});
+  const sfx=` (${i18n("копия")})`,c=schBlank({from:s.builtin?null:s,name:[...s.name].slice(0,SCH_NAME_MAX-[...sfx].length).join("")+sfx});
   if(s.builtin){c.kind=s.kind==="never"?"week":s.kind;if(s.kind==="never")c.week=schW({})}
   delete c.own;
   API.post("/schedules",schBody(c)).then(x=>{

@@ -2115,6 +2115,7 @@ window.I18N_EN={
 "Эти записи создаёт сервер. Их нельзя удалить":"The server makes these records. You cannot delete them",
 "Указать имя домена":"Enter a domain name",
 "Имя домена — не длиннее":"The domain name must not be longer than",
+"Название расписания — не длиннее 100 знаков":"The schedule name must not be longer than 100 characters",
 "знаков":"characters",
 "знака":"characters",
 "Указать IP, порт и производителя":"Enter the IP, port and vendor",
