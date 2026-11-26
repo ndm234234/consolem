@@ -37672,8 +37672,7 @@ function volFieldsHtml(a,v,set){
         v.mode==="part"?i18n("занимает весь диск. Неотформатированный диск форматируют отдельно кнопкой «Форматировать» у тома"):i18n("на диске с файловой системой. Для FAT32 — не больше 4 ГБ"))}
       ${v.mode==="part"?pfw("volume","sizeBytes",fldRo("Объём",d?.size||v.size)):dir("сервер создаёт файл тома в этой папке")+gb("Размер файла","не меньше 1 ГБ")}</div>`;
   }
-  if(k==="nas")return`<div class="g" style="margin-top:10px">${nasPathField({val:v.disk,on:[...set,"disk"],own:a.id,kind:"archive."+a.kind,sid:a.server,scope:set[0]==="anSet"?"an:new":set[0]==="avVol"?"av:new":"vol:"+v.id,saved:set[0]==="volSet"?volSavedDisk(v)||"":"",attr:vf("disk"),hint:"\\\\nas01\\vms или //nas01/vms"})}${gb("Размер файла","том сетевого хранилища — это всегда файл")}
-      ${inp("Пользователь","user","text","домен\\имя или компьютер\\имя")}${inp("Пароль","pass","password")}</div>`;
+  if(k==="nas")return`<div class="g" style="margin-top:10px">${inp("Пользователь","user","text","домен\\имя или компьютер\\имя")}${inp("Пароль","pass","password")}${nasPathField({val:v.disk,on:[...set,"disk"],own:a.id,kind:"archive."+a.kind,sid:a.server,scope:set[0]==="anSet"?"an:new":set[0]==="avVol"?"av:new":"vol:"+v.id,saved:set[0]==="volSet"?volSavedDisk(v)||"":"",attr:vf("disk"),hint:"\\\\nas01\\vms или //nas01/vms"})}${gb("Размер файла","том сетевого хранилища — это всегда файл")}</div>`;
   const p=a.provider||"s3";
   if(p==="azure")return`<div class="g" style="margin-top:10px">${inp("Учётная запись хранилища","account")}${inp("Ключ доступа","secret","password")}${inp("Контейнер","bucket","text","создаётся заранее в портале Azure")}${inp("Путь в контейнере","path")}${gb("Объём")}</div>`;
   const keys=`${inp("Access key ID","keyId")}${inp("Secret access key","secret","password")}`;
@@ -38092,7 +38091,7 @@ function anFoundHtml(a,addr){
   if(addr==="nas"){
     const v=an.vol,inp=(l,k,t,h)=>`<div${k==="user"||k==="pass"?pfa("volume",k==="user"?"login":"password"):""}><label>${i18n(l)}</label><input type="${t||"text"}" data-nas="${k}" value="${escHtml(v[k]??"")}" ${onEv("input",["anSet",k,onEv.value,true])} ${k==="disk"||k==="user"||k==="pass"?onEv("change",["anNasPath"]):""}>${h?`<div class="bk-hint">${i18n(h)}</div>`:""}</div>`;
     const list=anNasList(),wait=protoNasEntry("archive."+an.kind,v,an.server);
-    return`<div class="g" style="margin-top:10px">${nasPathField({val:v.disk,on:["anSet","disk"],change:["anNasPath"],check:false,kind:"archive."+an.kind,sid:an.server,scope:"an-found",hint:"папка, где лежат файлы томов .afs"})}${inp("Пользователь","user","text","домен\\имя или компьютер\\имя")}${inp("Пароль","pass","password")}</div>
+    return`<div class="g" style="margin-top:10px">${inp("Пользователь","user","text","домен\\имя или компьютер\\имя")}${inp("Пароль","pass","password")}${nasPathField({val:v.disk,on:["anSet","disk"],change:["anNasPath"],check:false,kind:"archive."+an.kind,sid:an.server,scope:"an-found",hint:"папка, где лежат файлы томов .afs"})}</div>
       <div class="an-vol-h">${i18n("Тома с записями в папке")}<span class="sub">${list.length} ${i18n(plural(list.length,"том|тома|томов"))}</span></div>
       ${list.length?`<div class="an-founds">${list.map(f=>protoFoundRow(f,an.found===f.key,["anPickFound"],an.server?locName(find(an.server)?.n||{}):"",v.disk)).join("")}</div>`:foundWait(wait)||`<div class="bk-hint">${i18n(String(v.disk||"").trim()&&String(v.user||"").trim()?"В папке нет томов с записями этого типа.":"Указать путь к папке и пользователя. Сервер покажет тома в папке.")}</div>`}
       ${protoFoundNote()}`;
@@ -38269,7 +38268,7 @@ function avPaint(){
   else if(nas){
     const inp=(l,k,t,h)=>`<div${k==="user"||k==="pass"?pfa("volume",k==="user"?"login":"password"):""}><label>${i18n(l)}</label><input type="${t||"text"}" data-nas="${k}" value="${escHtml(av.nas[k]??"")}" ${onEv("input",["avNas",k,onEv.value])} ${k==="disk"||k==="user"||k==="pass"?onEv("change",["avNasPath"]):""}>${h?`<div class="bk-hint">${i18n(h)}</div>`:""}</div>`;
     const list=avList(a),wait=protoNasEntry(nodeKind(a),av.nas,a.server);
-    body+=`<div class="g" style="margin-top:10px">${nasPathField({val:av.nas.disk,on:["avNas","disk"],change:["avNasPath"],check:false,kind:nodeKind(a),sid:a.server,scope:"av-found",hint:"папка, где лежат файлы томов .afs"})}${inp("Пользователь","user","text","домен\\имя или компьютер\\имя")}${inp("Пароль","pass","password")}</div>
+    body+=`<div class="g" style="margin-top:10px">${inp("Пользователь","user","text","домен\\имя или компьютер\\имя")}${inp("Пароль","pass","password")}${nasPathField({val:av.nas.disk,on:["avNas","disk"],change:["avNasPath"],check:false,kind:nodeKind(a),sid:a.server,scope:"av-found",hint:"папка, где лежат файлы томов .afs"})}</div>
       <div class="an-vol-h">${i18n("Тома с записями в папке")}<span class="sub">${list.length} ${i18n(plural(list.length,"том|тома|томов"))}</span></div>
       ${list.length?`<div class="an-founds">${list.map(f=>protoFoundRow(f,av.found===f.key,["avPick"],sname,av.nas.disk)).join("")}</div>`:foundWait(wait)||`<div class="bk-hint">${i18n(String(av.nas.disk||"").trim()&&String(av.nas.user||"").trim()?"В папке нет томов с записями этого типа.":"Указать путь к папке и пользователя. Сервер покажет тома в папке.")}</div>`}${protoFoundNote()}`;
   }else{
