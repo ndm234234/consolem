@@ -3492,7 +3492,7 @@ body.pj-hdlog .gojump{display:none}
 @container (max-width:900px){.vw-b{grid-template-columns:minmax(0,1fr)}.vw-b .vw-panel{max-height:none;position:static}}
 @media (prefers-reduced-motion:reduce){.vw *{transition:none!important}}
 /* Окно детектора (прототип 55): слева кадр и превью сработок, справа настройки по типам */
-.dw{--dw-in:#4ea1ff;--dw-ex:#ff7a7a;--dw-ln:#fde047}
+.dw{--dw-in:#4ea1ff;--dw-ex:#ff7a7a;--dw-ln:#fde047;--dw-cal:#5eead4}
 .dw-stub{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 10px;margin:0 0 10px;border:1px dashed var(--one-warning-icon);border-radius:var(--one-radius-container);background:var(--one-warning-bg);color:var(--one-warning-text);font-size:12px}
 /* Столбец настроек — доля ширины карточки (на широком экране шире), разделитель тянется мышью и стрелками */
 .dw-grid{display:grid;grid-template-columns:minmax(0,1fr) 12px var(--dw-rw,clamp(320px,44%,calc(100% - 400px)));column-gap:2px;row-gap:12px;align-items:start}
@@ -3537,6 +3537,8 @@ body.dw-resizing,body.dw-resizing *{cursor:col-resize!important;user-select:none
 .dw-a.sel{stroke-width:1.1}
 .dw-sa{fill:var(--c);fill-opacity:.12;stroke:var(--c);stroke-width:.6;stroke-dasharray:2 1;cursor:move}
 .dw-l{stroke-width:1.1;cursor:move}
+/* Область калибровки скорости: штриховой четырёхугольник на дороге */
+.dw-cal{fill:var(--dw-cal);fill-opacity:.1;stroke:var(--dw-cal);stroke-width:.6;stroke-dasharray:2 1;cursor:move}
 .dw-sz{fill:none;stroke:#fde047;stroke-width:.6;stroke-dasharray:1.5 1;cursor:move}
 .dw-hd{fill:#fff;stroke:var(--c,var(--bl));stroke-width:.7;cursor:grab}
 .dw-hd:hover{r:2.3}
@@ -3768,6 +3770,17 @@ body.dw-resizing,body.dw-resizing *{cursor:col-resize!important;user-select:none
 .dw-csub-r:hover{background:var(--one-control-hover)}
 .dw-csub-r small{color:var(--mu)}
 .dw-adv{padding:10px 14px}
+/* Тонкая настройка и вход во «Все параметры» */
+.dw-fine>summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px}
+.dw-fine>summary::-webkit-details-marker{display:none}
+.dw-fine>summary::before{content:"";width:6px;height:6px;border-right:1.5px solid var(--mu);border-bottom:1.5px solid var(--mu);transform:rotate(-45deg);transition:transform .15s;flex:none}
+.dw-fine[open]>summary::before{transform:rotate(45deg)}
+.dw-fine>summary h4{margin:0}
+.dw-fine-lead{margin:8px 0 12px}
+.dw-fine-n{margin-left:8px;font:var(--one-type-caption);color:var(--bl);font-weight:400}
+.dw-all{display:flex;align-items:center;gap:12px;border:1px solid var(--ln);border-radius:var(--one-radius-container);margin:12px 0 0;padding:12px 16px}
+.dw-all-t{flex:1;min-width:0}.dw-all-t p{margin:4px 0 0}
+.dw-all .btn{flex:none}
 .dw-adv summary{cursor:pointer;font-weight:600;font-size:12px}
 .dw-adv-b{margin-top:10px}
 .dw-vs{display:inline-flex;align-items:center;gap:6px;margin-left:auto}
@@ -18632,7 +18645,8 @@ function detZoneCardHtml(cam,d){
 }
 // Параметры детектора: где работает, вид, чувствительность по диапазону шаблона, поток и настройки серверного
 // noSensFld — чувствительность показывает окно детектора своим ползунком: поля здесь нет
-function detFieldsHtml(cam,d,nameLb,noSensFld){
+// basic — только имя, размещение, тип и чувствительность: остальное в «Тонкой настройке» и «Все параметры»
+function detFieldsHtml(cam,d,nameLb,noSensFld,basic){
   const opt=detOption(cam,d),draft=!hwVer.has(d.id),opts=cam?.detectorOptions||[];
   const place=draft&&opts.length?`<div><label>${i18n("Размещение")}</label><select ${onEv("change",["detPlace",`${cam.id}`,`${d.id}`,onEv.value])}><option value="" ${d.template?"":"selected"}>${i18n("Серверный")}</option>${opts.map(o=>`<option value="${escHtml(o.template)}" ${o.template===d.template?"selected":""}>${escHtml(i18n("Встроенный"))}: ${escHtml(o.name)}</option>`).join("")}</select></div>`
     :pfw(d,"builtin",fldRo("Размещение",i18n(d.builtin?"Встроенный":"Серверный")));
@@ -18640,6 +18654,8 @@ function detFieldsHtml(cam,d,nameLb,noSensFld){
   const noSens=!!opt&&opt.sensitivityMin==null;
   const sens=noSens||noSensFld?"":pfw(d,"sensitivity",fld(opt?`Чувствительность`:"Чувствительность",d.sens||""));
   const streams=!d.builtin&&cam?pfw(d,"stream",sl("Поток",camStreams(cam).map(s=>s.id),d.stream||camStreams(cam)[0].id)):"";
+  if(basic)return`<div class="g">${fld(nameLb,locName(d))}${place}${kind}${sens}</div>
+    ${opt&&!noSens&&!noSensFld?`<p class="sub">${i18n("Чувствительность")}: ${opt.sensitivityMin}–${opt.sensitivityMax}</p>`:""}${cam?detServerNoteHtml(cam,d):""}`;
   return`<div class="g">${fld(nameLb,locName(d))}${place}${kind}${sens}${streams}</div>
     ${opt&&!noSens&&!noSensFld?`<p class="sub">${i18n("Чувствительность")}: ${opt.sensitivityMin}–${opt.sensitivityMax}</p>`:""}
     ${d.builtin?"":`<div style="margin-top:10px"${pfa(d,"params")}>${fld("Настройки детектора",d.params||"")}</div><div${pfa(d,"labels")}><label class="sub" style="display:block;margin-top:10px">${i18n("Метки серверов: где считать")}</label>${chipsHtml(refLabels,d.labels,"listToggle",`${d.id}`,"labels")}</div>`}
@@ -18830,7 +18846,9 @@ function dwFromUnit(d){
     min:(os.min||[0,0]).slice(),max:(os.max||[1,1]).slice(),minAt:[.1,.97],maxAt:[.5,.97],
     sens:has?+d.sens:sd,sensNo:!has,sensDef:sd,delay:d.minDurationSec??0,classes:dwCls(d.classes),conf:d.confidence??60,
     count:d.crowdMin??4,hold:d.crowdHoldSec??10,stay:d.stillSec??60,pw:[pw.min??0,pw.max??1],arc:dwArcOf(d),
-    subs:dwSubUnits(d).filter(s=>DW_SUBN[s.props?.subdetectorKind]).map(dwSubFromUnit)};
+    subs:dwSubUnits(d).filter(s=>DW_SUBN[s.props?.subdetectorKind]).map(dwSubFromUnit),
+    // Тонкая настройка: поля схемы как есть; нет поля — undefined
+    fine:Object.fromEntries(["cameraPosition","detectUnattendedObjects","minTriggers","scanWindow","similarSearch","similarTrackSec","humanSize","speedCalibArea","analysisFps","alarmEndSec","frameWidth","abandonedSensitivity","objectSpeed"].map(f=>[f,d[f]==null?undefined:JSON.parse(JSON.stringify(d[f]))]))};
 }
 // Поддетектор: объект → модель. Нет поля — без группы, направление в обе стороны, скорость 0–500, смещение 15 × 10 %
 function dwSubFromUnit(n){
@@ -18866,6 +18884,8 @@ function dwDetProps(c,k,d){
   if(k==="abandoned"&&dwHas(d,"stillSec"))o.stillSec=c.stay;
   // «Архив и показ» (0.13.0): уходит только значение не по умолчанию; возврат к умолчанию снимает поле (null в правке)
   if(c.arc)DW_ARC_F.forEach(([f,,,def])=>{if(DW_ARC_K.has(k)&&dwHas(d,f)&&c.arc[f]!==def)o[f]=c.arc[f]});
+  // Тонкая настройка: поле семейства уходит, когда задано; снятое — null
+  if(c.fine)DW_FINE.forEach(x=>{if(x.t==="stream"||!x.fam.includes(k)||!dwHas(d,x.f))return;const v=c.fine[x.f];if(v!==undefined)o[x.f]=v;else if(d[x.f]!=null)o[x.f]=null});
   return o;
 }
 function dwSubProps(s,k){
@@ -19126,11 +19146,9 @@ function dwGripKey(g,e){
   dwRwSet(g,f,true);
 }
 function dwGripReset(g){dwRwSet(g,null,true)}
-function dwStubHtml(d,k){
-  return`<div class="dw-stub"><b>${i18n("Заглушка превью.")}</b>
-    <span>${i18n("Видео, объекты и сработки создаёт браузер. Сервер их не отдаёт.")}</span>
-    <span class="dw-vs">${i18n("Время превью")} <span class="dw-seg">${[1,10,60].map(v=>`<button type="button" class="${dw.tsp===v?"on":""}" ${onEv("click",["dwTsp",v])}>×${v}</button>`).join("")}</span></span></div>`;
-}
+// Плашки «Заглушка превью» и выбора времени превью (×1, ×10, ×60) нет — окно показывает живое видео,
+// как будет с сервером. Время превью идёт ×1 (dw.tsp)
+function dwStubHtml(d,k){return""}
 function dwToolsHtml(d,k){
   if(k==="other"||k==="meta")return"";
   const b=(t,l,ic)=>`<button type="button" class="btn s${dw.tool===t?" on":""}" ${onEv("click",["dwTool",t])}>${ic}${i18n(l)}</button>`;
@@ -19139,6 +19157,7 @@ function dwToolsHtml(d,k){
   if(k!=="linecross")out.push(b("in","Зона",sw("var(--dw-in)")));
   if(dwHas(d,"extraZones"))out.push(b("ex","Исключение",sw("var(--dw-ex)")));
   if(k==="linecross")out.push(b("line","Линия",sw("var(--dw-ln)")));
+  if(dwCalOn(d))out.push(`<button type="button" class="btn s${dw.tool==="cal"?" on":""}" data-dw-cal-tool ${onEv("click",["dwCalDraw",d.id,1])}>${sw("var(--dw-cal)")}${i18n("Калибровка скорости")}</button>`);
   return`<span class="sub dw-tools-l">${i18n("Нарисовать")}:</span>`+out.join("");
 }
 // Стоп-кадр (CX3): время превью стоит, кадр не меняется, пока рисуют зону
@@ -19150,6 +19169,7 @@ function dwLayHtml(k){
   return`<span class="sub dw-tools-l">${i18n("Показать")}:</span>`+b("geo","Зоны","Показать зоны и линии на кадре. Скрыть, чтобы видеть сцену под ними.")+b("obj","Трекинг","Показать рамки объектов, которые нашёл детектор.")+b("trk","Треки","Показать траектории объектов за последние секунды.");
 }
 function dwHintText(k){
+  if(dw.poly?.type==="cal")return"Щёлкнуть по кадру четыре угла участка дороги по порядку. Потом углы и всю область можно перетащить. Правый щелчок убирает последнюю точку, Esc отменяет.";
   if(dw.poly)return"Чтобы добавить точку, щёлкнуть по кадру. Чтобы замкнуть зону, щёлкнуть первую точку, дважды щёлкнуть или нажать Enter. Правый щелчок убирает последнюю точку, Esc отменяет зону.";
   if(dw.tool==="in")return"Протянуть мышью по кадру, чтобы нарисовать прямоугольник. Чтобы нарисовать многоугольник, щёлкать по кадру точку за точкой. Детектор будет искать объекты внутри зоны.";
   if(dw.tool==="ex")return"Протянуть мышью по кадру, чтобы нарисовать прямоугольник. Чтобы нарисовать многоугольник, щёлкать по кадру точку за точкой. Детектор не будет замечать объекты в этой зоне.";
@@ -19200,7 +19220,7 @@ function dwMidSvg(pts,b,col){
 }
 // Многоугольник, который пользователь рисует щелчками: точки, стороны и сторона к курсору
 function dwPolySvg(){
-  const p=dw.poly,col=p.type==="ex"?"var(--dw-ex)":"var(--dw-in)",all=p.q?[...p.pts,p.q]:p.pts,close=p.pts.length>=3;
+  const p=dw.poly,col=p.type==="ex"?"var(--dw-ex)":p.type==="cal"?"var(--dw-cal)":"var(--dw-in)",all=p.q?[...p.pts,p.q]:p.pts,close=p.type!=="cal"&&p.pts.length>=3;
   return`<polyline class="dw-pl" points="${all.map(dwP).join(" ")}" style="--c:${col}"/>`+
     p.pts.map((q,i)=>`<circle class="dw-pd${i===0&&close?" first":""}" cx="${(q[0]*DW_X).toFixed(1)}" cy="${(q[1]*DW_Y).toFixed(1)}" r="${i===0&&close?2.2:1.3}" style="--c:${col}"/>`).join("");
 }
@@ -19218,6 +19238,13 @@ function dwGeoSvg(d){
     if(!dw.tool){if(dw.sel===a.id)h+=dwMidSvg(a.pts,`area:${a.id}`,col);a.pts.forEach((p,i)=>h+=dwHdSvg(`area:${a.id}`,i,p,col,1.7))}
   });
   if(c.line&&!zOff)h+=dwLineSvg(c.line,c.dir,"line","var(--dw-ln)");
+  // Область калибровки скорости (speedCalibArea): углы тянут по одному, область — целиком
+  const cal=dwCalOn(d)&&c.fine?.speedCalibArea;
+  if(cal){
+    const top=cal.reduce((m,p)=>p[1]<m[1]?p:m,cal[0]);
+    h+=`<polygon class="dw-cal" data-b="cal" points="${cal.map(dwP).join(" ")}"/><text class="dw-tx" x="${(top[0]*DW_X+1.5).toFixed(1)}" y="${(top[1]*DW_Y+4).toFixed(1)}" style="fill:var(--dw-cal)">${i18n("Калибровка скорости")}</text>`;
+    if(!dw.tool)cal.forEach((p,i)=>h+=`<circle class="dw-hd" data-h="cal:${i}" cx="${(p[0]*DW_X).toFixed(1)}" cy="${(p[1]*DW_Y).toFixed(1)}" r="1.7" style="--c:var(--dw-cal)"><title>${i18n("Угол")} ${i+1}</title></circle>`);
+  }
   if(dw.poly)h+=dwPolySvg();
   const subSel=c.subs.some(s=>s.id===dw.subSel)?dw.subSel:null;
   if(DW_SUBP.has(k))c.subs.forEach((s,i)=>{
@@ -19722,6 +19749,8 @@ function dwDiffRows(d){
   if(c.hold!==s.hold)row(["hold"],"Группа стоит дольше",`${s.hold} ${i18n("с")}`,`${c.hold} ${i18n("с")}`);
   if(c.stay!==s.stay)row(["stay"],"Предмет лежит дольше",`${s.stay} ${i18n("с")}`,`${c.stay} ${i18n("с")}`);
   nnDiffRows(d,dwKindOf(d),row);
+  // Тонкая настройка: поле семейства — строка плана, когда значение изменилось
+  if(c.fine&&s.fine)DW_FINE.forEach(x=>{if(x.t==="stream"||!x.fam.includes(dwKindOf(d)))return;if(ne(c.fine[x.f],s.fine[x.f])){const t=v=>{const o={...c.fine};c.fine[x.f]=v;const r=dwFineText(d,x);c.fine=o;return r};row(["fine"],x.l,t(s.fine[x.f]),dwFineText(d,x))}});
   if(dwKindOf(d)==="meta")metaDiffRows(d,row);
   if(c.arc&&s.arc)DW_ARC_F.forEach(([f,l])=>{if(dwArcHas(d,f)&&c.arc[f]!==s.arc[f])row(["arc"],l,i18n(s.arc[f]?"вкл":"выкл"),i18n(c.arc[f]?"вкл":"выкл"))});
   if(ne(c.subs,s.subs)){
@@ -19928,6 +19957,153 @@ function faceClashHtml(d){
   const fix=!me&&on.length?`${i18n("Чтобы включить этот детектор, сначала выключить или удалить детекторы")} «${other}».`:me&&on.length?`${i18n("Оставить одно семейство: выключить или удалить детекторы")} «${other}» ${i18n("или этот детектор.")}`:`${i18n("Детектор")} «${other}» ${i18n("сейчас не работает. Консоль не даст включить его, пока работает этот детектор.")}`;
   return`<div class="nt bk-warn fam-nt" role="status"><b>${head}</b><p>${body}</p><p>${fix}</p><p>${i18n("Детекторы")} «${other}»: ${links}</p></div>`;
 }
+// ── Тонкая настройка детектора и вход во «Все параметры» (пробел C1) ──
+// Окно детектора показывает сразу частые поля семейства. Глубокие поля семейства — в группе «Тонкая настройка»:
+// свёрнутая группа в окне с правкой на месте (как «Дополнительные настройки» в Axxon One), а не список с
+// текущими значениями и переход во «Все параметры» к полю — пользователь выбрал A (раунд 2). Редкое для всех семейств (метки серверов, тревожные виды,
+// строка настроек) — только во «Все параметры»; вход туда — видимая карточка внизу окна.
+// Задержка конца тревоги, кадров в секунду, сжатие кадра, вторая чувствительность и скорость объекта — с профиля
+// vms.detector/1 1.4 (alarmEndSec, analysisFps, frameWidth, abandonedSensitivity, objectSpeed); нет поля в схеме вида — поле не видно
+const DW_FINE=[
+  {f:"stream",l:"Поток",fam:["motion","tracker","neural","linecross","lpr","crowd","abandoned","operatorControl"],t:"stream",help:"Детектор разбирает этот поток камеры. Поток с меньшим разрешением снижает нагрузку на сервер."},
+  {f:"analysisFps",l:"Кадров в секунду",fam:["neural"],basic:true,t:"num",min:0.1,max:100,step:0.1,def:6,unit:"кадр/с",help:"Нейросеть разбирает столько кадров в секунду. Для быстрых объектов, например машин, нужно 12 и больше."},
+  {f:"analysisFps",l:"Кадров в секунду",fam:["motion","tracker"],t:"num",min:0.1,max:100,step:0.1,def:12,unit:"кадр/с",help:"Детектор разбирает столько кадров в секунду. Меньше кадров — меньше нагрузка на сервер."},
+  {f:"alarmEndSec",l:"Задержка конца тревоги",fam:["motion","abandoned","crowd"],t:"num",min:0,max:600,def:10,unit:"с",help:"Тревога кончается через столько секунд после конца события. Короткая пауза не делит тревогу на две."},
+  {f:"frameWidth",l:"Сжатие кадра",fam:["motion","tracker","neural"],t:"sel",def:1280,opts:[["0","Без сжатия"],["1920","До 1920 точек по ширине"],["1280","До 1280 точек по ширине"],["640","До 640 точек по ширине"]],help:"Сервер уменьшает кадр перед разбором. Меньше кадр — меньше нагрузка, но детектор хуже видит мелкие объекты."},
+  {f:"cameraPosition",l:"Положение камеры",fam:["tracker","neural"],t:"sel",def:"wall",opts:[["wall","На стене"],["ceiling","На потолке"]],help:"От положения камеры зависит, как поддетекторы считают смещение объекта."},
+  {f:"detectUnattendedObjects",l:"Искать оставленные предметы",fam:["tracker"],t:"sw",def:true,help:"Трекер ищет оставленные и унесённые предметы для поддетекторов «Оставленный предмет»."},
+  {f:"abandonedSensitivity",l:"Чувствительность к оставленным предметам",fam:["tracker"],t:"num",min:1,max:100,def:9,unit:"",dep:"detectUnattendedObjects",help:"Чем выше значение, тем меньший предмет трекер замечает."},
+  {f:"objectSpeed",l:"Скорость объекта",fam:["tracker","neural","linecross"],t:"rng",min:0,max:500,def:[0,500],unit:"усл. ед.",help:"Детектор пропускает объекты медленнее и быстрее. Скорость — в условных единицах. Подобрать её помогает поиск в архиве."},
+  {f:"minTriggers",l:"Срабатываний до трека",fam:["neural"],t:"num",min:2,max:100,def:6,unit:"раз",help:"Сколько раз подряд нейросеть должна найти объект, чтобы трекер завёл трек. Больше значение — меньше ложных треков."},
+  {f:"scanWindow",l:"Сканирующее окно",fam:["neural"],t:"wh",unit:"пикс.",help:"Сервер разбирает кадр окнами этого размера, чтобы найти мелкие и дальние объекты. Пустые поля выключают окно."},
+  {f:"similarSearch",l:"Поиск похожих",fam:["neural"],t:"sw",def:false,help:"Трекер собирает признаки людей для поиска похожих. Нагрузка на сервер растёт."},
+  {f:"similarTrackSec",l:"Время обработки похожих треков",fam:["neural"],t:"num",min:0,max:3600,def:0,unit:"с",dep:"similarSearch"},
+  {f:"humanSize",l:"Размер человека",fam:["crowd"],t:"whf",unit:"% кадра",help:"Средний размер человека в кадре. По нему детектор считает людей в группе. Пустые поля выключают калибровку."},
+  {f:"speedCalibArea",l:"Область калибровки скорости",fam:["lpr"],t:"quad",help:"Четырёхугольник на дороге. По нему сервер оценивает скорость машины. Без области скорость не оценивается."}
+];
+// Только во «Все параметры»: редкое для всех семейств
+const DW_ALL_ONLY=[["labels","Метки серверов"],["alarmKinds","Что считать тревогой"],["params","Строка настроек детектора"]];
+// Встроенный детектор считает на камере: серверной тонкой настройки у него нет
+function dwFineList(d,k,basic){return d.builtin?[]:DW_FINE.filter(x=>x.fam.includes(k)&&!!x.basic===!!basic&&(x.t==="stream"?dwHas(d,"stream")&&!!find(d.id)?.p:dwHas(d,x.f)))}
+function dwFineGet(d,x){
+  if(x.t==="stream")return d.stream||"";
+  const c=dwC(d),v=c.fine?.[x.f];
+  // objectSpeed в API — {min, max}, поле окна — пара [не меньше, не больше]; нет части — без ограничения
+  return x.t==="rng"&&v?[v.min??x.def[0],v.max??x.def[1]]:v;
+}
+// Значение не по умолчанию: поле задано и отличается от умолчания
+function dwFineChanged(d,x){
+  const v=dwFineGet(d,x);
+  if(x.t==="stream")return false;
+  if(v===undefined||v===null)return false;
+  return JSON.stringify(v)!==JSON.stringify(x.def);
+}
+function dwFineText(d,x){
+  const v=dwFineGet(d,x),pc=n=>Math.round(n*1000)/10;
+  if(x.t==="stream")return v||i18n("основной");
+  if(v===undefined||v===null){
+    if(x.def===undefined)return i18n(x.t==="quad"?"не задана":"выключено");
+    return x.t==="sel"?i18n(x.opts.find(o=>o[0]===String(x.def))?.[1]||""):x.t==="sw"?i18n(x.def?"вкл":"выкл"):x.t==="rng"?i18n("без ограничения"):`${x.def} ${i18n(x.unit||"")}`.trim();
+  }
+  if(x.t==="sel")return i18n(x.opts.find(o=>o[0]===String(v))?.[1]||String(v));
+  if(x.t==="sw")return i18n(v?"вкл":"выкл");
+  if(x.t==="rng")return v[0]===x.def[0]&&v[1]===x.def[1]?i18n("без ограничения"):`${v[0]}–${v[1]} ${i18n(x.unit)}`;
+  if(x.t==="wh")return`${v.width} × ${v.height} ${i18n("пикс.")}`;
+  if(x.t==="whf")return`${pc(v[0])} × ${pc(v[1])} % ${i18n("кадра")}`;
+  // Углы в процентах кадра: план видит, что область сдвинули, а не только «задана»
+  if(x.t==="quad")return v.map(p=>`${pc(p[0])}×${pc(p[1])}`).join(", ")+" %";
+  return`${v} ${i18n(x.unit||"")}`.trim();
+}
+// Значение по умолчанию у поля, которого нет на сервере, черновик не держит: иначе план покажет пустую строку
+function dwFinePut(d,f,v){
+  const c=dwC(d),x=DW_FINE.find(y=>y.f===f&&y.fam.includes(dwKindOf(d)))||DW_FINE.find(y=>y.f===f);c.fine=c.fine||{};
+  const none=v===null||v===undefined||x.def!==undefined&&JSON.stringify(v)===JSON.stringify(x.def);
+  c.fine[f]=none&&dwSaved(d).fine?.[f]===undefined?undefined:v;
+}
+function dwFineSet(id,f,v){
+  const d=detNodeOf(id);if(!d)return;
+  if(f==="stream"){d.stream=v;setD(true)}
+  else{const x=DW_FINE.find(y=>y.f===f);dwFinePut(d,f,x?.t==="sel"&&typeof x.def==="number"?Number(v):v)}// frameWidth в API — число
+  gear();
+}
+function dwFineNum(id,f,v,el){
+  // Поле с шагом (кадров в секунду) берёт дробь, остальные — целое
+  if(v===""||v==null)return;let n=el?.step&&el.step!=="any"&&+el.step<1?Math.round(+v*10)/10:Math.round(+v);if(!Number.isFinite(n))return;
+  if(el&&el.min!==""&&n<+el.min)n=+el.min;if(el&&el.max!==""&&n>+el.max)n=+el.max;
+  const d=detNodeOf(id);if(!d)return;
+  dwFinePut(d,f,n);
+  dwSoon();dwFineCountPaint();
+}
+function dwFineSw(id,f){const d=detNodeOf(id),x=DW_FINE.find(y=>y.f===f);const v=dwFineGet(d,x);dwFineSet(id,f,!(v??x.def))}
+// Пара «не меньше – не больше» уходит, только когда обе границы заданы и меньшая не выше большей: пока человек
+// набирает число, черновик пару не берёт и другую границу не трогает. Граница, равная умолчанию, не уходит
+function dwFineRng(id,f){
+  const d=detNodeOf(id),x=DW_FINE.find(y=>y.f===f),ins=[...(dwRoot()?.querySelectorAll(`[data-dw-fine="${f}"] input`)||[])];
+  if(!d||ins.length!==2||ins.some(el=>el.value===""))return;
+  const a=ins.map(el=>Math.max(x.min,Math.min(x.max,Math.round(+el.value))));
+  if(a.some(n=>!Number.isFinite(n))||a[0]>a[1])return;
+  const o={...(a[0]!==x.def[0]?{min:a[0]}:{}),...(a[1]!==x.def[1]?{max:a[1]}:{})};
+  dwFinePut(d,f,Object.keys(o).length?o:null);
+  dwSoon();dwFineCountPaint();
+}
+// Пара (ширина и высота) уходит только целиком: половина пары остаётся в поле ввода, черновик её не берёт.
+// Обе пустые — поле снято
+function dwFineWh(id,f,key,v){
+  const d=detNodeOf(id),root=dwRoot(),ins=[...(root?.querySelectorAll(`[data-dw-fine="${f}"] input`)||[])].map(i=>i.value===""?null:+i.value);
+  if(ins.length!==2)return;
+  const[a,b]=ins,ok=x=>x!=null&&x>0;
+  if(a==null&&b==null)dwFinePut(d,f,null);
+  else if(ok(a)&&ok(b))dwFinePut(d,f,f==="scanWindow"?{...(dwC(d).fine?.scanWindow||{}),width:Math.round(a),height:Math.round(b)}:[Math.min(1,a/100),Math.min(1,b/100)]);
+  else return;
+  dwSoon();dwFineCountPaint();
+}
+// «Убрать область» — снять speedCalibArea; нарисовать — dwCalDraw (четыре щелчка по кадру)
+function dwFineQuad(id){
+  const d=detNodeOf(id);if(!d||dwRoRefuse(id))return;
+  dwFinePut(d,"speedCalibArea",null);gear();
+}
+// Поле тонкой настройки: правка в окне (вариант A)
+function dwFineFieldHtml(d,x){
+  const id=d.id,v=dwFineGet(d,x),lab=`<label>${i18n(x.l)}</label>`,help=x.help?dwHelp(x.help):"",at=` data-dw-fine="${x.f}"`;
+  if(x.dep){const dx=DW_FINE.find(y=>y.f===x.dep);if(!(dwFineGet(d,dx)??dx.def))return""}
+  if(x.t==="stream"){const cam=find(d.id)?.p,ss=cam?camStreams(cam):[];
+    return`<div class="dw-f"${at}${pfa(d,"stream")}>${lab}<select ${onEv("change",["dwFineSet",id,x.f,onEv.value])}>${ss.map(s=>`<option value="${escHtml(s.id)}" ${s.id===(d.stream||ss[0]?.id)?"selected":""}>${escHtml(s.name||s.id)}</option>`).join("")}</select>${help}</div>`}
+  if(x.t==="sel")return`<div class="dw-f"${at}>${lab}<select ${onEv("change",["dwFineSet",id,x.f,onEv.value])}>${x.opts.map(([o,t])=>`<option value="${o}" ${o===String(v??x.def)?"selected":""}>${i18n(t)}</option>`).join("")}</select>${help}</div>`;
+  if(x.t==="sw"){const on=!!(v??x.def);return`<div class="dw-f"${at}><label class="dw-swl"><span class="sw ${on?"on":""}" role="switch" aria-checked="${on}" ${onEv("click",["dwFineSw",id,x.f])}></span>${i18n(x.l)}</label>${help}</div>`}
+  if(x.t==="num")return`<div class="dw-f dw-num"${at}>${lab}<span class="dw-in"><input type="number" min="${x.min}" max="${x.max}"${x.step?` step="${x.step}"`:""} value="${v??x.def}" ${onEv("input",["dwFineNum",id,x.f,onEv.value,onEv.el])}><span>${i18n(x.unit)}</span></span>${help}</div>`;
+  if(x.t==="rng"){const a=v||x.def;return`<div class="dw-f dw-num"${at}>${lab}<span class="dw-in"><input type="number" min="${x.min}" max="${x.max}" value="${a[0]}" aria-label="${i18n("Не меньше")}" ${onEv("input",["dwFineRng",id,x.f])}><span>–</span><input type="number" min="${x.min}" max="${x.max}" value="${a[1]}" aria-label="${i18n("Не больше")}" ${onEv("input",["dwFineRng",id,x.f])}><span>${i18n(x.unit)}</span></span>${help}</div>`}
+  if(x.t==="wh"){const o=v||{};return`<div class="dw-f dw-num"${at}>${lab}<span class="dw-in"><input type="number" min="1" max="10000" value="${o.width??""}" placeholder="—" aria-label="${i18n("Ширина")}" ${onEv("input",["dwFineWh",id,x.f,"width",onEv.value])}><span>×</span><input type="number" min="1" max="10000" value="${o.height??""}" placeholder="—" aria-label="${i18n("Высота")}" ${onEv("input",["dwFineWh",id,x.f,"height",onEv.value])}><span>${i18n(x.unit)}</span></span>${help}</div>`}
+  if(x.t==="whf"){const a=v||[null,null],pc=n=>n==null?"":Math.round(n*1000)/10;return`<div class="dw-f dw-num"${at}>${lab}<span class="dw-in"><input type="number" min="0" max="100" step="0.5" value="${pc(a[0])}" placeholder="—" aria-label="${i18n("Ширина")}" ${onEv("input",["dwFineWh",id,x.f,0,onEv.value])}><span>×</span><input type="number" min="0" max="100" step="0.5" value="${pc(a[1])}" placeholder="—" aria-label="${i18n("Высота")}" ${onEv("input",["dwFineWh",id,x.f,1,onEv.value])}><span>${i18n(x.unit)}</span></span>${help}</div>`}
+  if(x.t==="quad")return`<div class="dw-f"${at}>${lab}<div class="dw-row"><span class="sub">${escHtml(dwFineText(d,x))}</span><button type="button" class="btn s" data-dw-cal-draw ${onEv("click",["dwCalDraw",id])}>${lu("plus",14)}${i18n(v?"Нарисовать заново":"Нарисовать на кадре")}</button>${v?`<button type="button" class="btn s" data-dw-cal-off ${onEv("click",["dwFineQuad",id])}>${lu("trash",14)}${i18n("Убрать область")}</button>`:""}</div>${help}</div>`;
+  return"";
+}
+// Сколько полей тонкой настройки не по умолчанию: число в заголовке группы видно и у свёрнутой группы
+function dwFineCount(d,k){return dwFineList(d,k).filter(x=>dwFineChanged(d,x)).length}
+function dwFineCountPaint(){const d=dwD();if(!d)return;const n=dwFineCount(d,dwKindOf(d));document.querySelectorAll("[data-dw-fine-n]").forEach(el=>{el.textContent=n?`${i18n("изменено")}: ${n}`:"";el.hidden=!n})}
+const DW_FINE_KEY="cfg.dwFineOpen";
+function dwFineOpenGet(){try{return localStorage.getItem(DW_FINE_KEY)==="1"}catch(e){return false}}
+// Щелчок по заголовку: <details> ещё в прежнем состоянии, поэтому запоминается обратное (toggle onEv не слушает)
+function dwFineToggle(el){const o=!el.closest("details")?.open;try{localStorage.setItem(DW_FINE_KEY,o?"1":"0")}catch(e){}}
+function dwFineHtml(d,k){
+  const L=dwFineList(d,k);if(!L.length)return"";
+  const n=dwFineCount(d,k),kt=i18n(DW_KINDS.find(x=>x[0]===k)?.[1]||"");
+  const badge=`<span class="dw-fine-n" data-dw-fine-n${n?"":" hidden"}>${n?`${i18n("изменено")}: ${n}`:""}</span>`;
+  return`<details class="dw-sec dw-fine" data-dw-fine-sec${dwFineOpenGet()?" open":""}><summary ${onEv("click",["dwFineToggle",onEv.el])}><h4>${i18n("Тонкая настройка")}${kt?` · ${escHtml(kt)}`:""}${badge}</h4></summary>
+    <p class="sub dw-fine-lead">${i18n("Обычно эти значения не меняют. Их меняют, если детектор пропускает объекты, даёт ложные сработки или сильно нагружает сервер.")}</p>${L.map(x=>dwFineFieldHtml(d,x)).join("")}</details>`;
+}
+// Карточка входа во «Все параметры»: видна всегда, в одном месте — в конце столбца настроек
+function dwAllCardHtml(d){
+  const has=DW_ALL_ONLY.filter(([f])=>f==="alarmKinds"||!d.builtin).map(([,l])=>i18n(l).toLowerCase());
+  const what=`${i18n("Форма «Все параметры» показывает")} ${has.join(", ")} ${i18n("и все свойства вида по схеме.")}`;
+  return`<section class="dw-sec dw-all" data-dw-all><div class="dw-all-t"><b>${i18n("Все параметры детектора")}</b><p class="sub">${escHtml(what)} ${i18n("Это режим для опытных.")}</p></div>
+    <button type="button" class="btn s" data-dw-all-go ${onEv("click",["dwAllGo",d.id,""])}>${lu("list",14)}${i18n("Все параметры")}</button></section>`;
+}
+// Переход во «Все параметры»: форма открывается, поле моргает (правило «Моргание при переходе по ссылке»)
+function dwAllGo(id,f){
+  formAllSet(true);
+  if(!f)return accFlash(()=>[document.querySelector("[data-base-head]")].filter(Boolean));
+  accFlash(()=>{const el=document.querySelector(`[data-dw-fine="${f}"],[data-sf="${f}"],[data-sf-ro="${f}"]`);return el?[el.closest(".dw-f,div")]:[]});
+}
 function dwPanelHtml(cam,d,k,c){
   const id=d.id,on=d.enabled!==false;
   const head=`<section class="dw-sec dw-head"><div class="dw-name"><input type="text" value="${escHtml(locName(d))}" aria-label="${i18n("Имя")}" readonly><div class="sw ${on?"on":""}" role="switch" aria-checked="${on}" aria-label="${i18n("Включён")}"${pfa(d,"enabled")} ${onEv("click",["detEnable",`${id}`])}></div></div>
@@ -19960,13 +20136,16 @@ function dwPanelHtml(cam,d,k,c){
   if(k==="motion"&&dwHas(d,"minDurationSec"))when.push(dwNum(id,"delay","Сработать, если движение длится не меньше",0,30,"с","Короткое движение, например блик или птица, детектор пропустит."));
   if(k==="crowd"&&dwHas(d,"crowdMin")&&dwHas(d,"crowdHoldSec"))when.push(dwNum(id,"count","Людей в зоне не меньше",2,50,"чел."),dwNum(id,"hold","Дольше",1,600,"с","Детектор сработает, когда в зоне долго стоит группа людей. Следующая сработка — после того, как группа разойдётся."));
   if(k==="abandoned"&&dwHas(d,"stillSec"))when.push(dwNum(id,"stay","Предмет лежит без движения дольше",5,1800,"с"));
-  const adv=`<details class="dw-adv"><summary>${i18n("Дополнительно")}</summary><div class="dw-adv-b">${detFieldsHtml(cam,d,"Имя",sensUi)}${cam?detServerNoteHtml(cam,d):""}</div></details>`;
+  dwFineList(d,k,true).forEach(x=>when.push(dwFineFieldHtml(d,x)));
   const where=dwSec("Зоны детектирования",dwAreasHtml(id,k,c))+(DW_SIZE.has(k)&&dwHas(d,"objectSize")?dwSizeSec(id):""),wh=when.length?dwSec("Условия срабатывания",when.join("")):"";
   const arcH=dwArcHtml(d,k,c);
   const nnH=nnSecHtml(d,k);
-  if(!hasS)return head+tabs+nnH+what+where+wh+arcH+adv;
+  // «Дополнительно» уступает «Тонкой настройке» семейства и карточке «Все параметры»
+  // «Детектор»: имя, размещение, тип и чувствительность без ползунка — сразу, как было в «Дополнительно»
+  const fine=dwSec("Детектор",detFieldsHtml(cam,d,"Имя",sensUi,true))+dwFineHtml(d,k)+dwAllCardHtml(d);
+  if(!hasS)return head+tabs+nnH+what+where+wh+arcH+fine;
   // Вкладки: настройки детектора отдельно от поддетекторов, столбец короче
-  return head+tabs+(ptab==="det"?nnH+what+where+wh+arcH+adv:`<section class="dw-sec dw-subs-tab">${dwSubsHtml(id,k,c)}</section>`);
+  return head+tabs+(ptab==="det"?nnH+what+where+wh+arcH+fine:`<section class="dw-sec dw-subs-tab">${dwSubsHtml(id,k,c)}</section>`);
 }
 // ── Действия ──
 function dwRoot(){return document.querySelector("[data-dw]")}
@@ -20152,6 +20331,7 @@ function dwDown(st,e){
     if(kd==="area"||kd==="sub"||kd==="sub2"){const was=dw.pt;if(dwZoneFocus(kd,id))reSel=true;dw.pt={b:`${kd}:${id}`,i:+i};if(!was||was.b!==dw.pt.b||was.i!==dw.pt.i)reSel=true}
     if(kd==="area"){const a=c.areas.find(x=>x.id===id);if(a)move=q=>{a.pts[+i]=q}}
     else if(kd==="line")move=q=>{c.line[+id]=q};
+    else if(kd==="cal"&&c.fine?.speedCalibArea){const a=dwCalCopy(c);move=q=>{a[+id]=q}}
     else if(kd==="sub"){const s=c.subs.find(x=>x.id===id);if(s)move=q=>{s.area.pts[+i]=q}}
     else if(kd==="sub2"){const s=c.subs.find(x=>x.id===id);if(s)move=q=>{s.area2.pts[+i]=q}}
     else if(kd==="subl"){const s=c.subs.find(x=>x.id===id);if(s)move=q=>{s.line[+i]=q}}
@@ -20164,7 +20344,7 @@ function dwDown(st,e){
     e.preventDefault();
     const[kd,id]=b.split(":");
     subPick(kd,id);
-    const pts=kd==="area"?c.areas.find(x=>x.id===id)?.pts:kd==="sub"?c.subs.find(x=>x.id===id)?.area.pts:kd==="sub2"?c.subs.find(x=>x.id===id)?.area2?.pts:kd==="line"?c.line:kd==="subl"?c.subs.find(x=>x.id===id)?.line:kd==="min"||kd==="max"?[c[kd+"At"]]:null;
+    const pts=kd==="cal"?(c.fine?.speedCalibArea?dwCalCopy(c):null):kd==="area"?c.areas.find(x=>x.id===id)?.pts:kd==="sub"?c.subs.find(x=>x.id===id)?.area.pts:kd==="sub2"?c.subs.find(x=>x.id===id)?.area2?.pts:kd==="line"?c.line:kd==="subl"?c.subs.find(x=>x.id===id)?.line:kd==="min"||kd==="max"?[c[kd+"At"]]:null;
     if((kd==="area"||kd==="sub"||kd==="sub2")&&dwZoneFocus(kd,id))reSel=true;
     if(pts){const orig=pts.map(p=>p.slice());move=q=>{const dx=q[0]-p0[0],dy=q[1]-p0[1];orig.forEach((p,i)=>{pts[i][0]=+Math.min(1,Math.max(0,p[0]+dx)).toFixed(4);pts[i][1]=+Math.min(1,Math.max(0,p[1]+dy)).toFixed(4)})}}
   }
@@ -20237,16 +20417,30 @@ function dwHover(st,e){if(!dw.poly)return;const q=dwXY(st,e);if(q){dw.poly.q=q;d
 function dwHintSet(){const el=dwRoot()?.querySelector("[data-dw-hint]"),d=dwD();if(el&&d)el.textContent=i18n(dwHintText(dwKindOf(d)))}
 function dwPolyClick(p0,detail){
   const p=dw.poly;
-  if(detail>=2){dwPolyClose();return}
   const near=(a,b)=>Math.hypot((a[0]-b[0])*DW_X,(a[1]-b[1])*DW_Y)<2.5;
+  // Калибровка: ровно четыре разных угла; двойной щелчок области не замыкает
+  if(p.type==="cal"){if(p.pts.some(q=>near(p0,q)))return;p.pts.push(p0);if(p.pts.length===4)dwCalClose();else{dwPaintGeo();dwHintSet()}return}
+  if(detail>=2){dwPolyClose();return}
   if(p.pts.length>=3&&near(p0,p.pts[0])){dwPolyClose();return}
   if(near(p0,p.pts[p.pts.length-1]))return;
   if(p.pts.length>=DW_PMAX){toast("В зоне не может быть больше 64 точек");return}
   p.pts.push(p0);dwPaintGeo();dwHintSet();
 }
 function dwPolyUndo(){dw.poly.pts.pop();if(!dw.poly.pts.length){dw.poly=null;dw.tool=null;gear();return}dwPaintGeo();dwHintSet()}
+// Область калибровки скорости — четыре щелчка по кадру; четвёртый щелчок кладёт область в черновик
+function dwCalOn(d){return!!d&&!d.builtin&&dwKindOf(d)==="lpr"&&dwHas(d,"speedCalibArea")}
+// Кнопка панели «Нарисовать» (bar) включает и выключает рисование, как другие кнопки панели; кнопка в «Тонкой настройке» начинает заново
+function dwCalDraw(id,bar){const d=detNodeOf(id);if(!dwCalOn(d)||dwRoRefuse(id))return;if(bar&&dw.tool==="cal"){dw.tool=null;dw.poly=null;gear();return}dw.sel=null;dw.pt=null;dw.tool="cal";dw.poly={type:"cal",pts:[]};gear()}
+function dwCalClose(){
+  const d=dwD(),p=dw.poly;if(!d||!p)return;
+  dwFinePut(d,"speedCalibArea",p.pts.map(q=>q.slice()));
+  dw.poly=null;dw.tool=null;gear();
+}
+// Перед протяжкой — своя копия точек: черновик не делит массив с сохранённым значением
+function dwCalCopy(c){c.fine.speedCalibArea=c.fine.speedCalibArea.map(q=>q.slice());return c.fine.speedCalibArea}
 function dwPolyClose(){
   const p=dw.poly,d=dwD();if(!p||!d)return;
+  if(p.type==="cal"){if(p.pts.length===4)dwCalClose();else toast("Поставить четыре угла области");return}
   if(p.pts.length<3){toast("Чтобы замкнуть зону, поставить не меньше трёх точек");return}
   const c=dwC(d);
   if(p.type==="in"&&!dwHas(d,"extraZones"))c.areas=c.areas.filter(a=>a.type!=="in");
