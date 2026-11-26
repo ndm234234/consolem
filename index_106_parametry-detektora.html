@@ -3491,7 +3491,7 @@ body.pj-hdlog .gojump{display:none}
 @container (max-width:900px){.vw-b{grid-template-columns:minmax(0,1fr)}.vw-b .vw-panel{max-height:none;position:static}}
 @media (prefers-reduced-motion:reduce){.vw *{transition:none!important}}
 /* Окно детектора (прототип 55): слева кадр и превью сработок, справа настройки по типам */
-.dw{--dw-in:#4ea1ff;--dw-ex:#ff7a7a;--dw-ln:#fde047}
+.dw{--dw-in:#4ea1ff;--dw-ex:#ff7a7a;--dw-ln:#fde047;--dw-cal:#5eead4}
 .dw-stub{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 10px;margin:0 0 10px;border:1px dashed var(--one-warning-icon);border-radius:var(--one-radius-container);background:var(--one-warning-bg);color:var(--one-warning-text);font-size:12px}
 /* Столбец настроек — доля ширины карточки (на широком экране шире), разделитель тянется мышью и стрелками */
 .dw-grid{display:grid;grid-template-columns:minmax(0,1fr) 12px var(--dw-rw,clamp(320px,44%,calc(100% - 400px)));column-gap:2px;row-gap:12px;align-items:start}
@@ -3536,6 +3536,8 @@ body.dw-resizing,body.dw-resizing *{cursor:col-resize!important;user-select:none
 .dw-a.sel{stroke-width:1.1}
 .dw-sa{fill:var(--c);fill-opacity:.12;stroke:var(--c);stroke-width:.6;stroke-dasharray:2 1;cursor:move}
 .dw-l{stroke-width:1.1;cursor:move}
+/* Область калибровки скорости (прототип 106): штриховой четырёхугольник на дороге */
+.dw-cal{fill:var(--dw-cal);fill-opacity:.1;stroke:var(--dw-cal);stroke-width:.6;stroke-dasharray:2 1;cursor:move}
 .dw-sz{fill:none;stroke:#fde047;stroke-width:.6;stroke-dasharray:1.5 1;cursor:move}
 .dw-hd{fill:#fff;stroke:var(--c,var(--bl));stroke-width:.7;cursor:grab}
 .dw-hd:hover{r:2.3}
@@ -19128,6 +19130,7 @@ function dwToolsHtml(d,k){
   if(k!=="linecross")out.push(b("in","Зона",sw("var(--dw-in)")));
   if(dwHas(d,"extraZones"))out.push(b("ex","Исключение",sw("var(--dw-ex)")));
   if(k==="linecross")out.push(b("line","Линия",sw("var(--dw-ln)")));
+  if(dwCalOn(d))out.push(`<button type="button" class="btn s${dw.tool==="cal"?" on":""}" data-dw-cal-tool ${onEv("click",["dwCalDraw",d.id,1])}>${sw("var(--dw-cal)")}${i18n("Калибровка скорости")}</button>`);
   return`<span class="sub dw-tools-l">${i18n("Нарисовать")}:</span>`+out.join("");
 }
 // Стоп-кадр (CX3): время превью стоит, кадр не меняется, пока рисуют зону
@@ -19139,6 +19142,7 @@ function dwLayHtml(k){
   return`<span class="sub dw-tools-l">${i18n("Показать")}:</span>`+b("geo","Зоны","Показать зоны и линии на кадре. Скрыть, чтобы видеть сцену под ними.")+b("obj","Трекинг","Показать рамки объектов, которые нашёл детектор.")+b("trk","Треки","Показать траектории объектов за последние секунды.");
 }
 function dwHintText(k){
+  if(dw.poly?.type==="cal")return"Щёлкнуть по кадру четыре угла участка дороги по порядку. Потом углы и всю область можно перетащить. Правый щелчок убирает последнюю точку, Esc отменяет.";
   if(dw.poly)return"Чтобы добавить точку, щёлкнуть по кадру. Чтобы замкнуть зону, щёлкнуть первую точку, дважды щёлкнуть или нажать Enter. Правый щелчок убирает последнюю точку, Esc отменяет зону.";
   if(dw.tool==="in")return"Протянуть мышью по кадру, чтобы нарисовать прямоугольник. Чтобы нарисовать многоугольник, щёлкать по кадру точку за точкой. Детектор будет искать объекты внутри зоны.";
   if(dw.tool==="ex")return"Протянуть мышью по кадру, чтобы нарисовать прямоугольник. Чтобы нарисовать многоугольник, щёлкать по кадру точку за точкой. Детектор не будет замечать объекты в этой зоне.";
@@ -19189,7 +19193,7 @@ function dwMidSvg(pts,b,col){
 }
 // Многоугольник, который пользователь рисует щелчками: точки, стороны и сторона к курсору
 function dwPolySvg(){
-  const p=dw.poly,col=p.type==="ex"?"var(--dw-ex)":"var(--dw-in)",all=p.q?[...p.pts,p.q]:p.pts,close=p.pts.length>=3;
+  const p=dw.poly,col=p.type==="ex"?"var(--dw-ex)":p.type==="cal"?"var(--dw-cal)":"var(--dw-in)",all=p.q?[...p.pts,p.q]:p.pts,close=p.type!=="cal"&&p.pts.length>=3;
   return`<polyline class="dw-pl" points="${all.map(dwP).join(" ")}" style="--c:${col}"/>`+
     p.pts.map((q,i)=>`<circle class="dw-pd${i===0&&close?" first":""}" cx="${(q[0]*DW_X).toFixed(1)}" cy="${(q[1]*DW_Y).toFixed(1)}" r="${i===0&&close?2.2:1.3}" style="--c:${col}"/>`).join("");
 }
@@ -19207,6 +19211,13 @@ function dwGeoSvg(d){
     if(!dw.tool){if(dw.sel===a.id)h+=dwMidSvg(a.pts,`area:${a.id}`,col);a.pts.forEach((p,i)=>h+=dwHdSvg(`area:${a.id}`,i,p,col,1.7))}
   });
   if(c.line&&!zOff)h+=dwLineSvg(c.line,c.dir,"line","var(--dw-ln)");
+  // Область калибровки скорости (speedCalibArea): углы тянут по одному, область — целиком
+  const cal=dwCalOn(d)&&c.fine?.speedCalibArea;
+  if(cal){
+    const top=cal.reduce((m,p)=>p[1]<m[1]?p:m,cal[0]);
+    h+=`<polygon class="dw-cal" data-b="cal" points="${cal.map(dwP).join(" ")}"/><text class="dw-tx" x="${(top[0]*DW_X+1.5).toFixed(1)}" y="${(top[1]*DW_Y+4).toFixed(1)}" style="fill:var(--dw-cal)">${i18n("Калибровка скорости")}</text>`;
+    if(!dw.tool)cal.forEach((p,i)=>h+=`<circle class="dw-hd" data-h="cal:${i}" cx="${(p[0]*DW_X).toFixed(1)}" cy="${(p[1]*DW_Y).toFixed(1)}" r="1.7" style="--c:var(--dw-cal)"><title>${i18n("Угол")} ${i+1}</title></circle>`);
+  }
   if(dw.poly)h+=dwPolySvg();
   const subSel=c.subs.some(s=>s.id===dw.subSel)?dw.subSel:null;
   if(DW_SUBP.has(k))c.subs.forEach((s,i)=>{
@@ -19972,7 +19983,8 @@ function dwFineText(d,x){
   if(x.t==="rng")return v[0]===x.def[0]&&v[1]===x.def[1]?i18n("без ограничения"):`${v[0]}–${v[1]} ${i18n(x.unit)}`;
   if(x.t==="wh")return`${v.width} × ${v.height} ${i18n("пикс.")}`;
   if(x.t==="whf")return`${pc(v[0])} × ${pc(v[1])} % ${i18n("кадра")}`;
-  if(x.t==="quad")return`4 ${i18n("точки")}`;
+  // Углы в процентах кадра: план видит, что область сдвинули, а не только «задана»
+  if(x.t==="quad")return v.map(p=>`${pc(p[0])}×${pc(p[1])}`).join(", ")+" %";
   return`${v} ${i18n(x.unit||"")}`.trim();
 }
 // Значение по умолчанию у поля, которого нет на сервере, черновик не держит: иначе план покажет пустую строку
@@ -20018,9 +20030,10 @@ function dwFineWh(id,f,key,v){
   else return;
   dwSoon();dwFineCountPaint();
 }
+// «Убрать область» — снять speedCalibArea; нарисовать — dwCalDraw (четыре щелчка по кадру)
 function dwFineQuad(id){
-  const c=dwC(detNodeOf(id));c.fine=c.fine||{};
-  dwFinePut(detNodeOf(id),"speedCalibArea",c.fine.speedCalibArea?null:[[.3,.6],[.7,.6],[.85,.9],[.15,.9]]);gear();
+  const d=detNodeOf(id);if(!d||dwRoRefuse(id))return;
+  dwFinePut(d,"speedCalibArea",null);gear();
 }
 // Поле тонкой настройки: правка в окне (вариант A)
 function dwFineFieldHtml(d,x){
@@ -20034,7 +20047,7 @@ function dwFineFieldHtml(d,x){
   if(x.t==="rng"){const a=v||x.def;return`<div class="dw-f dw-num"${at}>${lab}<span class="dw-in"><input type="number" min="${x.min}" max="${x.max}" value="${a[0]}" aria-label="${i18n("Не меньше")}" ${onEv("input",["dwFineRng",id,x.f])}><span>–</span><input type="number" min="${x.min}" max="${x.max}" value="${a[1]}" aria-label="${i18n("Не больше")}" ${onEv("input",["dwFineRng",id,x.f])}><span>${i18n(x.unit)}</span></span>${help}</div>`}
   if(x.t==="wh"){const o=v||{};return`<div class="dw-f dw-num"${at}>${lab}<span class="dw-in"><input type="number" min="1" max="10000" value="${o.width??""}" placeholder="—" aria-label="${i18n("Ширина")}" ${onEv("input",["dwFineWh",id,x.f,"width",onEv.value])}><span>×</span><input type="number" min="1" max="10000" value="${o.height??""}" placeholder="—" aria-label="${i18n("Высота")}" ${onEv("input",["dwFineWh",id,x.f,"height",onEv.value])}><span>${i18n(x.unit)}</span></span>${help}</div>`}
   if(x.t==="whf"){const a=v||[null,null],pc=n=>n==null?"":Math.round(n*1000)/10;return`<div class="dw-f dw-num"${at}>${lab}<span class="dw-in"><input type="number" min="0" max="100" step="0.5" value="${pc(a[0])}" placeholder="—" aria-label="${i18n("Ширина")}" ${onEv("input",["dwFineWh",id,x.f,0,onEv.value])}><span>×</span><input type="number" min="0" max="100" step="0.5" value="${pc(a[1])}" placeholder="—" aria-label="${i18n("Высота")}" ${onEv("input",["dwFineWh",id,x.f,1,onEv.value])}><span>${i18n(x.unit)}</span></span>${help}</div>`}
-  if(x.t==="quad")return`<div class="dw-f"${at}>${lab}<div class="dw-row"><span class="sub">${escHtml(dwFineText(d,x))}</span><button type="button" class="btn s" ${onEv("click",["dwFineQuad",id])}>${lu(v?"trash":"plus",14)}${i18n(v?"Убрать область":"Задать область")}</button></div>${help}</div>`;
+  if(x.t==="quad")return`<div class="dw-f"${at}>${lab}<div class="dw-row"><span class="sub">${escHtml(dwFineText(d,x))}</span><button type="button" class="btn s" data-dw-cal-draw ${onEv("click",["dwCalDraw",id])}>${lu("plus",14)}${i18n(v?"Нарисовать заново":"Нарисовать на кадре")}</button>${v?`<button type="button" class="btn s" data-dw-cal-off ${onEv("click",["dwFineQuad",id])}>${lu("trash",14)}${i18n("Убрать область")}</button>`:""}</div>${help}</div>`;
   return"";
 }
 // Сколько полей тонкой настройки не по умолчанию: число в заголовке группы видно и у свёрнутой группы
@@ -20291,6 +20304,7 @@ function dwDown(st,e){
     if(kd==="area"||kd==="sub"||kd==="sub2"){const was=dw.pt;if(dwZoneFocus(kd,id))reSel=true;dw.pt={b:`${kd}:${id}`,i:+i};if(!was||was.b!==dw.pt.b||was.i!==dw.pt.i)reSel=true}
     if(kd==="area"){const a=c.areas.find(x=>x.id===id);if(a)move=q=>{a.pts[+i]=q}}
     else if(kd==="line")move=q=>{c.line[+id]=q};
+    else if(kd==="cal"&&c.fine?.speedCalibArea){const a=dwCalCopy(c);move=q=>{a[+id]=q}}
     else if(kd==="sub"){const s=c.subs.find(x=>x.id===id);if(s)move=q=>{s.area.pts[+i]=q}}
     else if(kd==="sub2"){const s=c.subs.find(x=>x.id===id);if(s)move=q=>{s.area2.pts[+i]=q}}
     else if(kd==="subl"){const s=c.subs.find(x=>x.id===id);if(s)move=q=>{s.line[+i]=q}}
@@ -20303,7 +20317,7 @@ function dwDown(st,e){
     e.preventDefault();
     const[kd,id]=b.split(":");
     subPick(kd,id);
-    const pts=kd==="area"?c.areas.find(x=>x.id===id)?.pts:kd==="sub"?c.subs.find(x=>x.id===id)?.area.pts:kd==="sub2"?c.subs.find(x=>x.id===id)?.area2?.pts:kd==="line"?c.line:kd==="subl"?c.subs.find(x=>x.id===id)?.line:kd==="min"||kd==="max"?[c[kd+"At"]]:null;
+    const pts=kd==="cal"?(c.fine?.speedCalibArea?dwCalCopy(c):null):kd==="area"?c.areas.find(x=>x.id===id)?.pts:kd==="sub"?c.subs.find(x=>x.id===id)?.area.pts:kd==="sub2"?c.subs.find(x=>x.id===id)?.area2?.pts:kd==="line"?c.line:kd==="subl"?c.subs.find(x=>x.id===id)?.line:kd==="min"||kd==="max"?[c[kd+"At"]]:null;
     if((kd==="area"||kd==="sub"||kd==="sub2")&&dwZoneFocus(kd,id))reSel=true;
     if(pts){const orig=pts.map(p=>p.slice());move=q=>{const dx=q[0]-p0[0],dy=q[1]-p0[1];orig.forEach((p,i)=>{pts[i][0]=+Math.min(1,Math.max(0,p[0]+dx)).toFixed(4);pts[i][1]=+Math.min(1,Math.max(0,p[1]+dy)).toFixed(4)})}}
   }
@@ -20376,16 +20390,30 @@ function dwHover(st,e){if(!dw.poly)return;const q=dwXY(st,e);if(q){dw.poly.q=q;d
 function dwHintSet(){const el=dwRoot()?.querySelector("[data-dw-hint]"),d=dwD();if(el&&d)el.textContent=i18n(dwHintText(dwKindOf(d)))}
 function dwPolyClick(p0,detail){
   const p=dw.poly;
-  if(detail>=2){dwPolyClose();return}
   const near=(a,b)=>Math.hypot((a[0]-b[0])*DW_X,(a[1]-b[1])*DW_Y)<2.5;
+  // Калибровка: ровно четыре разных угла; двойной щелчок области не замыкает
+  if(p.type==="cal"){if(p.pts.some(q=>near(p0,q)))return;p.pts.push(p0);if(p.pts.length===4)dwCalClose();else{dwPaintGeo();dwHintSet()}return}
+  if(detail>=2){dwPolyClose();return}
   if(p.pts.length>=3&&near(p0,p.pts[0])){dwPolyClose();return}
   if(near(p0,p.pts[p.pts.length-1]))return;
   if(p.pts.length>=DW_PMAX){toast("В зоне не может быть больше 64 точек");return}
   p.pts.push(p0);dwPaintGeo();dwHintSet();
 }
 function dwPolyUndo(){dw.poly.pts.pop();if(!dw.poly.pts.length){dw.poly=null;dw.tool=null;gear();return}dwPaintGeo();dwHintSet()}
+// Прототип 106: область калибровки скорости — четыре щелчка по кадру; четвёртый щелчок кладёт область в черновик
+function dwCalOn(d){return!!d&&!d.builtin&&dwKindOf(d)==="lpr"&&dwHas(d,"speedCalibArea")}
+// Кнопка панели «Нарисовать» (bar) включает и выключает рисование, как другие кнопки панели; кнопка в «Тонкой настройке» начинает заново
+function dwCalDraw(id,bar){const d=detNodeOf(id);if(!dwCalOn(d)||dwRoRefuse(id))return;if(bar&&dw.tool==="cal"){dw.tool=null;dw.poly=null;gear();return}dw.sel=null;dw.pt=null;dw.tool="cal";dw.poly={type:"cal",pts:[]};gear()}
+function dwCalClose(){
+  const d=dwD(),p=dw.poly;if(!d||!p)return;
+  dwFinePut(d,"speedCalibArea",p.pts.map(q=>q.slice()));
+  dw.poly=null;dw.tool=null;gear();
+}
+// Перед протяжкой — своя копия точек: черновик не делит массив с сохранённым значением
+function dwCalCopy(c){c.fine.speedCalibArea=c.fine.speedCalibArea.map(q=>q.slice());return c.fine.speedCalibArea}
 function dwPolyClose(){
   const p=dw.poly,d=dwD();if(!p||!d)return;
+  if(p.type==="cal"){if(p.pts.length===4)dwCalClose();else toast("Поставить четыре угла области");return}
   if(p.pts.length<3){toast("Чтобы замкнуть зону, поставить не меньше трёх точек");return}
   const c=dwC(d);
   if(p.type==="in"&&!dwHas(d,"extraZones"))c.areas=c.areas.filter(a=>a.type!=="in");
