@@ -29461,9 +29461,8 @@ const schDlgSeen={key:null};
 function schE(k){return k==="d"?schDlg:schEd}
 function schEdNew(s,k,o={}){
   const d=schFill(ruleClone(s)),t=schIso(new Date());
-  const q=new URLSearchParams(location.search);
   return{k,id:s.id,d,base:o.isNew?"":JSON.stringify(d),isNew:!!o.isNew,onSave:o.onSave||null,onCancel:o.onCancel||null,from:o.from||null,month:t.slice(0,7),day:t,
-    view:q.get("schview")==="list"?"list":"grid",mode:q.get("schmode")==="erase"?"erase":"add",hist:[],fut:[],copy:null,copySel:[],lpend:[]};
+    view:"grid",mode:"add",hist:[],fut:[],copy:null,copySel:[],lpend:[]};
 }
 function schDirty(e){return!!e&&(e.isNew||JSON.stringify(e.d)!==e.base)}
 function schRO(e){const s=schById(e.id);return!!(e.d.builtin||(s&&s._pend))}
@@ -29480,7 +29479,6 @@ document.addEventListener("keydown",ev=>{
   const key=ev.key.toLowerCase();
   if(key==="z"&&!ev.shiftKey){ev.preventDefault();schUndo(k)}
   else if(key==="y"||(key==="z"&&ev.shiftKey)){ev.preventDefault();schRedo(k)}
-  else if(key==="escape"){}
 });
 document.addEventListener("keydown",ev=>{if(ev.key!=="Escape")return;const e=schDlg&&schDlg.copy!=null?schDlg:schEd&&schEd.copy!=null?schEd:null;if(e){e.copy=null;schRepaint(e.k)}});
 // Путь к списку интервалов: w:<день> | c:<день цикла> | d:<дата> | o:<правило особых дней>.
@@ -29535,11 +29533,31 @@ function schLsTime(k,f,t,n,v,pend){
 }
 function schLsDel(k,f,t,pend){const e=schE(k);if(!e)return;if(pend){e.lpend=e.lpend.filter(x=>!schSame(x,[f,t]));schRepaint(k);return}schMut(k,s=>{s.week.forEach(l=>{const i=l.findIndex(x=>schSame(x,[f,t]));if(i>=0)l.splice(i,1)})})}
 function schLsAdd(k){const e=schE(k);if(!e||schRO(e))return;(e.lpend||(e.lpend=[])).push(["09:00","18:00"]);schRepaint(k)}
-// Вычесть отрезок [lo, hi] минут из интервалов дня (интервал через полночь режется только в своих сутках)
-function schCut(l,lo,hi){
-  const out=[];
-  l.map(schRaw).forEach(([a,b])=>{if(b<=lo||a>=hi){out.push([a,b]);return}if(a<lo)out.push([a,lo]);if(b>hi)out.push([hi,b])});
-  l.splice(0,l.length,...out.filter(([a,b])=>b>a).map(([a,b])=>b-a>=1440?[schHM(a),schHM(a)]:[schHM(a),schHM(b)]));
+// Стереть отрезок [lo, hi] минут суток дня p. Интервал через полночь: его утренняя часть — в следующих сутках,
+// поэтому стирание правит и предыдущий день (часть, что переходит в эти сутки), а кусок после полуночи уходит
+// в следующий день. У дат и особых дней соседних суток нет: интервал через полночь, который пришлось бы так делить,
+// остаётся как был.
+function schNb(s,p,d){const[t,i]=p.split(":"),n=+i;if(t==="w")return"w:"+((n+d+7)%7);if(t==="c"){const L=s.cycle.days.length;return"c:"+((n+d+L)%L)}return null}
+const schIvOut=([a,b])=>b-a>=1440?[schHM(a),schHM(a)]:[schHM(a),schHM(b)];
+function schErase(s,p,lo,hi){
+  // l — список, [x, y] — что стереть в минутах его суток; spill — куда уходят куски после полуночи
+  const cut=(l,x,y,spill)=>{
+    const keep=[],moved=[];
+    l.forEach(iv=>{
+      const[a,b]=schRaw(iv);
+      if(b<=x||a>=y){keep.push(iv);return}
+      const parts=[];if(a<x)parts.push([a,x]);if(b>y)parts.push([y,b]);
+      if(!spill&&parts.some(([u])=>u>=1440)){keep.push(iv);return}
+      parts.forEach(([u,v])=>{if(v<=u)return;if(u>=1440)moved.push([u-1440,v-1440]);else keep.push(schIvOut([u,v]))});
+    });
+    l.splice(0,l.length,...keep);
+    return moved;
+  };
+  const nx=schNb(s,p,1),pv=schNb(s,p,-1);
+  if(pv){const back=cut(schIvList(s,pv),lo+1440,hi+1440,true),own=schIvList(s,p);back.forEach(x=>own.push(schIvOut(x)));schNorm(own)}
+  const fwd=cut(schIvList(s,p),lo,hi,!!nx);
+  if(nx&&fwd.length){const l=schIvList(s,nx);fwd.forEach(x=>l.push(schIvOut(x)));schNorm(l)}
+  schNorm(schIvList(s,p));
 }
 function schCopyMon(k,to){schMut(k,s=>{const m=s.week[0];for(let i=1;i<(to==="all"?7:5);i++)s.week[i]=ruleClone(m)})}
 function schCycLen(k,v){schMut(k,s=>{const n=Math.max(1,Math.min(31,parseInt(v,10)||1)),d=s.cycle.days;while(d.length<n)d.push([]);d.length=n;s.cycle.len=n})}
@@ -29597,7 +29615,7 @@ function schBarDown(ev){
     ghosts.forEach(g=>g.remove());lab.remove();
     if(hi-lo<5)return;
     const ps=bars.slice(r0,r1+1).map(b=>b.dataset.p);
-    schMut(k,s=>{ps.forEach(pp=>{const l=schIvList(s,pp);if(erase)schCut(l,lo,hi);else{l.push([schHM(lo),hi>=1440?"00:00":schHM(hi)]);schNorm(l)}})});
+    schMut(k,s=>{ps.forEach(pp=>{if(erase)schErase(s,pp,lo,hi);else{const l=schIvList(s,pp);l.push([schHM(lo),hi>=1440?"00:00":schHM(hi)]);schNorm(l)}})});
   };
   ev.preventDefault();
 }
