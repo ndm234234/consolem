@@ -3776,10 +3776,6 @@ body.dw-resizing,body.dw-resizing *{cursor:col-resize!important;user-select:none
 .dw-fine-lead{margin:8px 0 12px}
 .dw-fine-n{margin-left:8px;font:var(--one-type-caption);color:var(--bl);font-weight:400}
 .dw-stub{margin-left:4px;font:var(--one-type-caption);color:var(--mu);border:1px dashed var(--ln);border-radius:4px;padding:0 4px;font-weight:400}
-.dw-fine-l{list-style:none;margin:8px 0;padding:0;display:grid;gap:4px}
-.dw-fine-l li{display:flex;align-items:baseline;gap:8px;font:var(--one-type-body-sm)}
-.dw-fine-l .dw-fine-v{margin-left:auto;color:var(--mu);text-align:right}
-.dw-fine-l li.chg .dw-fine-v{color:var(--tx);font-weight:600}
 .dw-all{display:flex;align-items:center;gap:12px;border:1px solid var(--ln);border-radius:var(--one-radius-container);margin:12px 0 0;padding:12px 16px}
 .dw-all-t{flex:1;min-width:0}.dw-all-t p{margin:4px 0 0}
 .dw-all .btn{flex:none}
@@ -19927,12 +19923,11 @@ function faceClashHtml(d){
 }
 // ── Тонкая настройка детектора и вход во «Все параметры» (прототип 105, пробел C1) ──
 // Окно детектора показывает сразу частые поля семейства. Глубокие поля семейства — в группе «Тонкая настройка»:
-// вариант A — свёрнутая группа в окне (как «Дополнительные настройки» в Axxon One), вариант B (?v=b) — список с
-// текущими значениями и переход во «Все параметры» к полю. Редкое для всех семейств (метки серверов, тревожные виды,
+// свёрнутая группа в окне с правкой на месте (как «Дополнительные настройки» в Axxon One), а не список с
+// текущими значениями и переход во «Все параметры» к полю — пользователь выбрал A (раунд 2). Редкое для всех семейств (метки серверов, тревожные виды,
 // строка настроек) — только во «Все параметры»; вход туда — видимая карточка внизу окна.
 // stub — поля нет в контракте (задержка конца тревоги, кадров в секунду, сжатие кадра, вторая чувствительность,
 // скорость объекта): ЗАГЛУШКА, значение живёт в памяти страницы и в план не уходит. Контракт — после утверждения вида
-const DW_V=(()=>{try{return new URLSearchParams(location.search).get("v")==="b"?"b":"a"}catch(e){return"a"}})();
 const DW_FINE=[
   {f:"stream",l:"Поток",fam:["motion","tracker","neural","linecross","lpr","crowd","abandoned"],t:"stream",help:"Детектор разбирает этот поток камеры. Поток с меньшим разрешением снижает нагрузку на сервер."},
   {f:"fps",l:"Кадров в секунду",fam:["neural"],basic:true,stub:1,t:"num",min:1,max:25,def:6,unit:"кадр/с",help:"Нейросеть разбирает столько кадров в секунду. Для быстрых объектов, например машин, нужно 12 и больше."},
@@ -20039,17 +20034,13 @@ function dwFineHtml(d,k){
   const L=dwFineList(d,k);if(!L.length)return"";
   const n=dwFineCount(d,k),kt=i18n(DW_KINDS.find(x=>x[0]===k)?.[1]||"");
   const badge=`<span class="dw-fine-n" data-dw-fine-n${n?"":" hidden"}>${n?`${i18n("изменено")}: ${n}`:""}</span>`;
-  if(DW_V==="b"){
-    const rows=L.map(x=>`<li${dwFineChanged(d,x)?" class=\"chg\"":""}><button type="button" class="lk" ${onEv("click",["dwAllGo",d.id,x.f])}>${i18n(x.l)}</button>${dwStubTag(x)}<span class="dw-fine-v">${escHtml(dwFineText(d,x))}</span></li>`).join("");
-    return`<section class="dw-sec dw-fine dw-fine-b" data-dw-fine-sec><h4>${i18n("Тонкая настройка")} · ${escHtml(kt)}${badge}</h4><ul class="dw-fine-l">${rows}</ul>${dwHelp("Обычно эти значения не меняют. Чтобы изменить значение, нажать на его название: консоль откроет «Все параметры» на этом поле.")}</section>`;
-  }
   return`<details class="dw-sec dw-fine" data-dw-fine-sec${dwFineOpenGet()?" open":""} ${onEv("toggle",["dwFineToggle",onEv.el])}><summary><h4>${i18n("Тонкая настройка")} · ${escHtml(kt)}${badge}</h4></summary>
     <p class="sub dw-fine-lead">${i18n("Обычно эти значения не меняют. Их меняют, если детектор пропускает объекты, даёт ложные сработки или сильно нагружает сервер.")}</p>${L.map(x=>dwFineFieldHtml(d,x)).join("")}</details>`;
 }
 // Карточка входа во «Все параметры»: видна всегда, в одном месте — в конце столбца настроек
 function dwAllCardHtml(d){
   const has=DW_ALL_ONLY.filter(([f])=>f==="params"?!d.builtin:true).map(([,l])=>i18n(l).toLowerCase());
-  const what=DW_V==="b"&&dwFineList(d,dwKindOf(d)).length?i18n("Форма «Все параметры» показывает тонкую настройку детектора и все свойства вида по схеме."):`${i18n("Форма «Все параметры» показывает")} ${has.join(", ")} ${i18n("и все свойства вида по схеме.")}`;
+  const what=`${i18n("Форма «Все параметры» показывает")} ${has.join(", ")} ${i18n("и все свойства вида по схеме.")}`;
   return`<section class="dw-sec dw-all" data-dw-all><div class="dw-all-t"><b>${i18n("Все параметры детектора")}</b><p class="sub">${escHtml(what)} ${i18n("Это режим для опытных.")}</p></div>
     <button type="button" class="btn s" data-dw-all-go ${onEv("click",["dwAllGo",d.id,""])}>${lu("list",14)}${i18n("Все параметры")}</button></section>`;
 }
@@ -20062,11 +20053,8 @@ function dwAllGo(id,f){
 // «Все параметры» детектора: заглушки — отдельной карточкой, пока их нет в контракте
 function dwAllStubCardHtml(n){
   if(nodeKind(n)!=="det")return"";
-  // Вариант B: тонкая настройка семейства целиком — первой карточкой, теми же полями, что в окне (у схемы нет полей
-  // для сканирующего окна, размера человека и области калибровки). Вариант A: только заглушки
-  const k=dwKindOf(n),L=DW_V==="b"?dwFineList(n,k).filter(x=>x.t!=="stream"):DW_FINE.filter(x=>x.stub&&x.fam.includes(k));if(!L.length)return"";
-  const kt=i18n(DW_KINDS.find(x=>x[0]===k)?.[1]||"");
-  return`<div class="card dw-all-stub" data-schema-card><div class="ch">${DW_V==="b"?`${i18n("Тонкая настройка")} · ${escHtml(kt)}`:i18n("Тонкая настройка: поля, которых нет в контракте")}</div><div class="cb"><p class="sub">${i18n(DW_V==="b"?"Обычно эти значения не меняют. Их меняют, если детектор пропускает объекты, даёт ложные сработки или сильно нагружает сервер. Поля с меткой «заглушка» консоль хранит только на этой странице.":"Эти поля — заглушка до правки контракта API. Консоль хранит значения только на этой странице.")}</p><div class="dw-all-stub-g">${L.map(x=>dwFineFieldHtml(n,x)).join("")}</div></div></div>`;
+  const k=dwKindOf(n),L=DW_FINE.filter(x=>x.stub&&x.fam.includes(k));if(!L.length)return"";
+  return`<div class="card dw-all-stub" data-schema-card><div class="ch">${i18n("Тонкая настройка: поля, которых нет в контракте")}</div><div class="cb"><p class="sub">${i18n("Эти поля — заглушка до правки контракта API. Консоль хранит значения только на этой странице.")}</p><div class="dw-all-stub-g">${L.map(x=>dwFineFieldHtml(n,x)).join("")}</div></div></div>`;
 }
 function dwPanelHtml(cam,d,k,c){
   const id=d.id,on=d.enabled!==false;
