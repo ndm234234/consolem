@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Конфигуратор — API",
-    "version": "0.39.0",
+    "version": "0.40.0",
     "description": "Контракт конфигуратора: всё, что интерфейс читает и меняет. Источник истины: встроенный сервер прототипа (api/server.js) и бэкенд отвечают по нему. Договорённости — api/README.md: версии записей (ETag / If-Match, 428, 412), ошибки application/problem+json с машинным code, групповые операции с частичным успехом и idempotencyKey, поток событий SSE. Система может поддерживать не весь контракт: что она умеет — GET /reference → capabilities; остальные операции отвечают 404 NO_ROUTE, неподдержанные виды устройств и настройки — 422 NOT_SUPPORTED. Операции с тегом test-support есть только на тестовом стенде. Форма работает с одним адресом входа, другой — только если этот недоступен. Список операций, откат и память idempotencyKey у каждого адреса свои: после 5xx и смены адреса запись сперва перечитывается. Версия одной записи на разных адресах может отличаться: 412 и перечитывание. У изменений чужого кластера at — время, когда их увидели.",
     "license": {
       "name": "Внутренний документ",
@@ -11033,7 +11033,7 @@
           },
           "eventId": {
             "type": "string",
-            "description": "unit.event: код события из UnitKind.events. С 0.18.0 deviceId может быть детектором (профиль vms.detector/1) под камерой: событие поднимает камера, eventId — detectorKind детектора или его нет (другое — 422 VALIDATION_FAILED, field: eventId; событие, которое объявил сам вид детектора, остаётся событием детектора); сервер пишет в match поле detector (uid детектора), у other — и template встроенного детектора. Детектор не под камерой — 422 VALIDATION_FAILED, field: deviceId",
+            "description": "unit.event: код события из UnitKind.events. С 0.18.0 deviceId может быть детектором (профиль vms.detector/1) под камерой: событие поднимает камера, eventId — detectorKind детектора или его нет (другое — 422 VALIDATION_FAILED, field: eventId; событие, которое объявил сам вид детектора, остаётся событием детектора); сервер пишет в match поле detector (uid детектора), у other — и template встроенного детектора. Детектор не под камерой — 422 VALIDATION_FAILED, field: deviceId. С 0.40.0: детектор detectorKind other с analyticsKind поднимает и события камеры из расширения x-events {analyticsKind: [коды событий]} у свойства analyticsKind вида детектора (vms.detector/1 1.3); без eventId — detectorKind детектора, как раньше",
             "x-layer": "vms"
           },
           "match": {
@@ -19235,7 +19235,8 @@
                   "description": "Подстановки к причине: лимит, лицензия"
                 },
                 "schema": {
-                  "$ref": "#/components/schemas/JsonSchema"
+                  "$ref": "#/components/schemas/JsonSchema",
+                  "description": "С 0.40.0. Схема вида, суженная под этого родителя: хук профиля вида может сузить перечни значений. Нет поля — схема вида из GET /kinds"
                 }
               }
             }

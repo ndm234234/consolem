@@ -744,6 +744,48 @@
     field(await props(env, off, { analyticsKind: "robot" }), "VALIDATION_FAILED", P("analyticsKind"), "незнакомый код — отказ схемы");
   }, { needs: ["createUnits", "patchUnit", "kind:det", "kind:subdet"] });
 
+  // С 0.40.0 (vms.detector/1 1.3): серверные семейства Axxon One — значения analyticsKind; x-events {значение: [коды событий камеры]}
+  // у свойства analyticsKind говорит, какие события камеры поднимает детектор этого вида сверх other (пункты C5, F209, F210, F223)
+  const FAMILIES = ["neuralCounter", "pose", "ppe", "fight", "fireSmoke", "audio", "queue", "waterLevel", "barcode", "heatmap", "sceneChange", "unattendedMoney", "floatingObjects", "operatorControl"];
+  test("analyticsKind: семейства серверных детекторов (с 0.40.0) — значение с подписью, x-events называет события камеры; детектор каждого семейства создаётся", async () => {
+    const env = await makeEnv();
+    const ak = (await env.ok("GET", "/kinds/det")).schema.properties.analyticsKind;
+    const camEv = new Set((await env.ok("GET", "/kinds/camera")).events.map((e) => e.id));
+    const xe = ak["x-events"] || {};
+    for (const f of FAMILIES) {
+      assert.ok(ak.enum.includes(f), `${f} — значение analyticsKind`);
+      assert.ok(ak["x-enum-labels"] && ak["x-enum-labels"][f] && ak["x-enum-labels"][f].text, `${f} — подпись`);
+    }
+    Object.entries(xe).forEach(([a, evs]) => {
+      assert.ok(ak.enum.includes(a), `x-events: ${a} — значение analyticsKind`);
+      evs.forEach((e) => assert.ok(camEv.has(e), `x-events ${a}: ${e} — событие вида camera`));
+    });
+    assert.eq(xe.fireSmoke, ["fire", "smoke"], "дым и огонь — два события");
+    assert.eq(xe.sceneChange, ["tamper"], "изменение сцены — tamper");
+    for (const f of FAMILIES) {
+      const d = await addDet(env, camU, `Семейство ${f}`, { detectorKind: "other", analyticsKind: f });
+      assert.eq([d.properties.detectorKind, d.properties.analyticsKind], ["other", f], `${f}: детектор создан`);
+    }
+    return `семейств ${FAMILIES.length}, с событиями ${Object.values(xe).filter((e) => e.length).length}`;
+  }, { needs: ["createUnits", "kind:det", "kind:camera", "prop:det.analyticsKind"], layer: "profile:vms.detector/1", since: "1.3" });
+
+  test("analyticsKind: событие детектора семейства (с 0.40.0) — коды из x-events и other проходят, чужой код — 422 field eventId; match.detector пишет сервер", async () => {
+    const env = await makeEnv();
+    const ev = (deviceId, eventId) => env.call("POST", "/test/events", Object.assign({ type: "unit.event", deviceId, match: {} }, eventId ? { eventId } : {}));
+    const fs = await addDet(env, camU, "Дым и огонь", { detectorKind: "other", analyticsKind: "fireSmoke" });
+    for (const id of ["fire", "smoke", "other", null]) assert.status(await ev(fs.uid, id), 200, null, `fireSmoke: ${id || "без eventId"}`);
+    const bad = await ev(fs.uid, "pose");
+    assert.status(bad, 422, "VALIDATION_FAILED", "fireSmoke не поднимает pose");
+    assert.eq(bad.body.field, "eventId", "field — eventId");
+    const tr = await addDet(env, camU, "Трекер", { detectorKind: "other", analyticsKind: "tracker" });
+    assert.status(await ev(tr.uid, "fire"), 422, "VALIDATION_FAILED", "у трекера x-events нет — fire не проходит, как раньше");
+    const mo = await addDet(env, camU, "Движение", { detectorKind: "motion", analyticsKind: undefined });
+    assert.status(await ev(mo.uid, "fire"), 422, "VALIDATION_FAILED", "детектор не other — x-events не действует");
+    const hm = await addDet(env, camU, "Тепловая карта", { detectorKind: "other", analyticsKind: "heatmap" });
+    assert.status(await ev(hm.uid, null), 200, null, "heatmap: без eventId — other");
+    assert.status(await ev(hm.uid, "fire"), 422, "VALIDATION_FAILED", "heatmap: пустая строка x-events — только other");
+  }, { needs: ["createUnits", "kind:det", "kind:camera", "prop:det.analyticsKind", "testEvent"], layer: "profile:vms.detector/1", since: "1.3" });
+
   test("Поддетектор: под трекером и движением — создан, entity.created kind subdet; под другим видом — 422 NOT_SUPPORTED /parentId; abandoned только под трекером", async () => {
     const env = await makeEnv();
     const t = await addDet(env, camU, "Трекер", { detectorKind: "other", analyticsKind: "tracker" });
@@ -774,6 +816,33 @@
     const bad = await create(env, Object.assign(det(camU, "Новая линия", { detectorKind: "linecross" }), { children: [{ kind: "subdet", properties: sub(t, "enter").properties }] }));
     assert.eq(bad.failed.map((x) => [x.code, x.field]), [["NOT_SUPPORTED", "/children/0/parentId"]], "и под новой линией — отказ");
   }, { needs: ["createUnits", "kind:det", "kind:subdet"] });
+
+  // С 0.40.0 (vms.subdetector/1 1.1, пункт F223): контроль оператора принимает только dwell, enter, line; GET /units/{uid}/creatable
+  // у детектора отдаёт схему вида subdet с subdetectorKind, суженным под этот детектор
+  test("Поддетектор: контроль оператора (с 0.40.0) — dwell, enter, line созданы, другой вид — 422 NOT_SUPPORTED /properties/subdetectorKind; creatable сужает subdetectorKind", async () => {
+    const env = await makeEnv();
+    const oc = await addDet(env, camU, "Контроль оператора", { detectorKind: "other", analyticsKind: "operatorControl" });
+    for (const k of ["dwell", "enter", "line"]) {
+      const s = await addSub(env, oc, k, k === "dwell" ? { timeSec: 20 } : {});
+      assert.eq([s.parentId, s.properties.subdetectorKind], [oc.uid, k], `${k} под контролем оператора`);
+    }
+    const res = await create(env, sub(oc, "stop", { timeSec: 5 }));
+    assert.eq(res.failed.map((x) => [x.code, x.field]), [["NOT_SUPPORTED", P("subdetectorKind")]], "stop — отказ");
+    const kindsUnder = async (u) => {
+      const row = (await env.ok("GET", `/units/${u.uid}/creatable`)).items.find((x) => x.kind === "subdet") || {};
+      return row.schema?.properties?.subdetectorKind?.enum;
+    };
+    assert.eq(await kindsUnder(oc), ["line", "enter", "dwell"], "creatable: только допустимые, в порядке схемы вида");
+    const tr = await addDet(env, camU, "Трекер", { detectorKind: "other", analyticsKind: "tracker" });
+    const mo = await addDet(env, camU, "Движение", { detectorKind: "motion" });
+    const all = (await env.ok("GET", "/kinds/subdet")).schema.properties.subdetectorKind.enum;
+    assert.eq(await kindsUnder(tr), all, "трекер — все виды");
+    assert.eq(await kindsUnder(mo), all.filter((k) => k !== "abandoned"), "движение — все, кроме abandoned");
+    const ne = await addDet(env, camU, "Нейро", { detectorKind: "other", analyticsKind: "neural" });
+    assert.eq(await kindsUnder(ne), all.filter((k) => k !== "abandoned"), "нейросетевой трекер — все, кроме abandoned");
+    const under = (await env.ok("GET", `/units/${cam.id}/creatable`)).items;
+    assert.ok(under.every((x) => !("schema" in x)), "под камерой схему не сужают");
+  }, { needs: ["createUnits", "getCreatable", "kind:det", "kind:subdet", "prop:det.analyticsKind"], layer: "profile:vms.subdetector/1", since: "1.1" });
 
   test("Поддетектор: вид родителя сменили после создания — поддетектор правится; правило родителя — только при создании и при subdetectorKind в правке", async () => {
     const env = await makeEnv();

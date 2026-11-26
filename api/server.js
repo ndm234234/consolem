@@ -3450,7 +3450,9 @@
       return kinds.creatable(u.kind).map((kind) => {
         const no = (reason) => ({ kind, allowed: false, reason });
         if (options && unitType(kind) && !options.some((o) => o.type === kind)) return no("NOT_SUPPORTED");
-        return { kind, allowed: true };
+        // С 0.40.0: схема вида, суженная под этого родителя — поддетектор под детектором: только допустимые subdetectorKind
+        const schema = hooksOf(kind).map((h) => h.schemaUnder && h.schemaUnder(kind, u, pctx)).find(Boolean) || null;
+        return Object.assign({ kind, allowed: true }, schema ? { schema } : {});
       });
     }
     /* ----- Ядро: запись объектов ----- */
@@ -5898,8 +5900,10 @@
             if (kinds.profileOf(u.kind, "vms.detector/1") && !((kinds.get(u.kind) || {}).events || []).some((e) => e.id === eventId)) {
               const cam = u.parentId ? store.get(u.parentId) : null;
               if (!cam || !kinds.profileOf(cam.kind, "vms.camera/1")) return problem(422, "VALIDATION_FAILED", "Детектор не под камерой", { field: "deviceId" });
-              if (eventId && eventId !== props(u).detectorKind) return problem(422, "VALIDATION_FAILED", `Детектор вида ${props(u).detectorKind} не поднимает событие ${eventId}`, { field: "eventId" });
-              eventId = props(u).detectorKind;
+              // С 0.40.0: детектор other с analyticsKind поднимает и события из x-events у analyticsKind вида (vms.detector/1 1.3)
+              const own = hDetector.eventsOf(u, pctx);
+              if (eventId && eventId !== props(u).detectorKind && !own.includes(eventId)) return problem(422, "VALIDATION_FAILED", `Детектор вида ${props(u).detectorKind} не поднимает событие ${eventId}`, { field: "eventId" });
+              eventId = eventId || props(u).detectorKind;
               match.detector = u.uid;
               if (eventId === "other" && props(u).template && !("template" in match)) match.template = props(u).template;
               u = cam;

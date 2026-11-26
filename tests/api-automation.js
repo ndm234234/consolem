@@ -1239,6 +1239,20 @@
     assert.eq([t2.match, t2.target.gone], [{}, [cam.name]], "в gone — только камера");
   }, { needs: ["kind:camera", "kind:det", "deleteUnit"] });
 
+  test("Детектор семейства в правиле (с 0.40.0): fire детектора fireSmoke запускает правило камеры; сервер пишет в событие match.detector", async () => {
+    const env = await makeEnv();
+    const cams = (await env.pages("/units?kind=camera&limit=1000")).filter((u) => u.enabled !== false);
+    const camId = cams[0].uid;
+    const made = await env.ok("POST", "/units", { idempotencyKey: `fs-${Date.now()}`, items: [{ kind: "det", name: "Дым и огонь", parentId: camId, properties: { detectorKind: "other", analyticsKind: "fireSmoke" } }] });
+    const d = made.done[0].units[0];
+    const r = await env.ok("POST", "/rules", onEvent({ triggers: [trig("fire", camId)] }));
+    const n = (await fireList(env, r.id)).length;
+    assert.status(await unitEvent(env, d.uid, "fire"), 200, null, "детектор поднял fire");
+    const f = await fireList(env, r.id);
+    assert.eq(f.length, n + 1, "правило сработало");
+    assert.eq(f[f.length - 1].events[0].match.detector, d.uid, "в событии — detector");
+  }, { needs: ["kind:camera", "kind:det", "createUnits", "prop:det.analyticsKind", "testEvent"], layer: "profile:vms.detector/1", since: "1.3" });
+
   test("Один детектор в правиле (с 0.23.0): match.detector при сохранении — не детектор или детектор другой камеры — 422 VALIDATION_FAILED, field match.detector", async () => {
     const env = await makeEnv();
     const dets = (await env.pages("/units?kind=det&limit=1000")).filter((u) => u.properties?.detectorKind === "motion");

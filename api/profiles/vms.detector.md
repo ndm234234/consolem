@@ -1,7 +1,7 @@
 <!-- Собрано tools/build_api.py из api/profiles/vms.detector.json — руками не править -->
 # `vms.detector/1` — Детектор
 
-Версия 1.2 · ведёт: mockup · смотрят правку: w2c
+Версия 1.3 · ведёт: mockup · смотрят правку: w2c
 
 Использует: `vms.camera/1` с 1.0, `vms.live/1` с 1.0, `vms.subdetector/1` с 1.0
 
@@ -12,7 +12,7 @@
 | Свойство | Тип | Смысл | С версии |
 |---|---|---|---|
 | `alarmKinds` | массив string | «Тревожные виды»: Что считать тревогой у камеры и детектора: коды событий видов (UnitKind.events). Это о классе события, а не о жизни тревоги | 1.0 |
-| `analyticsKind` | string: `tracker`, `neural`, `meta`, `faceTV`, `faceVA`, `faceVL` | С 0.12.0. Вид детектора вне перечня `detectorKind`; действует только при `detectorKind: other`. С 0.17.0: `meta` — мета-детектор, `faceVA`, `faceVL`, `faceTV` — детекторы лиц из пакетов распознавания лиц; `faceTV` — старый DetectorPack, с 3.11.1 его заменил детектор лиц VA. С 0.30.0 (версия профиля 1.1): несовместимые на одном сервере значения — расширение `x-conflicts {значение: [значения]}` у этого свойства в схеме вида; связь двусторонняя, достаточно строки у одного из значений. Клиент, который не знает `x-conflicts`, его пропускает. Прежнее место — `reference.analyticsConflicts` — снято в 0.32.0: несовместимые значения есть только в `x-conflicts` у `analyticsKind` Нет значения — у сервера нет такой возможности: особый экран поле не показывает (`absent`). | 1.0 |
+| `analyticsKind` | string: `tracker`, `neural`, `meta`, `faceTV`, `faceVA`, `faceVL`, `neuralCounter`, `pose`, `ppe`, `fight`, `fireSmoke`, `audio`, `queue`, `waterLevel`, `barcode`, `heatmap`, `sceneChange`, `unattendedMoney`, `floatingObjects`, `operatorControl` | С 0.12.0. Вид детектора вне перечня `detectorKind`; действует только при `detectorKind: other`. С 0.17.0: `meta` — мета-детектор, `faceVA`, `faceVL`, `faceTV` — детекторы лиц из пакетов распознавания лиц; `faceTV` — старый DetectorPack, с 3.11.1 его заменил детектор лиц VA. С 0.30.0 (версия профиля 1.1): несовместимые на одном сервере значения — расширение `x-conflicts {значение: [значения]}` у этого свойства в схеме вида; связь двусторонняя, достаточно строки у одного из значений. Клиент, который не знает `x-conflicts`, его пропускает. Прежнее место — `reference.analyticsConflicts` — снято в 0.32.0: несовместимые значения есть только в `x-conflicts` у `analyticsKind`. С 0.40.0: серверные семейства Axxon One — neuralCounter, pose, ppe, fight, fireSmoke, audio, queue, waterLevel, barcode, heatmap, sceneChange, unattendedMoney, floatingObjects, operatorControl. Какие события камеры поднимает детектор этого вида сверх other — расширение `x-events {значение: [коды событий камеры]}` у этого свойства; значения нет в x-events — только other. operatorControl принимает поддетекторы dwell, enter, line (vms.subdetector/1) Нет значения — у сервера нет такой возможности: особый экран поле не показывает (`absent`). | 1.0 |
 | `builtin` | boolean | Детектор работает на камере. Заводит оператор, потока на сервер не требует | 1.0 |
 | `cameraPosition` | string: `wall`, `ceiling` | С 0.15.0. Трекеры: положение камеры; на потолке смещение поддетекторов по X и Y, на стене — по X. Нет поля — `wall` Нет значения — у сервера нет такой возможности: особый экран поле не показывает (`absent`). | 1.0 |
 | `classes` | массив string: `person`, `car`, `bike`, до 8 | С 0.12.0. Нет поля — все классы Нет значения — у сервера нет такой возможности: особый экран поле не показывает (`absent`). | 1.0 |
@@ -62,6 +62,7 @@
 
 | Версия | Что |
 |---|---|
+| 1.3 | Контракт 0.40.0, пункты отчёта о пробелах C5, F209, F210, F223 (запрос 2026-11-12-104207Z, п. 26): 14 новых значений analyticsKind и расширение x-events у этого свойства — какие события камеры поднимает детектор каждого вида. Поля и типы не менялись |
 | 1.2 | Запрос 154325Z, ответ w2c, п. 3 и 3.1: `absent: unsupported` у полей, которых у w2c нет: analyticsKind, cameraPosition, classes, confidence, crowdHoldSec, crowdMin, detectUnattendedObjects, direction, extraZones, humanSize, minDurationSec, minTriggers, objectSize, plateWidth, scanWindow, similarSearch, similarTrackSec, speedCalibArea, stillSec, metaDiff, metaFps, metaFrames, metaQueries, metaSearch, metaSkipSimilar, metaThreshold, recordMask, recordTracks, showMask, showTrackLifespan, showTracks. Нет значения — у сервера нет такой возможности: особый экран прячет поле, если его нельзя править. Поля и типы не менялись |
 | 1.1 | Контракт 0.30.0: расширение x-conflicts у свойства analyticsKind — несовместимые виды серверных детекторов в схеме вида вместо reference.analyticsConflicts (устарел в 0.30.0, снят в 0.32.0; новое место — x-conflicts у analyticsKind). Поля не менялись |
 | 1.0 | Профиль перенесён в файл из api/fixtures/demo.json и api/BACKEND.md, контракт 0.25.0. Поля до переноса — с 1.0; когда какое поле появилось в контракте — api/README.md, «Что добавлено в …» |

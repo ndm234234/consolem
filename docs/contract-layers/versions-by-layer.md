@@ -49,6 +49,7 @@
 | 0.37.0 | Пресет PTZ: записано ли положение и какое; диафрагма в аренде движения; профили `vms.ptz/1` 1.2 и `vms.camera/1` 1.7 | `vms.ptz/1`; `vms.camera/1` | `PtzMove.iris`; свойство профиля `presets[]`: `savedOnDevice`, `pan`, `tilt`, `zoom` |
 | 0.38.0 | Правила имени объекта в описании вида: `UnitKind.nameSchema` (`minLength`, `maxLength`, `pattern`); у домена набора — до 100 знаков. Клиент проверяет имя сам, сервер правила пока не судит | механизм | `UnitKind.nameSchema` |
 | 0.39.0 | Исключение сервера из домена: что удалит исключение (`ownConfig` в status, профиль `vms.server/1` 1.2) и сервер сессии (`Me.serverId`, поле подсистемы в общей схеме — `KNOWN_LEAKS`) | `vms.server/1` | `Me.serverId`; поле профиля в status: `ownConfig` |
+| 0.40.0 | Каталог семейств серверных детекторов: 14 значений `analyticsKind` и их события камеры (`x-events` у `analyticsKind`, профиль `vms.detector/1` 1.3); детектор контроля оператора принимает поддетекторы dwell, enter, line (`vms.subdetector/1` 1.1). `GET /units/{uid}/creatable` отдаёт у поддетектора под детектором схему вида с суженным `subdetectorKind` (поле `schema` уже было в контракте). Механизм: смысл `Creatable.items[].schema` и вызов хука профиля | механизм; `vms.detector/1`; `vms.subdetector/1` | `Creatable` (описание `schema`), `TestEventRequest` (описание `eventId`); данные вида: `analyticsKind`, `x-events`, события камеры |
 
 ## Как дополнять
 

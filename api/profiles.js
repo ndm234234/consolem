@@ -1564,7 +1564,14 @@
     return null;
   }
 
+  // С 0.40.0: события камеры, которые поднимает серверный детектор other сверх other — x-events {analyticsKind: [коды]}
+  // у свойства analyticsKind вида детектора (vms.detector/1 1.3). Нет строки — только other
+  const akEvents = (u, ctx) => {
+    const p = props(u), ak = (((ctx.kinds.get(u.kind) || {}).schema || {}).properties || {}).analyticsKind || {};
+    return (p.detectorKind === "other" && !p.builtin && p.analyticsKind && (ak["x-events"] || {})[p.analyticsKind]) || [];
+  };
   const detector = {
+    eventsOf: (u, ctx) => akEvents(u, ctx).slice(),
     detOption, zoneProblem, sensProblem, conflictWith, conflictParams, akClash, akParams, detProblem, clashProblem, createProblem: detCreateProblem,
     beforeCreate(u, parent, ctx) {
       const s = specOf(u);
@@ -1586,13 +1593,22 @@
   /* ===== vms.subdetector/1 (с 0.12.0) — поддетектор: дочерний объект вида subdet под детектором-трекером или детектором движения ===== */
 
   // Что принимает поддетекторы: движение, трекер объектов, нейросетевой трекер. null — не принимает
-  const subHost = (p) => (p.detectorKind === "motion" ? "motion" : p.detectorKind === "other" && (p.analyticsKind === "tracker" || p.analyticsKind === "neural") ? p.analyticsKind : null);
+  // С 0.40.0 — и контроль оператора (operatorControl): у него только поддетекторы из SUB_ONLY
+  const subHost = (p) => (p.detectorKind === "motion" ? "motion" : p.detectorKind === "other" && ["tracker", "neural", "operatorControl"].includes(p.analyticsKind) ? p.analyticsKind : null);
+  // Какие виды поддетектора принимает родитель вида host (null — любые из схемы вида subdet, кроме правил subProblem)
+  const SUB_ONLY = { operatorControl: ["dwell", "enter", "line"] };
+  // Допустимые subdetectorKind под родителем вида host: перечень схемы вида subdet без запрещённых родителем
+  const subKindsFor = (host, kind, ctx) => {
+    const all = ((((ctx.kinds.get(kind) || {}).schema || {}).properties || {}).subdetectorKind || {}).enum || [];
+    return all.filter((k) => (SUB_ONLY[host] ? SUB_ONLY[host].includes(k) : true) && (k !== "abandoned" || host === "tracker"));
+  };
   // Свойства поддетектора целиком (p) под родителя вида host. Блокировки родителя не берёт: над ним может идти операция плана
   // с тем же детектором (ctx.lockedProblem без ctx.held отказал бы своей же операции — запрос про шаги потоков).
   // host undefined — правило родителя не проверяется (правка, которая не трогает subdetectorKind)
   function subProblem(p, host, ctx) {
     const bad = (code, field, extra) => ctx.problem(422, code, extra.message, { field, params: extra.params });
     if (host !== undefined && p.subdetectorKind === "abandoned" && host !== "tracker") return bad("NOT_SUPPORTED", "/properties/subdetectorKind", { message: "Оставленный предмет есть только у трекера объектов" });
+    if (host && SUB_ONLY[host] && !SUB_ONLY[host].includes(p.subdetectorKind)) return bad("NOT_SUPPORTED", "/properties/subdetectorKind", { message: "Этот детектор не принимает поддетектор такого вида", params: { reason: "subdetectorKind", allowed: SUB_ONLY[host].slice() } });
     // line и stripe (с 0.15.0) — линия: line или polyline; остальные виды — область rect или polygon
     const shape = (p.zone || {}).shape, wantLine = p.subdetectorKind === "line" || p.subdetectorKind === "stripe", isLine = shape === "line" || shape === "polyline";
     if (wantLine !== isLine) return bad("VALIDATION_FAILED", "/properties/zone", { message: wantLine ? "Для линии нужна зона line или polyline" : "Нужна зона rect или polygon", params: { reason: "shape" } });
@@ -1611,6 +1627,18 @@
   }
   const subdetector = {
     subHost, subProblem,
+    // С 0.40.0: GET /units/{uid}/creatable — схема вида kind под родителем parent, суженная под него, или null (схема вида как есть).
+    // Поддетектор под детектором, который их принимает: subdetectorKind — только допустимые значения (vms.subdetector/1 1.1)
+    schemaUnder(kind, parent, ctx) {
+      if (!ctx.kinds.profileOf(kind, "vms.subdetector/1") || !parent || !ctx.kinds.profileOf(parent.kind, "vms.detector/1")) return null;
+      const host = subHost(props(parent));
+      const sc = (ctx.kinds.get(kind) || {}).schema;
+      const prop = ((sc || {}).properties || {}).subdetectorKind;
+      if (!host || !prop) return null;
+      const out = JSON.parse(JSON.stringify(sc));
+      out.properties.subdetectorKind.enum = subKindsFor(host, kind, ctx);
+      return out;
+    },
     beforeCreate(u, parent, ctx) {
       const host = parent ? subHost(parent.fresh ? parent.properties || {} : props(parent)) : null;
       if (!host) return ctx.problem(422, "NOT_SUPPORTED", "Этот детектор поддетекторов не принимает", { field: "/parentId", params: { reason: "noSubdetectors" } });
