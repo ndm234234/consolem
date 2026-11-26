@@ -1,4 +1,4 @@
-// Английский прототипа 105 (docs/TEXTS.md, «Как менять текст безопасно»): подключён после assets/i18n-en.js
+// Английский прототипа 106 (docs/TEXTS.md, «Как менять текст безопасно»): подключён после assets/i18n-en.js
 Object.assign(window.I18N_EN,{
 "% кадра":"% of frame",
 "Без сжатия":"No downscaling",
