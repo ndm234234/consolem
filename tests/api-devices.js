@@ -919,6 +919,27 @@
     assert.eq(NEW.filter((n) => n in gone.properties), [], "null снимает");
   }, { needs: ["createUnits", "patchUnit", "kind:det", "prop:det.scanWindow"] });
 
+  // Профиль vms.detector/1 1.4, пункт C1: параметры детектора по семействам. prop:det.objectSpeed в needs — знак, что сервер знает 1.4
+  test("Параметры детектора по семействам (1.4): без полей — как раньше; новые сохраняются; пределы и min выше max — 422; null снимает", async () => {
+    const env = await makeEnv();
+    const NEW = ["alarmEndSec", "analysisFps", "frameWidth", "abandonedSensitivity", "objectSpeed"];
+    const t = await addDet(env, camU, "Трекер 1.4", { detectorKind: "other", analyticsKind: "tracker", sensitivity: 60 });
+    assert.eq(NEW.filter((n) => n in t.properties), [], "без полей — ключей нет");
+    const good = { alarmEndSec: 30, analysisFps: 6.5, frameWidth: 640, abandonedSensitivity: 20, objectSpeed: { min: 10, max: 200 } };
+    const ok = await env.ok("PATCH", U(t.uid), { properties: good }, v(t));
+    assert.eq(NEW.map((n) => ok.properties[n]), NEW.map((n) => good[n]), "сохранены");
+    field(await props(env, ok, { alarmEndSec: 601 }), "VALIDATION_FAILED", P("alarmEndSec"), "задержка больше 600");
+    field(await props(env, ok, { analysisFps: 0 }), "VALIDATION_FAILED", P("analysisFps"), "0 кадров");
+    field(await props(env, ok, { frameWidth: 800 }), "VALIDATION_FAILED", P("frameWidth"), "ширина вне перечня");
+    field(await props(env, ok, { abandonedSensitivity: 0 }), "VALIDATION_FAILED", P("abandonedSensitivity"), "чувствительность 0");
+    field(await props(env, ok, { objectSpeed: { max: 501 } }), "VALIDATION_FAILED", P("objectSpeed/max"), "скорость выше 500");
+    const sp = await props(env, ok, { objectSpeed: { min: 300, max: 100 } });
+    field(sp, "VALIDATION_FAILED", P("objectSpeed/min"), "min выше max");
+    assert.eq(sp.body.params.reason, "minAboveMax", "reason скорости");
+    const gone = await env.ok("PATCH", U(ok.uid), { properties: Object.fromEntries(NEW.map((n) => [n, null])) }, v(ok));
+    assert.eq(NEW.filter((n) => n in gone.properties), [], "null снимает");
+  }, { needs: ["createUnits", "patchUnit", "kind:det", "prop:det.objectSpeed"], layer: "profile:vms.detector/1", since: "1.4" });
+
   test("Поддетектор 0.15.0: stripe — линия или ломаная; свой objectSize; диапазон multi; lostObjectType; свои extraZones; direction у a2a", async () => {
     const env = await makeEnv();
     const t = await addDet(env, camU, "Трекер 0.15", { detectorKind: "other", analyticsKind: "tracker" });

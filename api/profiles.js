@@ -1500,7 +1500,7 @@
     const out = sid ? akClash(p, null, null, ctx, sid) : [];
     return out.length || !kin.length ? out : kin.map(() => ({}));
   }
-  // С 0.12.0: пара min/max — меньшее не выше большего. objectSize — [ширина, высота], plateWidth — число. {field, params} или null
+  // С 0.12.0: пара min/max — меньшее не выше большего. objectSize — [ширина, высота], plateWidth — число; с профиля 1.4 и objectSpeed — число. {field, params} или null
   const aboveMax = (lo, hi) => (Array.isArray(lo) ? Array.isArray(hi) && lo.some((v, i) => v > hi[i]) : typeof lo === "number" && typeof hi === "number" && lo > hi);
   const rangeErr = (obj, name) => {
     const r = obj && obj[name];
@@ -1510,7 +1510,7 @@
   // действует только при detectorKind: other; сервер не отказывает и не сбрасывает его, когда старый клиент меняет detectorKind
   const settingsErr = (whole, set) => {
     if (!whole) return null;
-    const bad = rangeErr(whole, "objectSize") || rangeErr(whole, "plateWidth") || frontEdgeErr(whole) || scanErr(whole.scanWindow);
+    const bad = rangeErr(whole, "objectSize") || rangeErr(whole, "plateWidth") || rangeErr(whole, "objectSpeed") || frontEdgeErr(whole) || scanErr(whole.scanWindow);
     if (bad) return bad;
     return set.analyticsKind != null && whole.detectorKind !== "other" ? { field: "/properties/analyticsKind", params: { reason: "notOther" } } : null;
   };
