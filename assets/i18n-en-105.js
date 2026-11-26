@@ -42,6 +42,9 @@ Object.assign(window.I18N_EN,{
 "Это режим для опытных.":"This mode is for advanced users.",
 "Этого поля нет в контракте API. Консоль хранит значение только на этой странице.":"This field is not in the API contract. The console keeps the value only on this page.",
 "заглушка":"stub",
+"Задать область":"Set area",
+"не задана":"not set",
+"пикс.":"px",
 "и все свойства вида по схеме.":"and all kind properties from the schema.",
 "раз":"times",
 "усл. ед.":"rel. units"
