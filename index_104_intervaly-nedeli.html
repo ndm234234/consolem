@@ -1346,7 +1346,7 @@ select:not([multiple]){white-space:nowrap;overflow:hidden}:root select:not([mult
 .sch-kinds button[disabled]{cursor:default}
 .sch-hint{margin-top:8px}
 .sch-tools{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 8px;align-items:center}.sch-tools select{width:auto}
-/* Прототип 103: вид недели, режим выделения, шаг назад, копирование в дни, список интервалов */
+/* Прототип 104: вид недели, режим выделения, шаг назад, копирование в дни, список интервалов */
 .sch-tools .rl-seg button{display:inline-flex;align-items:center;gap:6px}
 .sch-segrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.sch-undo{display:inline-flex;gap:4px;margin-left:auto}
 .sch-dhint{margin:0 0 4px;font-size:12px}
@@ -29469,7 +29469,7 @@ function schEdNew(s,k,o={}){
 function schDirty(e){return!!e&&(e.isNew||JSON.stringify(e.d)!==e.base)}
 function schRO(e){const s=schById(e.id);return!!(e.d.builtin||(s&&s._pend))}
 function schRepaint(k){if(k==="d")schDlgPaint();else paint()}
-// Шаг назад и шаг вперёд (прототип 103): каждая правка кладёт снимок до неё; новая правка стирает шаги вперёд.
+// Шаг назад и шаг вперёд (прототип 104): каждая правка кладёт снимок до неё; новая правка стирает шаги вперёд.
 function schMut(k,fn){const e=schE(k);if(!e||schRO(e))return;const was=JSON.stringify(e.d);fn(e.d);if(JSON.stringify(e.d)!==was){(e.hist||(e.hist=[])).push(was);if(e.hist.length>100)e.hist.shift();e.fut=[]}schRepaint(k)}
 function schUndo(k){const e=schE(k);if(!e||!(e.hist||[]).length)return;(e.fut||(e.fut=[])).push(JSON.stringify(e.d));e.d=JSON.parse(e.hist.pop());e.copy=null;schRepaint(k)}
 function schRedo(k){const e=schE(k);if(!e||!(e.fut||[]).length)return;e.hist.push(JSON.stringify(e.d));e.d=JSON.parse(e.fut.pop());e.copy=null;schRepaint(k)}
@@ -29511,7 +29511,7 @@ const SCH_TPL=[["wd8","Будни 08:00–20:00",{"1,2,3,4,5":[["08:00","20:00"]
   ["night","Каждый день 20:00–08:00",{"1,2,3,4,5,6,7":[["20:00","08:00"]]}],["we","Суббота и воскресенье целиком",{"6,7":[["00:00","00:00"]]}],
   ["all","Каждый день круглосуточно",{"1,2,3,4,5,6,7":[["00:00","00:00"]]}],["clr","Очистить все дни",{}]];
 function schTpl(k,v){const t=SCH_TPL.find(x=>x[0]===v);if(t)schMut(k,s=>{s.week=schW(t[2])})}
-// «Копировать в…»: день-источник и отмеченные дни недели (прототип 103)
+// «Копировать в…»: день-источник и отмеченные дни недели (прототип 104)
 function schCopyOpen(k,i){const e=schE(k);if(!e)return;e.copy=e.copy===i?null:i;e.copySel=[];schRepaint(k)}
 function schCopyTick(k,j,on){const e=schE(k);if(!e)return;const l=new Set(e.copySel||[]);on?l.add(j):l.delete(j);e.copySel=[...l];schRepaint(k)}
 function schCopyAll(k){const e=schE(k);if(!e)return;const all=[0,1,2,3,4,5,6].filter(j=>j!==e.copy);e.copySel=(e.copySel||[]).length===all.length?[]:all;schRepaint(k)}
@@ -29593,7 +29593,7 @@ function schCalMonth(k,d){
 function schCalPick(k,iso){const e=schE(k);if(e){e.day=iso;schRepaint(k)}}
 // Проведите по полосе — добавится интервал (шаг 5 минут, время видно над выделением); пересечения сольются.
 // В режиме «Стирать» выделение убирает время. Выделение по нескольким строкам (дни недели, дни цикла) меняет
-// те же часы во всех строках сразу (прототип 103, как в веб-конфигураторе Axxon One).
+// те же часы во всех строках сразу (прототип 104, как в веб-конфигураторе Axxon One).
 let schDrag=null;
 function schBarDown(ev){
   if(ev.button!==0)return;

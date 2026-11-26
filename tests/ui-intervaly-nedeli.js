@@ -1,10 +1,10 @@
-/* Интервалы расписания (прототип 103, пробелы F109, F113, F114): редактор недели на странице «Расписания».
+/* Интервалы расписания (прототип 104, пробелы F109, F113, F114): редактор недели на странице «Расписания».
    Выделение мышью — шаг 5 минут, по нескольким дням сразу; режим «Стирать» (и интервал через полночь);
    «Копировать в…» у дня; вид «Список интервалов» (строка — время и дни недели); «Шаг назад» и «Шаг вперёд».
    Данные — по-прежнему по дням недели (контракт week[7]). На странице без этих функций сценарий ничего не проверяет.
-   Запуск: python3 tools/check_ui.py --page index_103_intervaly-nedeli.html tests/ui-intervaly-nedeli.js */
+   Запуск: python3 tools/check_ui.py --page index_104_intervaly-nedeli.html tests/ui-intervaly-nedeli.js */
 UiCheck(async ({ ok, until }) => {
-  if (typeof schErase !== "function" || typeof schCopyGo !== "function") { ok(true, "редактора интервалов прототипа 103 на странице нет"); return; }
+  if (typeof schErase !== "function" || typeof schCopyGo !== "function") { ok(true, "редактора интервалов прототипа 104 на странице нет"); return; }
   const SID = "f0000001-0001-4000-8000-000000000000"; // «Рабочие дни»: пн–пт 08:00–20:00
   const J = (x) => JSON.stringify(x);
   const E = () => schE("p");
