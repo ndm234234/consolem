@@ -1351,21 +1351,21 @@ select:not([multiple]){white-space:nowrap;overflow:hidden}:root select:not([mult
 .sch-segrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.sch-undo{display:inline-flex;gap:4px;margin-left:auto}
 .sch-dhint{margin:0 0 4px;font-size:12px}
 .sch-blk.ghost.er{background:var(--rd);opacity:.45;outline-color:var(--rd)}
-.sch-glab{position:fixed;transform:translateX(-50%);background:var(--one-fg);color:var(--bg);font-size:11px;line-height:16px;padding:0 6px;border-radius:var(--one-radius-control);white-space:nowrap;pointer-events:none;font-variant-numeric:tabular-nums;z-index:3}
-.sch-glab.er{background:var(--rd);color:#fff}
+.sch-glab{position:fixed;transform:translateX(-50%);background:var(--one-fg);color:var(--bg);font-size:11px;line-height:16px;padding:0 8px;border-radius:var(--one-radius-control);white-space:nowrap;pointer-events:none;font-variant-numeric:tabular-nums;z-index:3}
+.sch-glab.er{background:var(--rd);color:var(--one-accent-on)}
 .sch-ivs{position:relative}
 .sch-cpb.on{background:var(--x-soft);box-shadow:inset 0 0 0 1px var(--x-edge)}
-.sch-pop{position:absolute;right:0;top:calc(100% + 4px);z-index:20;width:320px;background:var(--p);border:1px solid var(--ln);border-radius:var(--one-radius-container);box-shadow:0 8px 24px rgba(0,0,0,.35);padding:12px;display:flex;flex-direction:column;gap:8px}
+.sch-pop{position:absolute;right:0;top:calc(100% + 4px);z-index:20;width:320px;background:var(--p);border:1px solid var(--ln);border-radius:var(--one-radius-container);box-shadow:var(--one-shadow);padding:12px;display:flex;flex-direction:column;gap:8px}
 .sch-pop .sub{margin:0;font-size:12px}.sch-pfoot{display:flex;justify-content:flex-end;gap:8px}
 .sch-pdays{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
-.sch-chip{min-width:32px;height:24px;padding:0 8px;border:1px solid var(--ln);border-radius:var(--one-radius-control);background:var(--p2);color:var(--tx);font:inherit;font-size:12px;cursor:pointer}
+.sch-chip{min-width:32px;height:24px;padding:0 8px;border:1px solid var(--ln);border-radius:var(--one-radius-container);background:var(--p2);color:var(--tx);font:inherit;font-size:12px;cursor:pointer}
 .sch-chip:hover:not([disabled]){background:var(--one-control-hover)}
 .sch-chip.on{background:var(--bl);border-color:var(--bl);color:var(--one-accent-on,#fff)}
 .sch-chip.src{display:inline-flex;align-items:center;justify-content:center;cursor:default;border-style:dashed;color:var(--mu)}
 .sch-chip.all{margin-left:4px}
 .sch-chip[disabled]{cursor:default;opacity:.7}
 .sch-list{display:flex;flex-direction:column;margin:4px 0}
-.sch-li{display:grid;grid-template-columns:max-content 120px 1fr max-content;gap:8px 12px;align-items:center;padding:6px 0;border-bottom:1px solid var(--ln)}
+.sch-li{display:grid;grid-template-columns:max-content 120px 1fr max-content;gap:8px 12px;align-items:center;padding:8px 0;border-bottom:1px solid var(--ln)}
 .sch-li .sch-dur{margin:0;font-size:12px;font-variant-numeric:tabular-nums}
 .sch-li.pend .sch-iv input{border-style:dashed}
 .sch-lnote{grid-column:1/-1;margin:0;font-size:12px}
@@ -3835,6 +3835,7 @@ body:has(.ttu) #tst:not(.in-fs){bottom:144px}
 <!-- ONE PSIM: мост по ONE.PSIM.PrototypeKit, подключён после стилей прототипа -->
 <link rel="stylesheet" href="assets/one-psim/bridge.css">
 <script src="assets/i18n-en.js"></script>
+<script src="assets/i18n-en-104.js"></script>
 <!-- API: контракт, эталонный набор, встроенный сервер и клиент (api/README.md) -->
 <script src="api/openapi.js"></script>
 <script src="api/fixture.js"></script>
@@ -11031,6 +11032,7 @@ const ESC_LAYERS=[
   // но раньше самого мастера
   {is:()=>document.getElementById("bmodal")?.classList.contains("open")&&!(document.querySelector("#bmodal .dc-box")&&(document.getElementById("confirm")?.classList.contains("open")||schDlgIsOpen())),off:bmBackdrop},
   {is:()=>document.getElementById("confirm")?.classList.contains("open"),off:closeConfirm},
+  {is:()=>typeof schCopyLayer==="function"&&!!schCopyLayer(),off(){const e=schCopyLayer();e.copy=null;schRepaint(e.k)}},
   {is:()=>typeof schDlgIsOpen==="function"&&schDlgIsOpen(),off:()=>schDlgCancel()},
   {is:()=>wizOpen()&&wizd?.mode==="device-add"&&(wizd.devFiltPop||wizd.csvFiltPop||wizd.modePop||wizd.devFieldsPop),
    off(){wizd.devFiltPop=wizd.csvFiltPop=wizd.modePop=wizd.devFieldsPop=false;wizd.tplFilter="";renderDeviceWizard()}},
@@ -29475,12 +29477,14 @@ function schRedo(k){const e=schE(k);if(!e||!(e.fut||[]).length)return;e.hist.pus
 document.addEventListener("keydown",ev=>{
   if(!(ev.ctrlKey||ev.metaKey)||ev.altKey)return;
   const t=ev.target,typing=t&&(t.tagName==="INPUT"||t.tagName==="TEXTAREA"||t.isContentEditable);if(typing)return;
+  if(document.getElementById("confirm")?.classList.contains("open"))return;   // под окном вопроса редактор не меняем
   const k=schDlg?"d":(schEd&&app==="rules"&&String(rule).startsWith("sch:")?"p":null);if(!k)return;
-  const key=ev.key.toLowerCase();
+  const key=ev.code==="KeyZ"?"z":ev.code==="KeyY"?"y":"";   // по клавише, а не по букве: Ctrl+Z работает и в русской раскладке
   if(key==="z"&&!ev.shiftKey){ev.preventDefault();schUndo(k)}
   else if(key==="y"||(key==="z"&&ev.shiftKey)){ev.preventDefault();schRedo(k)}
 });
-document.addEventListener("keydown",ev=>{if(ev.key!=="Escape")return;const e=schDlg&&schDlg.copy!=null?schDlg:schEd&&schEd.copy!=null?schEd:null;if(e){e.copy=null;schRepaint(e.k)}});
+// Окошко «Копировать в…» — слой Escape (ESC_LAYERS) выше окна расписания: Esc закрывает только окошко
+function schCopyLayer(){return schDlg&&schDlg.copy!=null?schDlg:(schEd&&schEd.copy!=null&&app==="rules"&&String(rule).startsWith("sch:")?schEd:null)}
 // Путь к списку интервалов: w:<день> | c:<день цикла> | d:<дата> | o:<правило особых дней>.
 function schIvList(s,p){
   const[t,i]=p.split(":"),n=+i;
@@ -29502,7 +29506,7 @@ function schIvAdd(k,p){schMut(k,s=>{
   const a=schRaw(last)[1]%1440;l.push([schHM(a+60),schHM(a+120)]);
 })}
 function schSetName(k,v){schMut(k,s=>{s.name=v})}
-function schSetKind(k,v){schMut(k,s=>{s.kind=v;if(v!=="week")s.ovr.forEach(o=>{if(o.m==="same")o.m="none"})})}
+function schSetKind(k,v){const e0=schE(k);if(e0){e0.mode="add";e0.copy=null}schMut(k,s=>{s.kind=v;if(v!=="week")s.ovr.forEach(o=>{if(o.m==="same")o.m="none"})})}
 const SCH_TPL=[["wd8","Будни 08:00–20:00",{"1,2,3,4,5":[["08:00","20:00"]]}],["wd9","Будни 09:00–18:00",{"1,2,3,4,5":[["09:00","18:00"]]}],
   ["night","Каждый день 20:00–08:00",{"1,2,3,4,5,6,7":[["20:00","08:00"]]}],["we","Суббота и воскресенье целиком",{"6,7":[["00:00","00:00"]]}],
   ["all","Каждый день круглосуточно",{"1,2,3,4,5,6,7":[["00:00","00:00"]]}],["clr","Очистить все дни",{}]];
@@ -29513,25 +29517,28 @@ function schCopyTick(k,j,on){const e=schE(k);if(!e)return;const l=new Set(e.copy
 function schCopyAll(k){const e=schE(k);if(!e)return;const all=[0,1,2,3,4,5,6].filter(j=>j!==e.copy);e.copySel=(e.copySel||[]).length===all.length?[]:all;schRepaint(k)}
 function schCopyGo(k){const e=schE(k);if(!e||e.copy==null)return;const src=e.copy,to=e.copySel||[];e.copy=null;if(!to.length){schRepaint(k);return}schMut(k,s=>{to.forEach(j=>{s.week[j]=ruleClone(s.week[src])})})}
 function schSetMode(k,v){const e=schE(k);if(e){e.mode=v;schRepaint(k)}}
-function schSetView(k,v){const e=schE(k);if(e){e.view=v;e.copy=null;schRepaint(k)}}
+function schSetView(k,v){const e=schE(k);if(e){e.view=v;e.copy=null;e.mode="add";schRepaint(k)}}
+// Стирать выделением можно только в виде «По дням» недели — там есть переключатель режима
+const schErasing=e=>e.mode==="erase"&&e.d.kind==="week"&&e.view!=="list";
 // Вид «Список интервалов»: строки — одинаковые интервалы [с, до] и дни недели, где они есть.
 // Данные — по-прежнему по дням недели (контракт week[7]); строка без дней живёт только в редакторе.
 function schGroups(e){
   const m=new Map();
   e.d.week.forEach((l,i)=>l.forEach(iv=>{const key=iv[0]+"-"+iv[1];if(!m.has(key))m.set(key,{iv:[iv[0],iv[1]],days:[]});m.get(key).days.push(i)}));
   const rows=[...m.values()].sort((a,b)=>schRaw(a.iv)[0]-schRaw(b.iv)[0]||schRaw(a.iv)[1]-schRaw(b.iv)[1]);
-  return rows.concat((e.lpend||[]).map(iv=>({iv,days:[],pend:true})));
+  return rows.concat((e.lpend||[]).map((iv,pi)=>({iv,days:[],pend:true,pi})));
 }
 const schSame=(a,b)=>a[0]===b[0]&&a[1]===b[1];
-function schLsDay(k,f,t,j,on){schMut(k,s=>{const l=s.week[j];if(on){l.push([f,t]);schNorm(l)}else{const i=l.findIndex(x=>schSame(x,[f,t]));if(i>=0)l.splice(i,1)}});schLsPendDrop(k,f,t,on)}
-function schLsAll(k,f,t,on){schMut(k,s=>{s.week.forEach(l=>{const i=l.findIndex(x=>schSame(x,[f,t]));if(i>=0)l.splice(i,1);if(on){l.push([f,t]);schNorm(l)}})});schLsPendDrop(k,f,t,on)}
-function schLsPendDrop(k,f,t,on){const e=schE(k);if(on&&e&&e.lpend){const i=e.lpend.findIndex(x=>schSame(x,[f,t]));if(i>=0){e.lpend.splice(i,1);schRepaint(k)}}}
-function schLsTime(k,f,t,n,v,pend){
+// pi — номер новой строки без дней (e.lpend), null — строка из данных
+function schLsDay(k,f,t,j,on,pi){schLsPendDrop(k,pi,on);schMut(k,s=>{const l=s.week[j];if(on){l.push([f,t]);schNorm(l)}else{const i=l.findIndex(x=>schSame(x,[f,t]));if(i>=0)l.splice(i,1)}})}
+function schLsAll(k,f,t,on,pi){schLsPendDrop(k,pi,on);schMut(k,s=>{s.week.forEach(l=>{const i=l.findIndex(x=>schSame(x,[f,t]));if(i>=0)l.splice(i,1);if(on){l.push([f,t]);schNorm(l)}})})}
+function schLsPendDrop(k,pi,on){const e=schE(k);if(on&&e&&e.lpend&&pi!=null&&e.lpend[pi])e.lpend.splice(pi,1)}
+function schLsTime(k,f,t,n,v,pi){
   const e=schE(k);if(!e||!v)return;
-  if(pend){const x=e.lpend.find(x=>schSame(x,[f,t]));if(x){x[n]=v;schRepaint(k)}return}
+  if(pi!=null){const x=e.lpend[pi];if(x){x[n]=v;schRepaint(k)}return}
   schMut(k,s=>{s.week.forEach(l=>{const i=l.findIndex(x=>schSame(x,[f,t]));if(i>=0){l[i]=n?[f,v]:[v,t];schNorm(l)}})});
 }
-function schLsDel(k,f,t,pend){const e=schE(k);if(!e)return;if(pend){e.lpend=e.lpend.filter(x=>!schSame(x,[f,t]));schRepaint(k);return}schMut(k,s=>{s.week.forEach(l=>{const i=l.findIndex(x=>schSame(x,[f,t]));if(i>=0)l.splice(i,1)})})}
+function schLsDel(k,f,t,pi){const e=schE(k);if(!e)return;if(pi!=null){e.lpend.splice(pi,1);schRepaint(k);return}schMut(k,s=>{s.week.forEach(l=>{const i=l.findIndex(x=>schSame(x,[f,t]));if(i>=0)l.splice(i,1)})})}
 function schLsAdd(k){const e=schE(k);if(!e||schRO(e))return;(e.lpend||(e.lpend=[])).push(["09:00","18:00"]);schRepaint(k)}
 // Стереть отрезок [lo, hi] минут суток дня p. Интервал через полночь: его утренняя часть — в следующих сутках,
 // поэтому стирание правит и предыдущий день (часть, что переходит в эти сутки), а кусок после полуночи уходит
@@ -29591,7 +29598,7 @@ let schDrag=null;
 function schBarDown(ev){
   if(ev.button!==0)return;
   const bar=ev.currentTarget,k=bar.dataset.k,p=bar.dataset.p,e=schE(k);if(!e||schRO(e))return;
-  const erase=e.mode==="erase",pre=p.split(":")[0];
+  const pre=p.split(":")[0],erase=schErasing(e)&&pre==="w";
   const rowsEl=bar.closest(".sch-rows"),multi=pre==="w"||pre==="c";
   const bars=multi&&rowsEl?[...rowsEl.querySelectorAll(`.sch-bar[data-p^="${pre}:"]`)]:[bar];
   const rc=bar.getBoundingClientRect(),at=x=>Math.max(0,Math.min(1440,Math.round((x-rc.left)/rc.width*288)*5));
@@ -29623,7 +29630,7 @@ function schBarDown(ev){
 const schPc=m=>(m/14.4).toFixed(3)+"%";
 function schBarHtml(raw,carry,now,k,p,ro){
   const blk=(a,b,cls,tip)=>`<span class="sch-blk ${cls}" style="left:${schPc(a)};width:${schPc(Math.max(b-a,6))}" data-tip="${escHtml(tip)}"></span>`;
-  return`<div class="sch-bar ${ro?"ro":""}" ${k?`data-k="${k}" data-p="${p}"`:""} ${ro||!k?"":`${onEv("pointerdown",["schBarDown",onEv.event])} data-tip="${i18n("Проведите мышью, чтобы добавить интервал")}"`}>${
+  return`<div class="sch-bar ${ro?"ro":""}" ${k?`data-k="${k}" data-p="${p}"`:""} ${ro||!k?"":`${onEv("pointerdown",["schBarDown",onEv.event])} data-tip="${i18n(String(p).startsWith("w:")&&schE(k)&&schErasing(schE(k))?"Провести мышью, чтобы стереть время":"Проведите мышью, чтобы добавить интервал")}"`}>${
     carry.map(([a,b])=>blk(a,b,"carry",i18n("продолжение интервала с предыдущего дня"))).join("")}${
     raw.map(([a,b])=>blk(a,Math.min(b,1440),b>1440?"x":"",`${schHM(a)}–${schHM(b)}${b>1440?" "+i18n("(до следующего дня)"):""}`)).join("")}${
     now!=null?`<span class="sch-now" style="left:${schPc(now)}" data-tip="${i18n("Сейчас")} ${schHM(now)}"></span>`:""}</div>`;
@@ -29645,26 +29652,26 @@ function schCopyHtml(e,i,label){
   if(!open)return btn;
   const all=others.every(j=>sel.has(j));
   return btn+`<div class="sch-pop" role="dialog" aria-label="${i18n("Копировать")} ${escHtml(label)}">
-    <b>${i18n("Копировать")} «${escHtml(i18n(SCH_DAY_FULL[i]))}» ${i18n("в")}:</b>
+    <b>«${escHtml(i18n(SCH_DAY_FULL[i]))}» — ${i18n("копировать в")}:</b>
     <div class="sch-pdays">${RULE_DAYS.map((d,j)=>j===i?`<span class="sch-chip src" data-tip="${i18n("День-источник")}">${i18n(d)}</span>`:`<button type="button" class="sch-chip ${sel.has(j)?"on":""}" aria-pressed="${sel.has(j)}" ${onEv("click",["schCopyTick",`${k}`,j,!sel.has(j)])}>${i18n(d)}</button>`).join("")}
       <button type="button" class="sch-chip all ${all?"on":""}" aria-pressed="${all}" ${onEv("click",["schCopyAll",`${k}`])}>${i18n("Все дни")}</button></div>
     <p class="sub">${i18n("Интервалы отмеченных дней консоль заменит интервалами дня-источника.")}</p>
-    <div class="sch-pfoot"><button type="button" class="btn s" ${onEv("click",["schCopyOpen",`${k}`,i])}>${i18n("Отмена")}</button><button type="button" class="btn s pri" ${sel.size?"":"disabled"} ${onEv("click",["schCopyGo",`${k}`])}>${sel.size?`${i18n("Копировать в")} ${sel.size} ${i18n(sel.size===1?"день":sel.size<5?"дня":"дней")}`:i18n("Отметьте дни")}</button></div>
+    <div class="sch-pfoot"><button type="button" class="btn s" ${onEv("click",["schCopyOpen",`${k}`,i])}>${i18n("Отмена")}</button><button type="button" class="btn s pri" ${sel.size?"":"disabled"} ${onEv("click",["schCopyGo",`${k}`])}>${sel.size?`${i18n("Копировать в")} ${sel.size} ${i18n(sel.size===1?"день":sel.size<5?"дня":"дней")}`:i18n("Отметить дни")}</button></div>
   </div>`;
 }
 // Вид «Список интервалов» (как в клиенте Axxon One): строка — время с, до и дни недели
 function schListHtml(e){
   const k=e.k,ro=schRO(e),rows=schGroups(e),dis=ro?"disabled":"";
   const body=rows.map((r,n)=>{
-    const[f,t]=r.iv,all=r.days.length===7,pend=!!r.pend;
+    const[f,t]=r.iv,all=r.days.length===7,pend=!!r.pend,pi=pend?r.pi:null;
     const cross=schRaw(r.iv)[1]>1440;
     return`<div class="sch-li ${pend?"pend":""}">
-      <span class="sch-iv"><input type="time" value="${escHtml(f)}" ${dis} aria-label="${i18n("Интервал")} ${n+1}: ${i18n("с")}" ${onEv("change",["schLsTime",`${k}`,f,t,0,onEv.value,pend])}><span>–</span><input type="time" value="${escHtml(t)}" ${dis} aria-label="${i18n("Интервал")} ${n+1}: ${i18n("до")}" ${onEv("change",["schLsTime",`${k}`,f,t,1,onEv.value,pend])}></span>
+      <span class="sch-iv"><input type="time" value="${escHtml(f)}" ${dis} aria-label="${i18n("Интервал")} ${n+1}: ${i18n("с")}" ${onEv("change",["schLsTime",`${k}`,f,t,0,onEv.value,pi])}><span>–</span><input type="time" value="${escHtml(t)}" ${dis} aria-label="${i18n("Интервал")} ${n+1}: ${i18n("до")}" ${onEv("change",["schLsTime",`${k}`,f,t,1,onEv.value,pi])}></span>
       <span class="sch-dur sub">${schDur(Math.min(schRaw(r.iv)[1]-schRaw(r.iv)[0],1440))}${cross?` · ${i18n("до следующего дня")}`:""}</span>
-      <div class="sch-pdays">${RULE_DAYS.map((d,j)=>{const on=r.days.includes(j);return`<button type="button" class="sch-chip ${on?"on":""}" aria-pressed="${on}" ${dis} aria-label="${i18n(SCH_DAY_FULL[j])}" ${onEv("click",["schLsDay",`${k}`,f,t,j,!on])}>${i18n(d)}</button>`}).join("")}
-        <button type="button" class="sch-chip all ${all?"on":""}" aria-pressed="${all}" ${dis} ${onEv("click",["schLsAll",`${k}`,f,t,!all])}>${i18n("Все")}</button></div>
-      ${ro?"":`<button type="button" class="lk sch-x" data-tip="${i18n("Убрать интервал")}" aria-label="${i18n("Убрать интервал")} ${n+1}" ${onEv("click",["schLsDel",`${k}`,f,t,pend])}>${lu("x",12)}</button>`}
-      ${pend?`<span class="sub sch-lnote">${i18n("Отметьте дни недели. Без дней интервал не действует и не сохранится.")}</span>`:""}
+      <div class="sch-pdays">${RULE_DAYS.map((d,j)=>{const on=r.days.includes(j);return`<button type="button" class="sch-chip ${on?"on":""}" aria-pressed="${on}" ${dis} aria-label="${i18n(SCH_DAY_FULL[j])}" ${onEv("click",["schLsDay",`${k}`,f,t,j,!on,pi])}>${i18n(d)}</button>`}).join("")}
+        <button type="button" class="sch-chip all ${all?"on":""}" aria-pressed="${all}" ${dis} ${onEv("click",["schLsAll",`${k}`,f,t,!all,pi])}>${i18n("Все")}</button></div>
+      ${ro?"":`<button type="button" class="lk sch-x" data-tip="${i18n("Убрать интервал")}" aria-label="${i18n("Убрать интервал")} ${n+1}" ${onEv("click",["schLsDel",`${k}`,f,t,pi])}>${lu("x",12)}</button>`}
+      ${pend?`<span class="sub sch-lnote">${i18n("Отметить дни недели. Без дней интервал не действует и не сохранится.")}</span>`:""}
     </div>`;
   }).join("");
   const td=schDow(new Date())-1,s=e.d;
@@ -29686,7 +29693,7 @@ function schKindBody(e){
     const tpl=`<select aria-label="${i18n("Шаблон недели")}" ${onEv("change",["schTpl",`${k}`,onEv.value])}><option value="">${i18n("Шаблон…")}</option>${SCH_TPL.map(x=>`<option value="${x[0]}">${escHtml(i18n(x[1]))}</option>`).join("")}</select>`;
     const tools=`<div class="sch-tools">${vseg}${ro?"":(view==="grid"?mseg:"")+tpl}</div>`;
     if(view==="list")return tools+schListHtml(e);
-    const hint=ro?"":`<p class="sub sch-dhint">${i18n(e.mode==="erase"?"Проведите мышью по полосе, чтобы стереть время. Чтобы стереть те же часы в нескольких днях, ведите мышь вниз или вверх по дням.":"Выделение мышью идёт с шагом 5 минут. Чтобы задать те же часы нескольким дням, ведите мышь вниз или вверх по дням.")}</p>`;
+    const hint=ro?"":`<p class="sub sch-dhint">${i18n(e.mode==="erase"?"Провести мышью по полосе, чтобы стереть время. Чтобы стереть те же часы в нескольких днях, вести мышь вниз или вверх по дням.":"Выделение мышью идёт с шагом 5 минут. Чтобы задать те же часы нескольким дням, вести мышь вниз или вверх по дням.")}</p>`;
     return tools+hint+`<div class="sch-rows">${schRulerHtml()}${s.week.map((l,i)=>schRowHtml(e,i18n(RULE_DAYS[i]),l,"w:"+i,{today:i===td,now:i===td?nowM:null,carry:schCarry(s.week[(i+6)%7])})).join("")}</div>`;
   }
   if(s.kind==="cycle"){

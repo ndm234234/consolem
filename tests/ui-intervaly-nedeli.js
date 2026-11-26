@@ -89,10 +89,27 @@ UiCheck(async ({ ok, until }) => {
   schLsAdd("p");
   ok(await until(() => document.querySelector(".sch-li.pend")), "новая строка без дней видна и помечена");
   ok(W().every((l) => !l.some((x) => x[0] === "09:00" && x[1] === "18:00")), "строка без дней не попала в данные");
-  schLsDay("p", "09:00", "18:00", 2, true);
-  ok(J(W()[2]) === J([["09:00", "18:00"]]) && !E().lpend.length, "первый флажок дня переносит строку в данные");
+  schLsAdd("p");
+  ok(await until(() => document.querySelectorAll(".sch-li.pend").length === 2), "две новые строки с одинаковым временем");
+  schLsTime("p", "09:00", "18:00", 1, "17:00", 1);
+  ok(J(E().lpend) === J([["09:00", "18:00"], ["09:00", "17:00"]]), "время второй новой строки меняется только у неё");
+  schLsDel("p", "09:00", "18:00", 0);
+  ok(J(E().lpend) === J([["09:00", "17:00"]]), "«Убрать» убирает только свою новую строку");
+  schLsDay("p", "09:00", "17:00", 2, true, 0);
+  ok(J(W()[2]) === J([["09:00", "17:00"]]) && !E().lpend.length, "первый флажок дня переносит строку в данные");
   schSetView("p", "grid");
   ok(await until(() => bars().length === 7), "обратно в вид «По дням»");
+
+  // Режим «Стирать» не переходит в другой тип и вид: там переключателя нет
+  schSetMode("p", "erase");
+  schSetView("p", "list");
+  ok(E().mode === "add", "смена вида возвращает режим «Добавлять»");
+  schSetView("p", "grid");
+  schSetMode("p", "erase");
+  schSetKind("p", "cycle");
+  ok(E().mode === "add" && !schErasing(E()), "смена типа возвращает режим «Добавлять»");
+  schUndo("p");
+  ok(await until(() => E().d.kind === "week" && bars().length === 7), "шаг назад вернул тип «По дням недели»");
 
   // 6. Шаг назад и шаг вперёд
   set([[["08:00", "20:00"]], [], [], [], [], [], []]);
@@ -108,7 +125,16 @@ UiCheck(async ({ ok, until }) => {
   drag(2, 540, 2, 600);
   ok(!E().fut.length, "новая правка стирает шаги вперёд");
   document.body.focus();
-  document.dispatchEvent(new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true }));
-  ok(J(W()) === before, "Ctrl+Z — шаг назад");
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "я", code: "KeyZ", ctrlKey: true, bubbles: true }));
+  ok(J(W()) === before, "Ctrl+Z — шаг назад, и в русской раскладке");
   ok(await until(() => document.querySelector(".sch-undo button:not([disabled])")), "кнопки шагов доступны после правок");
+
+  // 7. Окно расписания: Esc закрывает окошко «Копировать в…», а не окно
+  schDlgOpen(SID);
+  ok(await until(() => schDlgIsOpen() && document.querySelector('#schdlg .sch-bar[data-p="w:0"]')), "окно расписания открыто");
+  schCopyOpen("d", 0);
+  ok(await until(() => document.querySelector("#schdlg .sch-pop")), "в окне открыто «Копировать в…»");
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  ok(await until(() => !document.querySelector("#schdlg .sch-pop")), "Esc закрыл окошко");
+  ok(schDlgIsOpen(), "окно расписания осталось открытым");
 });
