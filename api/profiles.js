@@ -505,6 +505,30 @@
     if (params.serverId && !ctx.byId("servers", params.serverId)) return ctx.problem(422, "VALIDATION_FAILED", "Такого сервера нет", { field: "serverId" });
     return { result: { items: foundOnNas(params.disk, params.serverId || null, ctx) } };
   }
+  // Папки NAS (команда listFolders вида archive.network, профиль vms.volume/1 1.5, пробел F94): стенд в сеть не ходит.
+  // Дерево одно и то же при каждом вызове: у сервера NAS — общие папки, ниже — две ступени папок. Сверх того — папки,
+  // где уже лежат тома хранилищ NAS: так человек видит и занятую папку. Учётная запись обязательна, пароль стенд не судит
+  const NAS_SHARES = ["backup", "public", "vms"], NAS_TREE = [["Архив", "Камеры 2025", "Резерв"], ["Объектный", "Старое"]];
+  const nasKey = (x) => String(x || "").trim().replace(/\//g, "\\").replace(/\\+$/, "").toLowerCase();
+  function archiveFolders(kind, params, ctx) {
+    if (archSpec(kind, ctx).address !== "nas") return ctx.problem(422, "NOT_SUPPORTED", `У вида ${kind} нет папок NAS`, { field: "kind" });
+    const raw = trimmed(params.disk);
+    const m = /^(\\\\|\/\/)([^\\/]+)((?:[\\/][^\\/]+)*)[\\/]*$/.exec(raw || "");
+    if (!m) return ctx.problem(422, "VALIDATION_FAILED", "Путь к папке NAS: \\\\сервер\\папка или //сервер/папка", { field: "disk", params: { reason: "format" } });
+    if (!trimmed(params.login)) return ctx.problem(422, "VALIDATION_FAILED", "Укажите учётную запись NAS", { field: "login" });
+    if (params.serverId && !ctx.byId("servers", params.serverId)) return ctx.problem(422, "VALIDATION_FAILED", "Такого сервера нет", { field: "serverId" });
+    const sep = m[1] === "//" ? "/" : "\\", base = raw.replace(/[\\/]+$/, ""), segs = m[3].split(/[\\/]/).filter(Boolean).length;
+    // Имена без учёта регистра: SMB не различает Vms и vms
+    const names = new Map((segs ? NAS_TREE[segs - 1] || [] : NAS_SHARES).map((x) => [x.toLowerCase(), x]));
+    // Папки томов NAS ниже этой: первая ступень пути после base
+    const vols = volumesAt("nas", null, ctx), key = nasKey(base) + "\\";
+    vols.forEach((v) => { const k = nasKey(v.disk); if (!k.startsWith(key)) return; const nm = String(v.disk).trim().replace(/\//g, "\\").replace(/\\+$/, "").slice(key.length).split("\\")[0]; if (nm && !names.has(nm.toLowerCase())) names.set(nm.toLowerCase(), nm); });
+    const items = [...names.values()].filter(Boolean).sort((a, b) => a.localeCompare(b, "ru")).map((name) => {
+      const path = base + sep + name, v = vols.find((x) => nasKey(x.disk) === nasKey(path));
+      return Object.assign({ name, path }, v ? { archiveId: v.archiveId } : {});
+    });
+    return { result: { items } };
+  }
   // Том с записями (attachExisting): адрес — из списка findVolumes этого хранилища, тип хранения — как у хранилища
   function volumeAttachProblem(a, v, storage, ctx) {
     const address = archSpec(a.kind, ctx).address;
@@ -544,6 +568,7 @@
     actions: {
       check: (u, params, ctx) => archiveCheck(u.kind, params.volume, ctx),
       findVolumes: (u, params, ctx) => archiveFind(u.kind, params, ctx),
+      listFolders: (u, params, ctx) => archiveFolders(u.kind, params, ctx),
     },
   };
 

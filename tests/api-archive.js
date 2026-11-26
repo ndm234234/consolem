@@ -234,6 +234,39 @@
     assert.eq((await find({ serverId: srv.id, path: "" })).length, all.length, "пустой path — все тома, как раньше");
   }, { needs: ["runKindAction", "kind:archive.local", "action:archive.local/findVolumes"], layer: "profile:vms.volume/1", since: "1.4" });
 
+  // Пробел F94: папки NAS по учётной записи (профиль 1.5, команда listFolders вида archive.network)
+  test("Том: listFolders (профиль 1.5) — общие папки NAS, подпапки по алфавиту, папка с томом хранилища — с archiveId, неверный путь и нет учётной записи — 422", async () => {
+    const env = await makeEnv();
+    const run = (params) => env.call("POST", "/kinds/archive.network/actions/listFolders", { params });
+    const list = async (params) => (await env.ok("POST", "/kinds/archive.network/actions/listFolders", { params })).result.items;
+    const shares = await list({ disk: "\\\\nas01", login: "svc" });
+    assert.ok(shares.length > 0 && shares.every((f) => f.path === "\\\\nas01\\" + f.name), "у сервера NAS — общие папки, путь — сервер и имя");
+    const sub = await list({ disk: "\\\\nas01\\vms\\", login: "svc", password: "x" });
+    assert.ok(sub.length > 0 && sub.every((f) => f.path === "\\\\nas01\\vms\\" + f.name), "подпапки: путь без косой черты в конце");
+    assert.eq(sub.map((f) => f.name), sub.map((f) => f.name).slice().sort((a, b) => a.localeCompare(b, "ru")), "по алфавиту");
+    assert.ok((await list({ disk: "//nas01/vms", login: "svc" })).every((f) => f.path.startsWith("//nas01/vms/")), "прямая косая черта — ответ в той же записи");
+    // Каждая папка, где лежит том хранилища NAS, — с archiveId хранилища, чей том там лежит; регистр пути не важен
+    const nasVols = FX.volumes.filter((v) => FX.archives.some((a) => a.id === v.archiveId && a.kind === "network") && /^\\\\[^\\]+\\.+/.test(v.disk || ""));
+    assert.ok(nasVols.length > 0, "в наборе есть тома NAS");
+    for (const v of nasVols) {
+      const at = v.disk.replace(/[\\]+$/, ""), parent = at.replace(/\\[^\\]+$/, "");
+      const hit = (await list({ disk: parent.toUpperCase(), login: "svc" })).find((f) => f.path.toLowerCase() === at.toLowerCase());
+      assert.ok(hit && FX.volumes.some((x) => x.archiveId === hit.archiveId && x.disk.replace(/[\\]+$/, "").toLowerCase() === at.toLowerCase()), `папка ${at} — с archiveId хранилища, чей том в ней`);
+    }
+    assert.ok((await list({ disk: "\\\\nas01\\vms", login: "svc" })).every((f) => !f.archiveId), "в папке без томов — без archiveId");
+    for (const disk of ["nas01\\vms", "D:\\Axxon", "\\\\", ""]) {
+      const r = await run({ disk, login: "svc" });
+      assert.status(r, 422, "VALIDATION_FAILED", `неверный путь «${disk}»`);
+      if (disk) assert.eq([r.body.field, (r.body.params || {}).reason], ["/params/disk", "format"], `неверный путь «${disk}»: поле и причина`);
+    }
+    for (const login of [undefined, "  "]) {
+      const r = await run(Object.assign({ disk: "\\\\nas01\\vms" }, login == null ? {} : { login }));
+      assert.status(r, 422, "VALIDATION_FAILED", "без учётной записи");
+      assert.ok(/login/.test(String(r.body.field)), `без учётной записи: поле login, а не ${r.body.field}`);
+    }
+    assert.status(await env.call("POST", "/kinds/archive.local/actions/listFolders", { params: { disk: "\\\\nas01", login: "svc" } }), 404, "NOT_FOUND", "у локального команды нет");
+  }, { needs: ["runKindAction", "kind:archive.network", "action:archive.network/listFolders"], layer: "profile:vms.volume/1", since: "1.5" });
+
   test("Том: «только чтение» (профиль 1.2) — writeStopped хранится, состояние не меняется, откат возвращает запись", async () => {
     const env = await makeEnv();
     const vol = FX.volumes.find((x) => x.state === "ready" && x.enabled !== false && !x.writeStopped && x.shrinkPendingBytes == null);
