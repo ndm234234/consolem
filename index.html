@@ -2811,6 +2811,21 @@ p.dl-warn svg{display:inline;vertical-align:-2px}
 .an-srv{margin-bottom:12px}
 .gb-in{display:flex;align-items:center;gap:6px}
 .gb-in input{flex:1;min-width:0}
+.g>[data-nas-f]:has(.nasp){grid-column:1/-1}
+/* Выбор папки NAS (пробел F94): панель под полем пути, строки — папки, внизу — «Выбрать эту папку» */
+.nasp{margin-top:8px;border:1px solid var(--ln);border-radius:var(--one-radius-container);background:var(--p);padding:8px;display:flex;flex-direction:column;gap:8px;font:var(--one-type-body-sm)}
+.nasp-head{display:flex;align-items:center;gap:8px;min-width:0}
+.nasp-path{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.nasp-list{max-height:224px;overflow:auto;scrollbar-gutter:stable;display:flex;flex-direction:column}
+.nasp-row{display:flex;align-items:center;gap:8px;height:var(--row-h);padding:0 8px;border:0;border-radius:var(--one-radius-control);background:none;color:var(--tx);font:inherit;text-align:left;cursor:pointer;transition:background .12s}
+.nasp-row:hover{background:var(--p2)}
+.nasp-row:focus-visible{outline:2px solid var(--one-focus-ring);outline-offset:2px}
+.nasp-row svg{width:var(--ic);height:var(--ic);flex:none;color:var(--mu)}
+.nasp-nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nasp-row .tag{max-width:50%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nasp-foot{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.nasp-why{flex:1;min-width:0}
+@media (prefers-reduced-motion:reduce){.nasp-row{transition:none}}
 .gb-in>span{color:var(--mu);font-size:12px}
 /* Размер тома: единица, свободное место, ошибка и предупреждение под полем (пробел F92) */
 .gb-in .vsz-unit{flex:0 0 auto;width:auto;field-sizing:content}
@@ -9946,7 +9961,7 @@ function cardPlanOpen(){
 function cardEditBlock(){
   if(!cardDraft)return"";
   // Размер тома в карточке — не меньше 1 ГБ и не больше свободного места диска (пробел F92)
-  {const n=find(cardDraft.id)?.n,a=n?.type==="vol"&&archById(n.archId),p=a&&volSizeProblem(a,n,a.server);if(p)return p}
+  {const n=find(cardDraft.id)?.n,a=n?.type==="vol"&&archById(n.archId),p=a&&(volSizeProblem(a,n,a.server)||(archAddr(a)==="nas"&&nasPathProblem(n.disk,a.id,nasKey(n.disk)!==nasKey(volSavedDisk(n)))));if(p)return p}
   return Object.keys(edits).map(k=>{const[id,f]=splitEditKey(k);return id===cardDraft.id?editError(id,f,edits[k]):""}).find(Boolean)||"";
 }
 // Свободное место дисков (freeBytes) считает сервер. Операция, которая добавила том или изменила его
@@ -37626,7 +37641,7 @@ const CLOUD_REGIONS={s3:["eu-central-1","eu-west-1","us-east-1","us-west-1","ap-
 function volFieldsHtml(a,v,set){
   // Правило 2 версии профиля: метка поля тома по ключу (размер — sizeBytes, пользователь — login, пароль — password)
   const vf=key=>pfa("volume",{gb:"sizeBytes",user:"login",pass:"password"}[key]||key);
-  const k=archAddr(a),inp=(label,key,type,hint,ph)=>`<div${vf(key)}><label>${i18n(label)}</label><input type="${type||"text"}" value="${escHtml(v[key]??"")}" ${ph?`placeholder="${escHtml(ph)}"`:""} ${onEv("input",[...set,key,onEv.value,true])}>${hint?`<div class="bk-hint">${i18n(hint)}</div>`:""}</div>`;
+  const k=archAddr(a),inp=(label,key,type,hint,ph)=>`<div${vf(key)}><label>${i18n(label)}</label><input type="${type||"text"}" ${key==="user"||key==="pass"?`data-nas="${key}"`:""} value="${escHtml(v[key]??"")}" ${ph?`placeholder="${escHtml(ph)}"`:""} ${onEv("input",[...set,key,onEv.value,true])}>${hint?`<div class="bk-hint">${i18n(hint)}</div>`:""}</div>`;
   const sel=(label,key,opts,hint)=>`<div${vf(key)}><label>${i18n(label)}</label><select ${onEv("change",[...set,key,onEv.value])}>${opts.map(([val,l,dis])=>`<option value="${escHtml(val)}" ${String(v[key])===String(val)?"selected":""} ${dis?"disabled":""}>${escHtml(l)}</option>`).join("")}</select>${hint?`<div class="bk-hint">${hint}</div>`:""}</div>`;
   // Размер: число, единица ГБ / ТБ, под полем — свободное место диска и «Всё свободное» (пробел F92)
   const gb=(label,hint)=>{
@@ -37659,8 +37674,7 @@ function volFieldsHtml(a,v,set){
         v.mode==="part"?i18n("занимает весь диск. Неотформатированный диск форматируют отдельно кнопкой «Форматировать» у тома"):i18n("на диске с файловой системой. Для FAT32 — не больше 4 ГБ"))}
       ${v.mode==="part"?pfw("volume","sizeBytes",fldRo("Объём",d?.size||v.size)):dir("сервер создаёт файл тома в этой папке")+gb("Размер файла","не меньше 1 ГБ")}</div>`;
   }
-  if(k==="nas")return`<div class="g" style="margin-top:10px">${inp("Путь к папке","disk","text","\\\\nas01\\vms или //nas01/vms")}${gb("Размер файла","том сетевого хранилища — это всегда файл")}
-      ${inp("Пользователь","user","text","домен\\имя или компьютер\\имя")}${inp("Пароль","pass","password")}</div>`;
+  if(k==="nas")return`<div class="g" style="margin-top:10px">${inp("Пользователь","user","text","домен\\имя или компьютер\\имя")}${inp("Пароль","pass","password")}${nasPathField({val:v.disk,on:[...set,"disk"],own:a.id,kind:"archive."+a.kind,sid:a.server,scope:set[0]==="anSet"?"an:new":set[0]==="avVol"?"av:new":"vol:"+v.id,saved:set[0]==="volSet"?volSavedDisk(v)||"":"",attr:vf("disk"),hint:"\\\\nas01\\vms или //nas01/vms"})}${gb("Размер файла","том сетевого хранилища — это всегда файл")}</div>`;
   const p=a.provider||"s3";
   if(p==="azure")return`<div class="g" style="margin-top:10px">${inp("Учётная запись хранилища","account")}${inp("Ключ доступа","secret","password")}${inp("Контейнер","bucket","text","создаётся заранее в портале Azure")}${inp("Путь в контейнере","path")}${gb("Объём")}</div>`;
   const keys=`${inp("Access key ID","keyId")}${inp("Secret access key","secret","password")}`;
@@ -37737,6 +37751,86 @@ function volDefaults(a){
   const f=(a.vols||[])[0]||{};
   return{disk:a.provider||"s3",size:f.size||"10 ТБ",region:f.region||(CLOUD_REGIONS[a.provider]||CLOUD_REGIONS.s3)[0],bucket:f.bucket||"",path:"vms"+((a.vols||[]).length?"/vol"+((a.vols||[]).length+1):""),
     keyId:f.keyId||"",secret:"",host:f.host||"",port:f.port||9000,proto:f.proto||"https",account:f.account||"",endpoint:f.endpoint||"",style:f.style||"path"};
+}
+// ── Папка NAS: запись пути, выбор папки, папка другого хранилища (пробел F94) ──
+// Путь к папке NAS: \\сервер\папка или //сервер/папка. Пустой путь проверяет «Указать путь и пользователя»
+const NAS_PATH_RE=/^(\\\\|\/\/)[^\\/]+(?:[\\/][^\\/]+)+[\\/]*$/;
+function nasKey(p){return String(p||"").trim().replace(/\//g,"\\").replace(/\\+$/,"").toLowerCase()}
+function nasPathBad(p){p=String(p||"").trim();return p&&!NAS_PATH_RE.test(p)?i18n("Записать путь так: \\\\сервер\\папка или //сервер/папка."):""}
+// Хранилище, чей том уже лежит в этой папке NAS. Своё хранилище own не считается: у него в папке могут быть несколько файлов томов
+function nasTakenBy(p,own){const k=nasKey(p);return k?arch.find(a=>a.id!==own&&archAddr(a)==="nas"&&archVols(a).some(v=>nasKey(v.disk)===k))||null:null}
+function nasTakenText(a){return i18n("В этой папке уже есть том хранилища")+` «${locName(a)}». `+i18n("Два хранилища не могут писать в одну папку. Выбрать другую папку.")}
+// Что мешает взять папку: запись пути, а для нового тома — и том другого хранилища в папке. check "0" — только запись пути
+// Путь тома карточки, который уже применён: его папку не проверяют на «занято» — том уже там
+function volSavedDisk(v){const b=cardDraft?.id===v?.id?cardDraft.snap:cardBase?.id===v?.id?cardBase.snap:null;return b?b.disk:null}
+function nasPathProblem(p,own,check){const t=check===false?null:nasTakenBy(p,own);return nasPathBad(p)||(t?nasTakenText(t):"")}
+// saved — применённый путь тома карточки: его папку не проверяют на «занято»
+function nasPathLive(el,own,check,saved){
+  const box=el.closest("[data-nas-f]")?.querySelector("[data-nas-msg]");if(!box)return;
+  const m=nasPathProblem(el.value,own,check!=="0"&&!(saved&&nasKey(el.value)===nasKey(saved)));box.textContent=m;box.hidden=!m;
+}
+// Поле «Путь к папке» NAS: on — обработчик ввода без значения, change — после выбора папки; sid — сервер, который подключает NAS
+function nasPathField(o){
+  const m=nasPathProblem(o.val,o.own,o.check!==false&&!(o.saved&&nasKey(o.val)===nasKey(o.saved))),pick=kindActionOn(o.kind,"listFolders");
+  return`<div data-nas-f${o.attr||""}><label>${i18n("Путь к папке")}</label><div class="gb-in"><input data-nas="disk" value="${escHtml(o.val||"")}" placeholder="\\\\nas01\\vms" ${onEv("input",[...o.on,onEv.value,true],["nasPathLive",onEv.el,String(o.own||""),o.check===false?"0":"1",String(o.saved||"")])} ${o.change?onEv("change",o.change):""}>${pick?`<button type="button" class="btn s" data-tip="${i18n("Показать папки NAS. Сначала указать пользователя")}" ${onEv("pointerdown",["nasPickOpen",onEv.el,o.scope,o.kind,String(o.sid||""),String(o.own||""),o.check===false?"0":"1",JSON.stringify(o.on),JSON.stringify(o.change||null)])} ${onEv("click",["nasPickOpen",onEv.el,o.scope,o.kind,String(o.sid||""),String(o.own||""),o.check===false?"0":"1",JSON.stringify(o.on),JSON.stringify(o.change||null)])}>${i18n("Выбрать папку…")}</button>`:""}</div>${o.hint?`<div class="bk-hint">${i18n(o.hint)}</div>`:""}<div class="bk-hint bk-bad" data-nas-msg ${m?"":"hidden"}>${escHtml(m)}</div>${nasPickHtml(o.scope)}</div>`;
+}
+// Выбор папки NAS: консоль спрашивает подпапки у сервера (команда listFolders вида, профиль vms.volume/1 1.5)
+let NASP=null;
+// Кнопка слушает pointerdown и click: pointerdown открывает выбор до ухода из поля (change перерисует окно и потеряет click),
+// click — для клавиатуры. Второй вызов того же выбора ничего не делает
+function nasPickOpen(btn,scope,kind,sid,own,check,on,change){
+  if(NASP&&NASP.scope===scope&&Date.now()-NASP.at<600)return;
+  const g=btn.closest(".g"),val=n=>String(g?.querySelector(`[data-nas="${n}"]`)?.value||"").trim();
+  const disk=val("disk"),login=val("user"),pass=val("pass"),m=/^(\\\\|\/\/)([^\\/]+)/.exec(disk);
+  if(!m){toast(i18n("Сначала записать в путь сервер NAS, например \\\\nas01."));return}
+  if(!login){toast(i18n("Сначала указать пользователя NAS."));return}
+  const root=m[1]+m[2];
+  NASP={scope,kind,sid,own,at:Date.now(),check:check!=="0",on:JSON.parse(on),change:JSON.parse(change),login,pass,root,path:NAS_PATH_RE.test(disk)?disk.replace(/[\\/]+$/,""):root,items:null,err:"",q:""};
+  nasPickLoad();
+}
+function nasPickLoad(){
+  const p=NASP;if(!p)return;
+  const path=p.path;p.items=null;p.err="";p.q="";nasPickPaint();
+  kindAction(p.kind,"listFolders",Object.assign({disk:path,login:p.login},p.pass?{password:p.pass}:{},p.sid?{serverId:p.sid}:{}))
+    .then(r=>{if(NASP!==p||p.path!==path)return;p.items=r?.items||[];nasPickPaint()})
+    .catch(e=>{if(NASP!==p||p.path!==path)return;p.items=[];p.err=problemText(e);nasPickPaint()});
+}
+function nasPickRows(p){
+  const q=p.q.trim().toLowerCase(),all=p.items||[],list=q?all.filter(f=>f.name.toLowerCase().includes(q)):all;
+  const hl=s=>{if(!q)return escHtml(s);const i=s.toLowerCase().indexOf(q);return escHtml(s.slice(0,i))+`<mark>${escHtml(s.slice(i,i+q.length))}</mark>`+escHtml(s.slice(i+q.length))};
+  const rows=list.map(f=>{
+    const t=f.archiveId?archById(f.archiveId):null;
+    const tag=f.archiveId?`<span class="tag" data-tip="${escHtml(i18n("В папке есть том этого хранилища"))}">${t?escHtml(locName(t)):i18n("том другого хранилища")}</span>`:"";
+    return`<button type="button" class="nasp-row" ${onEv("click",["nasPickInto",`${f.path}`])}>${lu("folder")}<span class="nasp-nm">${hl(f.name)}</span>${tag}</button>`;
+  }).join("");
+  const body=p.items==null?`<div class="sub">${i18n("Консоль читает папки NAS…")}</div>`:p.err?`<div class="bk-hint bk-bad">${escHtml(p.err)}</div>`
+    :rows||`<div class="sub">${i18n(q?"Нет папок с таким именем.":"В этой папке нет подпапок.")}</div>`;
+  return`<div class="nasp-list" data-nasp-rows>${body}</div><div class="nasp-cnt sub">${i18n("Показано")} ${list.length} ${i18n("из")} ${all.length}</div>`;
+}
+function nasPickHtml(scope){
+  const p=NASP;if(!p||p.scope!==scope)return`<div data-nasp="${escHtml(scope)}" hidden></div>`;
+  const atRoot=nasKey(p.path)===nasKey(p.root),why=p.items==null?i18n("Консоль читает папки NAS…"):p.err?p.err:atRoot?i18n("Сначала открыть общую папку NAS"):nasPathProblem(p.path,p.own,p.check);
+  return`<div class="nasp" data-nasp="${escHtml(scope)}" role="group" aria-label="${i18n("Папки NAS")}">
+    <div class="nasp-head"><button type="button" class="btn s" ${atRoot?`disabled data-tip="${i18n("Это верхний уровень NAS")}"`:""} ${onEv("click",["nasPickUp"])}>${lu("arrow-up")}${i18n("Вверх")}</button>
+      <b class="nasp-path" data-tip="${escHtml(p.path)}">${escHtml(p.path)}</b>
+      <button type="button" class="btn-icon" data-tip="${i18n("Закрыть выбор папки")}" aria-label="${i18n("Закрыть выбор папки")}" ${onEv("click",["nasPickClose"])}>${lu("x")}</button></div>
+    <input class="nasp-q" type="search" placeholder="${i18n("Найти папку…")}" value="${escHtml(p.q)}" ${onEv("input",["nasPickQ",onEv.value])}>
+    ${nasPickRows(p)}
+    <div class="nasp-foot">${why?`<span class="sub nasp-why">${escHtml(why)}</span>`:""}<button type="button" class="btn s pri" ${why?`disabled data-tip="${escHtml(why)}"`:""} ${onEv("click",["nasPickUse"])}>${i18n("Выбрать эту папку")}</button></div>
+  </div>`;
+}
+function nasPickPaint(){const p=NASP;if(!p)return;const el=document.querySelector(`[data-nasp="${CSS.escape(p.scope)}"]`);if(el)el.outerHTML=nasPickHtml(p.scope)}
+function nasPickQ(v){const p=NASP;if(!p)return;p.q=v;const el=document.querySelector(`[data-nasp="${CSS.escape(p.scope)}"]`);if(!el)return;el.querySelector("[data-nasp-rows]")?.remove();el.querySelector(".nasp-cnt")?.remove();el.querySelector(".nasp-q").insertAdjacentHTML("afterend",nasPickRows(p))}
+function nasPickInto(path){if(!NASP)return;NASP.path=path;nasPickLoad()}
+function nasPickUp(){const p=NASP;if(!p)return;const i=Math.max(p.path.lastIndexOf("\\"),p.path.lastIndexOf("/"));if(nasKey(p.path)===nasKey(p.root)||i<p.root.length)return;p.path=p.path.slice(0,i);nasPickLoad()}
+function nasPickClose(){const p=NASP;if(!p)return;NASP=null;const el=document.querySelector(`[data-nasp="${CSS.escape(p.scope)}"]`);if(el)el.outerHTML=nasPickHtml(p.scope)}
+// Выбранная папка уходит в поле пути тем же обработчиком, что и ввод, затем — обработчиком change (поиск томов с записями)
+function nasPickUse(){
+  const p=NASP;if(!p||p.items==null||p.err||nasKey(p.path)===nasKey(p.root)||nasPathProblem(p.path,p.own,p.check))return;
+  NASP=null;
+  const call=(c,...x)=>{const f=window[c[0]];if(typeof f==="function")f(...c.slice(1),...x)};
+  call(p.on,p.path);if(p.change)call(p.change);
+  toast(i18n("Выбрана папка")+" "+p.path);
 }
 // ── Тома с записями на дисках сервера и в NAS ───────────────────────────
 // Как в Axxon One: хранилище собирают и из томов, где уже есть записи (раздел SolidStore, файл .afs, папка
@@ -37848,7 +37942,7 @@ function addArchive(ownerId){
   const server=sid&&!isUnallocated(sid)?sid:"";
   const dom=handOf(n,"domain")?n.id:server?SERVER_DOMAIN[server]:from?archDomainId(from):nodeDomainId(n)||(handOf(n,"server")?unallocDomainOf(n.id):null)||scopedDomains()[0]?.id;
   if(!dom)return;
-  FOUND_VOLS.clear();
+  FOUND_VOLS.clear();NASP=null;
   // Хранилище подсказывает свой вид, сервер — диски сервера, домен — вид без сервера
   const spec=from&&archSpec(from),kinds=refArchKinds;
   const wanted=(spec&&!spec.serverWide&&kinds.find(x=>x.kind===archKind(from)))||(server?kinds.find(x=>x.kind==="local"):domainArchKinds()[0])||kinds[0];
@@ -37919,6 +38013,7 @@ function anBlockVol(){
   if(anFoundOn()){
     if(addr==="disk"&&!an.server)return i18n("Выберите сервер");
     if(addr==="nas"&&(!String(v.disk||"").trim()||!String(v.user||"").trim()))return i18n("Указать путь и пользователя");
+    if(addr==="nas"&&nasPathBad(v.disk))return nasPathBad(v.disk);
     if(addr==="nas"&&an.needKey&&!String(v.pass||"").trim())return i18n("Ввести пароль или секрет снова. Черновик не хранит их");
     // Черновик мог пролежать: выбранного тома уже нет в списке — выбор не считается. Список — только из кэша
     if(addr==="disk"&&foundByPath("archive."+an.kind)&&!String(an.findPath||"").trim())return i18n("Указать папку с записями");
@@ -37933,6 +38028,7 @@ function anBlockVol(){
   }
   if(addr!=="disk"||v.mode!=="part"){const p=volSizeProblem({kind:an.kind},v,an.server);if(p)return p}
   if(addr==="nas"&&(!String(v.disk||"").trim()||!String(v.user||"").trim()))return i18n("Указать путь и пользователя");
+  if(addr==="nas"){const p=nasPathProblem(v.disk);if(p)return p}
   if(an.needKey&&!String(v.secret||v.pass||"").trim())return i18n("Ввести пароль или секрет снова. Черновик не хранит их");
   if(addr==="bucket"&&!String(v.bucket||"").trim())return i18n(an.provider==="azure"?"Укажите контейнер":"Укажите бакет");
   if(addr==="bucket"&&an.provider==="minio"&&!String(v.host||"").trim())return i18n("Укажите хост MinIO");
@@ -37995,9 +38091,9 @@ function anNasPath(){foundDropErrors();anFoundDefault();renderArchNew()}
 // Шаг «Первый том», вариант «Том с записями»
 function anFoundHtml(a,addr){
   if(addr==="nas"){
-    const v=an.vol,inp=(l,k,t,h)=>`<div${k==="user"||k==="pass"?pfa("volume",k==="user"?"login":"password"):""}><label>${i18n(l)}</label><input type="${t||"text"}" value="${escHtml(v[k]??"")}" ${onEv("input",["anSet",k,onEv.value,true])} ${k==="disk"||k==="user"||k==="pass"?onEv("change",["anNasPath"]):""}>${h?`<div class="bk-hint">${i18n(h)}</div>`:""}</div>`;
+    const v=an.vol,inp=(l,k,t,h)=>`<div${k==="user"||k==="pass"?pfa("volume",k==="user"?"login":"password"):""}><label>${i18n(l)}</label><input type="${t||"text"}" data-nas="${k}" value="${escHtml(v[k]??"")}" ${onEv("input",["anSet",k,onEv.value,true])} ${k==="disk"||k==="user"||k==="pass"?onEv("change",["anNasPath"]):""}>${h?`<div class="bk-hint">${i18n(h)}</div>`:""}</div>`;
     const list=anNasList(),wait=protoNasEntry("archive."+an.kind,v,an.server);
-    return`<div class="g" style="margin-top:10px">${inp("Путь к папке","disk","text","папка, где лежат файлы томов .afs")}${inp("Пользователь","user","text","домен\\имя или компьютер\\имя")}${inp("Пароль","pass","password")}</div>
+    return`<div class="g" style="margin-top:10px">${inp("Пользователь","user","text","домен\\имя или компьютер\\имя")}${inp("Пароль","pass","password")}${nasPathField({val:v.disk,on:["anSet","disk"],change:["anNasPath"],check:false,kind:"archive."+an.kind,sid:an.server,scope:"an-found",hint:"папка, где лежат файлы томов .afs"})}</div>
       <div class="an-vol-h">${i18n("Тома с записями в папке")}<span class="sub">${list.length} ${i18n(plural(list.length,"том|тома|томов"))}</span></div>
       ${list.length?`<div class="an-founds">${list.map(f=>protoFoundRow(f,an.found===f.key,["anPickFound"],an.server?locName(find(an.server)?.n||{}):"",v.disk)).join("")}</div>`:foundWait(wait)||`<div class="bk-hint">${i18n(String(v.disk||"").trim()&&String(v.user||"").trim()?"В папке нет томов с записями этого типа.":"Указать путь к папке и пользователя. Сервер покажет тома в папке.")}</div>`}
       ${protoFoundNote()}`;
@@ -38094,7 +38190,7 @@ function addVolume(archId){
 }
 // Окно «Новый том»: новый том или том с записями
 let av=null;
-function avOpen(a){FOUND_VOLS.clear();av={archId:a.id,src:"new",found:null,path:"",nas:{disk:"\\\\nas01\\vms",user:"",pass:""},vol:volDefaults(a)};avPaint()}
+function avOpen(a){FOUND_VOLS.clear();NASP=null;av={archId:a.id,src:"new",found:null,path:"",nas:{disk:"\\\\nas01\\vms",user:"",pass:""},vol:volDefaults(a)};avPaint()}
 // Новый том — строка плана хранилища: консоль ничего не пишет на сервер до «Применить» (правила дизайна, раздел 4)
 let volTmp=0;
 function avToPlan(a,vol){
@@ -38156,10 +38252,12 @@ function avBlock(a){
     const v=av.vol;if(!v)return i18n("Нет свободного диска");
     if(archAddr(a)==="disk"&&v.mode!=="part"&&!String(v.dir||"").trim())return i18n("Указать папку на диске");
     if(archAddr(a)==="nas"&&(!String(v.disk||"").trim()||!String(v.user||"").trim()))return i18n("Указать путь и пользователя");
+    if(archAddr(a)==="nas"){const p=nasPathProblem(v.disk,a.id);if(p)return p}
     if(archAddr(a)==="bucket"&&!String(v.bucket||"").trim())return i18n(a.provider==="azure"?"Укажите контейнер":"Укажите бакет");
     return volSizeProblem(a,v,a.server);
   }
   if(archAddr(a)==="nas"&&(!String(av.nas.disk||"").trim()||!String(av.nas.user||"").trim()))return i18n("Указать путь и пользователя");
+  if(archAddr(a)==="nas"&&nasPathBad(av.nas.disk))return nasPathBad(av.nas.disk);
   if(archAddr(a)!=="nas"&&foundByPath(nodeKind(a))&&!String(av.path||"").trim())return i18n("Указать папку с записями");
   return av.found&&avList(a,true).some(f=>f.key===av.found)?"":i18n("Выбрать том с записями");
 }
@@ -38170,9 +38268,9 @@ function avPaint(){
   if(av.src==="new")body+=av.vol?volFieldsHtml(a,av.vol,["avVol"])
     :`<div class="nt err an-found-note">${i18n("На сервере нет свободных дисков. На каждом диске уже есть том этого хранилища или раздел другого.")}</div>`;
   else if(nas){
-    const inp=(l,k,t,h)=>`<div${k==="user"||k==="pass"?pfa("volume",k==="user"?"login":"password"):""}><label>${i18n(l)}</label><input type="${t||"text"}" value="${escHtml(av.nas[k]??"")}" ${onEv("input",["avNas",k,onEv.value])} ${k==="disk"||k==="user"||k==="pass"?onEv("change",["avNasPath"]):""}>${h?`<div class="bk-hint">${i18n(h)}</div>`:""}</div>`;
+    const inp=(l,k,t,h)=>`<div${k==="user"||k==="pass"?pfa("volume",k==="user"?"login":"password"):""}><label>${i18n(l)}</label><input type="${t||"text"}" data-nas="${k}" value="${escHtml(av.nas[k]??"")}" ${onEv("input",["avNas",k,onEv.value])} ${k==="disk"||k==="user"||k==="pass"?onEv("change",["avNasPath"]):""}>${h?`<div class="bk-hint">${i18n(h)}</div>`:""}</div>`;
     const list=avList(a),wait=protoNasEntry(nodeKind(a),av.nas,a.server);
-    body+=`<div class="g" style="margin-top:10px">${inp("Путь к папке","disk","text","папка, где лежат файлы томов .afs")}${inp("Пользователь","user","text","домен\\имя или компьютер\\имя")}${inp("Пароль","pass","password")}</div>
+    body+=`<div class="g" style="margin-top:10px">${inp("Пользователь","user","text","домен\\имя или компьютер\\имя")}${inp("Пароль","pass","password")}${nasPathField({val:av.nas.disk,on:["avNas","disk"],change:["avNasPath"],check:false,kind:nodeKind(a),sid:a.server,scope:"av-found",hint:"папка, где лежат файлы томов .afs"})}</div>
       <div class="an-vol-h">${i18n("Тома с записями в папке")}<span class="sub">${list.length} ${i18n(plural(list.length,"том|тома|томов"))}</span></div>
       ${list.length?`<div class="an-founds">${list.map(f=>protoFoundRow(f,av.found===f.key,["avPick"],sname,av.nas.disk)).join("")}</div>`:foundWait(wait)||`<div class="bk-hint">${i18n(String(av.nas.disk||"").trim()&&String(av.nas.user||"").trim()?"В папке нет томов с записями этого типа.":"Указать путь к папке и пользователя. Сервер покажет тома в папке.")}</div>`}${protoFoundNote()}`;
   }else{
@@ -38187,7 +38285,7 @@ function avPaint(){
   openBulkModal(`${i18n("Новый том")} · ${escHtml(locName(a))}`,`<div class="av-body">${body}</div>`,avFootHtml(a),"bbox-wide av-box");
 }
 function avNasPath(){foundDropErrors();avDefault();avPaint()}
-function avClose(){av=null;closeBulkModal()}
+function avClose(){av=null;NASP=null;closeBulkModal()}
 function avCreate(){
   const a=av&&archById(av.archId);if(!a||avBlock(a))return;
   if(av.src==="new"){avToPlan(a,av.vol);return}
