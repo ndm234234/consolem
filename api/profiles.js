@@ -1508,15 +1508,32 @@
   };
   // Новые настройки детектора (objectSize, plateWidth, analyticsKind) по записи целиком: {field, params} или null. analyticsKind
   // действует только при detectorKind: other; сервер не отказывает и не сбрасывает его, когда старый клиент меняет detectorKind
-  const settingsErr = (whole, set) => {
+  // С профиля 1.5 (контракт 0.41.0): lists — списки лиц (facelist) у детектора лиц, списки номеров (platelist) у детектора номеров
+  // (lpr); у остальных семейств списков нет. {field, params} или null. Список — объект склада нужного вида
+  const FACE_KINDS = ["faceTV", "faceVA", "faceVL"];
+  const listKind = (p) => (p.detectorKind === "lpr" ? "platelist" : p.detectorKind === "other" && FACE_KINDS.includes(p.analyticsKind) ? "facelist" : null);
+  const listsErr = (whole, ctx) => {
+    const lists = Array.isArray(whole.lists) ? whole.lists : [];
+    if (!lists.length && whole.checkLists !== true) return null;
+    const want = listKind(whole);
+    if (!want) return { field: lists.length ? "/properties/lists" : "/properties/checkLists", params: { reason: "notFamily" } };
+    for (let i = 0; i < lists.length; i++) {
+      const u = ctx.units.get(lists[i]);
+      if (!u || u.kind !== want) return { field: `/properties/lists/${i}`, params: { reason: u ? "wrongKind" : "unknownList", kind: want, uid: lists[i] } };
+    }
+    return null;
+  };
+  const settingsErr = (whole, set, ctx) => {
     if (!whole) return null;
-    const bad = rangeErr(whole, "objectSize") || rangeErr(whole, "plateWidth") || rangeErr(whole, "objectSpeed") || frontEdgeErr(whole) || scanErr(whole.scanWindow);
+    // Списки судим, только когда запрос их задаёт: смена семейства (старый клиент шлёт detectorKind и analyticsKind: null) хранимые lists не трогает
+    const bad = rangeErr(whole, "objectSize") || rangeErr(whole, "plateWidth") || rangeErr(whole, "objectSpeed") || frontEdgeErr(whole) || scanErr(whole.scanWindow) || (set && (set.lists != null || set.checkLists != null) ? listsErr(whole, ctx) : null);
     if (bad) return bad;
     return set.analyticsKind != null && whole.detectorKind !== "other" ? { field: "/properties/analyticsKind", params: { reason: "notOther" } } : null;
   };
   const settingsProblem = (whole, set, ctx) => {
-    const e = settingsErr(whole, set);
-    const text = { minAboveMax: "Наименьшее значение выше наибольшего", frontEdge: "Передняя сторона: номер меньше числа точек зоны", stepAboveWindow: "Шаг окна больше самого окна" };
+    const e = settingsErr(whole, set, ctx);
+    const text = { minAboveMax: "Наименьшее значение выше наибольшего", frontEdge: "Передняя сторона: номер меньше числа точек зоны", stepAboveWindow: "Шаг окна больше самого окна",
+      notFamily: "Списки есть только у детектора лиц и детектора номеров", unknownList: "Такого списка нет", wrongKind: "Список не того вида: у детектора лиц — список лиц, у детектора номеров — список номеров" };
     return e ? ctx.problem(422, "VALIDATION_FAILED", text[e.params.reason] || "Вид аналитики задают только при detectorKind: other", e) : null;
   };
   const detProblem = (rec, patch, ctx) => (rec.type === "det" ? zoneProblem(patch.zone, ctx) || sensProblem(rec, patch.sensitivity, null, ctx) : null);
@@ -1540,7 +1557,7 @@
   function detCreateProblem(spec, cam, ctx, fresh) {
     if (spec.type !== "det") return null;
     if (zoneProblem(spec.zone, ctx)) return { code: "VALIDATION_FAILED", field: "zone" };
-    const ne = settingsErr(spec, spec);
+    const ne = settingsErr(spec, spec, ctx);
     if (ne) return Object.assign({ code: "VALIDATION_FAILED" }, ne);
     const fam = spec.enabled !== false ? freshClash(spec, cam, fresh, ctx) : [];
     if (fam.length) return { code: "BUSY", field: "analyticsKind", params: akParams(fam) };

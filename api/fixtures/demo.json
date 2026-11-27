@@ -7830,7 +7830,8 @@
         "type": "string",
         "enum": [
          "yes",
-         "no"
+         "no",
+         "none"
         ],
         "x-label": {
          "key": "field.event.face.list.presence",
@@ -7847,8 +7848,38 @@
           "key": "field.event.face.list.presence.no",
           "text": "нет в списке",
           "lang": "ru"
+         },
+         "none": {
+          "key": "field.event.face.list.presence.none",
+          "text": "нет ни в одном списке",
+          "lang": "ru"
          }
-        }
+        },
+        "description": "С 0.41.0 значение none. yes — есть в списке (в выбранном, если задан listId), no — нет в списке (в выбранном, если задан listId), none — нет ни в одном списке; none вместе с listId — 422 VALIDATION_FAILED, field match.presence"
+       },
+       "listId": {
+        "type": "string",
+        "format": "uuid",
+        "x-ref": {
+         "kinds": [
+          "facelist"
+         ]
+        },
+        "x-label": {
+         "key": "field.event.face.list.listId",
+         "text": "Список",
+         "lang": "ru"
+        },
+        "description": "С 0.41.0. uid списка (facelist), в котором нашли совпадение. Правило с match.listId ловит событие только этого списка; без него — любого списка. Нет такого объекта или вид не тот — 422 VALIDATION_FAILED, field match.listId. Список удалили — правило получает его в target.gone, match.listId и match.entryId снимаются"
+       },
+       "entryId": {
+        "type": "string",
+        "x-label": {
+         "key": "field.event.face.list.entryId",
+         "text": "Запись",
+         "lang": "ru"
+        },
+        "description": "С 0.41.0. id записи списка (entries[].id), по которой совпало. Нужен listId и запись этого списка, иначе 422 VALIDATION_FAILED, field match.entryId"
        }
       }
      },
@@ -7870,7 +7901,8 @@
         "type": "string",
         "enum": [
          "yes",
-         "no"
+         "no",
+         "none"
         ],
         "x-label": {
          "key": "field.event.plate.list.presence",
@@ -7887,8 +7919,38 @@
           "key": "field.event.plate.list.presence.no",
           "text": "нет в списке",
           "lang": "ru"
+         },
+         "none": {
+          "key": "field.event.plate.list.presence.none",
+          "text": "нет ни в одном списке",
+          "lang": "ru"
          }
-        }
+        },
+        "description": "С 0.41.0 значение none. yes — есть в списке (в выбранном, если задан listId), no — нет в списке (в выбранном, если задан listId), none — нет ни в одном списке; none вместе с listId — 422 VALIDATION_FAILED, field match.presence"
+       },
+       "listId": {
+        "type": "string",
+        "format": "uuid",
+        "x-ref": {
+         "kinds": [
+          "platelist"
+         ]
+        },
+        "x-label": {
+         "key": "field.event.plate.list.listId",
+         "text": "Список",
+         "lang": "ru"
+        },
+        "description": "С 0.41.0. uid списка (platelist), в котором нашли совпадение. Правило с match.listId ловит событие только этого списка; без него — любого списка. Нет такого объекта или вид не тот — 422 VALIDATION_FAILED, field match.listId. Список удалили — правило получает его в target.gone, match.listId и match.entryId снимаются"
+       },
+       "entryId": {
+        "type": "string",
+        "x-label": {
+         "key": "field.event.plate.list.entryId",
+         "text": "Запись",
+         "lang": "ru"
+        },
+        "description": "С 0.41.0. id записи списка (entries[].id), по которой совпало. Нужен listId и запись этого списка, иначе 422 VALIDATION_FAILED, field match.entryId"
        }
       }
      },
@@ -11221,6 +11283,34 @@
       "maximum": 100,
       "x-ui-unit": "кадр/с",
       "description": "С профиля vms.detector/1 1.4. Детектор движения и трекеры: сколько кадров в секунду детектор разбирает. Больше — точнее для быстрых объектов, но нагрузка на сервер растёт. Нет поля — умолчание детектора: 12 у детектора движения и трекера объектов, 6 у нейросетевого трекера"
+     },
+     "checkLists": {
+      "x-label": {
+       "key": "field.checkLists",
+       "text": "Проверять по спискам",
+       "lang": "ru"
+      },
+      "type": "boolean",
+      "description": "С профиля vms.detector/1 1.5. Детектор лиц (analyticsKind: faceTV, faceVA, faceVL) и детектор номеров (lpr): сверять найденное со списками. checkLists: true без lists или с пустым lists — со всеми синхронизированными списками своего вида (лица — facelist, номера — platelist), в том числе с теми, что появятся позже. Нет поля — false: детектор не сверяет"
+     },
+     "lists": {
+      "x-label": {
+       "key": "field.lists",
+       "text": "Списки",
+       "lang": "ru"
+      },
+      "type": "array",
+      "items": {
+       "type": "string",
+       "format": "uuid",
+       "x-ref": {
+        "kinds": [
+         "facelist",
+         "platelist"
+        ]
+       }
+      },
+      "description": "С профиля vms.detector/1 1.5. Необязательное сужение: списки, по которым сверяет детектор вместо всех списков своего вида. Нет поля или пустой массив — все списки своего вида (при checkLists: true). У детектора лиц — объекты вида facelist, у детектора номеров — platelist. Другой вид, неизвестный uid или семейство без списков — 422 VALIDATION_FAILED, field /properties/lists. Список удалили — uid уходит из массива; если checkLists был true и lists опустел, сервер снимает и checkLists (пустой lists значит все списки). Запрос без lists и checkLists списки не судит: смена семейства хранимые значения не трогает"
      }
     }
    }
@@ -13591,6 +13681,219 @@
    ]
   },
   {
+   "kind": "facelist",
+   "label": {
+    "key": "kind.facelist",
+    "text": "Список лиц",
+    "lang": "ru"
+   },
+   "labelPlural": {
+    "key": "kind.facelist.plural",
+    "text": "Списки лиц",
+    "lang": "ru"
+   },
+   "icon": "settings",
+   "parents": [
+    null
+   ],
+   "implements": [],
+   "capabilities": [],
+   "schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+     "source": {
+      "x-label": {
+       "key": "field.list.source",
+       "text": "Источник",
+       "lang": "ru"
+      },
+      "type": "string",
+      "readOnly": true,
+      "enum": [
+       "axxonnet",
+       "axxondata",
+       "datacenter"
+      ],
+      "x-enum-labels": {
+       "axxonnet": {
+        "key": "enum.list.source.axxonnet",
+        "text": "AxxonNet",
+        "lang": "ru"
+       },
+       "axxondata": {
+        "key": "enum.list.source.axxondata",
+        "text": "AxxonData",
+        "lang": "ru"
+       },
+       "datacenter": {
+        "key": "enum.list.source.datacenter",
+        "text": "Axxon Datacenter",
+        "lang": "ru"
+       }
+      },
+      "description": "С 0.41.0. Облачная служба, в которой ведут список. Консоль список не заводит и не правит: записи приходят из облака, сервер синхронизирует их в домен"
+     },
+     "syncedAt": {
+      "x-label": {
+       "key": "field.list.syncedAt",
+       "text": "Синхронизирован",
+       "lang": "ru"
+      },
+      "type": "string",
+      "format": "date-time",
+      "readOnly": true,
+      "description": "С 0.41.0. Когда сервер последний раз забрал список из облака"
+     },
+     "manageUrl": {
+      "x-label": {
+       "key": "field.list.manageUrl",
+       "text": "Управление списком",
+       "lang": "ru"
+      },
+      "type": "string",
+      "format": "uri",
+      "readOnly": true,
+      "description": "С 0.41.0. Адрес страницы облака, где список ведут (добавить и убрать лица). Консоль только открывает ссылку"
+     },
+     "entries": {
+      "x-label": {
+       "key": "field.list.entries",
+       "text": "Записи",
+       "lang": "ru"
+      },
+      "type": "array",
+      "readOnly": true,
+      "items": {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "id",
+        "name"
+       ],
+       "properties": {
+        "id": {
+         "type": "string"
+        },
+        "name": {
+         "type": "string"
+        }
+       }
+      },
+      "description": "С 0.41.0. Записи списка лиц: id — код записи в облаке (строка), name — подпись. Правило выбирает запись в match.entryId"
+     }
+    }
+   }
+  },
+  {
+   "kind": "platelist",
+   "label": {
+    "key": "kind.platelist",
+    "text": "Список номеров",
+    "lang": "ru"
+   },
+   "labelPlural": {
+    "key": "kind.platelist.plural",
+    "text": "Списки номеров",
+    "lang": "ru"
+   },
+   "icon": "settings",
+   "parents": [
+    null
+   ],
+   "implements": [],
+   "capabilities": [],
+   "schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+     "source": {
+      "x-label": {
+       "key": "field.list.source",
+       "text": "Источник",
+       "lang": "ru"
+      },
+      "type": "string",
+      "readOnly": true,
+      "enum": [
+       "axxonnet",
+       "axxondata",
+       "datacenter"
+      ],
+      "x-enum-labels": {
+       "axxonnet": {
+        "key": "enum.list.source.axxonnet",
+        "text": "AxxonNet",
+        "lang": "ru"
+       },
+       "axxondata": {
+        "key": "enum.list.source.axxondata",
+        "text": "AxxonData",
+        "lang": "ru"
+       },
+       "datacenter": {
+        "key": "enum.list.source.datacenter",
+        "text": "Axxon Datacenter",
+        "lang": "ru"
+       }
+      },
+      "description": "С 0.41.0. Облачная служба, в которой ведут список. Консоль список не заводит и не правит: записи приходят из облака, сервер синхронизирует их в домен"
+     },
+     "syncedAt": {
+      "x-label": {
+       "key": "field.list.syncedAt",
+       "text": "Синхронизирован",
+       "lang": "ru"
+      },
+      "type": "string",
+      "format": "date-time",
+      "readOnly": true,
+      "description": "С 0.41.0. Когда сервер последний раз забрал список из облака"
+     },
+     "manageUrl": {
+      "x-label": {
+       "key": "field.list.manageUrl",
+       "text": "Управление списком",
+       "lang": "ru"
+      },
+      "type": "string",
+      "format": "uri",
+      "readOnly": true,
+      "description": "С 0.41.0. Адрес страницы облака, где список ведут (добавить и убрать номера). Консоль только открывает ссылку"
+     },
+     "entries": {
+      "x-label": {
+       "key": "field.list.entries",
+       "text": "Записи",
+       "lang": "ru"
+      },
+      "type": "array",
+      "readOnly": true,
+      "items": {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "id",
+        "name"
+       ],
+       "properties": {
+        "id": {
+         "type": "string"
+        },
+        "name": {
+         "type": "string"
+        },
+        "plate": {
+         "type": "string"
+        }
+       }
+      },
+      "description": "С 0.41.0. Записи списка номеров: id — код записи в облаке (строка), name — подпись, plate — номер. Правило выбирает запись в match.entryId"
+     }
+    }
+   }
+  },
+  {
    "kind": "stream",
    "label": {
     "key": "kind.stream",
@@ -15653,7 +15956,7 @@
     "text": "Детектор",
     "lang": "ru"
    },
-   "version": "1.4",
+   "version": "1.5",
    "uses": [
     {
      "id": "vms.camera/1",
@@ -15675,6 +15978,7 @@
     "analysisFps",
     "analyticsKind",
     "builtin",
+    "checkLists",
     "cameraPosition",
     "classes",
     "confidence",
@@ -15688,6 +15992,7 @@
     "frameWidth",
     "humanSize",
     "labels",
+    "lists",
     "metaDiff",
     "metaFps",
     "metaFrames",
@@ -16115,6 +16420,15 @@
    "place": [
     {
      "what": {
+      "kinds": [
+       "facelist",
+       "platelist"
+      ]
+     },
+     "by": "none"
+    },
+    {
+     "what": {
       "implements": [
        "core.folder/1"
       ]
@@ -16198,7 +16512,9 @@
       "kinds": [
        "export",
        "email",
-       "sms"
+       "sms",
+       "facelist",
+       "platelist"
       ]
      },
      "by": "none"
@@ -35131,7 +35447,12 @@
     "builtin": false,
     "detectorKind": "other",
     "enabled": true,
-    "analyticsKind": "faceVA"
+    "analyticsKind": "faceVA",
+    "checkLists": true,
+    "lists": [
+     "30000307-0000-4000-8000-000000000000",
+     "30000308-0000-4000-8000-000000000000"
+    ]
    },
    "status": {
     "link": "online"
@@ -35319,6 +35640,167 @@
     },
     "showTracks": true,
     "showTrackLifespan": true
+   },
+   "status": {
+    "link": "online"
+   }
+  },
+  {
+   "uid": "30000307-0000-4000-8000-000000000000",
+   "kind": "facelist",
+   "parentId": null,
+   "domainId": "10000001-0000-4000-8000-000000000000",
+   "name": "Сотрудники",
+   "version": "1",
+   "properties": {
+    "source": "axxonnet",
+    "syncedAt": "2026-11-25T06:30:00Z",
+    "manageUrl": "https://cloud.axxonnet.example/lists/faces/staff",
+    "entries": [
+     {
+      "id": "f-0101",
+      "name": "Иванов Сергей"
+     },
+     {
+      "id": "f-0102",
+      "name": "Петрова Анна"
+     },
+     {
+      "id": "f-0103",
+      "name": "Кузнецов Дмитрий"
+     },
+     {
+      "id": "f-0104",
+      "name": "Смирнова Ольга"
+     }
+    ]
+   },
+   "status": {
+    "link": "online"
+   }
+  },
+  {
+   "uid": "30000308-0000-4000-8000-000000000000",
+   "kind": "facelist",
+   "parentId": null,
+   "domainId": "10000001-0000-4000-8000-000000000000",
+   "name": "Розыск",
+   "version": "1",
+   "properties": {
+    "source": "datacenter",
+    "syncedAt": "2026-11-25T06:30:00Z",
+    "manageUrl": "https://datacenter.example/lists/faces/watch",
+    "entries": [
+     {
+      "id": "f-0201",
+      "name": "Неизвестный 1"
+     },
+     {
+      "id": "f-0202",
+      "name": "Неизвестный 2"
+     },
+     {
+      "id": "f-0203",
+      "name": "Неизвестный 3"
+     }
+    ]
+   },
+   "status": {
+    "link": "online"
+   }
+  },
+  {
+   "uid": "30000309-0000-4000-8000-000000000000",
+   "kind": "platelist",
+   "parentId": null,
+   "domainId": "10000001-0000-4000-8000-000000000000",
+   "name": "Автопарк",
+   "version": "1",
+   "properties": {
+    "source": "axxondata",
+    "syncedAt": "2026-11-25T06:30:00Z",
+    "manageUrl": "https://data.axxon.example/lists/plates/fleet",
+    "entries": [
+     {
+      "id": "p-0101",
+      "name": "Фургон 1",
+      "plate": "А123ВС77"
+     },
+     {
+      "id": "p-0102",
+      "name": "Фургон 2",
+      "plate": "В456ОР77"
+     },
+     {
+      "id": "p-0103",
+      "name": "Легковой служебный",
+      "plate": "Е789КХ50"
+     },
+     {
+      "id": "p-0104",
+      "name": "Грузовик",
+      "plate": "М321ТТ97"
+     },
+     {
+      "id": "p-0105",
+      "name": "Автобус",
+      "plate": "Н654УА99"
+     }
+    ]
+   },
+   "status": {
+    "link": "online"
+   }
+  },
+  {
+   "uid": "30000310-0000-4000-8000-000000000000",
+   "kind": "platelist",
+   "parentId": null,
+   "domainId": "10000001-0000-4000-8000-000000000000",
+   "name": "Чёрный список номеров",
+   "version": "1",
+   "properties": {
+    "source": "axxonnet",
+    "syncedAt": "2026-11-25T06:30:00Z",
+    "manageUrl": "https://cloud.axxonnet.example/lists/plates/block",
+    "entries": [
+     {
+      "id": "p-0201",
+      "name": "Нарушитель 1",
+      "plate": "К111КК77"
+     },
+     {
+      "id": "p-0202",
+      "name": "Нарушитель 2",
+      "plate": "С222СС78"
+     },
+     {
+      "id": "p-0203",
+      "name": "Нарушитель 3",
+      "plate": "Х333ХХ99"
+     }
+    ]
+   },
+   "status": {
+    "link": "online"
+   }
+  },
+  {
+   "uid": "30000013-0073-4000-8000-000000000002",
+   "kind": "det",
+   "parentId": "30000013-0000-4000-8000-000000000000",
+   "domainId": "10000001-0000-4000-8000-000000000000",
+   "name": "Номера",
+   "version": "1",
+   "properties": {
+    "builtin": false,
+    "detectorKind": "lpr",
+    "enabled": true,
+    "checkLists": true,
+    "lists": [
+     "30000309-0000-4000-8000-000000000000",
+     "30000310-0000-4000-8000-000000000000"
+    ]
    },
    "status": {
     "link": "online"

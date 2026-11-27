@@ -914,7 +914,7 @@
     const lost = camera.events.find((e) => e.id === "device.lost");
     assert.eq(lost.params.properties.thresholdSec.enum, ["10", "30", "60", "300"], "уточнение порога обрыва");
     const plate = camera.events.find((e) => e.id === "plate.list");
-    assert.eq([plate.params.properties.presence.enum, camera.events.find((e) => e.id === "fire").ends], [["yes", "no"], true], "presence yes и no, огонь имеет конец");
+    assert.eq([plate.params.properties.presence.enum.filter((x) => x !== "none"), camera.events.find((e) => e.id === "fire").ends], [["yes", "no"], true], "presence: yes и no, огонь имеет конец (none — с 0.41.0, только у системы со списками)");
     const made = await env.ok("POST", "/rules", onEvent({ triggers: [trig("plate.list", camA.id, { presence: "yes" })] }));
     const n = async () => (await fireList(env, made.id)).length;
     const was = await n();
@@ -1274,6 +1274,101 @@
     const put = await env.call("PUT", `/rules/${ok.id}`, Object.assign({}, r, { triggers: [trig("motion", other.uid, { detector: d1.uid })] }), { "If-Match": `"${r.version}"` });
     assert.status(put, 422, "VALIDATION_FAILED", "PUT: детектор другой камеры");
   }, { needs: ["kind:camera", "kind:det", "putRule"] });
+
+  // Контракт 0.41.0, пункт C17: списки лиц (facelist) и номеров (platelist) — объекты только для чтения; события face.list и plate.list
+  // выбирают список и запись. layer: профиль vms.detector/1 1.5 — рядом с ним в наборе виды списков
+  const listsOf = (env, kind) => env.pages(`/units?kind=${kind}&limit=100`);
+  const matchBad = async (env, ev, match, field, what) => {
+    const r = await env.call("POST", "/rules", onEvent({ triggers: [trig(ev, camA.id, match)] }));
+    assert.status(r, 422, "VALIDATION_FAILED", what);
+    assert.eq(r.body.field, field, what + ": field");
+    return r;
+  };
+
+  test("Списки лиц и номеров в правиле (с 0.41.0): listId, entryId и presence none в событии face.list; правило ловит свой список и запись, без listId — любой", async () => {
+    const env = await makeEnv();
+    const ev = (await env.ok("GET", "/kinds/camera")).events.find((e) => e.id === "face.list");
+    assert.eq(ev.params.properties.listId["x-ref"], { kinds: ["facelist"] }, "listId — x-ref на списки лиц");
+    assert.eq([ev.params.properties.presence.enum, ev.params.properties.entryId.type], [["yes", "no", "none"], "string"], "presence: есть none; entryId — строка");
+    const [l1, l2] = await listsOf(env, "facelist");
+    const e0 = l1.properties.entries[0].id, e1 = l1.properties.entries[1].id;
+    const byList = await env.ok("POST", "/rules", onEvent({ triggers: [trig("face.list", camA.id, { listId: l1.uid })] }));
+    const byEntry = await env.ok("POST", "/rules", onEvent({ triggers: [trig("face.list", camA.id, { listId: l1.uid, entryId: e0 })] }));
+    const any = await env.ok("POST", "/rules", onEvent({ triggers: [trig("face.list", camA.id)] }));
+    const none = await env.ok("POST", "/rules", onEvent({ triggers: [trig("face.list", camA.id, { presence: "none" })] }));
+    const ids = [byList, byEntry, any, none].map((r) => r.id);
+    const count = async () => Promise.all(ids.map(async (id) => (await fireList(env, id)).length));
+    const step = async (match, want, what) => {
+      const was = await count();
+      assert.status(await unitEvent(env, camA.id, "face.list", match), 200, null, what);
+      assert.eq((await count()).map((n, i) => n - was[i]), want, what);
+    };
+    await step({ listId: l1.uid, entryId: e0, presence: "yes" }, [1, 1, 1, 0], "список 1, запись 0: правила списка, записи и без списка");
+    await step({ listId: l1.uid, entryId: e1, presence: "yes" }, [1, 0, 1, 0], "список 1, другая запись: правило записи молчит");
+    await step({ listId: l2.uid, entryId: l2.properties.entries[0].id, presence: "yes" }, [0, 0, 1, 0], "другой список: молчат правила первого списка");
+    await step({ presence: "none" }, [0, 0, 1, 1], "нет ни в одном списке: правило none и правило без listId");
+    const r = await env.ok("GET", `/rules/${byEntry.id}`);
+    assert.eq(r.triggers[0].match, { listId: l1.uid, entryId: e0 }, "правило хранит listId и entryId как есть");
+  }, { needs: ["kind:camera", "kind:facelist"], layer: "profile:vms.detector/1", since: "1.5" });
+
+  test("Списки номеров в правиле (с 0.41.0): plate.list ловит свой список номеров; список лиц в plate.list — 422", async () => {
+    const env = await makeEnv();
+    const ev = (await env.ok("GET", "/kinds/camera")).events.find((e) => e.id === "plate.list");
+    assert.eq([ev.params.properties.listId["x-ref"], ev.params.properties.presence.enum], [{ kinds: ["platelist"] }, ["yes", "no", "none"]], "plate.list: x-ref на списки номеров, presence с none");
+    const [p1, p2] = await listsOf(env, "platelist");
+    const [f1] = await listsOf(env, "facelist");
+    const mine = await env.ok("POST", "/rules", onEvent({ triggers: [trig("plate.list", camA.id, { listId: p1.uid, entryId: p1.properties.entries[2].id })] }));
+    const n = (await fireList(env, mine.id)).length;
+    assert.status(await unitEvent(env, camA.id, "plate.list", { listId: p2.uid, presence: "yes" }), 200, null, "событие другого списка");
+    assert.status(await unitEvent(env, camA.id, "plate.list", { listId: p1.uid, entryId: p1.properties.entries[2].id, presence: "yes" }), 200, null, "событие своей записи");
+    assert.eq((await fireList(env, mine.id)).length, n + 1, "сработало только на своей записи");
+    const wrong = await matchBad(env, "plate.list", { listId: f1.uid }, "match.listId", "список лиц в событии номеров");
+    assert.eq([wrong.body.params.uid, wrong.body.params.reason, wrong.body.params.kind], [f1.uid, "wrongKind", "platelist"], "params: что не подошло, причина, нужный вид");
+    const ghost = await matchBad(env, "plate.list", { listId: "00000000-0000-4000-8000-000000000000" }, "match.listId", "нет такого списка");
+    assert.eq(ghost.body.params.reason, "unknownList", "reason неизвестного списка");
+  }, { needs: ["kind:camera", "kind:facelist", "kind:platelist"], layer: "profile:vms.detector/1", since: "1.5" });
+
+  test("Списки в правиле (с 0.41.0): match.listId, match.entryId и presence none при сохранении — 422 VALIDATION_FAILED с полем; PUT проверяет так же", async () => {
+    const env = await makeEnv();
+    const [l1, l2] = await listsOf(env, "facelist");
+    const ghost = "00000000-0000-4000-8000-000000000000";
+    await matchBad(env, "face.list", { listId: ghost }, "match.listId", "нет такого объекта");
+    await matchBad(env, "face.list", { listId: camA.id }, "match.listId", "объект не список");
+    await matchBad(env, "face.list", { entryId: l1.properties.entries[0].id }, "match.entryId", "запись без списка");
+    await matchBad(env, "face.list", { listId: l1.uid, entryId: l2.properties.entries[0].id }, "match.entryId", "запись другого списка");
+    await matchBad(env, "face.list", { listId: l1.uid, entryId: "нет-такой" }, "match.entryId", "нет такой записи");
+    const none = await matchBad(env, "face.list", { listId: l1.uid, presence: "none" }, "match.presence", "none вместе со списком");
+    assert.eq(none.body.params.reason, "noneWithList", "reason");
+    const ok = await env.ok("POST", "/rules", onEvent({ triggers: [trig("face.list", camA.id, { listId: l1.uid, entryId: l1.properties.entries[0].id, presence: "yes" })] }));
+    const r = await env.ok("GET", `/rules/${ok.id}`);
+    const put = await env.call("PUT", `/rules/${ok.id}`, body(r, { triggers: [trig("face.list", camA.id, { listId: ghost })] }), etag(r));
+    assert.status(put, 422, "VALIDATION_FAILED", "PUT: нет такого списка");
+    assert.eq(put.body.field, "match.listId", "PUT: field");
+    // Шаг ожидания события проверяется как триггер
+    const wait = await env.call("POST", "/rules", onEvent({ triggers: [trig("motion", camA.id)], steps: [{ control: "waitEvent", event: { source: "unit", kinds: ["camera"], event: "face.list", target: dev(camA.id), match: { listId: ghost } }, sec: 30, yes: [], no: [] }] }));
+    assert.status(wait, 422, "VALIDATION_FAILED", "шаг ожидания события");
+    assert.eq(wait.body.field, "match.listId", "шаг: field");
+  }, { needs: ["kind:camera", "kind:facelist", "putRule"], layer: "profile:vms.detector/1", since: "1.5" });
+
+  test("Список удалён (с 0.41.0): правило теряет match.listId и match.entryId, имя списка — в target.gone события; правило без списка не задето", async () => {
+    const env = await makeEnv();
+    const [l1, l2] = await listsOf(env, "facelist");
+    const mine = await env.ok("POST", "/rules", onEvent({ triggers: [trig("face.list", camA.id, { listId: l1.uid, entryId: l1.properties.entries[0].id, presence: "yes" })] }));
+    const other = await env.ok("POST", "/rules", onEvent({ triggers: [trig("face.list", camA.id, { listId: l2.uid })] }));
+    // Консоль списки не удаляет: вид не объявляет delete. Стенд снимает объект так, как это сделала бы синхронизация, — на время даёт виду delete
+    const kind = await env.ok("GET", "/kinds/facelist");
+    const refused = await env.call("DELETE", `/units/${l1.uid}`, undefined, { "If-Match": `"${l1.version}"` });
+    assert.status(refused, 422, "NOT_SUPPORTED", "у вида нет возможности delete");
+    assert.status(await env.call("PUT", "/test/kinds/facelist", Object.assign({}, kind, { capabilities: ["delete"] })), 200, null, "стенд дал виду delete");
+    const del = await env.call("DELETE", `/units/${l1.uid}`, undefined, { "If-Match": `"${l1.version}"` });
+    assert.ok([200, 202, 204].includes(del.status), "список удалён: " + del.status);
+    assert.status(await env.call("PUT", "/test/kinds/facelist", kind), 200, null, "стенд вернул описание вида");
+    await ApiTest.settle();
+    const t = (await env.ok("GET", `/rules/${mine.id}`)).triggers[0];
+    assert.eq([t.match, t.target.gone], [{ presence: "yes" }, [l1.name]], "listId и entryId сняты, presence остался, список — в gone");
+    const o = (await env.ok("GET", `/rules/${other.id}`)).triggers[0];
+    assert.eq([o.match, o.target.gone], [{ listId: l2.uid }, []], "правило другого списка не задето");
+  }, { needs: ["kind:camera", "kind:facelist", "deleteUnit"], layer: "profile:vms.detector/1", since: "1.5" });
 
   ApiTest.loaded("api-automation.js");
 })();

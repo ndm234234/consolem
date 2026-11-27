@@ -1512,7 +1512,8 @@
     }
     // Удалённый объект остаётся в цели битым элементом — по имени; исключение удалённого просто снимается.
     // В версиях истории — так же, иначе «Сравнить» покажет удаление как правку
-    function rulesGone(names) {
+    // eventsOnly — только ссылки событий (match), без целей: так вызывает удаление объектов, у которых нет старого пути цели
+    function rulesGone(names, eventsOnly) {
       if (!names.size) return;
       const fix = (t) => {
         if (!t) return t;
@@ -1521,16 +1522,18 @@
         return Object.assign({}, t, { include: t.include.filter((x) => !hit.includes(x)), exclude: t.exclude.filter((x) => !names.has(x)),
           gone: [...t.gone, ...hit.map((x) => names.get(x.uid))] });
       };
-      // С 0.18.0: событие одного детектора (match.detector) — удалённый детектор уходит в gone цели этого события
-      const byDetector = (t) => {
-        const d = t && t.match && t.match.detector;
+      // С 0.18.0: событие одного детектора (match.detector) — удалённый детектор уходит в gone цели этого события.
+      // С 0.41.0 так же список события списка (match.listId): уходят и listId, и entryId (запись принадлежит списку)
+      const byRef = (t, keys) => {
+        const d = t && t.match && t.match[keys[0]];
         if (!d || !names.has(d)) return;
-        delete t.match.detector;
+        keys.forEach((k) => delete t.match[k]);
         // Камеру события удалили вместе с детектором: в gone идёт только камера (её запишет fix цели)
         if (t.target && t.target.include.some((x) => !x.area && names.has(x.uid))) return;
         const g = t.target || { include: [], exclude: [], gone: [], fromEvent: false };
         t.target = Object.assign({}, g, { gone: [...g.gone, names.get(d)] });
       };
+      const byDetector = (t) => { byRef(t, ["detector"]); byRef(t, ["listId", "entryId"]); };
       const eachEvent = (c) => {
         c.triggers.forEach(byDetector);
         const walk = (l) => l.forEach((a) => { if (a.event) byDetector(a.event); walk(a.yes || []); walk(a.no || []); });
@@ -1539,13 +1542,13 @@
       db.rules.forEach((r) => {
         const was = JSON.stringify(r);
         eachEvent(r);
-        eachTarget(r, fix);
+        if (!eventsOnly) eachTarget(r, fix);
         if (JSON.stringify(r) === was) return;
         bump(r);
         runsStop(r.id);
         changed("rule", r);
       });
-      db.ruleVersions.forEach((v) => { eachEvent(v.rule); eachTarget(v.rule, fix); });
+      db.ruleVersions.forEach((v) => { eachEvent(v.rule); if (!eventsOnly) eachTarget(v.rule, fix); });
     }
     // Версия истории: что стало после изменения. undo убирает версию, которую отменяет, если она последняя
     // was — кто и когда менял правило и с какого дня оно «в наблюдении» до этой правки. «Отменить»
@@ -1620,9 +1623,45 @@
       if (!hit) walk(c.steps);
       return hit;
     }
+    // С 0.41.0: match.listId, match.entryId и presence: none события списка (face.list, plate.list). Список — объект вида из x-ref
+    // параметра listId описания события, запись — элемент entries списка. Событие без параметра listId и пустые значения не судим.
+    // Удалённый позже список правило не роняет: rulesGone
+    function listProblem(c) {
+      const bad = (field, msg, params) => problem(422, "VALIDATION_FAILED", msg, { field, params });
+      const set = (v) => v != null && v !== "";
+      const paramsOf = (ev) => {
+        for (const k of kinds.list()) {
+          const e = (k.events || []).find((x) => x.id === ev);
+          if (e && e.params && (e.params.properties || {}).listId) return e.params.properties;
+        }
+        return null;
+      };
+      const check = (t) => {
+        const m = t && t.match, pr = m && t.event && paramsOf(t.event);
+        if (!pr) return null;
+        let list = null;
+        if (set(m.listId)) {
+          list = typeof m.listId === "string" ? store.get(m.listId) : null;
+          const want = (((pr.listId || {})["x-ref"] || {}).kinds || [])[0];
+          if (!list) return bad("match.listId", `Списка ${m.listId} нет`, { uid: m.listId, reason: "unknownList", kind: want });
+          if (!(((pr.listId || {})["x-ref"] || {}).kinds || []).includes(list.kind)) return bad("match.listId", `«${list.name}» — не тот вид списка: у этого события нужен ${want}`, { uid: m.listId, reason: "wrongKind", kind: want });
+        }
+        if (set(m.entryId)) {
+          if (!list) return bad("match.entryId", "Запись выбирают в списке: нужен match.listId", { reason: "needsList" });
+          if (!(props(list).entries || []).some((x) => x.id === m.entryId)) return bad("match.entryId", `В списке «${list.name}» нет записи ${m.entryId}`, { uid: list.uid, entryId: m.entryId });
+        }
+        if (m.presence === "none" && list) return bad("match.presence", "«Нет ни в одном списке» не сочетается с выбранным списком", { reason: "noneWithList" });
+        return null;
+      };
+      let hit = null;
+      (c.triggers || []).some((t) => (hit = check(t)));
+      const walk = (l) => (l || []).some((a) => (a.event && (hit = check(a.event))) || walk(a.yes) || walk(a.no));
+      if (!hit) walk(c.steps);
+      return hit;
+    }
     function ruleProblem(c) {
       if (!String(c.name || "").trim()) return problem(422, "NAME_REQUIRED", "Укажите название правила", { field: "name" });
-      const det = detectorProblem(c);
+      const det = detectorProblem(c) || listProblem(c);
       if (det) return det;
       if (c.runAsRoleId && !db.access.roles.some((x) => x.id === c.runAsRoleId)) return problem(422, "VALIDATION_FAILED", `Роли ${c.runAsRoleId} нет`, { field: "runAsRoleId" });
       const typed = stepTypeProblem(c);
@@ -3797,6 +3836,9 @@
       });
       // Ссылки на удалённое у остальных — снять; откат вернёт (snap[0].refs)
       snap[0].refs = refsCleanup(new Set(all.map((x) => x.uid)));
+      // С 0.41.0: удалённый список лиц и номеров уходит из событий правил в gone цели (match.listId, match.entryId снимаются);
+      // чужие uid byRef пропускает. Правила, как и при удалении детектора, откатом не возвращаются
+      rulesGone(new Map(all.map((x) => [x.uid, x.name])), true);
       return snap;
     }
     const nullable = (s) => [].concat((s || {}).type || []).includes("null");
@@ -3843,6 +3885,12 @@
           else u.properties[n] = v;
         });
         // Источник событий: cameraId — всегда первая камера overlays (снятая из списка камера не оставляет прежнего значения)
+        // С профиля vms.detector/1 1.5: пустой lists при checkLists — «все списки»; детектор, у которого сузили выбор и все выбранные
+        // списки удалили, не должен молча перейти на все — checkLists снимается (откат вернёт его вместе с lists)
+        if (names.includes("lists") && props(u).checkLists === true && Array.isArray(props(u).lists) && !props(u).lists.length && Array.isArray(before.lists) && before.lists.length) {
+          before.checkLists = true;
+          u.properties.checkLists = false;
+        }
         const ov = props(u).overlays;
         if (Array.isArray(ov) && names.length) {
           const want = ov.length ? ov[0].cameraId : null;

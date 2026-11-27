@@ -66,6 +66,9 @@ PLUGIN_KINDS = ["security_controller/CONTROLLER", "security_controller/SENSOR", 
 # Контракт 0.12.0: поддетекторы (вид subdet) и новые настройки детектора. Система объявляет, что поддерживает, схемой вида:
 # в профиле «один домен» вида subdet нет, у det нет и этих свойств, а трекеры (analyticsKind) не заводятся — как у w2c без них
 PLUGIN_KINDS += ["subdet"]
+# Контракт 0.41.0: списки лиц и номеров (облако, пункт C17) — у профиля «один домен» их нет, у событий списка нет listId и entryId
+PLUGIN_KINDS += ["facelist", "platelist"]
+LIST_EVENT_PARAMS = ["listId", "entryId"]
 DROP_PROPS = {"det": ["analyticsKind", "extraZones", "direction", "objectSize", "classes", "confidence", "minDurationSec", "plateWidth", "crowdMin", "crowdHoldSec", "stillSec",
   # Контракт 0.13.0: запись и показ маски и треков — в профиле «один домен» их тоже нет
   "recordMask", "recordTracks", "showMask", "showTracks", "showTrackLifespan",
@@ -74,7 +77,9 @@ DROP_PROPS = {"det": ["analyticsKind", "extraZones", "direction", "objectSize", 
   # Контракт 0.17.0: поля мета-детектора (без analyticsKind им не к чему относиться)
   "metaQueries", "metaThreshold", "metaFrames", "metaFps", "metaSearch", "metaSkipSimilar", "metaDiff",
   # Профиль vms.detector/1 1.4: параметры детектора по семействам (пункт C1)
-  "alarmEndSec", "analysisFps", "frameWidth", "abandonedSensitivity", "objectSpeed"]}
+  "alarmEndSec", "analysisFps", "frameWidth", "abandonedSensitivity", "objectSpeed",
+  # Профиль vms.detector/1 1.5: сверка со списками лиц и номеров (пункт C17)
+  "checkLists", "lists"]}
 # Виды, чьи события и действия правил система профиля объявляет, хотя объектов этих видов у неё нет (вход датчика io.input,
 # текст источника, событие и команда единицы СКУД, выход реле) — редактор правил их предлагает. Каталог правил — из описаний
 # видов, поэтому описания остаются, но завести такой объект нельзя: без create и createParents, без x-ui-category (в мастере их нет)
@@ -457,6 +462,17 @@ def profile_kinds(kinds):
             k.pop("x-ui-category", None)
         for name in DROP_PROPS.get(k["kind"], []):
             ((k.get("schema") or {}).get("properties") or {}).pop(name, None)
+        # Событие списка без самих списков: ни выбора списка и записи, ни «нет ни в одном списке» (контракт 0.41.0)
+        for e in k.get("events", []):
+            pr = ((e.get("params") or {}).get("properties") or {})
+            if e["id"] in ("face.list", "plate.list"):
+                for name in LIST_EVENT_PARAMS:
+                    pr.pop(name, None)
+                p = pr.get("presence")
+                if p:
+                    p["enum"] = [v for v in p["enum"] if v != "none"]
+                    p.get("x-enum-labels", {}).pop("none", None)
+                    p.pop("description", None)
         clean(k.get("schema"))
         out.append(k)
     return out

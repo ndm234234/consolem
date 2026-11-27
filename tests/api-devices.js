@@ -37,6 +37,7 @@
     ["recordMask", "profile:vms.detector/1"],
     ["analyticsKind", "profile:vms.detector/1"],
     ["Свойства детектора и поддетектора", "profile:vms.detector/1"],
+    ["Списки лиц и номеров у детектора", "profile:vms.detector/1"],
     ["Источник:", "profile:vms.pos/1"],
     ["Правило: событие text", "profile:vms.pos/1"],
     ["Единица СКУД", "profile:vms.acs/1"],
@@ -939,6 +940,69 @@
     const gone = await env.ok("PATCH", U(ok.uid), { properties: Object.fromEntries(NEW.map((n) => [n, null])) }, v(ok));
     assert.eq(NEW.filter((n) => n in gone.properties), [], "null снимает");
   }, { needs: ["createUnits", "patchUnit", "kind:det", "prop:det.objectSpeed"], layer: "profile:vms.detector/1", since: "1.4" });
+
+  // Профиль vms.detector/1 1.5, пункт C17: checkLists и lists. kind:facelist в needs — знак, что система объявила списки
+  test("Списки лиц и номеров у детектора (1.5): детектор лиц — списки лиц, номеров — списки номеров; другой вид, чужой uid, другое семейство — 422; список удалён — uid уходит", async () => {
+    const env = await makeEnv();
+    const [f1, f2] = await env.pages("/units?kind=facelist&limit=100");
+    const [p1] = await env.pages("/units?kind=platelist&limit=100");
+    const L = (n) => `/properties/lists/${n}`;
+    // Выключенные: включённый детектор лиц того же сервера ответил бы 409 BUSY
+    const face = await addDet(env, camU, "Лица со списками", { detectorKind: "other", analyticsKind: "faceVA", enabled: false });
+    assert.eq(["lists", "checkLists"].filter((n) => n in face.properties), [], "без полей — ключей нет");
+    const ok = await env.ok("PATCH", U(face.uid), { properties: { checkLists: true, lists: [f1.uid, f2.uid] } }, v(face));
+    assert.eq([ok.properties.checkLists, ok.properties.lists], [true, [f1.uid, f2.uid]], "сохранены");
+    const wrong = await props(env, ok, { lists: [f1.uid, p1.uid] });
+    field(wrong, "VALIDATION_FAILED", L(1), "список номеров у детектора лиц");
+    assert.eq([wrong.body.params.reason, wrong.body.params.kind], ["wrongKind", "facelist"], "reason и ожидаемый вид");
+    const ghost = await props(env, ok, { lists: ["00000000-0000-4000-8000-000000000000"] });
+    field(ghost, "VALIDATION_FAILED", L(0), "нет такого uid");
+    assert.eq(ghost.body.params.reason, "unknownList", "reason неизвестного списка");
+    field(await props(env, ok, { lists: [cam.id] }), "VALIDATION_FAILED", L(0), "uid камеры вместо списка");
+    assert.eq(await failedOf(env, det(camU, "Новый с чужим списком", { detectorKind: "other", analyticsKind: "faceVL", enabled: false, lists: [p1.uid] })), [["VALIDATION_FAILED", L(0)]], "и при создании");
+    // Номера
+    const lpr = await addDet(env, camU, "Номера со списками", { detectorKind: "lpr", sensitivity: 10, checkLists: true, lists: [p1.uid] });
+    assert.eq(lpr.properties.lists, [p1.uid], "детектор номеров: список номеров");
+    field(await props(env, lpr, { lists: [f1.uid] }), "VALIDATION_FAILED", L(0), "список лиц у детектора номеров");
+    // Другие семейства списков не имеют
+    const mo = await addDet(env, camU, "Движение без списков", { detectorKind: "motion", sensitivity: 10 });
+    field(await props(env, mo, { lists: [f1.uid] }), "VALIDATION_FAILED", P("lists"), "детектор движения со списком");
+    const fam = await props(env, mo, { checkLists: true });
+    field(fam, "VALIDATION_FAILED", P("checkLists"), "детектор движения проверяет по спискам");
+    assert.eq(fam.body.params.reason, "notFamily", "reason семейства");
+    const off = await env.ok("PATCH", U(mo.uid), { properties: { checkLists: false } }, v(mo));
+    assert.eq(off.properties.checkLists, false, "checkLists: false — у любого семейства");
+    // checkLists без lists — все списки своего вида: не ошибка
+    const all = await addDet(env, camU, "Все списки", { detectorKind: "lpr", sensitivity: 10, checkLists: true });
+    assert.eq([all.properties.checkLists, "lists" in all.properties], [true, false], "checkLists: true без lists — сохранено");
+    const empty = await env.ok("PATCH", U(all.uid), { properties: { lists: [] } }, v(all));
+    assert.eq([empty.properties.checkLists, empty.properties.lists], [true, []], "пустой lists — не ошибка");
+    // Смена семейства (старый клиент шлёт detectorKind и analyticsKind: null) не отказывает; хранимые списки остаются как есть
+    const moved = await env.ok("PATCH", U(ok.uid), { properties: { detectorKind: "motion", analyticsKind: null } }, v(ok));
+    assert.eq([moved.properties.detectorKind, moved.properties.lists], ["motion", [f1.uid, f2.uid]], "семейство сменено, lists на месте");
+    await env.ok("PATCH", U(ok.uid), { properties: { detectorKind: "other", analyticsKind: "faceVA" } }, v(moved));
+    // Список удалён: uid уходит из lists, как любая ссылка x-ref. Консоль списки не удаляет: стенд на время даёт виду delete
+    const dropList = async (name, list) => {
+      const kind = await env.ok("GET", `/kinds/${name}`);
+      assert.status(await env.call("PUT", `/test/kinds/${name}`, Object.assign({}, kind, { capabilities: ["delete"] })), 200, null, "стенд дал виду delete");
+      const del = await env.call("DELETE", U(list.uid), undefined, v(list));
+      assert.ok([200, 202, 204].includes(del.status), "список удалён: " + del.status);
+      assert.status(await env.call("PUT", `/test/kinds/${name}`, kind), 200, null, "стенд вернул описание вида");
+      await ApiTest.settle();
+    };
+    await dropList("facelist", f1);
+    assert.eq((await get(env, face.uid)).properties.lists, [f2.uid], "uid удалённого списка снят из lists");
+    // Сужение до одного списка, и его удалили: пустой lists значил бы «все списки» — checkLists снимается, детектор не переходит на все
+    const narrow = await env.ok("PATCH", U(lpr.uid), { properties: { checkLists: true, lists: [p1.uid] } }, v(await get(env, lpr.uid)));
+    assert.eq([narrow.properties.checkLists, narrow.properties.lists], [true, [p1.uid]], "сужено до одного списка");
+    await dropList("platelist", p1);
+    const after = (await get(env, lpr.uid)).properties;
+    assert.eq([after.checkLists, after.lists], [false, []], "выбранный список удалён: lists пуст, checkLists снят");
+    // Без сужения (checkLists без lists) удаление списка детектор не меняет
+    assert.eq([(await get(env, all.uid)).properties.checkLists], [true], "детектор без lists: checkLists остался");
+    const cleared = await env.ok("PATCH", U(face.uid), { properties: { checkLists: null, lists: null } }, v(await get(env, face.uid)));
+    assert.eq(["lists", "checkLists"].filter((n) => n in cleared.properties), [], "null снимает");
+  }, { needs: ["createUnits", "patchUnit", "deleteUnit", "kind:det", "kind:facelist", "kind:platelist", "prop:det.lists"], layer: "profile:vms.detector/1", since: "1.5" });
 
   test("Поддетектор 0.15.0: stripe — линия или ломаная; свой objectSize; диапазон multi; lostObjectType; свои extraZones; direction у a2a", async () => {
     const env = await makeEnv();
