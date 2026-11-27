@@ -19835,7 +19835,7 @@ function dwSizeHtml(id){
   const c=dwC(detNodeOf(id)),p=v=>Math.round(v*1000)/10;
   const row=(m,l)=>`<div class="dw-sz-r"><span>${i18n(l)}</span><span class="dw-in"><input type="number" min="0" max="100" step="0.5" value="${p(c[m][0])}" data-dw-size="${m}.0" ${onEv("input",["dwSet",id,m+".0",onEv.value,onEv.el])}><span>×</span><input type="number" min="0" max="100" step="0.5" value="${p(c[m][1])}" data-dw-size="${m}.1" ${onEv("input",["dwSet",id,m+".1",onEv.value,onEv.el])}><span>% ${i18n("кадра")}</span></span><span class="sub dw-nolim" data-dw-nolim="${m}"${(m==="min"?dwNoMin(c):dwNoMax(c))?"":" hidden"}>${i18n("без ограничения")}</span></div>`;
   return`<div class="dw-f">${row("min","Не меньше")}${row("max","Не больше")}
-    ${dwHelp(dw.lay.size?"Кадр показывает рамки размеров. Чтобы изменить размер, тянуть угол рамки мышью.":"Детектор не замечает объекты меньше и больше этих размеров. Консоль считает ширину и высоту в процентах кадра.")}</div>`;
+    ${dwHelp(dw.lay.size&&!id.startsWith(DC_V)?"Кадр показывает рамки размеров. Чтобы изменить размер, тянуть угол рамки мышью.":"Детектор не замечает объекты меньше и больше этих размеров. Консоль считает ширину и высоту в процентах кадра.")}</div>`;
 }
 function dwSizeSec(id){
   return dwSec("Размер объекта",dwSizeHtml(id),` <button type="button" class="btn s dw-sec-b${dw.lay.size?" on":""}" aria-pressed="${dw.lay.size}" ${onEv("click",["dwLay","size"])}>${i18n(dw.lay.size?"Скрыть на кадре":"Показать на кадре")}</button>`,` data-dw-size-sec`);
@@ -20572,7 +20572,7 @@ function dwFineFieldHtml(d,x){
 }
 // Сколько полей тонкой настройки не по умолчанию: число в заголовке группы видно и у свёрнутой группы
 function dwFineCount(d,k){return dwFineList(d,k).filter(x=>dwFineChanged(d,x)).length}
-function dwFineCountPaint(){const d=dwD();if(!d)return;const n=dwFineCount(d,dwKindOf(d));document.querySelectorAll("[data-dw-fine-n]").forEach(el=>{el.textContent=n?`${i18n("изменено")}: ${n}`:"";el.hidden=!n})}
+function dwFineCountPaint(){const d=dwD();if(!d)return;const n=dwFineCount(d,dwKindOf(d));(dwRoot()||document).querySelectorAll("[data-dw-fine-n]").forEach(el=>{el.textContent=n?`${i18n("изменено")}: ${n}`:"";el.hidden=!n})}
 const DW_FINE_KEY="cfg.dwFineOpen";
 function dwFineOpenGet(){try{return localStorage.getItem(DW_FINE_KEY)==="1"}catch(e){return false}}
 // Щелчок по заголовку: <details> ещё в прежнем состоянии, поэтому запоминается обратное (toggle onEv не слушает)
@@ -21848,7 +21848,10 @@ function dcKindOfKey(key){
 }
 function dcVirtNode(key){
   if(!dc)return null;
-  dc._vn=dc._vn||{};if(dc._vn[key])return dc._vn[key];
+  dc._vn=dc._vn||{};const was=dc._vn[key];
+  // Встроенный: шаблон другой камеры (выбор камер изменился) — границы чувствительности другие, детектор и умолчания заново
+  if(was&&!(was.builtin&&was._opt!==(dc._tpl||[]).find(t=>t.key===key)?.o))return was;
+  if(was&&dc._vb)delete dc._vb[key];
   const n={id:DC_V+key,type:"det",_dcv:key,enabled:true,devices:[]};
   if(key.startsWith("s:"))n.kind=key.slice(2);
   else if(key.startsWith("a:")){n.kind=DET_KIND_RU.other;n.analyticsKind=key.slice(2)}
@@ -22063,6 +22066,8 @@ function renderDetCreate(){
   requestAnimationFrame(()=>{document.querySelectorAll("#bmBody [data-cp-scroll]").forEach(el=>{if(keep[el.dataset.cpScroll])el.scrollTop=keep[el.dataset.cpScroll]});document.querySelector("#bmBody .dc-z-row.on")?.scrollIntoView({block:"nearest"})});
   if(dc.wq&&st.k==="what")dcWhatFilter(dc.wq);
   dcSave();liveSync();dcFrzApply();
+  // Блоки окна детектора при отрисовке тоже зовут detNodeOf(«dcv~…»): флаг действия мастера после отрисовки не нужен
+  if(dc)dc._vAct=0;
 }
 // Поиск по видам детекторов на шаге «Что создать»: прячет строки, выбор и черновик не меняет
 function dcWhatType(v){dc.wq=v;typeLater("dcWhat",()=>dcWhatFilter(dc.wq),!String(v||"").trim())}
