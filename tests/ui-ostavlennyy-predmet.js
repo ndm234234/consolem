@@ -1,7 +1,7 @@
 /* Поддетектор «Оставленный предмет» под трекером (прототип 107, пробелы F118, F119, F120; замечания покрытия det-760,
    det-761; Axxon One doc 292178): что искать (lostObjectType), классы, свои исключения (extraZones, type: ex),
    предупреждение, если трекер не ищет оставленные предметы (detectUnattendedObjects), и поля трекера профиля
-   vms.detector/1 1.5 (autoSensitivity, longTimeUnattended, longTimeIdleSec). Запуск — tools/check_ui.py. */
+   vms.detector/1 1.6 (autoSensitivity, longTimeUnattended, longTimeIdleSec). Запуск — tools/check_ui.py. */
 UiCheck(async ({ ok, until, sleep }) => {
   // Только прототип 107: в index.html функции нет до переноса. При переносе охрана становится absent(...)
   if (typeof dwSubLost !== "function") return;
@@ -107,7 +107,7 @@ UiCheck(async ({ ok, until, sleep }) => {
   ok(await until(() => !main().querySelector("[data-dw-unatt]")), "кнопка убрала предупреждение");
   ok(dwC(trk()).fine.detectUnattendedObjects !== false, "поиск у трекера включён в черновике (умолчание — поиск идёт)");
 
-  // det-760, det-761: поля трекера профиля 1.5 в «Тонкой настройке»
+  // det-760, det-761: поля трекера профиля 1.6 в «Тонкой настройке»
   // Время покоя скрыто, когда выключен поиск оставленных предметов (зависимость по цепочке)
   dwFinePut(trk(), "longTimeUnattended", true);
   dwFinePut(trk(), "detectUnattendedObjects", false);
