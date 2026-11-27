@@ -18864,8 +18864,9 @@ function dwSubFromUnit(n){
     time:p.timeSec??0,mode:p.timeMode||"gt",count:p.minObjects??3,
     spd:[p.speed?.min??0,p.speed?.max??500],grp:!!p.group,gn:p.group?.count??2,gh:p.group?.waitSec??2,off:[p.offset?.x??15,p.offset?.y??10],
     // Пробелы F119 и F120: что искать (нет поля — оставленный, как в контракте) и свои исключения; зоны in окно не правит и сохраняет
-    lost:p.lostObjectType||"left",ex:(p.extraZones||[]).filter(x=>x.type==="ex").map((x,j)=>({id:"x"+(j+1),pts:dwCopy(x.points)})),
-    xin:(p.extraZones||[]).filter(x=>x.type!=="ex").map(x=>JSON.parse(JSON.stringify(x)))};
+    // Другие виды поддетекторов extraZones не правят и не отправляют: ex и xin пусты
+    lost:p.lostObjectType||"left",ex:kind!=="abandoned"?[]:(p.extraZones||[]).filter(x=>x.type==="ex").map((x,j)=>({id:"x"+(j+1),pts:dwCopy(x.points),raw:JSON.parse(JSON.stringify(x))})),
+    xin:kind!=="abandoned"?[]:(p.extraZones||[]).filter(x=>x.type!=="ex").map(x=>JSON.parse(JSON.stringify(x)))};
 }
 // Модель → свойства объекта. Лишнего нет: свойство, которое у вида не нужно или равно умолчанию, не уходит
 function dwDetProps(c,k,d){
@@ -18907,7 +18908,7 @@ function dwSubProps(s,k){
   if(k!=="motion"&&s.kind!=="mask")o.classes=s.classes.slice();
   if(s.kind==="abandoned"){
     o.lostObjectType=s.lost;
-    const xz=[...(s.xin||[]),...(s.ex||[]).map(x=>({type:"ex",points:dwCopy(x.pts)}))];if(xz.length)o.extraZones=xz;
+    const xz=[...(s.xin||[]),...(s.ex||[]).map(x=>({...(x.raw||{}),type:"ex",points:dwCopy(x.pts)}))];if(xz.length)o.extraZones=xz;
   }
   if(s.kind!=="mask"){
     if(s.spd[0]!==0||s.spd[1]!==500)o.speed={min:s.spd[0],max:s.spd[1]};
@@ -19042,7 +19043,7 @@ function dwSubStep(c,k,o,t,pos,prev,ss,out){
   const[x,y]=pos,v=prev?Math.hypot(x-prev[0],y-prev[1])*100:0;
   c.subs.forEach(s=>{
     if(!s.on||s.kind==="mask"||s.kind==="multi")return;
-    if(s.kind==="abandoned"?o.cls==="person"||DW_ALL.includes(o.cls)&&!s.classes.includes(o.cls)||c.fine?.detectUnattendedObjects===false||s.lost==="taken"||s.ex?.some(q=>dwIn(q.pts,x,y)):k!=="motion"&&!s.classes.includes(o.cls))return;
+    if(s.kind==="abandoned"?DW_ALL.includes(o.cls)&&!s.classes.includes(o.cls)||c.fine?.detectUnattendedObjects===false||s.lost==="taken"||s.ex?.some(q=>dwIn(q.pts,x,y)):k!=="motion"&&!s.classes.includes(o.cls))return;
     if(prev&&(v<s.spd[0]||v>s.spd[1]))return;
     const st=ss[s.id]||(ss[s.id]={in:null,run:0,done:false,a1:null,in2:false});
     const fire=()=>out.push({t,sub:s.id});
@@ -19270,7 +19271,7 @@ function dwGeoSvg(d){
     else{poly(s.area.pts,"sub",s.kind==="a2a"?`1 · ${s.name}`:s.name);if(s.kind==="a2a")poly(s.area2.pts,"sub2","2")}
     // Пробел F120: свои исключения поддетектора — штриховка, как у исключений детектора; видны, когда поддетектор открыт или ничего не открыто
     if(s.ex?.length&&(on||!subSel))s.ex.forEach((x,j)=>{const zid=`${s.id}~${x.id}`,b=`subx:${zid}`;
-      h+=`<polygon class="dw-a ex${dw.sel===b?" sel":""}" data-b="${b}" points="${x.pts.map(dwP).join(" ")}"/>${(()=>{const lx=Math.min(...x.pts.map(q=>q[0])),ly=Math.max(...x.pts.map(q=>q[1]));return`<text class="dw-tx" x="${(Math.min(lx,.86)*DW_X+1).toFixed(1)}" y="${(Math.min(ly*DW_Y+3.6,DW_Y-1)).toFixed(1)}" style="fill:var(--dw-ex)">${escHtml(i18n("Исключение")+" "+(j+1))}</text>`})()}`;
+      h+=`<polygon class="dw-a ex${dw.sel===b?" sel":""}" data-b="${b}" points="${x.pts.map(dwP).join(" ")}"/>${(()=>{const lx=Math.min(...x.pts.map(q=>q[0])),ly=Math.max(...x.pts.map(q=>q[1]));return`<text class="dw-tx" x="${(Math.min(lx,.66)*DW_X+1).toFixed(1)}" y="${(Math.min(ly*DW_Y+3.6,DW_Y-1)).toFixed(1)}" style="fill:var(--dw-ex)">${escHtml(i18n("Исключение")+" "+(j+1)+" · "+s.name)}</text>`})()}`;
       if(hd){if(dw.sel===b)h+=dwMidSvg(x.pts,b,"var(--dw-ex)");x.pts.forEach((q,k2)=>h+=dwHdSvg(b,k2,q,"var(--dw-ex)",1.5))}});
   });
   if(dw.lay.size&&DW_SIZE.has(k))["min","max"].forEach(m=>{
@@ -19678,7 +19679,7 @@ function dwDirHtml(id,cur,fn,sid=""){
 function dwPtab(){return dw.subSel||dw.subNew?"sub":(dw.ptab||"det")}
 function dwPtabSet(v){
   if(v!=="sub"||dwPtab()==="sub"){dw.subSel=null;dw.subNew=false}
-  dw.ptab=v;gear();renderTree();
+  dw.ptab=v;dwSubToolDrop();gear();renderTree();
   const r=document.getElementById("dwRight");if(r)r.scrollTop=0;
 }
 // «Изменить размер у детектора»: вкладка «Детектор», прокрутка к разделу «Размер объекта» и вспышка на нём.
@@ -19726,7 +19727,7 @@ function dwSubBodyHtml(id,k,s){
   if(s.kind==="stop")f.push(num("time","Сработать, если объект стоит дольше",1,172800,"с"));
   if(s.kind==="abandoned"){
     const lost=[["left","Оставленный"],["taken","Унесённый"],["any","Любой"]];
-    f.push(`<div class="dw-f"${dwSubPf(id,s,"lostObjectType")}><label>${i18n("Что искать")}</label><span class="dw-seg" data-dw-lost>${lost.map(([v,l])=>`<button type="button" class="${s.lost===v?"on":""}" aria-pressed="${s.lost===v}" ${onEv("click",["dwSubLost",id,s.id,v])}>${i18n(l)}</button>`).join("")}</span>${dwHelp(s.lost==="left"?"Поддетектор сработает, когда в области появится предмет и пролежит без движения это время.":s.lost==="taken"?"Поддетектор сработает, когда предмет пропадёт из области и не вернётся за это время.":"Поддетектор сработает, когда предмет появится в области или пропадёт из неё.")}</div>`,
+    f.push(`<div class="dw-f"${dwSubPf(id,s,"lostObjectType")}><label>${i18n("Что искать")}</label><span class="dw-seg" data-dw-lost>${lost.map(([v,l])=>`<button type="button" class="${s.lost===v?"on":""}" aria-pressed="${s.lost===v}" ${onEv("click",["dwSubLost",id,s.id,v])}>${i18n(l)}</button>`).join("")}</span>${dwHelp(s.lost==="left"?"Поддетектор сработает, когда в области появится предмет и пролежит без движения это время.":s.lost==="taken"?"Поддетектор сработает, когда предмет пропадёт из области и не вернётся за это время. Превью на кадре не показывает унесённые предметы.":"Поддетектор сработает, когда предмет появится в области или пропадёт из неё.")}</div>`,
       num("time",s.lost==="taken"?"Сработать, если предмета нет дольше":"Сработать, если предмет лежит дольше",1,172800,"с"));
   }
   if(s.kind==="a2a")f.push(`<div class="dw-f"><label>${i18n("Время перехода из области 1 в область 2")}</label>${seg([["gt","дольше"],["lt","меньше"]])}</div>`,num("time","Время",0,172800,"с","Если время 0, поддетектор не проверяет время перехода."));
@@ -20107,7 +20108,7 @@ function dwFineQuad(id){
 // Поле тонкой настройки: правка в окне (вариант A)
 function dwFineFieldHtml(d,x){
   const id=d.id,v=dwFineGet(d,x),lab=`<label>${i18n(x.l)}</label>`,help=x.help?dwHelp(x.help):"",at=` data-dw-fine="${x.f}"`;
-  if(x.dep){const dx=DW_FINE.find(y=>y.f===x.dep);if(!(dwFineGet(d,dx)??dx.def))return""}
+  for(let y=x,n=0;y.dep&&n<4;n++){const dx=DW_FINE.find(z=>z.f===y.dep);if(!dx||!(dwFineGet(d,dx)??dx.def))return"";y=dx}
   if(x.off){const dx=DW_FINE.find(y=>y.f===x.off);if(dwHas(d,x.off)&&(dwFineGet(d,dx)??dx.def))return""}
   if(x.t==="stream"){const cam=find(d.id)?.p,ss=cam?camStreams(cam):[];
     return`<div class="dw-f"${at}${pfa(d,"stream")}>${lab}<select ${onEv("change",["dwFineSet",id,x.f,onEv.value])}>${ss.map(s=>`<option value="${escHtml(s.id)}" ${s.id===(d.stream||ss[0]?.id)?"selected":""}>${escHtml(s.name||s.id)}</option>`).join("")}</select>${help}</div>`}
@@ -20269,10 +20270,12 @@ function dwSubName(id,sid,v){const s=dwSubOf(id,sid);if(!s)return;s.name=v;const
 function dwSubLost(id,sid,v){const s=dwSubOf(id,sid);if(!s||dwRoRefuse(id))return;s.lost=v;gear()}
 function dwSubXId(s){let n=1;while(s.ex.some(x=>x.id==="x"+n))n++;return"x"+n}
 function dwSubExTool(id,sid){if(dwRoRefuse(id))return;if(dw.tool==="subx"&&dw.toolSub===sid){dw.tool=null;dw.poly=null;gear();return}dw.tool="subx";dw.toolSub=sid;dw.poly=null;dw.pt=null;dw.sel=null;gear()}
-function dwSubExDel(id,sid,xid){const s=dwSubOf(id,sid);if(!s||dwRoRefuse(id))return;s.ex=s.ex.filter(x=>x.id!==xid);if((dw.sel||"").startsWith(`subx:${sid}~`)){dw.sel=null;dw.pt=null}gear()}
-function dwUnattOn(id){const d=detNodeOf(id);if(!d||dwRoRefuse(id))return;dwFinePut(d,"detectUnattendedObjects",true);gear();toast("Консоль включила поиск оставленных предметов у трекера в черновике. Чтобы применить, нажать «Применить».")}
+function dwSubExDel(id,sid,xid){const s=dwSubOf(id,sid);if(!s||dwRoRefuse(id))return;s.ex=s.ex.filter(x=>x.id!==xid);if(dw.sel===`subx:${sid}~${xid}`){dw.sel=null;dw.pt=null}gear()}
+function dwUnattOn(id){const d=detNodeOf(id);if(!d||dwRoRefuse(id))return;dwFinePut(d,"detectUnattendedObjects",true);gear();toast("Консоль включила поиск оставленных предметов у трекера в черновике. Чтобы применить, нажать «Показать план», затем «Применить».")}
 function dwSubClass(id,sid,cl){const s=dwSubOf(id,sid);if(!s)return;const i=s.classes.indexOf(cl);if(i<0)s.classes.push(cl);else s.classes.splice(i,1);gear()}
-function dwSubSel(sid){dw.subSel=dw.subSel===sid?null:sid;dw.subAdv=false;if(/^sub2?:/.test(dw.sel||"")){dw.sel=null;dw.pt=null}gear();renderTree()}
+function dwSubSel(sid){dw.subSel=dw.subSel===sid?null:sid;dw.subAdv=false;if(/^sub[2x]?:/.test(dw.sel||"")){dw.sel=null;dw.pt=null}dwSubToolDrop();gear();renderTree()}
+// Инструмент «Исключение» поддетектора живёт, пока открыт его поддетектор
+function dwSubToolDrop(){if(dw.tool==="subx"&&dw.subSel!==dw.toolSub){dw.tool=null;dw.poly=null;dw.toolSub=null}}
 function dwSubNewOpen(){dw.subNew=!dw.subNew;if(dw.subNew)dwSubOkLoad(sel);gear();if(dw.subNew)setTimeout(()=>dwRoot()?.querySelector(".dw-new-q")?.focus(),0)}
 function dwSubAdd(id,kind){
   const c=dwC(detNodeOf(id)),n=c.subs.filter(s=>s.kind===kind).length+1,sid="s"+Date.now()%1e7;

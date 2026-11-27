@@ -2,7 +2,7 @@
 Object.assign(window.I18N_EN,{
 "Авточувствительность":"Auto sensitivity",
 "Включить поиск у трекера":"Turn on search in the tracker",
-"Консоль включила поиск оставленных предметов у трекера в черновике. Чтобы применить, нажать «Применить».":"The console turned on the abandoned object search in the tracker draft. To apply it, click Apply.",
+"Консоль включила поиск оставленных предметов у трекера в черновике. Чтобы применить, нажать «Показать план», затем «Применить».":"The console turned on the abandoned object search in the tracker draft. To apply it, click Show plan, then Apply.",
 "Любой":"Any",
 "Максимальное время покоя":"Maximum idle time",
 "Надолго оставленные предметы":"Long-time abandoned objects",
@@ -10,7 +10,7 @@ Object.assign(window.I18N_EN,{
 "Оставленный":"Abandoned",
 "Поддетектор сработает, когда в области появится предмет и пролежит без движения это время.":"The sub-detector triggers when an object appears in the area and stays without motion for this time.",
 "Поддетектор сработает, когда предмет появится в области или пропадёт из неё.":"The sub-detector triggers when an object appears in the area or disappears from it.",
-"Поддетектор сработает, когда предмет пропадёт из области и не вернётся за это время.":"The sub-detector triggers when an object disappears from the area and does not come back in this time.",
+"Поддетектор сработает, когда предмет пропадёт из области и не вернётся за это время. Превью на кадре не показывает унесённые предметы.":"The sub-detector triggers when an object disappears from the area and does not come back in this time. The frame preview does not show taken objects.",
 "Протянуть мышью по кадру, чтобы нарисовать прямоугольник исключения поддетектора. Чтобы нарисовать многоугольник, щёлкать по кадру. Чтобы замкнуть его, щёлкнуть по первой точке.":"Drag the mouse across the frame to draw a rectangle for the sub-detector exclusion. To draw a polygon, click the frame. To close it, click the first point.",
 "Сработать, если предмета нет дольше":"Trigger if the object is missing longer than",
 "Трекер ищет и предметы, которые лежат без движения дольше максимального времени покоя. Так ложных срабатываний меньше.":"The tracker also finds objects that stay without motion longer than the maximum idle time. This gives fewer false alarms.",

@@ -45,6 +45,14 @@ UiCheck(async ({ ok, until, sleep }) => {
   ok(await until(() => main().querySelector(`.dw-stage [data-b="subx:${s.id}~${s.ex[0].id}"]`)), "исключение на кадре");
   ok(main().querySelector(`[data-dw-zone="subx:${s.id}~${s.ex[0].id}"]`), "строка исключения в списке областей");
 
+  // Ревью: другой поддетектор снимает фокус исключения и инструмент «Исключение»
+  dwSubZoneSel("subx", `${s.id}~${s.ex[0].id}`);
+  dwSubExTool(TRK, s.id);
+  const dwellId = "30000027-0011-4000-8000-000000000000";
+  dwSubSel(dwellId);
+  ok(!/^subx:/.test(dw.sel || "") && dw.tool !== "subx", "другой поддетектор: фокус исключения и инструмент сняты");
+  dwSubSel(s.id);
+
   // F118: трекер не ищет оставленные предметы — предупреждение; кнопка включает поиск в черновике
   dwFinePut(trk(), "detectUnattendedObjects", false);
   gear();
@@ -54,6 +62,14 @@ UiCheck(async ({ ok, until, sleep }) => {
   ok(dwC(trk()).fine.detectUnattendedObjects !== false, "поиск у трекера включён в черновике (умолчание — поиск идёт)");
 
   // det-760, det-761: поля трекера профиля 1.5 в «Тонкой настройке»
+  // Время покоя скрыто, когда выключен поиск оставленных предметов (зависимость по цепочке)
+  dwFinePut(trk(), "longTimeUnattended", true);
+  dwFinePut(trk(), "detectUnattendedObjects", false);
+  dwPtabSet("det");
+  const fine0 = () => [...main().querySelectorAll("[data-dw-fine]")].map((e) => e.dataset.dwFine);
+  ok(await until(() => fine0().includes("detectUnattendedObjects")), "«Тонкая настройка» на экране");
+  ok(!fine0().includes("longTimeUnattended") && !fine0().includes("longTimeIdleSec"), "поиск выключен — нет полей надолго оставленных");
+  dwFinePut(trk(), "detectUnattendedObjects", true);
   dwFinePut(trk(), "autoSensitivity", true);
   dwFinePut(trk(), "longTimeUnattended", true);
   dwFinePut(trk(), "longTimeIdleSec", 120);
@@ -70,6 +86,16 @@ UiCheck(async ({ ok, until, sleep }) => {
   ok(u && u.lostObjectType === "taken", "на сервере «Что искать» — унесённый");
   ok(u && u.extraZones?.length === 1 && u.extraZones[0].type === "ex" && u.extraZones[0].points.length === 4, "на сервере своё исключение поддетектора");
   ok(u && Array.isArray(u.classes) && u.classes.length === 3, "на сервере классы поддетектора");
+
+  // Ревью: чужие extraZones другого вида поддетектора окно не правит и в план не кладёт
+  const dw0 = await uiRec(dwellId);
+  const dwellU = (await API.get(`/units/${dwellId}`));
+  await API.patch(`/units/${dwellId}`, { properties: { extraZones: [{ type: "ex", points: [[0.1, 0.1], [0.2, 0.1], [0.2, 0.2]] }] } }, dwellU.version);
+  ok(await until(() => dwSaved(trk()).subs.some((x) => x.id === dwellId)), "поддетектор «пребывание» в окне");
+  await sleep(300);
+  ok(!dwC(trk()).subs.find((x) => x.id === dwellId).ex.length, "у другого вида исключений поддетектора в модели нет");
+  ok(!dwDiffRows(trk()).length, "чужие extraZones не дают строк плана");
+  ok(dw0.subdetectorKind === "dwell", "это поддетектор «пребывание»");
 
   // Удаление исключения уходит в план и снимает extraZones на сервере
   // Поддетектор после «Применить» — объект сервера: id в черновике — его uid
