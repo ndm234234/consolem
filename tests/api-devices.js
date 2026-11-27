@@ -1041,6 +1041,21 @@
     const cleared = await env.ok("PATCH", U(face.uid), { properties: { checkLists: null, lists: null } }, v(await get(env, face.uid)));
     assert.eq(["lists", "checkLists"].filter((n) => n in cleared.properties), [], "null снимает");
   }, { needs: ["createUnits", "patchUnit", "deleteUnit", "kind:det", "kind:facelist", "kind:platelist", "prop:det.lists"], layer: "profile:vms.detector/1", since: "1.5" });
+  // Профиль vms.detector/1 1.6, замечания det-760 и det-761: трекер для поддетектора «Оставленный предмет». prop:det.longTimeIdleSec в needs — знак, что сервер знает 1.6
+  test("Трекер для оставленных предметов (1.6): без полей — как раньше; новые сохраняются; время покоя вне 15–1800 — 422; null снимает", async () => {
+    const env = await makeEnv();
+    const NEW = ["autoSensitivity", "longTimeUnattended", "longTimeIdleSec"];
+    const t = await addDet(env, camU, "Трекер 1.6", { detectorKind: "other", analyticsKind: "tracker" });
+    assert.eq(NEW.filter((n) => n in t.properties), [], "без полей — ключей нет");
+    const good = { autoSensitivity: true, longTimeUnattended: true, longTimeIdleSec: 120 };
+    const ok = await env.ok("PATCH", U(t.uid), { properties: good }, v(t));
+    assert.eq(NEW.map((n) => ok.properties[n]), NEW.map((n) => good[n]), "сохранены");
+    field(await props(env, ok, { longTimeIdleSec: 14 }), "VALIDATION_FAILED", P("longTimeIdleSec"), "время покоя меньше 15");
+    field(await props(env, ok, { longTimeIdleSec: 1801 }), "VALIDATION_FAILED", P("longTimeIdleSec"), "время покоя больше 1800");
+    field(await props(env, ok, { autoSensitivity: "да" }), "VALIDATION_FAILED", P("autoSensitivity"), "не логическое");
+    const gone = await env.ok("PATCH", U(ok.uid), { properties: Object.fromEntries(NEW.map((n) => [n, null])) }, v(ok));
+    assert.eq(NEW.filter((n) => n in gone.properties), [], "null снимает");
+  }, { needs: ["createUnits", "patchUnit", "kind:det", "prop:det.longTimeIdleSec"], layer: "profile:vms.detector/1", since: "1.6" });
 
   // Контракт 0.42.0: GET /units/{uid}/entries. Необязательный путь: система без listUnitEntries читает properties.entries, как в 0.41.0
   test("Записи списков лиц и номеров (0.42.0): страницы по offset и по cursor, total, q, ids, entryCount; отказы", async () => {
