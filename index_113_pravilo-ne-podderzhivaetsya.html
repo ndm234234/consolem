@@ -2701,6 +2701,11 @@ html[data-theme="light"] .busy-chip{background:var(--one-control-hover);color:va
 .dc-st:disabled{cursor:default;opacity:.55}
 .dc-st.on{color:inherit;font-weight:600;background:var(--one-selected-neutral)}
 .dc-st-sep{flex:none;width:14px;height:1px;background:var(--ln)}
+/* Прототип 113: шаг, которого нет у выбранного (правило у детекторов без событий) — пометка «Не поддерживается» */
+.dc-st-off{font-size:10px;font-weight:400;padding:1px 6px;border-radius:var(--one-radius-container);background:var(--one-selected-neutral);color:var(--mu)}
+.dc-st.off:disabled{opacity:.8}
+.dc-noev{margin:8px 0 0}
+.dc-noev b{font-weight:600}
 .dc-body{flex:1;min-height:0;min-width:0;display:grid;gap:22px;grid-template-columns:minmax(0,1fr)}
 .dc-what2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22px}
 .dc-cnt{margin-left:auto;color:var(--mu);font-size:11px}
@@ -3903,6 +3908,7 @@ body:has(.ttu) #tst:not(.in-fs){bottom:144px}
 <!-- ONE PSIM: мост по ONE.PSIM.PrototypeKit, подключён после стилей прототипа -->
 <link rel="stylesheet" href="assets/one-psim/bridge.css">
 <script src="assets/i18n-en.js"></script>
+<script src="assets/i18n-en-113.js"></script>
 <!-- API: контракт, эталонный набор, встроенный сервер и клиент (api/README.md) -->
 <script src="api/openapi.js"></script>
 <script src="api/fixture.js"></script>
@@ -5158,7 +5164,7 @@ function detAkFamSet(ks){
 // Подпись под семейством в мастере: какие события камеры поднимает детектор
 function detAkEvText(ak){
   const ev=DET_AK_EV[ak];if(!ev)return"";
-  if(!ev.length)return i18n("Нет событий для правил");
+  if(!ev.length)return i18n("Правило: не поддерживается. Детектор не поднимает событий");
   const cam=[...KINDS.values()].find(k=>(k.implements||[]).includes("vms.camera/1"));
   return`${i18n("События")}: ${ev.map(c=>{const e=(cam?.events||[]).find(x=>x.id===c);return e?textOf(e.label):c}).join(", ")}`;
 }
@@ -21204,8 +21210,9 @@ async function dcLoad(){
 // Все процессы создания устроены как «Добавить детекторы»: окно по центру, шаги кнопками, размер окна идёт за шагом,
 // в подвале «Отмена», итог, «Назад» и кнопка, которая называет результат. Клик мимо и Escape окно не закрывают.
 // Окно закрывает одна кнопка «×»: незавершённое остаётся в доке внизу справа, удаляет его только «Отмена».
-function wzBarHtml(steps,cur,reach,on,saved){
-  const bar=steps.map((x,i)=>`${i?`<span class="dc-st-sep"></span>`:""}<button type="button" class="dc-st ${i===cur?"on":""}" ${reach(i)?"":"disabled"} aria-current="${i===cur?"step":"false"}" ${onEv("click",[...on,`${i}`])}><span class="cp-step">${i<cur?lu("check",11):i+1}</span>${i18n(x.t)}</button>`).join("");
+// off(i) — почему шага нет у выбранного: шаг остаётся в полосе с пометкой «Не поддерживается», мастер его пропускает
+function wzBarHtml(steps,cur,reach,on,saved,off){
+  const bar=steps.map((x,i)=>{const no=off?off(i):"";return`${i?`<span class="dc-st-sep"></span>`:""}<button type="button" class="dc-st ${i===cur?"on":""}${no?" off":""}" ${reach(i)&&!no?"":"disabled"} ${no?`data-tip="${escHtml(no)}"`:""} aria-current="${i===cur?"step":"false"}" ${onEv("click",[...on,`${i}`])}><span class="cp-step">${no?"–":i<cur?lu("check",11):i+1}</span>${i18n(x.t)}${no?`<span class="dc-st-off">${i18n("Не поддерживается")}</span>`:""}</button>`}).join("");
   return`<div class="dc-steps">${bar}${saved?`<span class="dc-saved">${i18n("Черновик сохраняется сам")}</span>`:""}</div>`;
 }
 function wzFootHtml(o){
@@ -21484,7 +21491,10 @@ const DC_STEPS=[{t:"Что создать",k:"what"},{t:"На каких кам�
 function dcSteps(){return DC_STEPS.filter(x=>!(dc.lock&&x.k==="cams"))}
 function dcStepKey(){const a=dcSteps();return a[Math.min(dc.step,a.length-1)].k}
 function dcStepGo(i){
-  dc.step=+i;zoneDraw=null;
+  i=+i;
+  // Прототип 113: у выбранных детекторов нет событий — шага «Правило» нет, «Далее» и «Назад» идут через него
+  const a=dcSteps();if(dc.noRule&&a[i]?.k==="rule")i+=i>dc.step?1:-1;
+  dc.step=Math.max(0,Math.min(i,a.length-1));zoneDraw=null;
   if(dcStepKey()==="zones")dcZoneEnter();
   renderDetCreate();
 }
@@ -21689,11 +21699,16 @@ function dcRecHtml(c){
   const archSel=ruleFieldShown(ACT_ADD,archF,a)?`<select aria-label="${i18n("Архив")}" ${onEv("change",["setActionField","0","archive",onEv.value])}>${ruleArchOpts(a).map(([v,l])=>`<option value="${escHtml(v)}" ${(a.archive||"")===v?"selected":""}>${escHtml(l)}</option>`).join("")}</select>`:"";
   return`<div class="dc-sub dc-rec"><select aria-label="${i18n("Сколько записывать")}" ${onEv("change",["dcRecLen",onEv.value])}>${lenOpts}</select>${archSel}</div>`;
 }
+// Прототип 113: выбранные детекторы, у которых правило не поддерживается
+function dcNoEvHtml(){
+  const n=dc.noEv||[];if(!n.length)return"";
+  return`<p class="sub dc-note dc-noev"><b>${i18n("Не поддерживается")}:</b> ${escHtml(n.join(", "))}. ${i18n(n.length>1?"Эти детекторы не поднимают событий. Консоль не добавит их в правило.":"Этот детектор не поднимает событий. Консоль не добавит его в правило.")}</p>`;
+}
 function dcRuleHtml(gs){
   const r=dc.rule,cands=dcRuleCands(gs),c=dcCustomRule(gs),cur=dcActKey(c),on=r.mode==="new"?cur:r.mode;
   const one=gs.length<=1;
   const count=one?"":`<p class="sub dc-note">${gs.length} ${i18n(plural(gs.length,"правило|правила|правил"))}, ${i18n("по одному на вид. У них общие «При условии» и «То».")}</p>`;
-  const head=`<div class="dc-sec">${i18n("Если")}</div>${gs.map(g=>`<div class="dc-plan">${escHtml(triggerLabel(dcRuleWhen(g)))}</div>`).join("")}${count}`;
+  const head=`<div class="dc-sec">${i18n("Если")}</div>${gs.map(g=>`<div class="dc-plan">${escHtml(triggerLabel(dcRuleWhen(g)))}</div>`).join("")}${count}${dcNoEvHtml()}`;
   if(r.adv){
     const issues=ruleIssues(c);
     return`${head}
@@ -21765,6 +21780,10 @@ function renderDetCreate(){
   const gs=dcTrigs(plan,tpl);
   // Выбранные детекторы не поднимают событий (тепловая карта, контроль оператора): правило не из чего строить —
   // консоль выбирает «Ничего не делать» и возвращает прежний выбор, когда событие появится
+  // Прототип 113: детекторы без событий — пометка «Не поддерживается» у шага «Правило» и в плане (как isMacrosSupported в Axxon One)
+  dc.noEv=plan.filter(p=>p.fit.length&&p.key.startsWith("a:")&&(DET_AK_EV[p.key.slice(2)]||[0]).length===0).map(p=>p.name);
+  dc.noRule=!!(dc.ready&&total&&!gs.length);
+  if(dc.noRule&&dcStepKey()==="rule")dc.step--;
   if(dc.ready&&total&&!gs.length&&dc.rule.mode!=="none"){dc.rule.was=dc.rule.mode;dc.rule.mode="none"}
   else if(gs.length&&dc.rule.was){dc.rule.mode=dc.rule.was;delete dc.rule.was}
   if(gs.length&&dc.rule.pick&&!dcRuleCands(gs).some(x=>x.id===dc.rule.pick))dc.rule.pick="";
@@ -21836,16 +21855,17 @@ function renderDetCreate(){
       ${same?`<p class="sub dc-note">${i18n("У камер разные кадры. Консоль поставит зону на то же место кадра, а не на тот же объект. Консоль не заменит зоны, нарисованные вручную.")}</p>`:""}
     </div></div></section>`;
   };
-  const secRule=()=>`<section class="cp-col"><div class="cp-scroll" data-cp-scroll="r">${dc.ready&&!gs.length?`<p class="sub">${i18n("Выбранные детекторы не поднимают событий для правил. Консоль не создаст правило.")}</p>`:dc.ready?dcRuleHtml(gs):`<p class="sub">${i18n("Читаю, что умеют камеры…")}</p>`}</div></section>`;
+  const secRule=()=>`<section class="cp-col"><div class="cp-scroll" data-cp-scroll="r">${dc.ready&&!gs.length?`<p class="sub"><b>${i18n("Не поддерживается")}.</b> ${i18n("Выбранные детекторы не поднимают событий для правил. Консоль не создаст правило.")}</p>`:dc.ready?dcRuleHtml(gs):`<p class="sub">${i18n("Читаю, что умеют камеры…")}</p>`}</div></section>`;
   // Последний шаг и есть план: ничего ещё не записано, здесь видно всё, что произойдёт
   const secEnd=()=>{
     const rows=dcRowsOf(plan),noLine=rows.filter(dcNeedsLine).length;
     const tr=rows.map((x,i)=>{const o=dc.zoneBy[x.id];return`<tr><td class="bk-num">${i+1}</td><td>${escHtml(locName(x.cam))}</td><td>${escHtml(x.name)}</td><td>${dcNeedsLine(x)?`<span class="dl-warn">${lu("triangle-alert",11)} ${i18n("нет линии")}</span>`:o?`${escHtml(zoneText(o.z))}${o.from?` · ${i18n("копия")}`:""}`:i18n("вся картинка")}</td></tr>`}).join("");
     const skips=plan.flatMap(p=>[...p.skip.entries()].map(([w,c])=>`<div class="dc-plan-s">${escHtml(p.name)}: ${i18n("пропустим")} ${c}, ${escHtml(w)}</div>`)).join("");
     const r=dc.rule,acts=r.mode==="new"?dcCustomRule(gs).then.map(x=>x.ctl?i18n(ctlKind(x).label):actionLabel(x)).join("; "):"";
-    const ruleLines=r.mode==="none"?`<p class="sub dc-note">${i18n("Без правила. Сервер запишет событие только в журнал.")}</p>`
+    const ruleLines=dc.noRule?`<p class="sub dc-note"><b>${i18n("Не поддерживается")}.</b> ${i18n("Выбранные детекторы не поднимают событий для правил. Консоль не создаст правило.")}</p>`
+      :(r.mode==="none"?`<p class="sub dc-note">${i18n("Без правила. Сервер запишет событие только в журнал.")}</p>`
       :r.mode==="add"?`<p class="sub dc-note">${r.pick?`${i18n("Камеры встанут в правило")} «${escHtml(rules.find(x=>x.id===r.pick)?.name||"")}».${dcPickMiss(gs,r.pick).length?` ${i18n("Без правила останутся")}: ${escHtml(dcPickMiss(gs,r.pick).flatMap(g=>g.names).join(", "))}.`:""}`:i18n("Правило не выбрано. Консоль создаст детекторы без правила.")}</p>`
-      :gs.map(g=>`<div class="dc-plan"><div>${escHtml(triggerLabel(dcRuleWhen(g)))}</div><div class="dc-plan-s">${escHtml(acts)}${dc.custom?.cond.length?` · ${i18n("условий")}: ${dc.custom.cond.length}`:""}${r.watch?` · ${i18n("только журнал")}`:""}</div></div>`).join("");
+      :gs.map(g=>`<div class="dc-plan"><div>${escHtml(triggerLabel(dcRuleWhen(g)))}</div><div class="dc-plan-s">${escHtml(acts)}${dc.custom?.cond.length?` · ${i18n("условий")}: ${dc.custom.cond.length}`:""}${r.watch?` · ${i18n("только журнал")}`:""}</div></div>`).join(""))+(dc.noRule?"":dcNoEvHtml());
     return`<section class="cp-col"><div class="cp-scroll" data-cp-scroll="p"><p class="dc-total"><b>${total}</b> ${i18n(plural(total,"детектор|детектора|детекторов"))} ${i18n("на")} <b>${camsHit}</b> ${i18n(plural(camsHit,"камере|камерах|камерах"))}</p>${skips}
       <table class="bk-table"><thead><tr><th>#</th><th>${i18n("Камера")}</th><th>${i18n("Детектор")}</th><th>${i18n("Зона")}</th></tr></thead><tbody>${tr}</tbody></table>
       ${noLine?`<div class="nt bk-warn">${lu("triangle-alert")} ${noLine} ${i18n(plural(noLine,"детектору|детекторам|детекторам"))} ${i18n("пересечения линии нужна линия. Без линии детекторы не сработают.")}</div>`:""}
@@ -21857,7 +21877,7 @@ function renderDetCreate(){
   const fitBox=document.querySelector("#bmodal.open .bbox"),fitWas=fitBox?fitBox.getBoundingClientRect():null;
   const fitKey=st.k==="rule"&&dc.rule.adv?"rule-adv":st.k;
   const reach=i=>steps.slice(0,i).every(okStep);
-  const bar=wzBarHtml(steps,dc.step,reach,["dcStepGo"],true);
+  const bar=wzBarHtml(steps,dc.step,reach,["dcStepGo"],true,i=>dc.noRule&&steps[i].k==="rule"?i18n("Выбранные детекторы не поднимают событий для правил"):"");
   const skipN=plan.reduce((n,p)=>n+[...p.skip.values()].reduce((a,b)=>a+b,0),0);
   const sum=!dc.items.size?i18n("Выбрать, что создать"):!total?`${i18n("Выбрано видов")}: ${dc.items.size}. ${i18n("Выбрать камеры")}`:`${total} ${i18n(plural(total,"детектор|детектора|детекторов"))} ${i18n("на")} ${camsHit} ${i18n(plural(camsHit,"камере|камерах|камерах"))}${skipN?` · ${i18n("пропустим")} ${skipN}`:""}`;
   const go=last?`<button type="button" class="btn pri" ${total?"":"disabled"} ${onEv("click",["dcRun"])}>${total?`${i18n("Создать")} ${total} ${i18n(plural(total,"детектор|детектора|детекторов"))}${withRule?` ${dc.rule.mode==="new"?(gs.length>1?`${i18n("и")} ${gs.length} ${i18n(plural(gs.length,"правило|правила|правил"))}`:i18n("и правило")):i18n("и добавить к правилу")}`:""}`:i18n("Создать")}</button>`
