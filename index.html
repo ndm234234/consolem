@@ -5998,7 +5998,7 @@ async function unitActRun(){
 // У объекта две формы. Своя — ручной экран под вид (камера, сервер, касса…). Базовая — форма по схеме вида: все свойства,
 // с проверкой сервера (POST /units/validate), как у незнакомого вида. Базовая форма нужна редко (интеграторам, видам
 // плагинов), поэтому её открывает пункт «Все параметры» в меню «Ещё», а не кнопка на экране. Выбор консоль помнит у вида
-// до перезагрузки, ссылка — #node=<id>&form=all.
+// и после перезагрузки (localStorage, как режим показа unit.mode.* в Axxon One, пробел F128), ссылка — #node=<id>&form=all.
 // Профили (GET /kinds → profiles[]) перечисляют свойства с известным смыслом — их показывает своя форма. Что в схеме вида
 // сверх объединения Profile.properties всех его implements, базовая форма отмечает «сверх профиля»
 const KIND_PROFILES=new Map();
@@ -6187,16 +6187,19 @@ function hasBaseForm(n){
 // «Все параметры» есть у ручного экрана с базовой формой и у объекта по схеме со своей страницей: там это форма по схеме
 // на том же черновике n.props, что у страницы
 function hasAllForm(n){return hasBaseForm(n)||(!!n&&isSchemaNode(n)&&suiOn(n))}
-const formAllByKind=new Map();
+// Режим показа у вида: true — «Все параметры». Хранится только выбор «Все параметры»; нет доступа к хранилищу — до перезагрузки
+const FORM_ALL_KEY="cfg.formAll";
+const formAllByKind=new Map((()=>{try{return Object.entries(JSON.parse(localStorage.getItem(FORM_ALL_KEY)||"{}")).filter(([k,v])=>k&&v===true)}catch(e){return[]}})());
+function formAllSave(){try{const o={};formAllByKind.forEach((v,k)=>{if(k&&v===true)o[k]=true});localStorage.setItem(FORM_ALL_KEY,JSON.stringify(o))}catch(e){}}
 function cardFormAll(n){return hasAllForm(n)&&formAllByKind.get(tabMemKey(n))===true}
 // Строка перечня без полной записи: вид известен, форма откроется после чтения записи
 function kindHasBase(n){const ps=KINDS.get(nodeKind(n))?.schema?.properties;return!!n&&!isSchemaNode(n)&&!!ps&&Object.keys(ps).length>0}
 function formAllSet(v){
   const n=find(sel)?.n;if(!n)return;
-  if(n._row&&kindHasBase(n)){formAllByKind.set(tabMemKey(n),!!v);gear();return}
+  if(n._row&&kindHasBase(n)){formAllByKind.set(tabMemKey(n),!!v);formAllSave();gear();return}
   if(!hasAllForm(n))return;
   if(!v&&baseChanged(n).length){toast(FORM_BACK_WHY);return}
-  formAllByKind.set(tabMemKey(n),!!v);
+  formAllByKind.set(tabMemKey(n),!!v);formAllSave();
   tab=tabKeep(n);gear();
 }
 // Пункт меню «Ещё» (и меню строки дерева): «Все параметры» открывает базовую форму, «Вернуться к настройке» — свою.
