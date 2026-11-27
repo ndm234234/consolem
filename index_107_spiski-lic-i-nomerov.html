@@ -3791,6 +3791,7 @@ body.dw-resizing,body.dw-resizing *{cursor:col-resize!important;user-select:none
 
 .lst-row .tag{margin-left:auto;font-variant-numeric:tabular-nums}
 .lst-use{margin:8px 0}
+.pg-rows.lst-wait{opacity:.6}
 .dw-lst-mode{display:grid;gap:4px}
 .dw-lst-mode label,.dw-lst-pick label{display:flex;align-items:center;gap:8px;font:var(--one-type-body-sm)}
 .dw-lst-pick{display:grid;gap:4px;margin:8px 0 0 24px}
@@ -19995,42 +19996,57 @@ function lstOn(){return LST_KINDS.some(k=>KINDS.has(k))}
 function lstEnsure(){
   if(lstStore.load||!lstOn())return lstStore.load;
   lstStore.load=Promise.all(LST_KINDS.filter(k=>KINDS.has(k)).map(k=>unitsAll({kind:k}).then(r=>{lstStore.items[k]=r})))
-    .then(()=>{if(lstBigOn())lstBig();lstStore.done=true;ruleIdxDrop();paint()}).catch(()=>{lstStore.failed=true;paint()});
+    .then(()=>{lstStore.done=true;ruleIdxDrop();paint()}).catch(()=>{lstStore.failed=true;paint()});
   return lstStore.load;
 }
-// Заглушка прототипа (?lists=big): десятки списков и десятки тысяч записей. Контракт 0.41.0 отдаёт записи целиком в
-// поле entries, поэтому страницы и поиск идут на стороне страницы. Путь записей с поиском, страницей и итогом — в
-// контракт после утверждения вида. Придуманные списки (stub) сервер не знает: детектор и правило с ними не сохранить.
-function lstBigOn(){try{return new URLSearchParams(location.search).get("lists")==="big"}catch(e){return false}}
-const LST_FAM=["Иванов","Петров","Сидоров","Кузнецов","Смирнов","Попов","Васильев","Соколов","Михайлов","Новиков","Фёдоров","Морозов","Волков","Алексеев","Лебедев","Семёнов","Егоров","Павлов","Козлов","Степанов","Николаев","Орлов","Андреев","Макаров","Никитин","Захаров","Зайцев","Соловьёв","Борисов","Яковлев","Григорьев","Романов","Воробьёв","Сергеев","Кириллов","Фролов","Александров","Дмитриев","Королёв","Гусев"];
-const LST_NM=[["Сергей","Анна"],["Дмитрий","Ольга"],["Алексей","Елена"],["Андрей","Мария"],["Иван","Наталья"],["Михаил","Ирина"],["Николай","Татьяна"],["Павел","Светлана"],["Артём","Юлия"],["Олег","Екатерина"],["Роман","Ксения"],["Виктор","Дарья"],["Игорь","Алина"],["Максим","Виктория"],["Егор","Полина"]];
 const LST_PL="АВЕКМНОРСТУХ",LST_LAT="ABEKMHOPCTYX";
-function lstRnd(seed){let s=seed>>>0||1;return()=>{s^=s<<13;s^=s>>>17;s^=s<<5;return(s>>>0)/4294967296}}
-function lstFakeEnt(kind,i,rnd){
-  const id=`e${i}`;
-  if(kind==="platelist"){const L=()=>LST_PL[Math.floor(rnd()*12)],n=String(Math.floor(rnd()*999)+1).padStart(3,"0"),reg=[77,97,177,197,50,750,78,178,16,66][Math.floor(rnd()*10)];
-    return{id,plate:`${L()}${n}${L()}${L()} ${reg}`,name:rnd()<.6?`${LST_FAM[Math.floor(rnd()*40)]} ${LST_NM[Math.floor(rnd()*15)][0][0]}.`:""}}
-  const f=rnd()<.5,fam=LST_FAM[Math.floor(rnd()*40)],nm=LST_NM[Math.floor(rnd()*15)][f?1:0];
-  return{id,name:`${f?fam.replace(/(ий|ой)$/,"ая").replace(/([вн])$/,"$1а"):fam} ${nm} ${"АБВГДЕИКЛМНОПРСТ"[Math.floor(rnd()*16)]}.`};
+// ── Записи списка: путь GET /units/{uid}/entries (контракт 0.42.0) ──
+// Записей у списка — десятки тысяч, поэтому страницу, поиск и итог считает сервер. Бэкенд без операции listUnitEntries
+// (контракт 0.41.0) — записи из поля entries, страницы и поиск на стороне страницы, как раньше.
+// lstEnt — ответы по ключу «uid|q|offset|limit»: {items,total} | "wait" | "fail"; lstEntLast — последняя страница
+// списка: пока сервер читает новую, видна она, а не пустая карточка. lstEntNm — подписи записей по id (для правила)
+const lstEnt={},lstEntLast={},lstEntNm={};
+function lstEntPath(){return can("listUnitEntries")}
+function lstEntGet(uid,q,offset,limit){
+  const k=[uid,q,offset,limit].join("|");
+  if(lstEnt[k])return lstEnt[k];
+  lstEnt[k]="wait";
+  const qs={offset,limit};if(q)qs.q=q;
+  API.get(`/units/${encodeURIComponent(uid)}/entries`,qs)
+    .then(r=>{lstEnt[k]=r;lstEntLast[uid]={...r,q};(r.items||[]).forEach(e=>{lstEntNm[uid+"|"+e.id]=e});paint()})
+    .catch(()=>{lstEnt[k]="fail";paint()});
+  return"wait";
 }
-function lstGrow(u,size,seed){
-  const p=u.properties=u.properties||{},have=p.entries||[],rnd=lstRnd(seed),out=have.slice();
-  for(let i=have.length;i<size;i++)out.push(lstFakeEnt(u.kind,i,rnd));
-  p.entries=out;
+// Запись по id — для подписи выбранной записи в правиле: одна запись, а не весь список
+function lstEntOne(uid,id){
+  const k=uid+"|"+id;
+  if(k in lstEntNm)return lstEntNm[k];
+  lstEntNm[k]=undefined;
+  API.get(`/units/${encodeURIComponent(uid)}/entries`,{ids:id,limit:1})
+    .then(r=>{lstEntNm[k]=(r.items||[])[0]||null;paint()}).catch(()=>{lstEntNm[k]="fail";paint()});
+  return undefined;
 }
-function lstBig(){
-  const grow={"30000307":12480,"30000308":3210,"30000309":860,"30000310":24000};
-  LST_KINDS.forEach(k=>(lstStore.items[k]||[]).forEach(u=>{const s=grow[String(u.uid).slice(0,8)];if(s)lstGrow(u,s,+String(u.uid).slice(0,8))}));
-  const NAMES={facelist:["Подрядчики","Посетители VIP","Уволенные","Охрана смены А","Охрана смены Б","Курьеры","Арендаторы 2 этаж","Арендаторы 3 этаж","Персона нон грата","Водители","Уборка","IT-служба","Гости конференции","Стажёры","Руководство","Пропавшие (МВД)"],
-    platelist:["Такси","Доставка","Арендаторы парковки","Гости","Служебный транспорт","Угон (МВД)","Должники парковки","Спецтранспорт","Подрядчики","Курьеры","Каршеринг","Сотрудники"]};
-  LST_KINDS.forEach((k,ki)=>{
-    const arr=lstStore.items[k]||[],dom=arr[0]?.domainId,src=["axxonnet","axxondata","datacenter"],rnd=lstRnd(91+ki);
-    if(!dom)return;
-    NAMES[k].forEach((nm,i)=>{
-      const u={uid:`stub-${k}-${i}`,kind:k,name:nm,domainId:dom,stub:true,properties:{source:src[i%3],syncedAt:new Date(Date.now()-Math.floor(rnd()*72)*3600e3).toISOString(),entries:[]}};
-      lstGrow(u,[15,40,120,380,900,2400,5200,9100][Math.floor(rnd()*8)],(ki+1)*100+i);arr.push(u);
-    });
-  });
+function lstCount(u){const p=u.properties||{};return Number.isFinite(p.entryCount)?p.entryCount:(p.entries||[]).length}
+function lstComboRows(u,ents){return(ents||[]).map(e=>u.kind==="platelist"?{v:e.id,l:e.plate||e.id,sub:e.name||"",k:lstPlateKeys(e.plate).join(" ")}:{v:e.id,l:e.name||e.id})}
+// Поле записи в правиле: варианты — первые COMBO_MAX записей по введённому тексту, ищет сервер
+// Пока сервер ищет, в списке — «Консоль читает записи…»; запрос уходит после паузы в наборе (LST_COMBO_MS).
+// Пункт «любая» — только без текста поиска: иначе Enter взял бы его, а не первую найденную запись
+const LST_COMBO_MS=250;
+function lstComboFetch(c){
+  const u=lstById(c.spec.ctx?.listId);if(!u)return;
+  const q=String(c.q||"").trim();
+  c.srv=true;c.wait=true;c.err=false;
+  clearTimeout(c.tm);
+  c.tm=setTimeout(()=>{
+    const qs={limit:COMBO_MAX};if(q)qs.q=q;
+    API.get(`/units/${encodeURIComponent(u.uid)}/entries`,qs).then(r=>{
+      if(combo!==c||String(c.q||"").trim()!==q)return;
+      (r.items||[]).forEach(e=>{lstEntNm[u.uid+"|"+e.id]=e});
+      c.all=[...(q?[]:(c.spec.head||[]).map(([v,l])=>({v,l}))),...lstComboRows(u,r.items)];c.total=r.total;c.wait=false;
+      if(c.idx>=0&&q)c.idx=c.all.length?0:-1;
+      comboRender();
+    }).catch(()=>{if(combo!==c)return;c.wait=false;c.err=true;c.all=[];comboRender()});
+  },q?LST_COMBO_MS:0);
 }
 // Номер ищут без пробелов и без разницы, латиница или кириллица: «А123ВС», «a123bc» и «а 123 вс» — один номер
 function lstPlateKeys(pl){
@@ -20046,6 +20062,8 @@ function lstEntText(kind,e){return kind==="platelist"?`${e.plate||""}${e.name?` 
 // Записи для выбора: одного списка или всех списков вида (подпись выбранного в тексте правила)
 function lstEntryOpts(kind,listId){
   const ls=listId?[lstById(listId)].filter(Boolean):LST_KINDS.filter(k=>!kind||k===kind).flatMap(k=>lstOf(k));
+  // С путём записей (0.42.0) — только прочитанные записи (lstEntNm): весь список не читаем
+  if(lstEntPath())return ls.flatMap(u=>Object.keys(lstEntNm).filter(k=>k.startsWith(u.uid+"|")&&lstEntNm[k]&&typeof lstEntNm[k]==="object").map(k=>[lstEntNm[k].id,lstEntText(u.kind,lstEntNm[k])]));
   return ls.flatMap(u=>(u.properties?.entries||[]).map(e=>[e.id,lstEntText(u.kind,e)]));
 }
 // Вид списков детектора: лица — face (analyticsKind faceTV, faceVA, faceVL), номера — lpr
@@ -20059,18 +20077,40 @@ function lstUsers(u){
 function lstWhen(iso){const ms=Date.parse(iso||"");return Number.isFinite(ms)?expTimeText(ms):i18n("нет данных")}
 function lstPick(uid){const u=lstById(uid);if(u)lstStore.sel[u.kind]=uid;paint()}
 function lstRowHtml(u){
-  const p=u.properties||{},n=(p.entries||[]).length,us=lstUsers(u).length,on=lstStore.sel[u.kind]===u.uid;
+  const p=u.properties||{},n=lstCount(u),us=lstUsers(u).length,on=lstStore.sel[u.kind]===u.uid;
   return`<div class="it lst-row${on?" on":""}" data-lst="${escHtml(u.uid)}" ${onEv("click",["lstPick",u.uid])}><span>${lu("list",16)}</span><span>${escHtml(u.name||u.uid)}<small>${lstNum(n)} ${i18n(plural(n,LST_T[u.kind].ent))} · ${escHtml(LST_SRC[p.source]||p.source||"")} · ${i18n("детекторов")}: ${us}</small></span></div>`;
+}
+function lstEntRow(kind,e){return`<div class="it lst-ent"><span>${lu(kind==="platelist"?"car":"user",16)}</span><span class="lst-ent-m">${escHtml(kind==="platelist"?e.plate||e.id:e.name||e.id)}</span>${kind==="platelist"?`<span class="lst-ent-s">${escHtml(e.name||"—")}</span>`:""}</div>`}
+// Записи через путь: та же разметка, что у listCard (поиск, строки .pg-rows, подвал .tfoot), но страницу и итог дал сервер
+function lstEntriesSrv(u,title,mid,ph){
+  const kind=u.kind,key="lstent:"+u.uid,q=String(listQ[key]||"").trim(),total0=lstCount(u);
+  // Номер страницы не дальше последней: после смены размера страницы прежний номер мог уйти за конец списка
+  const known=q?(lstEntLast[u.uid]?.q===q?lstEntLast[u.uid].total:null):total0;
+  let page=Math.max(1,pageNo[key]||1);
+  if(known!=null&&page>pageLast(known)){page=pageLast(known);pageNo[key]=page}
+  let r=lstEntGet(u.uid,q,(page-1)*pageSize,pageSize);
+  if(typeof r==="object"&&r.total>0&&r.offset>=r.total){pageNo[key]=pageLast(r.total);r=lstEntGet(u.uid,q,(pageNo[key]-1)*pageSize,pageSize)}
+  const got=typeof r==="object"?r:null,show=got||(r==="wait"&&lstEntLast[u.uid])||null;
+  const total=show?show.total:q?0:total0;
+  let rows;
+  if(r==="fail")rows=`<p class="sub">${i18n("Консоль не прочитала записи. Чтобы повторить, обновить страницу.")}</p>`;
+  else if(!show)rows=`<p class="sub">${i18n("Консоль читает записи…")}</p>`;
+  else rows=(show.items||[]).map(e=>lstEntRow(kind,e)).join("")||`<p class="sub">${i18n(q?"Ничего не найдено":"В списке нет записей")}</p>`;
+  const body=listSearchHtml(key,ph,"list")+mid+`<div class="pg-rows${r==="wait"&&show?" lst-wait":""}">${rows}</div>`
+    +(total||pgAvg[key]?`<div class="tfoot">${pagerHtml(key,total,"list",LST_T[kind].ent)}</div>`:"");
+  return card(title,body);
 }
 function lstEntriesCard(u){
   const p=u.properties||{},ents=p.entries||[],kind=u.kind,link="";
   const us=lstUsers(u);
   const usT=us.length?us.map(d=>`<a href="#" ${onEv("click",["openNode",d.id,{app:"hw"}])}>${escHtml(locName(d))}</a>`).join(", "):i18n("ни один детектор не сверяет с этим списком");
-  return listCard({key:"lstent:"+u.uid,title:`«${escHtml(u.name||u.uid)}» · ${lstNum(ents.length)} ${i18n(plural(ents.length,LST_T[kind].ent))}`,head:link,items:ents,
+  const cnt=lstCount(u),title=`«${escHtml(u.name||u.uid)}» · ${lstNum(cnt)} ${i18n(plural(cnt,LST_T[kind].ent))}`;
+  const mid=`<p class="sub lst-use">${escHtml(LST_SRC[p.source]||p.source||"")} · ${i18n("синхронизирован")}: ${escHtml(lstWhen(p.syncedAt))}<br>${i18n("Сверяют")}: ${usT}</p>`;
+  const ph=kind==="platelist"?"Номер или владелец: А123ВС, a123bc…":"Фамилия или имя…";
+  if(lstEntPath())return lstEntriesSrv(u,title,mid,ph);
+  return listCard({key:"lstent:"+u.uid,title,head:link,items:ents,
     text:e=>[e.name,...(kind==="platelist"?lstPlateKeys(e.plate):[]),e.id],
-    row:e=>`<div class="it lst-ent"><span>${lu(kind==="platelist"?"car":"user",16)}</span><span class="lst-ent-m">${escHtml(kind==="platelist"?e.plate||e.id:e.name||e.id)}</span>${kind==="platelist"?`<span class="lst-ent-s">${escHtml(e.name||"—")}</span>`:""}</div>`,
-    mid:()=>`<p class="sub lst-use">${escHtml(LST_SRC[p.source]||p.source||"")} · ${i18n("синхронизирован")}: ${escHtml(lstWhen(p.syncedAt))}<br>${i18n("Сверяют")}: ${usT}</p>`,
-    empty:"В списке нет записей",ph:kind==="platelist"?"Номер или владелец: А123ВС, a123bc…":"Фамилия или имя…",unit:LST_T[kind].ent});
+    row:e=>lstEntRow(kind,e),mid:()=>mid,empty:"В списке нет записей",ph,unit:LST_T[kind].ent});
 }
 // Вкладка домена «Списки»: переключатель вида «Списки лиц | Списки номеров» (уровень ниже вкладок карточки, не второй
 // ряд вкладок), под ним — список и записи (list–detail): слева узкий перечень списков вида с поиском, справа записи
@@ -20091,7 +20131,7 @@ function listsTabHtml(n){
   const left=listCard({key:"lst:"+kind,title:i18n(T.title),items:ls,text:u=>[u.name],row:lstRowHtml,ph:"Имя списка…",unit:"список|списка|списков"});
   const sel=lstById(lstStore.sel[kind]);
   // Высота столбцов — по содержимому: пустого места под строками нет, столбцы могут быть разной высоты (выбор пользователя, раунд 6)
-  return lead+`<div class="lst-wrap"><div class="lst-grid"><div class="lst-col">${left}</div><div class="lst-col">${sel?lstEntriesCard(sel):card(T.one,`<p class="sub">${i18n("Выберите список слева.")}</p>`)}</div></div></div>`;
+  return lead+`<div class="lst-wrap"><div class="lst-grid"><div class="lst-col">${left}</div><div class="lst-col">${sel?lstEntriesCard(sel):card(T.one,`<p class="sub">${i18n("Выбрать список слева.")}</p>`)}</div></div></div>`;
 }
 // Окно детектора: «Проверять по спискам» и какие списки (пусто — все списки своего вида)
 function dwListsSecHtml(d){
@@ -20118,7 +20158,7 @@ function dwListsPickHtml(id,lk,ls,sel){
   return`<div class="dw-lst-box" data-dwlst="${escHtml(id)}">
     ${many?`<div class="dw-lst-bar"><div class="sq lst-sq"><span class="sq-lead">${IC_FIND}</span><input type="text" value="${escHtml(q)}" placeholder="${i18n("Имя списка…")}" aria-label="${i18n("Найти список")}" autocomplete="off" ${onEv("input",["dwListsFilter",id,onEv.value])}></div>
       <button type="button" class="btn s" ${onEv("click",["dwListsMark",id,true])}>${i18n("Отметить найденные")}</button><button type="button" class="btn s" ${onEv("click",["dwListsMark",id,false])}>${i18n("Снять найденные")}</button></div>`:""}
-    <div class="dw-lst-pick">${ls.map(u=>{const n=(u.properties?.entries||[]).length;return`<label data-lname="${escHtml(u.name||u.uid)}" ${dwLstHit(u,q)?"":"hidden"}><input type="checkbox" ${sel.includes(u.uid)?"checked":""} ${onEv("change",["dwListsPick",id,u.uid])}><span>${escHtml(u.name||u.uid)}<small>${lstNum(n)} ${i18n(plural(n,LST_T[lk].ent))}</small></span></label>`}).join("")}</div>
+    <div class="dw-lst-pick">${ls.map(u=>{const n=lstCount(u);return`<label data-lname="${escHtml(u.name||u.uid)}" ${dwLstHit(u,q)?"":"hidden"}><input type="checkbox" ${sel.includes(u.uid)?"checked":""} ${onEv("change",["dwListsPick",id,u.uid])}><span>${escHtml(u.name||u.uid)}<small>${lstNum(n)} ${i18n(plural(n,LST_T[lk].ent))}</small></span></label>`}).join("")}</div>
     <p class="sub dw-lst-cnt">${i18n("Выбрано")}: ${sel.length} ${i18n("из")} ${ls.length}<span data-dwlst-hit>${q?` · ${i18n("найдено")}: ${hit}`:""}</span></p>
   </div>`;
 }
@@ -27510,10 +27550,13 @@ function ruleLstField(id,p,ps){
   return{};
 }
 // После правки поля: «нет ни в одном» снимает список и запись; запись другого списка снимается
-function ruleLstPrune(mm){
+// f — поле, которое сменили: другой список снимает запись прежнего. С путём записей (0.42.0) весь список не читаем:
+// запись снимает смена списка, а остальное проверяет сервер при сохранении
+function ruleLstPrune(mm,f){
   if(!mm)return;
   if(mm.presence==="none"){delete mm.listId;delete mm.entryId}
-  if(mm.entryId&&(!mm.listId||!lstEntryOpts(null,mm.listId).some(x=>x[0]===mm.entryId)))delete mm.entryId;
+  if(f==="listId")delete mm.entryId;
+  if(mm.entryId&&(!mm.listId||!lstEntPath()&&!lstEntryOpts(null,mm.listId).some(x=>x[0]===mm.entryId)))delete mm.entryId;
 }
 function ruleDetServerKinds(){return refDetKinds.filter(k=>k!=="other"&&!DET_TRIG_OWN.includes(k)).map(k=>[k,detKindRu(k)])}
 function matchPhrase(k,match){
@@ -28558,7 +28601,7 @@ function setTriggerKind(i,v){
   ruleEdit(r=>{const k=TRIGGER_KINDS[+v],old=r.when[i];
     r.when[i]={sub:k.sub,kind:k.kind,ref:refFits(old.ref,k.devTypes,"when")?old.ref:"",match:{}}});
 }
-function setTriggerField(i,f,v){ruleEdit(r=>{const t=r.when[i];t.match=t.match||{};if(v)t.match[f]=v;else delete t.match[f];ruleLstPrune(t.match)})}
+function setTriggerField(i,f,v){ruleEdit(r=>{const t=r.when[i];t.match=t.match||{};if(v)t.match[f]=v;else delete t.match[f];ruleLstPrune(t.match,f)})}
 function addTrigger(){ruleEdit(r=>{const k=ruleTrigAdd();r.when.push({sub:k.sub,kind:k.kind,ref:"",match:{}});if(r.when.length>1&&!r.within&&!r.whenAny){if(ruleFeat("whenAny"))r.whenAny=true;else r.within=30}})}
 function delTrigger(i){ruleEdit(r=>{r.when.splice(i,1);if(r.when.length<2){r.within=0;r.whenAny=false}})}
 // «Или» и «и» между событиями и между условиями: связка одна на весь блок
@@ -28609,7 +28652,7 @@ function setWevKind(ps,v){
   ruleEdit(r=>{const c=ruleThenAt(r,ps);if(!c||!c.ev)return;const k=TRIGGER_KINDS[+v],old=c.ev;
     c.ev={sub:k.sub,kind:k.kind,ref:refFits(old.ref,k.devTypes,"when")?old.ref:"",match:{}}});
 }
-function setWevField(ps,f,v){ruleEdit(r=>{const c=ruleThenAt(r,ps);if(!c||!c.ev)return;c.ev.match=c.ev.match||{};if(v)c.ev.match[f]=v;else delete c.ev.match[f];ruleLstPrune(c.ev.match)})}
+function setWevField(ps,f,v){ruleEdit(r=>{const c=ruleThenAt(r,ps);if(!c||!c.ev)return;c.ev.match=c.ev.match||{};if(v)c.ev.match[f]=v;else delete c.ev.match[f];ruleLstPrune(c.ev.match,f)})}
 // Одна кнопка на уровень: добавляет пункт и ставит фокус на выбор его вида (там же выбирается действие или шаг).
 function addItem(lp){
   let ps="";
@@ -40552,7 +40595,7 @@ function comboOptions(spec){
     list=(all||[]).map(a=>({v:a.id,l:locName(a),sub:comboArchNote(a)}));
   }else if(spec.src==="vendor")list=Object.keys(DEVICE_MODELS).sort((a,b)=>a.localeCompare(b)).map(v=>({v,l:v}));
   else if(spec.src==="model")list=manualModels(c.vendor).map(v=>({v,l:v}));
-  else if(spec.src==="lstent"){const u=lstById(c.listId);list=(u?.properties?.entries||[]).map(e=>u.kind==="platelist"?{v:e.id,l:e.plate||e.id,sub:e.name||"",k:lstPlateKeys(e.plate).join(" ")}:{v:e.id,l:e.name||e.id})}
+  else if(spec.src==="lstent"){const u=lstById(c.listId);list=u&&!lstEntPath()?lstComboRows(u,u.properties?.entries):[]}
   return[...(spec.head||[]).map(([v,l])=>({v,l})),...list];
 }
 function comboLabel(spec,value){
@@ -40561,7 +40604,14 @@ function comboLabel(spec,value){
   if(!value)return"";
   if(spec.src==="folder")return folderById(value)?folderPathName(value):"";
   if(spec.src==="arch"){const a=archById(value);return a?locName(a):""}
-  if(spec.src==="lstent"){const u=lstById(spec.ctx?.listId),e=(u?.properties?.entries||[]).find(x=>x.id===value);return e?(u.kind==="platelist"?e.plate||e.id:e.name||e.id):i18n("Запись удалена из списка")}
+  if(spec.src==="lstent"){
+    const u=lstById(spec.ctx?.listId);
+    if(!u&&!lstStore.done)return"…";
+    const e=u&&(lstEntPath()?lstEntOne(u.uid,value):(u.properties?.entries||[]).find(x=>x.id===value));
+    if(e===undefined&&u)return"…";
+    if(e==="fail")return i18n("Консоль не прочитала запись");
+    return e?(u.kind==="platelist"?e.plate||e.id:e.name||e.id):i18n("Запись удалена из списка");
+  }
   return String(value);
 }
 function comboHtml(o){
@@ -40603,7 +40653,8 @@ function comboRender(){
   const c=combo;if(!c)return;
   const q=normText(c.q).trim(),words=q.split(/\s+/).filter(Boolean);
   let list=c.all;
-  if(words.length){
+  // Записи списка ищет сервер; пока ответа нет, прежние строки сужает сама страница — без пустого списка между нажатиями
+  if(words.length&&!(c.srv&&!c.wait)){
     list=list.filter(o=>{const hay=normText(`${o.l} ${o.g||""} ${o.sub||""} ${o.k||""}`);return words.every(w=>hay.includes(w))});
     const rank=o=>{const l=normText(o.l);return l===q?0:l.startsWith(words[0])?1:2};
     list=[...list].sort((a,b)=>rank(a)-rank(b));
@@ -40613,13 +40664,17 @@ function comboRender(){
   if(c.typed){c.typed=false;c.idx=!q||(c.spec.src==="model"&&normText(list[0]?.l)!==q)?-1:0}
   if(c.idx>=list.length)c.idx=list.length-1;
   let g="";
-  const rows=list.slice(0,COMBO_MAX).map((o,i)=>{
+  // С сервера пришли COMBO_MAX записей; пункт «любая» сверху в это число не входит
+  const cap=COMBO_MAX+(c.srv&&!q?(c.spec.head||[]).length:0);
+  const rows=list.slice(0,cap).map((o,i)=>{
     const head=!words.length&&o.g&&o.g!==g?`<div class="combo-g">${escHtml(o.g)}</div>`:"";
     if(o.g)g=o.g;
     return`${head}<div id="comboO${i}" role="option" aria-selected="${i===c.idx}" class="combo-opt ${i===c.idx?"on":""} ${o.v===c.cv?"cur":""}" ${onEv("click",onEv.stop,["comboPick",i])}>${hlText(o.l,c.q)}${o.sub?`<span class="combo-sub">${hlText(o.sub,c.q)}</span>`:""}</div>`;
   }).join("");
-  const none=list.length?"":`<div class="combo-note">${i18n(c.spec.free&&q?"Этого нет в списке. Консоль сохранит введённое значение":c.spec.src==="arch"&&!q?"Архивы не созданы":"Ничего не найдено")}</div>`;
-  const more=list.length>COMBO_MAX?`<div class="combo-note">${i18n("Показаны первые")} ${COMBO_MAX} ${i18n("из")} ${list.length}: ${i18n("уточните запрос")}</div>`:"";
+  const none=list.length?"":c.srv&&c.wait?`<div class="combo-note">${i18n("Консоль читает записи…")}</div>`:c.srv&&c.err?`<div class="combo-note">${i18n("Консоль не прочитала записи")}</div>`:`<div class="combo-note">${i18n(c.spec.free&&q?"Этого нет в списке. Консоль сохранит введённое значение":c.spec.src==="arch"&&!q?"Архивы не созданы":"Ничего не найдено")}</div>`;
+  // Сервер отдал первые COMBO_MAX записей и итог: «из N» — записей списка, без пунктов «любая»
+  const tot=c.srv?c.total||0:list.length;
+  const more=tot>COMBO_MAX?`<div class="combo-note">${i18n("Показаны первые")} ${COMBO_MAX} ${i18n("из")} ${tot}: ${i18n("уточните запрос")}</div>`:"";
   const p=comboPop();
   p.innerHTML=rows+none+more;
   p.style.display="block";
@@ -40636,6 +40691,7 @@ function comboOpen(el){
   if(idx>=COMBO_MAX){all=[all[idx],...all.slice(0,idx),...all.slice(idx+1)];idx=0}
   combo={inp:el,spec,all,cv,q:"",idx,list:all};
   el.setAttribute("aria-expanded","true");el.setAttribute("aria-controls","comboPop");
+  if(spec.src==="lstent"&&lstEntPath())lstComboFetch(combo);
   comboRender();
   document.getElementById(`comboO${combo.idx}`)?.scrollIntoView({block:"nearest"});
   // Окно могли перерисовать, пока список открыт (поиск в сети шлёт события): находим поле заново и продолжаем
@@ -40666,6 +40722,7 @@ function comboClick(el){const was=combo&&combo.inp===el;comboOpen(el);if(!was)el
 function comboInput(el){
   comboOpen(el);if(!combo)return;
   combo.q=el.value;combo.typed=true;
+  if(combo.spec.src==="lstent"&&lstEntPath())lstComboFetch(combo);
   comboRender();
 }
 function comboMove(d){
