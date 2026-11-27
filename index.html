@@ -3492,7 +3492,7 @@ body.pj-hdlog .gojump{display:none}
 @container (max-width:900px){.vw-b{grid-template-columns:minmax(0,1fr)}.vw-b .vw-panel{max-height:none;position:static}}
 @media (prefers-reduced-motion:reduce){.vw *{transition:none!important}}
 /* Окно детектора (прототип 55): слева кадр и превью сработок, справа настройки по типам */
-.dw{--dw-in:#4ea1ff;--dw-ex:#ff7a7a;--dw-ln:#fde047;--dw-cal:#5eead4}
+.dw{--dw-in:#4ea1ff;--dw-ex:#ff7a7a;--dw-ln:#fde047;--dw-cal:#5eead4;--dw-s2:var(--one-palette-amber)}
 .dw-stub{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 10px;margin:0 0 10px;border:1px dashed var(--one-warning-icon);border-radius:var(--one-radius-container);background:var(--one-warning-bg);color:var(--one-warning-text);font-size:12px}
 /* Столбец настроек — доля ширины карточки (на широком экране шире), разделитель тянется мышью и стрелками */
 .dw-grid{display:grid;grid-template-columns:minmax(0,1fr) 12px var(--dw-rw,clamp(320px,44%,calc(100% - 400px)));column-gap:2px;row-gap:12px;align-items:start}
@@ -3544,6 +3544,8 @@ body.dw-resizing,body.dw-resizing *{cursor:col-resize!important;user-select:none
 .dw-ov [data-dw-obj]{pointer-events:none}
 .dw-a{fill:var(--dw-in);fill-opacity:.14;stroke:var(--dw-in);stroke-width:.6;cursor:move}
 .dw-a.ex{fill:url(#dwHatch);fill-opacity:1;stroke:var(--dw-ex)}
+/* Счётчик посетителей (прототип 108): область 2 — свой цвет, область 1 — как зона */
+.dw-a.s2{fill:var(--dw-s2);stroke:var(--dw-s2)}.dw-vc-n{margin:4px 0 8px}
 .dw-a.sel{stroke-width:1.1}
 .dw-sa{fill:var(--c);fill-opacity:.12;stroke:var(--c);stroke-width:.6;stroke-dasharray:2 1;cursor:move}
 .dw-l{stroke-width:1.1;cursor:move}
@@ -18747,7 +18749,7 @@ function camDetectorsHtml(n){
 // Кадр показывает рамки по черновику сразу. Вкладка «Сработки до и после новых настроек» сравнивает прежние настройки
 // с новыми только после «Применить»: верхний ряд — эталон до «Применить», нижний заполняется после.
 const DW_T=3600,DW_X=160,DW_Y=90,DW_T0=Date.now()-1800*1000;
-const DW_KINDS=[["motion","Движение"],["linecross","Пересечение линии"],["tracker","Трекер объектов"],["neural","Нейросетевой трекер"],["lpr","Номер"],["crowd","Скопление людей"],["abandoned","Оставленный предмет"]];
+const DW_KINDS=[["motion","Движение"],["linecross","Пересечение линии"],["tracker","Трекер объектов"],["neural","Нейросетевой трекер"],["lpr","Номер"],["crowd","Скопление людей"],["abandoned","Оставленный предмет"],["visitors","Счётчик посетителей"]];
 const DW_CLS={person:"Человек",car:"Машина",bike:"Велосипед",bag:"Предмет",noise:"Помеха"};
 const DW_SUBC=["#c084fc","#f59e0b","#22d3ee","#f472b6"];
 // ── Поддетекторы, как в Axxon One: детектор находит объекты, поддетектор решает, когда сработать ──
@@ -18854,6 +18856,9 @@ function dwScene(){
   for(let i=0;i<70;i++){const t0=r()*(DW_T-8),x=.05+r()*.1,y=.32+r()*.22,h=.04+r()*.08;add({cls:"noise",src:"leaf",p:[[t0,x,y],[t0+3+r()*5,x+(r()-.5)*.02,y]],w:h*.9,h,conf:.1+r()*.3,str:.12+r()*.42})}
   for(let i=0;i<12;i++){const t0=r()*(DW_T-20),x=.3+r()*.55,y=.72+r()*.2,h=.1+r()*.1;add({cls:"noise",src:"shadow",p:[[t0,x,y],[t0+8+r()*8,x+.05,y]],w:h*2,h,conf:.1,str:.25+r()*.25})}
   add({cls:"bag",p:[[1820,.62,.7],[2420,.62,.7]],w:.025,h:.035,conf:.7,str:.3});
+  // Прототип 108: люди выходят из двери на тротуар — у счётчика посетителей есть и вход, и выход
+  const rx=dwRng(108);for(let i=0;i<14;i++){const t0=rx()*(DW_T-60),dir=rx()<.5,y=.66+rx()*.06,h=.11+rx()*.05,sp=18+rx()*10;
+    add({cls:"person",p:[[t0,.32,.6],[t0+1,.31,.61],[t0+4,.3,y],[t0+4+Math.abs((dir?1.04:-.04)-.3)*sp,dir?1.04:-.04,y]],w:h*.38,h,conf:.5+rx()*.45,str:.45+rx()*.5})}
   tr.sort((a,b)=>a.t0-b.t0);
   dwSceneCache=tr;return tr;
 }
@@ -18882,6 +18887,8 @@ function dwKindOf(d){
   if(code==="other"&&(d.analyticsKind==="tracker"||d.analyticsKind==="neural"))return d.analyticsKind;
   if(code==="other"&&d.analyticsKind==="meta")return"meta";
   if(code==="other"&&d.analyticsKind==="operatorControl")return"operatorControl";
+  // Счётчик посетителей (профиль vms.detector/1 1.8): секторы zone и zoneTo, счёт людей в помещении
+  if(code==="other"&&d.analyticsKind==="visitorsCounter")return"visitors";
   if(code==="other"&&DET_AK_CLASH[d.analyticsKind])return"face";
   return DW_CODES.has(code)?code:"other";
 }
@@ -18892,14 +18899,16 @@ const dwCls=a=>Array.isArray(a)?DW_ALL.filter(x=>a.includes(x)):DW_ALL.slice();
 const dwCopy=pts=>pts.map(q=>[q[0],q[1]]);
 function dwPolyOf(z){if(!z||!z.points?.length)return null;if(z.shape==="rect"){const[[x0,y0],[x1,y1]]=z.points;return[[x0,y0],[x1,y0],[x1,y1],[x0,y1]]}return dwCopy(z.points)}
 // Имя зоны на кадре и в списке: язык — на момент показа
-function dwAreaName(a){return`${i18n(a.type==="ex"?"Исключение":"Зона")} ${a.n}`}
+function dwAreaName(a){return a.sec?`${i18n("Область")} ${a.sec}`:`${i18n(a.type==="ex"?"Исключение":"Зона")} ${a.n}`}
 // Чувствительность, которую окно показывает, когда у объекта её нет: 50, у встроенного — в границах шаблона камеры
 function dwSensDef(d){const o=detOption(find(d.id)?.p,d);return Math.min(o?.sensitivityMax??100,Math.max(o?.sensitivityMin??1,50))}
 // Объект детектора → модель окна. Нет поля — прежнее поведение: без ограничения размера, все классы, умолчания сервера
 function dwFromUnit(d){
-  const z=d.zone,line=z?.shape==="line"&&z.points?.length>1,lc=dwKindOf(d)==="linecross",poly=z&&!line&&!lc?dwPolyOf(z):null,areas=[];
-  if(poly)areas.push({id:"z0",type:"in",n:1,pts:poly});
-  (d.extraZones||[]).forEach((x,i)=>{
+  const z=d.zone,line=z?.shape==="line"&&z.points?.length>1,lc=dwKindOf(d)==="linecross",vc=dwKindOf(d)==="visitors",poly=z&&!line&&!lc?dwPolyOf(z):null,areas=[];
+  if(poly)areas.push(vc?{id:"z0",type:"in",n:1,sec:1,pts:poly}:{id:"z0",type:"in",n:1,pts:poly});
+  // Счётчик посетителей: zone — область 1, zoneTo — область 2; зон сверх них у счётчика нет
+  if(vc&&d.zoneTo?.points?.length)areas.push({id:"z2",type:"s2",n:1,sec:2,pts:dwCopy(d.zoneTo.points)});
+  if(!vc)(d.extraZones||[]).forEach((x,i)=>{
     const n=areas.filter(a=>a.type===x.type).length+1;
     areas.push({id:"z"+(i+1),type:x.type,n,pts:dwCopy(x.points)});
   });
@@ -18910,6 +18919,8 @@ function dwFromUnit(d){
     sens:has?+d.sens:sd,sensNo:!has,sensDef:sd,delay:d.minDurationSec??0,classes:dwCls(d.classes),conf:d.confidence??60,
     count:d.crowdMin??4,hold:d.crowdHoldSec??10,stay:d.stillSec??60,pw:[pw.min??0,pw.max??1],arc:dwArcOf(d),
     subs:dwSubUnits(d).filter(s=>DW_SUBN[s.props?.subdetectorKind]).map(dwSubFromUnit),
+    // Счёт людей в помещении: нет поля — выключен, порог 10000, начальное число 0
+    vc:{on:d.indoorCount===true,max:d.indoorMax??10000,start:d.indoorStart??0},
     // Тонкая настройка: поля схемы как есть; нет поля — undefined
     fine:Object.fromEntries(["cameraPosition","detectUnattendedObjects","minTriggers","scanWindow","similarSearch","similarTrackSec","humanSize","speedCalibArea","analysisFps","alarmEndSec","frameWidth","abandonedSensitivity","objectSpeed","autoSensitivity","longTimeUnattended","longTimeIdleSec","checkLists","lists"].map(f=>[f,d[f]==null?undefined:JSON.parse(JSON.stringify(d[f]))]))};
 }
@@ -18930,6 +18941,7 @@ function dwSubFromUnit(n){
 function dwDetProps(c,k,d){
   const o={};
   if(k==="other")return o;
+  if(k==="visitors")return dwVcProps(c,d);
   const ins=c.areas.filter(a=>a.type==="in"),first=k==="linecross"?null:ins[0],rest=c.areas.filter(a=>a!==first);
   // Прямоугольник, который не трогали, остаётся прямоугольником
   const zone=k==="linecross"?(c.line?{shape:"line",points:dwCopy(c.line)}:c.zother?JSON.parse(JSON.stringify(c.zother)):null)
@@ -18955,6 +18967,19 @@ function dwDetProps(c,k,d){
   if(c.fine)DW_FINE.forEach(x=>{if(x.t==="stream"||!x.fam.includes(k)||!dwHas(d,x.f))return;const v=c.fine[x.f];if(v!==undefined)o[x.f]=v;else if(d[x.f]!=null)o[x.f]=null});
   return o;
 }
+// Счётчик посетителей: модель → свойства. Область 1 — zone (прямоугольник, который не трогали, остаётся прямоугольником),
+// область 2 — zoneTo; счёт людей — indoorCount, indoorMax, indoorStart
+function dwVcProps(c,d){
+  const o={},a=c.areas.find(x=>x.sec===1),b=c.areas.find(x=>x.sec===2);
+  o.zone=a?(c.zraw&&JSON.stringify(dwPolyOf(c.zraw))===JSON.stringify(a.pts)?dwClone(c.zraw):{shape:"polygon",points:dwCopy(a.pts)}):c.zother?dwClone(c.zother):null;
+  if(dwHas(d,"zoneTo"))o.zoneTo=b?{points:dwCopy(b.pts)}:null;
+  if(dwHas(d,"indoorCount"))o.indoorCount=c.vc.on;
+  if(dwHas(d,"indoorMax"))o.indoorMax=c.vc.max;
+  if(dwHas(d,"indoorStart"))o.indoorStart=c.vc.start;
+  return o;
+}
+// Сектор точки: 1 или 2; вне обоих — 0
+function dwVcSec(c,[x,y]){for(const a of c.areas)if(a.sec&&dwIn(a.pts,x,y))return a.sec;return 0}
 function dwSubProps(s,k){
   const o={enabled:s.on};
   o.zone=s.kind==="line"?{shape:"line",points:dwCopy(s.line)}:{shape:"polygon",points:dwCopy(s.area.pts)};
@@ -19067,6 +19092,8 @@ function dwChanged(d){return dwDiffRows(d).length>0}
 // Проверки детектора по порядку: на них строятся причина на рамке (вариант A) и воронка отсева (вариант B)
 function dwChecks(c,k){
   const L=[],ins=c.areas.filter(a=>a.type==="in"),exs=c.areas.filter(a=>a.type==="ex");
+  // Счётчик посетителей считает людей в двух секторах
+  if(k==="visitors")return[{key:"zone",out:"вне областей",pass:"В области",fail:()=>"вне областей",f:(o,p)=>dwVcSec(c,p)>0},{key:"cls",out:"не человек",pass:"Человек",fail:()=>"не человек",f:o=>o.cls==="person"}];
   if(ins.length)L.push({key:"zone",out:"вне зоны",pass:"В зоне",fail:()=>"вне зоны",f:(o,[x,y])=>ins.some(a=>dwIn(a.pts,x,y))});
   if(exs.length)L.push({key:"ex",out:"в зоне исключения",pass:"Не в исключении",fail:()=>"в зоне исключения",f:(o,[x,y])=>!exs.some(a=>dwIn(a.pts,x,y))});
   if(k==="lpr")L.push({key:"size",out:"номер не той ширины",pass:"Номер нужной ширины",fail:o=>o.pw<c.pw[0]?"номер мельче минимума":"номер крупнее максимума",f:o=>o.pw>=c.pw[0]&&o.pw<=c.pw[1]});
@@ -19089,6 +19116,8 @@ function dwObjFires(c,k,o){
     if(k==="motion"){run=why?0:run+1;if(!fired&&run>=Math.max(1,c.delay)){fired=true;out.push({t})}}
     else if(k==="neural"||k==="lpr"){if(!why&&!fired){fired=true;out.push({t})}}
     else if(k==="linecross"){if(prev&&!why&&c.line&&dwDirOk(dwCross(c.line,prev,pos),c.dir))out.push({t})}
+    // Переход из области 1 в область 2 — выход, из области 2 в область 1 — вход
+    else if(k==="visitors"){if(!why){const s=dwVcSec(c,pos);if(s&&ss.vs&&s!==ss.vs)out.push({t,vc:s===2?"out":"in"});if(s)ss.vs=s}}
     else if(k==="abandoned"){const mv=prev?Math.hypot(pos[0]-prev[0],pos[1]-prev[1]):1;still=!why&&mv<.002?still+1:0;if(!fired&&still>=c.stay){fired=true;out.push({t})}}
     if(DW_SUBP.has(k)&&!why&&c.subs.length)dwSubStep(c,k,o,t,pos,prev,ss,out);
     prev=pos;
@@ -19143,6 +19172,8 @@ function dwEval(c,k){
     }
   });
   fires.sort((a,b)=>a.t-b.t);
+  // Счёт людей в помещении: от начального числа, вход +1, выход −1; число стало выше порога — событие indoor.over
+  if(k==="visitors"&&c.vc.on){let n=c.vc.start;const over=[];fires.forEach(f=>{if(!f.vc)return;const was=n;n=Math.max(0,n+(f.vc==="in"?1:-1));if(n>c.vc.max&&was<=c.vc.max)over.push({t:f.t,n,over:true})});fires.push(...over);fires.sort((a,b)=>a.t-b.t)}
   const r={fires,byObj};
   dw.memo.set(key,r);if(dw.memo.size>6)dw.memo.delete(dw.memo.keys().next().value);
   return r;
@@ -19253,10 +19284,10 @@ function dwToolsHtml(d,k){
   if(k==="other"||k==="meta")return"";
   const t=dw.poly?.type==="cal"?"cal":dw.tool;if(!t)return"";
   const sub=t==="subx"?dwSubOf(d.id,dw.toolSub):null;
-  const what=t==="in"?i18n("зона детектора"):t==="ex"?i18n("исключение детектора"):t==="line"?i18n("линия A–B"):t==="cal"?i18n("область калибровки скорости")
+  const what=k==="visitors"&&(t==="in"||t==="s2")?i18n(t==="in"?"область 1":"область 2"):t==="in"?i18n("зона детектора"):t==="ex"?i18n("исключение детектора"):t==="line"?i18n("линия A–B"):t==="cal"?i18n("область калибровки скорости")
     :t==="subx"?`${i18n("исключение поддетектора")} «${escHtml(sub?.name||"")}»`:"";
   if(!what)return"";
-  const c=t==="in"?"in":t==="line"?"ln":t==="cal"?"cal":"ex";
+  const c=t==="s2"?"s2":t==="in"?"in":t==="line"?"ln":t==="cal"?"cal":"ex";
   return`<span class="dw-drawing" data-dw-drawing="${t}"><i class="dw-sw" style="background:var(--dw-${c})"></i><span>${i18n("Рисуем")}: ${what}</span></span><button type="button" class="btn s" data-dw-draw-off ${onEv("click",["dwDrawOff"])}>${i18n("Отменить")}</button>`;
 }
 function dwDrawOff(){dw.poly=null;dw.tool=null;gear()}
@@ -19271,6 +19302,8 @@ function dwLayHtml(k){
 function dwHintText(k){
   if(dw.poly?.type==="cal")return"Щёлкнуть по кадру четыре угла участка дороги по порядку. Потом углы и всю область можно перетащить. Правый щелчок убирает последнюю точку, Esc отменяет.";
   if(dw.poly)return"Чтобы добавить точку, щёлкнуть по кадру. Чтобы замкнуть зону, щёлкнуть первую точку, дважды щёлкнуть или нажать Enter. Правый щелчок убирает последнюю точку, Esc отменяет зону.";
+  if(dw.tool==="s2"||dw.tool==="in"&&k==="visitors")return"Протянуть мышью по кадру, чтобы нарисовать прямоугольник. Чтобы нарисовать многоугольник, щёлкать по кадру точку за точкой. Новая область заменит прежнюю.";
+  if(!dw.tool&&k==="visitors")return"Чтобы поменять области местами, щёлкнуть внутри области. Чтобы изменить область, тянуть её или её точки мышью. Чтобы добавить точку, щёлкнуть сторону правой кнопкой.";
   if(dw.tool==="in")return"Протянуть мышью по кадру, чтобы нарисовать прямоугольник. Чтобы нарисовать многоугольник, щёлкать по кадру точку за точкой. Детектор будет искать объекты внутри зоны.";
   if(dw.tool==="subx")return"Протянуть мышью по кадру, чтобы нарисовать прямоугольник исключения поддетектора. Чтобы нарисовать многоугольник, щёлкать по кадру. Чтобы замкнуть его, щёлкнуть по первой точке.";
   if(dw.tool==="ex")return"Протянуть мышью по кадру, чтобы нарисовать прямоугольник. Чтобы нарисовать многоугольник, щёлкать по кадру точку за точкой. Детектор не будет замечать объекты в этой зоне.";
@@ -19321,7 +19354,7 @@ function dwMidSvg(pts,b,col){
 }
 // Многоугольник, который пользователь рисует щелчками: точки, стороны и сторона к курсору
 function dwPolySvg(){
-  const p=dw.poly,col=p.type==="ex"||p.type==="subx"?"var(--dw-ex)":p.type==="cal"?"var(--dw-cal)":"var(--dw-in)",all=p.q?[...p.pts,p.q]:p.pts,close=p.type!=="cal"&&p.pts.length>=3;
+  const p=dw.poly,col=p.type==="ex"||p.type==="subx"?"var(--dw-ex)":p.type==="cal"?"var(--dw-cal)":p.type==="s2"?"var(--dw-s2)":"var(--dw-in)",all=p.q?[...p.pts,p.q]:p.pts,close=p.type!=="cal"&&p.pts.length>=3;
   return`<polyline class="dw-pl" points="${all.map(dwP).join(" ")}" style="--c:${col}"/>`+
     p.pts.map((q,i)=>`<circle class="dw-pd${i===0&&close?" first":""}" cx="${(q[0]*DW_X).toFixed(1)}" cy="${(q[1]*DW_Y).toFixed(1)}" r="${i===0&&close?2.2:1.3}" style="--c:${col}"/>`).join("");
 }
@@ -19336,11 +19369,11 @@ function dwGeoSvg(d){
   const zOff=nodeFieldOff(d,"zone"),sOff=(x,f)=>{if(!profHideSet.size)return false;const u=dwSubUnits(d).find(y=>y.id===x.id);return kindFieldOff(u?nodeKind(u):"subdet",f)};
   if(!zOff)c.areas.forEach(a=>{
     const ex=a.type==="ex";
-    h+=`<polygon class="dw-a${ex?" ex":""}${dw.sel===a.id?" sel":""}${dd?" dim":""}" data-fo="det" data-b="area:${a.id}" points="${a.pts.map(dwP).join(" ")}"/>`;
+    h+=`<polygon class="dw-a${ex?" ex":""}${a.type==="s2"?" s2":""}${dw.sel===a.id?" sel":""}${dd?" dim":""}" data-fo="det" data-b="area:${a.id}" points="${a.pts.map(dwP).join(" ")}"/>`;
     if(dd)return;
     const top=a.pts.reduce((m,p)=>p[1]<m[1]||(p[1]===m[1]&&p[0]<m[0])?p:m,a.pts[0]);
     h+=`<text class="dw-tx" x="${(top[0]*DW_X+1.5).toFixed(1)}" y="${(top[1]*DW_Y+4).toFixed(1)}">${escHtml(dwAreaName(a))}</text>`;
-    const col=ex?"var(--dw-ex)":"var(--dw-in)";
+    const col=ex?"var(--dw-ex)":a.type==="s2"?"var(--dw-s2)":"var(--dw-in)";
     if(!dw.tool){if(dw.sel===a.id)h+=dwMidSvg(a.pts,`area:${a.id}`,col);a.pts.forEach((p,i)=>h+=dwHdSvg(`area:${a.id}`,i,p,col,1.7))}
   });
   if(c.line&&!zOff)h+=dd?`<line class="dw-l dim" data-fo="det" x1="${c.line[0][0]*DW_X}" y1="${c.line[0][1]*DW_Y}" x2="${c.line[1][0]*DW_X}" y2="${c.line[1][1]*DW_Y}" stroke="var(--dw-ln)"/>`:dwLineSvg(c.line,c.dir,"line","var(--dw-ln)");
@@ -19412,7 +19445,7 @@ function dwObjSvg(d,t){
     const X=(pos[0]-o.w/2)*DW_X,Y=(pos[1]-o.h)*DW_Y,W=o.w*DW_X,H=o.h*DW_Y;
     if(dw.lay.trk&&o.cls!=="noise"){const pts=[];for(let s=Math.max(o.t0,t-8);s<=t;s+=1){const p=dwAt(o,s);if(p)pts.push(dwP(p))}pts.push(dwP(pos));box+=`<polyline class="dw-trk ${st}" points="${pts.join(" ")}"/>`}
     let lb="";
-    if(hot){const sub=hot.sub?c.subs.find(s=>s.id===hot.sub):null;lb=sub?`${i18n("Сработка")}: ${sub.name}`:i18n("Сработка")}
+    if(hot){const sub=hot.sub?c.subs.find(s=>s.id===hot.sub):null;lb=hot.vc?i18n(hot.vc==="in"?"Вошёл":"Вышел"):sub?`${i18n("Сработка")}: ${sub.name}`:i18n("Сработка")}
     else if(k==="lpr")lb=o.plate;
     else if(k==="neural")lb=`${i18n(DW_CLS[o.cls])} ${Math.round(o.conf*100)}%`;
     else if(k==="abandoned"){const n=dwRun(o,t,(p,s)=>{const q=dwAt(o,s-1);return!dwWhy(c,k,o,p)&&q&&Math.hypot(p[0]-q[0],p[1]-q[1])<.002},c.stay);lb=`${i18n("лежит")} ${n} ${i18n("с из")} ${c.stay}`}
@@ -19426,11 +19459,17 @@ function dwObjSvg(d,t){
   }
   if(k==="crowd"&&c.areas[0]){const a=c.areas[0].pts,x=Math.max(...a.map(p=>p[0]))*DW_X,y=Math.min(...a.map(p=>p[1]))*DW_Y;
     box+=`<text class="dw-lb ${inZone>=c.count?"hot":"ok"}" x="${(x-1).toFixed(1)}" y="${(y+4).toFixed(1)}" text-anchor="end">${i18n("Людей в зоне")}: ${inZone} ${i18n("из")} ${c.count}</text>`}
+  // Счётчик посетителей: сколько вошли и вышли за час до этой секунды; при счёте людей — сколько сейчас в помещении
+  if(k==="visitors"&&c.areas.length){const a=c.areas.flatMap(x=>x.pts),x=Math.max(...a.map(p=>p[0]))*DW_X,y=Math.max(...a.map(p=>p[1]))*DW_Y,F=E.fires.filter(f=>f.t<=t&&f.vc),ni=F.filter(f=>f.vc==="in").length,no=F.length-ni;
+    let inner="";if(c.vc.on){let n=c.vc.start;F.forEach(f=>{n=Math.max(0,n+(f.vc==="in"?1:-1))});inner=` · ${i18n("В помещении")}: ${n}`}
+    box+=`<text class="dw-lb ok" x="${Math.min(DW_X-1,x).toFixed(1)}" y="${Math.min(DW_Y-1,y+4).toFixed(1)}" text-anchor="end">${i18n("Вошли")}: ${ni} · ${i18n("Вышли")}: ${no}${inner}</text>`}
   dw.now=nOk;
   return sil+box;
 }
 // ── Превью сработок ──
 function dwFireLabel(f,c,k){
+  if(f.over)return`${i18n("Людей в помещении больше порога")}: ${f.n}`;
+  if(f.vc)return i18n(f.vc==="in"?"Посетитель вошёл":"Посетитель вышел");
   const sub=f.sub?c.subs.find(s=>s.id===f.sub):null;
   if(f.n)return sub?`${sub.name} · ${f.n} ${i18n("объектов в области")}`:`${f.n} ${i18n("человек в зоне")}`;
   const o=f.o;
@@ -19875,7 +19914,15 @@ function dwDiffRows(d){
   const ne=(a,b)=>JSON.stringify(a)!==JSON.stringify(b),pc=v=>(v*100).toFixed(1).replace(/\.0$/,"");
   const row=(keys,label,fromT,toT)=>out.push({keys,label,fromT:String(fromT),toT:String(toT)});
   const zn=a=>`${a.filter(x=>x.type==="in").length} ${i18n("зон")}, ${a.filter(x=>x.type==="ex").length} ${i18n("исключ.")}`;
-  if(ne(c.areas,s.areas)){const a=zn(s.areas),b=zn(c.areas);row(["areas"],"Зоны",a,a===b?i18n("другие точки на кадре"):b)}
+  if(dwKindOf(d)==="visitors"){
+    // Счётчик посетителей: области 1 и 2; обмен точками — «области поменялись местами»
+    const P=(a,n)=>JSON.stringify(a.find(x=>x.sec===n)?.pts||null),sw=P(c.areas,1)===P(s.areas,2)&&P(c.areas,2)===P(s.areas,1)&&P(c.areas,1)!=="null"&&P(c.areas,2)!=="null";
+    const nm=a=>[1,2].filter(n=>a.some(x=>x.sec===n)).map(n=>`${i18n("Область")} ${n}`).join(", ")||"—";
+    if(ne(c.areas,s.areas))row(["areas"],"Области",nm(s.areas),sw?i18n("области поменялись местами"):nm(c.areas)===nm(s.areas)?i18n("другие точки на кадре"):nm(c.areas));
+    if(c.vc.on!==s.vc.on)row(["vc"],"Считать людей в помещении",i18n(s.vc.on?"вкл":"выкл"),i18n(c.vc.on?"вкл":"выкл"));
+    if(c.vc.max!==s.vc.max)row(["vc"],"Порог людей в помещении",s.vc.max,c.vc.max);
+    if(c.vc.start!==s.vc.start)row(["vc"],"Людей в помещении сейчас",s.vc.start,c.vc.start);
+  }else if(ne(c.areas,s.areas)){const a=zn(s.areas),b=zn(c.areas);row(["areas"],"Зоны",a,a===b?i18n("другие точки на кадре"):b)}
   if(ne(c.line,s.line))row(["line"],"Линия A → B",s.line?i18n("есть"):"—",c.line?i18n("другие точки на кадре"):"—");
   if(c.dir!==s.dir)row(["dir"],"Направление",i18n(DW_DIR_RU[s.dir]),i18n(DW_DIR_RU[c.dir]));
   const sz=(a,none)=>a[0]===none&&a[1]===none?i18n("без ограничения"):`${pc(a[0])} × ${pc(a[1])} % ${i18n("кадра")}`;
@@ -19937,6 +19984,7 @@ function dwSteps(n,cr){
   // Свойства детектора: что отличается от сохранённых. Зоны уходят вместе: zone — первая зона, extraZones — остальные
   const np=dwDetProps(c,k,n),pp=dwPropsPatch(np,dwDetProps(s,k,n));
   if("zone" in pp||"extraZones" in pp){pp.zone=np.zone;if("extraZones" in np)pp.extraZones=np.extraZones}
+  if("zoneTo" in pp)pp.zoneTo=np.zoneTo;
   if(k==="meta")Object.assign(pp,metaPatch(n));
   const items=[],names=[],made=[];
   // Поля карточки (имя, «Включён», метки, вид…) идут тем же шагом patch
@@ -20476,6 +20524,7 @@ function dwPanelHtml(cam,d,k,c){
   if(hasS&&ptab==="sub"&&(k==="face"||k==="other"))return head+(k==="face"?faceClashHtml(d):"")+tabs+`<section class="dw-sec dw-subs-tab">${dwSubsHtml(id,k,c)}</section>`;
   if(k==="other")return head+tabs+dwSec("Параметры",detFieldsHtml(cam,d,"Имя"));
   if(k==="meta")return head+tabs+metaPanelHtml(d)+`<details class="dw-adv"><summary>${i18n("Дополнительно")}</summary><div class="dw-adv-b">${detFieldsHtml(cam,d,"Имя",true)}${cam?detServerNoteHtml(cam,d):""}</div></details>`;
+  if(k==="visitors")return head+tabs+dwSec("Области",dwVcAreasHtml(d,c))+dwSec("Счёт людей в помещении",dwVcCountHtml(d,c))+dwSec("Детектор",detFieldsHtml(cam,d,"Имя",false,true))+dwAllCardHtml(d);
   if(k==="face")return head+faceClashHtml(d)+tabs+dwSec("Зоны детектирования",dwAreasHtml(id,k,c))+dwListsSecHtml(d)+`<details class="dw-adv"><summary>${i18n("Дополнительно")}</summary><div class="dw-adv-b">${detFieldsHtml(cam,d,"Имя",true)}${cam?detServerNoteHtml(cam,d):""}</div></details>`;
   const what=(k==="linecross"||k==="neural")&&dwHas(d,"classes")?dwSec("Классы объектов",dwChips(id,["person","car","bike"],c.classes,"dwClass")+dwHelp("Детектор сработает только на объекты выбранных классов.")):"";
   const when=[];
@@ -20689,7 +20738,7 @@ function dwDown(st,e){
       const prev=c.areas.slice();
       if(tool==="in"&&!dwHas(d,"extraZones"))c.areas=c.areas.filter(a=>a.type!=="in");
       const nIn=c.areas.filter(a=>a.type===tool).length+1,a={id:"a"+Date.now()%1e7,type:tool,n:nIn,pts:[p0,p0,p0,p0]};
-      c.areas.push(a);dw.sel=a.id;
+      c.areas.push(a);dw.sel=a.id;dwVcNew(c,d,a);
       move=q=>{a.pts=[[p0[0],p0[1]],[q[0],p0[1]],[q[0],q[1]],[p0[0],q[1]]]};
       // Щелчок без протяжки начинает многоугольник: следующие щелчки ставят его точки (dwPolyClick)
       done=()=>{if(Math.abs(a.pts[2][0]-p0[0])<.02||Math.abs(a.pts[2][1]-p0[1])<.02){c.areas=prev;dw.sel=null;if(dw.tool===tool)dw.poly={type:tool,pts:[p0]}}};
@@ -20721,6 +20770,8 @@ function dwDown(st,e){
     const pts=kd==="cal"?(c.fine?.speedCalibArea?dwCalCopy(c):null):kd==="area"?c.areas.find(x=>x.id===id)?.pts:kd==="sub"?c.subs.find(x=>x.id===id)?.area.pts:kd==="sub2"?c.subs.find(x=>x.id===id)?.area2?.pts:kd==="line"?c.line:kd==="subl"?c.subs.find(x=>x.id===id)?.line:kd==="subx"?dwSubX(c,id).x?.pts:kd==="min"||kd==="max"?[c[kd+"At"]]:null;
     if((kd==="area"||kd==="sub"||kd==="sub2"||kd==="subx")&&dwZoneFocus(kd,id))reSel=true;
     if(pts){const orig=pts.map(p=>p.slice());move=q=>{const dx=q[0]-p0[0],dy=q[1]-p0[1];orig.forEach((p,i)=>{pts[i][0]=+Math.min(1,Math.max(0,p[0]+dx)).toFixed(4);pts[i][1]=+Math.min(1,Math.max(0,p[1]+dy)).toFixed(4)})}}
+    // Счётчик посетителей: щелчок внутри области без протяжки меняет области местами, как в Axxon One
+    if(pts&&kd==="area"&&c.areas.find(x=>x.id===id)?.sec){const m0=move;let mv=false;move=q=>{if(Math.hypot((q[0]-p0[0])*DW_X,(q[1]-p0[1])*DW_Y)>1)mv=true;if(mv)m0(q)};done=()=>{if(!mv&&dwVcSwap(c)){dw.sel=null;dw.pt=null;reSel=true;toast("Консоль поменяла области местами")}}}
   }
   if(!dw.tool&&!mid&&!h&&!b&&(dw.sel||dw.pt)){dw.sel=null;dw.pt=null;reSel=true}
   if(!move){if(reSel){gear();renderTree()}return}
@@ -20755,7 +20806,7 @@ function dwPtIns(pts,i,at){
 function dwPtDel(kd,id,i){
   const d=dwD();if(!d||dw.sent[d.id])return;
   const pts=dwPtsOf(dwC(d),kd,id);if(!pts||!pts[i])return;
-  if(pts.length<=3){toast("В зоне должно быть не меньше трёх точек. Чтобы убрать зону, удалить её в разделе «Зоны»");return}
+  if(pts.length<=3){toast(dwKindOf(d)==="visitors"?"В области должно быть не меньше трёх точек":"В зоне должно быть не меньше трёх точек. Чтобы убрать зону, удалить её в разделе «Зоны»");return}
   pts.splice(i,1);dw.pt=null;gear();
 }
 // Правый щелчок: по точке — удалить её; по стороне зоны — добавить точку; при рисовании — убрать последнюю точку
@@ -20803,6 +20854,35 @@ function dwPolyClick(p0,detail){
   if(p.pts.length>=DW_PMAX){toast("В зоне не может быть больше 64 точек");return}
   p.pts.push(p0);dwPaintGeo();dwHintSet();
 }
+// Счётчик посетителей: новая область 1 или 2 заменяет прежнюю
+function dwVcNew(c,d,a){if(dwKindOf(d)!=="visitors")return;a.sec=a.type==="s2"?2:1;c.areas=c.areas.filter(x=>x===a||x.sec!==a.sec)}
+// Поменять области 1 и 2 местами: точки области 1 уходят в область 2 и обратно. false — области 2 нет
+function dwVcSwap(c){const a=c.areas.find(x=>x.sec===1),b=c.areas.find(x=>x.sec===2);if(!a||!b)return false;[a.pts,b.pts]=[b.pts,a.pts];return true}
+function dwVcSwapBtn(id){if(dwRoRefuse(id))return;if(dwVcSwap(dwC(detNodeOf(id)))){gear();toast("Консоль поменяла области местами")}}
+function dwVcOn(id){if(dwRoRefuse(id))return;const c=dwC(detNodeOf(id));c.vc.on=!c.vc.on;gear()}
+function dwVcSet(id,key,v,el){
+  const c=dwC(detNodeOf(id));if(v===""||v==null)return;v=Math.round(+v);if(!Number.isFinite(v))return;
+  if(el&&v<+el.min)v=+el.min;if(el&&v>+el.max)v=+el.max;c.vc[key]=v;dwSoon();
+}
+// Раздел «Области» счётчика: области 1 и 2 со списком точек, смена мест, рисование заново
+function dwVcAreasHtml(d,c){
+  const id=d.id,has2=dwHas(d,"zoneTo");
+  const row=(sec,meta)=>{const a=c.areas.find(x=>x.sec===sec),col=sec===2?"var(--dw-s2)":"var(--dw-in)";
+    if(!a)return`<div class="dw-ar"><span class="tw"></span><i class="dw-sw" style="background:${col}"></i><span class="dw-ar-n">${i18n("Область")} ${sec}</span><span class="sub">${i18n("нет")}</span><button type="button" class="btn s" ${onEv("click",["dwTool",sec===2?"s2":"in"])}>${lu("plus",14)}${i18n("Нарисовать")}</button></div>`;
+    return`<div class="dw-ar${dw.sel===a.id?" sel":""}" data-dw-zone="${escHtml(a.id)}">${dwArToggle(dw.sel===a.id,["dwSelect",a.id],col,escHtml(dwAreaName(a)),`${i18n(meta)} · ${a.pts.length} ${i18n(plural(a.pts.length,"точка|точки|точек"))}`)}</div>${dw.sel===a.id?dwPtsHtml(id,"area",a.id,a.pts):""}`};
+  const both=c.areas.some(x=>x.sec===1)&&c.areas.some(x=>x.sec===2);
+  return row(1,"из области 1 в область 2 — выход")+(has2?row(2,"из области 2 в область 1 — вход"):"")
+    +(has2&&!both?`<div class="nt dw-vc-n">${i18n("Нужны обе области. Без них детектор не считает посетителей.")}</div>`:"")
+    +`<div class="dw-row"><button type="button" class="btn s"${both?"":` disabled data-tip="${i18n("Нужны обе области")}"`} ${onEv("click",["dwVcSwapBtn",id])}>${i18n("Поменять области местами")}</button></div>`
+    +dwHelp("Когда посетитель переходит из области 1 в область 2, детектор создаёт событие «Посетитель вышел». Когда посетитель переходит из области 2 в область 1, детектор создаёт событие «Посетитель вошёл». Щелчок внутри области на кадре тоже меняет области местами.");
+}
+// Раздел «Счёт людей в помещении»: вход прибавляет единицу, выход отнимает; число выше порога — событие
+function dwVcCountHtml(d,c){
+  const id=d.id;if(!dwHas(d,"indoorCount"))return"";
+  const num=(key,l,help)=>dwHas(d,key==="max"?"indoorMax":"indoorStart")?`<div class="dw-f dw-num"${pfa(d,key==="max"?"indoorMax":"indoorStart")}><label>${i18n(l)}</label><span class="dw-in"><input type="number" min="0" max="100000" value="${c.vc[key]}" ${onEv("input",["dwVcSet",id,key,onEv.value,onEv.el])}><span>${i18n("чел.")}</span></span>${help?dwHelp(help):""}</div>`:"";
+  return`<div class="dw-f dw-arc-f"${pfa(d,"indoorCount")}><label class="dw-swl"><span class="sw ${c.vc.on?"on":""}" role="switch" aria-checked="${c.vc.on}" aria-label="${i18n("Считать людей в помещении")}" ${onEv("click",["dwVcOn",id])}></span>${i18n("Считать людей в помещении")}</label>${dwHelp("Вход прибавляет единицу к числу людей в помещении, выход отнимает единицу.")}</div>`
+    +(c.vc.on?num("max","Порог людей в помещении","Если людей в помещении больше этого числа, детектор создаёт событие.")+num("start","Людей в помещении сейчас","Детектор начинает счёт с этого числа. После каждого изменения настроек детектора счёт начинается снова с этого числа."):"");
+}
 function dwPolyUndo(){dw.poly.pts.pop();if(!dw.poly.pts.length){dw.poly=null;dw.tool=null;gear();return}dwPaintGeo();dwHintSet()}
 // Область калибровки скорости — четыре щелчка по кадру; четвёртый щелчок кладёт область в черновик
 function dwCalOn(d){return!!d&&!d.builtin&&dwKindOf(d)==="lpr"&&dwHas(d,"speedCalibArea")}
@@ -20823,7 +20903,7 @@ function dwPolyClose(){
   if(p.type==="subx"){const s=c.subs.find(x=>x.id===p.sid);if(s){const x={id:dwSubXId(s),pts:p.pts.map(q=>q.slice())};s.ex.push(x);dw.sel=`subx:${s.id}~${x.id}`}dw.poly=null;dw.tool=null;dw.pt=null;gear();return}
   if(p.type==="in"&&!dwHas(d,"extraZones"))c.areas=c.areas.filter(a=>a.type!=="in");
   const a={id:"a"+Date.now()%1e7,type:p.type,n:c.areas.filter(x=>x.type===p.type).length+1,pts:p.pts.map(q=>q.slice())};
-  c.areas.push(a);dw.sel=a.id;dw.poly=null;dw.tool=null;dw.pt=null;gear();
+  c.areas.push(a);dwVcNew(c,d,a);dw.sel=a.id;dw.poly=null;dw.tool=null;dw.pt=null;gear();
 }
 // Esc отменяет рисование — слой ESC_LAYERS после диалогов и всплывающих окон: открытый диалог закрывается первым
 const DW_ESC={is:()=>!!dwRoot()&&!!(dw.poly||dw.tool),off(){dw.poly=null;dw.tool=null;gear()}};
