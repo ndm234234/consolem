@@ -1252,7 +1252,7 @@ select:not([multiple]){white-space:nowrap;overflow:hidden}:root select:not([mult
 .rl-opts{display:grid;gap:8px;margin-bottom:14px}
 .rl-opts-2{grid-template-columns:repeat(auto-fill,minmax(280px,1fr))}
 .rl-tpl-g{grid-column:1/-1;margin:6px 0 -2px;color:var(--mu);font-size:12px;font-weight:600}
-.rl-tpl-q{width:100%;margin:0 0 10px;flex:none;height:32px}.rl-tpl-none{grid-column:1/-1;margin:0}
+.rl-tpl-q{width:100%;margin:0 0 10px;flex:none;height:var(--ctrl-h)}.rl-tpl-none{grid-column:1/-1;margin:0}
 .rl-opt[hidden],.rl-tpl-g[hidden],.rl-tpl-none[hidden],.cbx-n[hidden]{display:none}
 .cbx{position:fixed;z-index:20000;display:flex;flex-direction:column;box-sizing:border-box;background:var(--p);border:1px solid var(--ln);border-radius:var(--one-radius-container);box-shadow:var(--one-shadow)}
 .cbx-q{flex:none;width:auto;margin:6px;box-sizing:border-box}
@@ -2696,16 +2696,17 @@ html[data-theme="light"] .busy-chip{background:var(--one-control-hover);color:va
 .dc-z.dc-z3{gap:0;grid-template-columns:var(--dc-l,220px) 12px minmax(240px,var(--dc-v,calc((92vh - 330px)*16/9))) 12px minmax(280px,1fr)}
 .dc-z3 .dc-z-main .live-frame{max-width:100%}
 .dc-z3>.dw-grip{min-height:0}
+@media(max-width:1180px){.dc-z3>.dw-grip{display:block}}
 .dc-set{min-width:0;min-height:0;overflow:auto;padding:0 4px 0 4px;scrollbar-width:thin}
 .dc-set-h{font-size:12px;font-weight:600;margin:0}
 .dc-set-n{font-size:11px;margin:2px 0 10px}
-.dc-set-g{font-size:11px;font-weight:600;color:var(--mu);margin:14px 0 8px}
+.dc-set-g{font-size:11px;font-weight:600;color:var(--mu);margin:12px 0 8px}
 .dc-set .dw-f{margin-bottom:10px}
 .dc-set .dw-num>label{flex:1 1 140px}
 .dc-set .dw-seg{flex-wrap:wrap}
 .dc-set-ft{display:flex;align-items:center;gap:8px;margin-top:12px}
 .dc-set .dw-f>label.dw-swl{justify-content:flex-start;color:var(--tx);margin:0}
-.dc-set [data-dc-size]{margin:0 0 6px;flex-wrap:nowrap}.dc-set [data-dc-size]>label{flex:0 0 76px;color:var(--mu)}
+.dc-set [data-dc-size]{margin:0 0 8px;flex-wrap:nowrap}.dc-set [data-dc-size]>label{flex:0 0 76px;color:var(--mu)}
 .dc-dock{position:fixed;right:16px;bottom:16px;z-index:40;display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--one-selected-indicator);border-radius:var(--one-radius-container);background:var(--p2);box-shadow:var(--one-shadow);max-width:min(480px,calc(100vw - 32px))}
 .dc-dock-t{min-width:0;font-size:12px}
 .dc-dock-t small{display:block;color:var(--mu);font-size:11px;margin-top:2px}
@@ -5181,7 +5182,7 @@ function detAkFamSet(ks){
 // Подпись под семейством в мастере: какие события камеры поднимает детектор
 function detAkEvText(ak){
   const ev=DET_AK_EV[ak];if(!ev)return"";
-  if(!ev.length)return i18n("Правило: не поддерживается. Детектор не поднимает событий");
+  if(!ev.length)return i18n("Правило: не поддерживается. Детектор не поднимает событий.");
   const cam=[...KINDS.values()].find(k=>(k.implements||[]).includes("vms.camera/1"));
   return`${i18n("События")}: ${ev.map(c=>{const e=(cam?.events||[]).find(x=>x.id===c);return e?textOf(e.label):c}).join(", ")}`;
 }
@@ -21791,7 +21792,8 @@ function dcItemRow(key,name,small,tag,tagCls,off){
 // условия срабатывания, «Архив и показ» (DW_ARC_F) и тонкая настройка семейства (DW_FINE). Поле есть, только если
 // оно есть в схеме вида det и в версии профиля сервера. Свойство, равное умолчанию, не уходит
 const DC_SET_WHEN=[
-  {f:"sensitivity",l:"Чувствительность",fam:["motion","tracker"],t:"num",min:1,max:100,def:50,help:"Чем выше чувствительность, тем более слабое движение замечает детектор."},
+  {f:"sensitivity",l:"Чувствительность",fam:["motion"],t:"num",min:1,max:100,def:50,help:"Чем выше чувствительность, тем более слабое движение замечает детектор."},
+  {f:"sensitivity",l:"Чувствительность",fam:["tracker"],t:"num",min:1,max:100,def:50,off:"autoSensitivity",help:"Чем выше чувствительность, тем более слабое движение замечает детектор."},
   {f:"minDurationSec",l:"Сработать, если движение длится не меньше",fam:["motion"],t:"num",min:0,max:30,def:0,unit:"с"},
   {f:"confidence",l:"Уверенность нейросети не ниже",fam:["neural","lpr"],t:"num",min:10,max:99,def:60,unit:"%"},
   {f:"direction",l:"Направление",fam:["linecross"],t:"seg",def:"both",opts:[["ab","A → B"],["ba","B → A"],["both","В обе стороны"]]},
@@ -21799,7 +21801,7 @@ const DC_SET_WHEN=[
   {f:"crowdMin",l:"Людей в зоне не меньше",fam:["crowd"],t:"num",min:2,max:50,def:4,unit:"чел."},
   {f:"crowdHoldSec",l:"Дольше",fam:["crowd"],t:"num",min:1,max:600,def:10,unit:"с"},
   {f:"stillSec",l:"Предмет лежит без движения дольше",fam:["abandoned"],t:"num",min:5,max:1800,def:60,unit:"с"},
-  {f:"objectSize",l:"Размер объекта",fam:[...DW_SIZE],t:"size",help:"Размер задан в процентах кадра. Объекты меньше и больше детектор пропускает."},
+  {f:"objectSize",l:"Размер объекта",fam:[...DW_SIZE],t:"size",help:"Размер задан в процентах кадра. Объекты меньше минимального или больше максимального размера детектор пропускает."},
   {f:"plateWidth",l:"Ширина номера",fam:["lpr"],t:"prng",unit:"%",help:"Ширина задана в процентах ширины кадра. Номера уже или шире детектор пропускает."},
   {f:"metaThreshold",l:"Совпадение с запросом не ниже",fam:["meta"],t:"num",min:0.05,max:100,step:0.05,def:20,unit:"%"},
   {f:"metaFrames",l:"Совпадение подряд не меньше",fam:["meta"],t:"num",min:10,max:100,def:15,unit:"кадров"},
@@ -21868,7 +21870,10 @@ function dcSetFtHtml(key,tpl){
 function dcSetFtPaint(key){const el=document.querySelector("#bmBody .dc-set-ft");if(el)el.outerHTML=dcSetFtHtml(key,dc._tpl||[]);dcSave()}
 function dcSetNum(key,f,el){
   if(el.value==="")return;let n=+el.value;if(!Number.isFinite(n))return;
-  if(el.min!==""&&n<+el.min)return;if(el.max!==""&&n>+el.max)return;
+  // Как dwFineNum в окне детектора: целое поле — целое, поле с шагом — с точностью шага; значение в границах поля
+  const st=el.step&&el.step!=="any"?+el.step:1,dp=st<1?Math.min(4,String(el.step).split(".")[1]?.length||0):0;
+  n=dp?+n.toFixed(dp):Math.round(n);
+  if(el.min!==""&&n<+el.min)n=+el.min;if(el.max!==""&&n>+el.max)n=+el.max;
   dcSetVals(key)[f]=n;dcSetFtPaint(key);
 }
 function dcSetFlip(key,f){const x=dcSetSpec(key,f);dcSetVals(key)[f]=!dcSetGet(key,x);renderDetCreate()}
@@ -21878,8 +21883,8 @@ function dcSetCls(key,cl){const cur=(dcSetVals(key).classes||DW_ALL).slice(),i=c
 function dcSetPair(key,f){
   const box=document.querySelector(`#bmBody .dc-set [data-dc-set="${f}"]`);if(!box)return;
   const x=dcSetSpec(key,f),num=el=>el.value===""?null:+el.value,ins=[...box.querySelectorAll("input")].map(num),fr=n=>Math.min(1,Math.max(0,n/100));
-  if(x.t==="rng"){if(ins.some(n=>n==null)||ins[0]>ins[1])return;const o={...(ins[0]!==x.def[0]?{min:ins[0]}:{}),...(ins[1]!==x.def[1]?{max:ins[1]}:{})};dcSetVals(key)[f]=Object.keys(o).length?o:undefined}
-  else if(x.t==="wh"||x.t==="whf"){const[a,b]=ins;if(a==null&&b==null)dcSetVals(key)[f]=undefined;else if(a>0&&b>0)dcSetVals(key)[f]=x.t==="wh"?{width:Math.round(a),height:Math.round(b)}:[fr(a),fr(b)];else return}
+  if(x.t==="rng"){if(ins.some(n=>n==null))return;for(let i=0;i<2;i++)ins[i]=Math.max(x.min,Math.min(x.max,Math.round(ins[i])));if(ins[0]>ins[1])return;const o={...(ins[0]!==x.def[0]?{min:ins[0]}:{}),...(ins[1]!==x.def[1]?{max:ins[1]}:{})};dcSetVals(key)[f]=Object.keys(o).length?o:undefined}
+  else if(x.t==="wh"||x.t==="whf"){const[a,b]=ins;if(a==null&&b==null)dcSetVals(key)[f]=undefined;else if(a>0&&b>0)dcSetVals(key)[f]=x.t==="wh"?{width:Math.min(10000,Math.max(1,Math.round(a))),height:Math.min(10000,Math.max(1,Math.round(b)))}:[fr(a),fr(b)];else return}
   else if(x.t==="prng"){if(ins.some(n=>n==null)||ins[0]>ins[1])return;const o={...(ins[0]>0?{min:fr(ins[0])}:{}),...(ins[1]<100?{max:fr(ins[1])}:{})};dcSetVals(key)[f]=Object.keys(o).length?o:undefined}
   else if(x.t==="size"){if(ins.some(n=>n==null))return;const mn=[fr(ins[0]),fr(ins[1])],mx=[fr(ins[2]),fr(ins[3])];if(mn[0]>mx[0]||mn[1]>mx[1])return;
     const o={...(mn[0]||mn[1]?{min:mn}:{}),...(mx[0]!==1||mx[1]!==1?{max:mx}:{})};dcSetVals(key)[f]=Object.keys(o).length?o:undefined}
@@ -21964,7 +21969,7 @@ function renderDetCreate(){
   // Прототип 113: детекторы без событий — пометка «Не поддерживается» у шага «Правило» и в плане (как isMacrosSupported в Axxon One)
   dc.noEv=plan.filter(p=>p.fit.length&&p.key.startsWith("a:")&&(DET_AK_EV[p.key.slice(2)]||[0]).length===0).map(p=>p.name);
   dc.noRule=!!(dc.ready&&total&&!gs.length);
-  if(dc.noRule&&dcStepKey()==="rule")dc.step--;
+  if(dc.noRule&&dcStepKey()==="rule"){dc.step--;if(dcStepKey()==="zones")dcZoneEnter()}
   if(dc.ready&&total&&!gs.length&&dc.rule.mode!=="none"){dc.rule.was=dc.rule.mode;dc.rule.mode="none"}
   else if(gs.length&&dc.rule.was){dc.rule.mode=dc.rule.was;delete dc.rule.was}
   if(gs.length&&dc.rule.pick&&!dcRuleCands(gs).some(x=>x.id===dc.rule.pick))dc.rule.pick="";
