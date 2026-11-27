@@ -3779,16 +3779,28 @@ body.dw-resizing,body.dw-resizing *{cursor:col-resize!important;user-select:none
 .dw-fine-lead{margin:8px 0 12px}
 /* Списки лиц и номеров (прототип 107) */
 .lst-lead{margin:0 0 12px;max-width:72ch}
-.lst-grid{display:grid;grid-template-columns:minmax(240px,320px) minmax(0,1fr);gap:16px;align-items:stretch}
+.lst-grid{display:grid;grid-template-columns:minmax(240px,320px) minmax(0,1fr);gap:16px;align-items:start}
 .lst-grid .card,.lst-grid .tfoot{min-width:0}.lst-grid .tfoot{flex-wrap:wrap}
 .lst-wrap{container-type:inline-size}
 .lst-seg{margin:0 0 10px}
 .lst-ent{padding:5px 9px;margin:0 0 2px;cursor:default}.it.lst-ent span.lst-ent-m{flex:0 0 auto;min-width:9em;font-variant-numeric:tabular-nums}.lst-ent .lst-ent-s{flex:1;min-width:0;color:var(--mu);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @container (max-width:680px){.lst-grid{grid-template-columns:minmax(0,1fr)}}
-.lst-col{display:flex;flex-direction:column;gap:16px;min-width:0}
-/* Перечень и записи — одной высоты: карточка тянется до соседней, строки занимают место, подвал со страницами — внизу */
-.lst-col>.card{flex:1;display:flex;flex-direction:column;margin:0}.lst-col>.card>.cb{flex:1;display:flex;flex-direction:column}
-.lst-col .pg-rows{flex:1}.lst-col .tfoot{margin-top:auto}
+.lst-col{display:flex;flex-direction:column;gap:16px;min-width:0}.lst-col>.card{margin:0}
+/* Черновик: четыре варианта высоты столбцов для сравнения (?lstv=1…4). Решение уйдёт в правило, лишние варианты — убрать.
+   1 — окна по высоте экрана, строки прокручиваются внутри карточки; 2 — высота по содержимому;
+   3 — одна высота, подвал сразу под строками; 4 — окна по высоте экрана, на странице столько строк, сколько входит */
+.lst-vbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px;padding:8px 10px;border:1px dashed var(--ln);border-radius:8px}
+.lst-vbar .rl-seg{margin:0}
+.lst-v1 .lst-grid,.lst-v3 .lst-grid,.lst-v4 .lst-grid{align-items:stretch}
+/* Высоту считает lstLayout: перерисовка карточки заменяет разметку, поэтому высота — в переменной на <html> */
+.lst-v1 .lst-grid,.lst-v4 .lst-grid{height:var(--lst-h,auto);grid-template-rows:minmax(0,1fr)}.lst-v1 .lst-col,.lst-v4 .lst-col{min-height:0}
+@container (max-width:680px){.lst-v1 .lst-grid,.lst-v4 .lst-grid{height:auto}}
+.lst-v1 .lst-col>.card,.lst-v3 .lst-col>.card,.lst-v4 .lst-col>.card{flex:1;min-height:0;display:flex;flex-direction:column}
+.lst-v1 .lst-col>.card>.cb,.lst-v4 .lst-col>.card>.cb{flex:1;min-height:0;display:flex;flex-direction:column}
+.lst-v1 .lst-col .pg-rows,.lst-v4 .lst-col .pg-rows{flex:1;min-height:0}
+.lst-v1 .lst-col .pg-rows{overflow:auto}.lst-v4 .lst-col .pg-rows{overflow:hidden}
+.lst-v1 .lst-col .tfoot,.lst-v4 .lst-col .tfoot{position:static;margin-top:auto}
+.lst-v4 .pg-size{display:none}
 .lst-row{cursor:pointer}
 
 .lst-row .tag{margin-left:auto;font-variant-numeric:tabular-nums}
@@ -19990,7 +20002,50 @@ function faceClashHtml(d){
 const LST_KINDS=["facelist","platelist"];
 const LST_T={facelist:{title:"Списки лиц",one:"Список лиц",ent:"лицо|лица|лиц",det:"Детектор лиц"},platelist:{title:"Списки номеров",one:"Список номеров",ent:"номер|номера|номеров",det:"Детектор номеров"}};
 const LST_SRC={axxonnet:"AxxonNet",axxondata:"AxxonData",datacenter:"Axxon Datacenter"};
-const lstStore={load:null,done:false,failed:false,items:{facelist:[],platelist:[]},sel:{},kind:"facelist"};
+const lstStore={load:null,done:false,failed:false,items:{facelist:[],platelist:[]},sel:{},kind:"facelist",
+  v:(()=>{const v=+new URLSearchParams(location.search).get("lstv");return v>=1&&v<=4?v:1})()};
+// Черновик: вариант высоты столбцов. Номер — в адресе (?lstv=N), чтобы ссылка открывала тот же вариант
+const LST_V=[[1,"Окна с прокруткой"],[2,"По содержимому"],[3,"Подвал под строками"],[4,"Страница по высоте окна"]];
+const lstFit={},lstRowH={};
+function lstVSet(v){
+  lstStore.v=v;
+  try{const u=new URL(location.href);u.searchParams.set("lstv",v);history.replaceState(history.state,"",u)}catch(e){}
+  paint();
+}
+// Вариант 4: на странице столько строк, сколько входит в окно карточки; размер страницы — свой у каждого списка
+function lstSized(key,fn){
+  if(lstStore.v!==4||!lstFit[key])return fn();
+  const s=pageSize;pageSize=lstFit[key];
+  try{return fn()}finally{pageSize=s}
+}
+// Варианты 1 и 4: сетка — до низа области прокрутки, столбцы одной высоты; в одну колонку (узкое место) — по содержимому
+function lstLayout(){
+  const g=document.querySelector(".lst-grid"),sc=g&&g.closest(".sc");
+  if(!g||!sc)return;
+  const one=getComputedStyle(g).gridTemplateColumns.trim().split(/\s+/).length<2;
+  if((lstStore.v!==1&&lstStore.v!==4)||one){
+    document.documentElement.style.removeProperty("--lst-h");
+    if(Object.keys(lstFit).length){Object.keys(lstFit).forEach(k=>delete lstFit[k]);if(lstStore.v===4)paint()}
+    return;
+  }
+  const top=g.getBoundingClientRect().top-sc.getBoundingClientRect().top+sc.scrollTop;
+  const h=Math.max(360,Math.floor(sc.clientHeight-top-parseFloat(getComputedStyle(sc).paddingBottom||0)));
+  const root=document.documentElement.style;
+  if(root.getPropertyValue("--lst-h")!==h+"px"){root.setProperty("--lst-h",h+"px");if(lstStore.v===4)return requestAnimationFrame(lstLayout)}
+  if(lstStore.v!==4)return;
+  let again=false;
+  g.querySelectorAll(".lst-col[data-lstk]").forEach(col=>{
+    // Строки разной высоты (имя в две строки): считаем по самой высокой, чтобы последняя строка не резалась
+    const box=col.querySelector(".pg-rows"),rows=box?[...box.querySelectorAll(".it")]:[];
+    if(!rows.length)return;
+    // Высота строки только растёт: иначе новая страница без высокой строки дала бы другое число строк и перерисовку по кругу
+    const k=col.dataset.lstk,rh=lstRowH[k]=Math.max(lstRowH[k]||0,...rows.map(x=>x.offsetHeight+parseFloat(getComputedStyle(x).marginBottom||0)));
+    const n=Math.max(3,Math.floor(box.clientHeight/rh));
+    if(lstFit[k]!==n){lstFit[k]=n;again=true}
+  });
+  if(again)paint();
+}
+window.addEventListener("resize",()=>{if(document.querySelector(".lst-grid"))requestAnimationFrame(lstLayout)});
 function lstKindSet(k){lstStore.kind=k;paint()}
 function lstOn(){return LST_KINDS.some(k=>KINDS.has(k))}
 function lstEnsure(){
@@ -20089,9 +20144,11 @@ function listsTabHtml(n){
   lead=seg+lead;
   if(!ls.length)return lead+card(T.title,`<p class="sub">${i18n("Списков пока нет. Чтобы добавить список, создать его в облаке и синхронизировать с доменом.")}</p>`);
   if(!ls.some(u=>u.uid===lstStore.sel[kind]))lstStore.sel[kind]=ls[0].uid;
-  const left=listCard({key:"lst:"+kind,title:i18n(T.title),items:ls,text:u=>[u.name],row:lstRowHtml,ph:"Имя списка…",unit:"список|списка|списков"});
-  const sel=lstById(lstStore.sel[kind]);
-  return lead+`<div class="lst-wrap"><div class="lst-grid"><div class="lst-col">${left}</div><div class="lst-col">${sel?lstEntriesCard(sel):card(T.one,`<p class="sub">${i18n("Выберите список слева.")}</p>`)}</div></div></div>`;
+  const lk="lst:"+kind,left=lstSized(lk,()=>listCard({key:lk,title:i18n(T.title),items:ls,text:u=>[u.name],row:lstRowHtml,ph:"Имя списка…",unit:"список|списка|списков"}));
+  const sel=lstById(lstStore.sel[kind]),rk=sel?"lstent:"+sel.uid:"";
+  const vbar=`<div class="lst-vbar"><span class="sub">${i18n("Черновик: высота столбцов")}</span><div class="rl-seg" role="radiogroup" aria-label="${i18n("Высота столбцов")}">${LST_V.map(([v,l])=>`<button type="button" role="radio" aria-checked="${v===lstStore.v}" class="${v===lstStore.v?"on":""}" ${onEv("click",["lstVSet",v])}>${v} · ${i18n(l)}</button>`).join("")}</div></div>`;
+  requestAnimationFrame(lstLayout);
+  return vbar+lead+`<div class="lst-wrap lst-v${lstStore.v}"><div class="lst-grid"><div class="lst-col" data-lstk="${escHtml(lk)}">${left}</div><div class="lst-col" data-lstk="${escHtml(rk)}">${sel?lstSized(rk,()=>lstEntriesCard(sel)):card(T.one,`<p class="sub">${i18n("Выберите список слева.")}</p>`)}</div></div></div>`;
 }
 // Окно детектора: «Проверять по спискам» и какие списки (пусто — все списки своего вида)
 function dwListsSecHtml(d){
