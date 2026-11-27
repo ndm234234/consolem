@@ -687,7 +687,7 @@ KIND_KEYWORDS = {"type", "enum", "const", "minimum", "maximum", "exclusiveMinimu
                  "items", "minItems", "maxItems", "required", "default", "readOnly", "writeOnly", "if", "then", "else", "dependentSchemas",
                  "description", "title", "properties", "additionalProperties", "deprecated", "allOf", "examples"}
 KIND_TYPES = {"string", "integer", "number", "boolean", "array", "object", "null"}
-KIND_FLAGS = ("x-search", "x-immutable", "x-unique", "x-ui-filter", "x-ui-advanced")
+KIND_FLAGS = ("x-search", "x-immutable", "x-unique", "x-ui-filter", "x-ui-advanced", "x-ui-manual")
 UUID_ANY = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-4000-8000-[0-9a-f]{12}")
 # Первая цифра uid объектов склада: домен, сервер, устройство (и объекты незнакомых видов), папка, хранилище, том
 UNIT_PREFIXES = "123456"

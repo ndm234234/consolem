@@ -1159,6 +1159,25 @@
     assert.eq(lists.map((l) => l.properties.entryCount), lists.map((l) => (l.properties.entries || []).length), "entryCount и в перечне /units");
   }, { needs: ["listUnitEntries", "kind:facelist", "kind:platelist"] });
 
+  // Контракт 0.43.0 (пробел F125): схема объекта детектора по семейству — чужие поля x-hidden, группы, x-ui-manual.
+  // x-ui-manual — отметка для интерфейса: детектор без такого поля создаётся и правится, как раньше
+  test("Схема объекта детектора по семейству (0.43.0): чужие поля скрыты, группы и подсказки, x-ui-manual без отказа", async () => {
+    const env = await makeEnv();
+    const kd = await env.ok("GET", "/kinds/det");
+    if (!kd.schemaPerUnit) return;
+    assert.ok(!kd.schema.required || !kd.schema.required.includes("humanSize"), "схема вида не требует humanSize");
+    const m = await addDet(env, camU, "Движение F125", { detectorKind: "motion", sensitivity: 10 });
+    const sm = await env.ok("GET", U(m.uid) + "/schema");
+    assert.ok(!sm.allOf && !sm.if, "схема объекта — без allOf и if");
+    assert.eq([!!sm.properties.plateWidth["x-hidden"], !!sm.properties.crowdMin["x-hidden"], !!sm.properties.sensitivity["x-hidden"]], [true, true, false], "у движения скрыты поля номеров и скопления");
+    assert.ok(sm.properties.sensitivity["x-ui-group"] && sm.properties.sensitivity["x-ui-group"].text && typeof sm.properties.sensitivity["x-ui-order"] === "number", "у поля группа и порядок");
+    const c = await addDet(env, camU, "Скопление F125", { detectorKind: "crowd", crowdMin: 5 });
+    const sc = await env.ok("GET", U(c.uid) + "/schema");
+    assert.eq([sc.properties.humanSize["x-ui-manual"], !!sc.properties.humanSize["x-hidden"], !!sm.properties.humanSize["x-ui-manual"]], [true, false, false], "humanSize — вручную у скопления, не у движения");
+    const p = await env.ok("PATCH", U(c.uid), { properties: { crowdMin: 6 } }, v(c));
+    assert.eq(p.properties.crowdMin, 6, "правка без humanSize — без отказа");
+  }, { needs: ["createUnits", "patchUnit", "getUnitSchema", "kind:camera", "kind:det", "prop:det.humanSize", "prop:det.crowdMin", "prop:det.plateWidth"], layer: "profile:vms.detector/1" });
+
   // С профиля vms.detector/1 1.8 (пункт F121): счётчик посетителей — секторы zone (область 1) и zoneTo (область 2),
   // счёт людей в помещении; события visitor.in, visitor.out, indoor.over из x-events
   test("Счётчик посетителей (1.8): секторы zone и zoneTo, счёт людей в помещении; у другого семейства — 422 notCounter, зона линией — 422 shape; события входа и выхода", async () => {

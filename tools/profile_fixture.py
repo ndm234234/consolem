@@ -466,6 +466,22 @@ def profile_kinds(kinds):
             k.pop("x-ui-category", None)
         for name in DROP_PROPS.get(k["kind"], []):
             ((k.get("schema") or {}).get("properties") or {}).pop(name, None)
+        # Части allOf схемы объекта (контракт 0.43.0, детектор): без снятых свойств; часть с условием по снятому свойству
+        # уходит целиком — условие не может стать верным
+        dropped, sch = set(DROP_PROPS.get(k["kind"], [])), k.get("schema") or {}
+        if dropped and "allOf" in sch:
+            keep = []
+            for part in sch["allOf"]:
+                cond = part.get("if") or {}
+                if (set(cond.get("properties") or {}) | set(cond.get("required") or [])) & dropped:
+                    continue
+                for node in (part, part.get("then") or {}, part.get("else") or {}):
+                    for name in dropped:
+                        (node.get("properties") or {}).pop(name, None)
+                    if "required" in node:
+                        node["required"] = [r for r in node["required"] if r not in dropped]
+                keep.append(part)
+            sch["allOf"] = keep
         # Событие списка без самих списков: ни выбора списка и записи, ни «нет ни в одном списке» (контракт 0.41.0)
         for e in k.get("events", []):
             pr = ((e.get("params") or {}).get("properties") or {})
