@@ -111,7 +111,7 @@ UiCheck(async ({ ok, until, sleep }) => {
   dwPtabSet("det");
   await until(() => dwPtab() === "det");
   const pts = dwC(d()).subs.find((s) => s.id === SUB).area.pts, cx = pts.reduce((s, p) => s + p[0], 0) / pts.length, cy = pts.reduce((s, p) => s + p[1], 0) / pts.length;
-  // Прототип 107: зоны не в фокусе бледные и щелчок не ловят — к поддетектору ведёт чип «Зоны на кадре», затем щелчок по его яркой области
+  // Прототип 110: зоны не в фокусе бледные и щелчок не ловят — к поддетектору ведёт чип «Зоны на кадре», затем щелчок по его яркой области
   const chips = typeof dwFocusHtml === "function";
   if (chips) {
     ok(!main().querySelector(`.dw-sa[data-b="sub:${SUB}"]`) && main().querySelector(`.dw-ov .dim[data-fo="${SUB}"]`), "при фокусе на детекторе область поддетектора бледная");
