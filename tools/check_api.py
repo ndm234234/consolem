@@ -327,6 +327,7 @@ BRIDGE_CLOSED = {
     "putScenarios": "документ сценариев правит consolem",
     "startUnitLive": _LIVE, "moveUnitLive": _LIVE,
     "startUnitTalk": _VIDEO, "getUnitTimeline": _VIDEO, "getUnitPlayback": _VIDEO, "listUnitHolds": _VIDEO,
+    "listUnitEntries": "записи списков лиц и номеров читает страница консоли, мост их не просит",
     "createUnitHold": _VIDEO, "deleteHold": _VIDEO, "verifyHold": _VIDEO, "listUnitBookmarks": _VIDEO,
     "createUnitBookmark": _VIDEO, "fetchUnitArchive": _VIDEO, "putUnitPtz": _VIDEO, "deleteUnitPtz": _VIDEO,
     "putUnitPreset": _VIDEO, "deleteUnitPreset": _VIDEO, "getUnitRecordingDays": _VIDEO,
@@ -1168,7 +1169,7 @@ def check_server(rep, spec):
 # Перечни объектов — /units, предметные API — по uid
 PAGED = ["/units", "/journal", "/operations", "/rules/{ruleId}/fires", "/archive-watches", "/archive-scans",
          "/access/users", "/access/groups", "/access/history", "/access/cell-history", "/access/roles/{roleId}/objects", "/tree/children", "/units/{uid}/discovery",
-         "/units/{uid}/timeline", "/units/{uid}/holds", "/units/{uid}/bookmarks"]
+         "/units/{uid}/timeline", "/units/{uid}/holds", "/units/{uid}/bookmarks", "/units/{uid}/entries"]
 
 
 def check_pages(rep, spec):

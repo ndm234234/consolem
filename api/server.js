@@ -3238,6 +3238,8 @@
       });
       keptSecrets(u).forEach((n) => (set[n] = true));
       const inherited = kinds.get(u.kind) ? inheritedOf(u, shown) : null;
+      // С 0.42.0: entryCount у списка лиц и номеров — число записей; считает сервер, а не хранит, чтобы не разойтись с entries
+      if (Array.isArray(props(u).entries) && ((kinds.get(u.kind) || {}).schema || {}).properties && kinds.get(u.kind).schema.properties.entryCount) shown.entryCount = props(u).entries.length;
       out.properties = shown;
       if (Object.keys(set).length) out.secrets = set;
       if (inherited && Object.keys(inherited).length) out.inherited = inherited;
@@ -4721,6 +4723,37 @@
       ["GET", "/units/{uid}", (p) => {
         const u = store.get(p.uid);
         return u ? one(unitView(u)) : notFound("Объект");
+      }],
+      // С 0.42.0: записи списка лиц или номеров страницами. Список — синхронный снимок: total точный, смещение и курсор держат место
+      // по номеру в отобранном наборе. q — имя, id, у номеров ещё plate после приведения (пробелы и «-» долой, верхний регистр,
+      // кириллица, похожая на латиницу, — латиницей); ids — только эти записи в порядке списка
+      ["GET", "/units/{uid}/entries", (p, q) => {
+        const u = store.get(p.uid);
+        if (!u) return notFound("Объект");
+        if (u.kind !== "facelist" && u.kind !== "platelist") return problem(422, "NOT_SUPPORTED", `Записи есть только у списков лиц и номеров, а не у вида ${u.kind}`, { field: "/kind", params: { kind: u.kind } });
+        const limit = limitOf(q);
+        if (limit === null) return limitBad();
+        const idsList = q.ids === undefined ? [] : String(q.ids).split(",").map((s) => s.trim()).filter(Boolean);
+        const ids = idsList.length ? idsList : null; // пустой ids — без отбора, как пустой q
+        if (ids && ids.length > 200) return problem(422, "VALIDATION_FAILED", "ids — не больше 200 записей", { field: "ids" });
+        const off = q.offset === undefined ? 0 : Number(q.offset);
+        if (q.offset !== undefined && !(Number.isInteger(off) && off >= 0)) return problem(422, "VALIDATION_FAILED", "offset — целое число от 0", { field: "offset" });
+        if (q.offset !== undefined && q.cursor !== undefined) return problem(422, "VALIDATION_FAILED", "offset не сочетается с cursor", { field: "offset", params: { reason: "withCursor" } });
+        const text = String(q.q === undefined ? "" : q.q).trim();
+        // В области курсора — версия списка: курсор, взятый до синхронизации, получает 422 INVALID_CURSOR, а не пропуск или повтор записей
+        const scope = hashOf(`entries|${u.uid}|${u.version}|${text}|${ids ? ids.join(",") : ""}`).toString(36);
+        const cur = cursorRead(q, scope);
+        if (cur.bad) return cur.bad;
+        const LOOK = { А: "A", В: "B", Е: "E", К: "K", М: "M", Н: "H", О: "O", Р: "P", С: "C", Т: "T", У: "Y", Х: "X" };
+        const plateKey = (v) => String(v).replace(/[\s-]+/g, "").toUpperCase().replace(/[АВЕКМНОРСТУХ]/g, (c) => LOOK[c]);
+        const low = text.toLowerCase(), pk = plateKey(text);
+        const idSet = ids && new Set(ids);
+        const hit = (e) => (!idSet || idSet.has(e.id)) && (!text || String(e.name || "").toLowerCase().includes(low) || e.id === text || (u.kind === "platelist" && pk !== "" && e.plate != null && plateKey(e.plate).includes(pk)));
+        const rows = (props(u).entries || []).filter(hit);
+        const start = cur.at === null ? off : cur.at;
+        const body = { items: rows.slice(start, start + limit).map(clone), total: rows.length, offset: start };
+        if (start + limit < rows.length) body.nextCursor = cursorMake(scope, start + limit, cur.exp);
+        return { status: 200, body };
       }],
       ["GET", "/units/{uid}/schema", (p) => {
         const u = store.get(p.uid);

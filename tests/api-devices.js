@@ -38,6 +38,7 @@
     ["analyticsKind", "profile:vms.detector/1"],
     ["Свойства детектора и поддетектора", "profile:vms.detector/1"],
     ["Списки лиц и номеров у детектора", "profile:vms.detector/1"],
+    ["Записи списков лиц и номеров", "mechanism"],
     ["Источник:", "profile:vms.pos/1"],
     ["Правило: событие text", "profile:vms.pos/1"],
     ["Единица СКУД", "profile:vms.acs/1"],
@@ -1040,6 +1041,91 @@
     const cleared = await env.ok("PATCH", U(face.uid), { properties: { checkLists: null, lists: null } }, v(await get(env, face.uid)));
     assert.eq(["lists", "checkLists"].filter((n) => n in cleared.properties), [], "null снимает");
   }, { needs: ["createUnits", "patchUnit", "deleteUnit", "kind:det", "kind:facelist", "kind:platelist", "prop:det.lists"], layer: "profile:vms.detector/1", since: "1.5" });
+
+  // Контракт 0.42.0: GET /units/{uid}/entries. Необязательный путь: система без listUnitEntries читает properties.entries, как в 0.41.0
+  test("Записи списков лиц и номеров (0.42.0): страницы по offset и по cursor, total, q, ids, entryCount; отказы", async () => {
+    const env = await makeEnv();
+    const lists = await env.pages("/units?kind=facelist,platelist&limit=100");
+    const faces = lists.find((l) => l.name === "Сотрудники"), plates = lists.find((l) => l.name === "Автопарк");
+    const E = (l, qs) => `/units/${l.uid}/entries${qs ? "?" + qs : ""}`;
+    // Страницы по offset: total — всех записей списка, offset — индекс первой записи страницы
+    const all = (await get(env, faces.uid)).properties.entries;
+    const p0 = await env.ok("GET", E(faces, "limit=100"));
+    assert.eq([p0.items.length, p0.total, p0.offset, typeof p0.nextCursor], [100, 240, 0, "string"], "первая страница");
+    const p2 = await env.ok("GET", E(faces, "limit=100&offset=200"));
+    assert.eq([p2.items.length, p2.total, p2.offset, "nextCursor" in p2], [40, 240, 200, false], "последняя страница: 40 записей, курсора нет");
+    assert.eq(p2.items, all.slice(200), "записи страницы — те же, что в properties.entries");
+    const dflt = await env.ok("GET", E(faces));
+    assert.eq([dflt.items.length, dflt.offset], [200, 0], "limit по умолчанию 200");
+    const past = await env.ok("GET", E(faces, "offset=5000"));
+    assert.eq([past.items, past.total, past.offset], [[], 240, 5000], "смещение за концом — пустые items, не ошибка");
+    // Обход по cursor даёт те же записи, что обход по offset
+    const byCursor = [];
+    let page = await env.ok("GET", E(faces, "limit=70"));
+    for (let n = 0; n < 10; n++) {
+      byCursor.push(...page.items);
+      if (!page.nextCursor) break;
+      page = await env.ok("GET", E(faces, `limit=70&cursor=${encodeURIComponent(page.nextCursor)}`));
+    }
+    const byOffset = [];
+    for (let o = 0; o < 240; o += 70) byOffset.push(...(await env.ok("GET", E(faces, `limit=70&offset=${o}`))).items);
+    assert.eq([byCursor.length, byCursor], [240, byOffset], "обход по cursor равен обходу по offset");
+    assert.eq(new Set(byCursor.map((x) => x.id)).size, 240, "id записей не повторяются");
+    // Поиск лиц: имя без учёта регистра, id целиком
+    const first = all[0];
+    const up = await env.ok("GET", E(faces, `q=${encodeURIComponent(first.name.toUpperCase())}&limit=1000`));
+    const lo = await env.ok("GET", E(faces, `q=${encodeURIComponent(first.name.toLowerCase())}&limit=1000`));
+    const want = all.filter((x) => x.name.toLowerCase().includes(first.name.toLowerCase()));
+    assert.eq([up.items.map((x) => x.id), lo.total], [want.map((x) => x.id), want.length], "q: регистр не важен");
+    assert.eq((await env.ok("GET", E(faces, "q=f-0102"))).items.map((x) => x.id), ["f-0102"], "q равен id");
+    assert.eq((await env.ok("GET", E(faces, "q=f-010"))).total, 0, "часть id — не совпадение");
+    const sp = await env.ok("GET", E(faces, "q=%20%20"));
+    assert.eq(sp.total, 240, "q из пробелов — без отбора");
+    const miss = await env.ok("GET", E(faces, "q=%D0%AF%D0%AF%D0%AF%D0%AF"));
+    assert.eq([miss.items, miss.total, miss.offset], [[], 0, 0], "ничего не нашлось");
+    const sub = await env.ok("GET", E(faces, `q=${encodeURIComponent(first.name.toLowerCase())}&limit=1&offset=${want.length - 1}`));
+    assert.eq([sub.total, sub.offset, sub.items.map((x) => x.id)], [want.length, want.length - 1, [want[want.length - 1].id]], "offset считают в отобранном наборе");
+    // Номера: кириллица и латиница, пробелы и дефисы
+    const pl = (await get(env, plates.uid)).properties.entries;
+    assert.eq((await env.ok("GET", E(plates))).total, 120, "в списке номеров 120 записей");
+    const norm = (v) => String(v).replace(/[\s-]+/g, "").toUpperCase().replace(/[АВЕКМНОРСТУХ]/g, (c) => "ABEKMHOPCTYX"["АВЕКМНОРСТУХ".indexOf(c)]);
+    const wantP = pl.filter((x) => norm(x.plate).includes("A123BC")).map((x) => x.id);
+    assert.ok(wantP.includes("p-0101"), "ожидание: А123ВС77 подходит");
+    for (const qq of ["A123BC", "а123вс", "a 123-bc", "А123ВС 77", "a123bc77"]) {
+      const r = await env.ok("GET", E(plates, `q=${encodeURIComponent(qq)}&limit=1000`));
+      const wantQ = pl.filter((x) => norm(x.plate).includes(norm(qq))).map((x) => x.id);
+      assert.eq([r.items.map((x) => x.id), r.total], [wantQ, wantQ.length], `номер по q «${qq}»`);
+      assert.ok(r.items.some((x) => x.id === "p-0101"), `«${qq}» находит p-0101`);
+      assert.eq(r.items.find((x) => x.id === "p-0101").plate, "А123ВС77", "plate записи без изменений");
+    }
+    assert.eq("plate" in (await env.ok("GET", E(faces, "limit=1"))).items[0], false, "у списка лиц plate нет");
+    assert.eq((await env.ok("GET", E(faces, "q=A123BC"))).total, 0, "у списка лиц номер не ищут");
+    // ids: в порядке списка, неизвестные пропущены
+    const ids = await env.ok("GET", E(faces, "ids=f-0103,f-0101,нет-такой"));
+    assert.eq([ids.items.map((x) => x.id), ids.total], [["f-0101", "f-0103"], 2], "ids: только названные, в порядке списка");
+    const tooMany = await env.call("GET", E(faces, "ids=" + Array.from({ length: 201 }, (_, i) => "x" + i).join(",")));
+    assert.status(tooMany, 422, "VALIDATION_FAILED");
+    assert.eq(tooMany.body.field, "ids", "field ids");
+    assert.eq((await env.ok("GET", E(faces, "ids=" + all.slice(0, 200).map((x) => x.id).join(",") + "&limit=1000"))).total, 200, "200 id — можно");
+    // Отказы
+    const both = await env.call("GET", E(faces, `limit=10&offset=10&cursor=${encodeURIComponent(p0.nextCursor)}`));
+    assert.status(both, 422, "VALIDATION_FAILED");
+    assert.eq([both.body.field, both.body.params.reason], ["offset", "withCursor"], "offset вместе с cursor");
+    assert.status(await env.call("GET", E(faces, "cursor=чужой")), 422, "INVALID_CURSOR");
+    assert.status(await env.call("GET", E(faces, `limit=100&q=zzz&cursor=${encodeURIComponent(p0.nextCursor)}`)), 422, "INVALID_CURSOR");
+    assert.status(await env.call("GET", E(faces, "limit=0")), 422, "VALIDATION_FAILED");
+    assert.status(await env.call("GET", E(faces, "offset=-1")), 422, "VALIDATION_FAILED");
+    const other = await env.call("GET", `/units/${cam.id}/entries`);
+    assert.status(other, 422, "NOT_SUPPORTED");
+    assert.eq(other.body.field, "/kind", "field /kind у камеры");
+    assert.status(await env.call("GET", "/units/00000000-0000-4000-8000-000000000000/entries"), 404, "NOT_FOUND");
+    // entryCount равен total без q
+    for (const l of lists) {
+      const u = await get(env, l.uid), n = (await env.ok("GET", E(l))).total;
+      assert.eq([u.properties.entryCount, u.properties.entryCount === (u.properties.entries || []).length], [n, true], `entryCount «${l.name}» равен total`);
+    }
+    assert.eq(lists.map((l) => l.properties.entryCount), lists.map((l) => (l.properties.entries || []).length), "entryCount и в перечне /units");
+  }, { needs: ["listUnitEntries", "kind:facelist", "kind:platelist"] });
 
   test("Поддетектор 0.15.0: stripe — линия или ломаная; свой objectSize; диапазон multi; lostObjectType; свои extraZones; direction у a2a", async () => {
     const env = await makeEnv();

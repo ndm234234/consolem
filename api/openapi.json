@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Конфигуратор — API",
-    "version": "0.41.0",
+    "version": "0.42.0",
     "description": "Контракт конфигуратора: всё, что интерфейс читает и меняет. Источник истины: встроенный сервер прототипа (api/server.js) и бэкенд отвечают по нему. Договорённости — api/README.md: версии записей (ETag / If-Match, 428, 412), ошибки application/problem+json с машинным code, групповые операции с частичным успехом и idempotencyKey, поток событий SSE. Система может поддерживать не весь контракт: что она умеет — GET /reference → capabilities; остальные операции отвечают 404 NO_ROUTE, неподдержанные виды устройств и настройки — 422 NOT_SUPPORTED. Операции с тегом test-support есть только на тестовом стенде. Форма работает с одним адресом входа, другой — только если этот недоступен. Список операций, откат и память idempotencyKey у каждого адреса свои: после 5xx и смены адреса запись сперва перечитывается. Версия одной записи на разных адресах может отличаться: 412 и перечитывание. У изменений чужого кластера at — время, когда их увидели.",
     "license": {
       "name": "Внутренний документ",
@@ -6913,6 +6913,96 @@
         }
       },
       "x-layer": "vms.timeline/1"
+    },
+    "/units/{uid}/entries": {
+      "get": {
+        "operationId": "listUnitEntries",
+        "tags": [
+          "hardware"
+        ],
+        "summary": "Записи списка лиц или номеров: страницы и поиск",
+        "description": "Необязательная операция (с 0.42.0): бэкенд может не объявить её в capabilities.operations, тогда клиент читает properties.entries объекта, как в 0.41.0. Записи списка (вид facelist или platelist) страницами, с поиском и переходом по смещению. Нет объекта — 404 NOT_FOUND; вид не facelist и не platelist — 422 NOT_SUPPORTED, field /kind. field отказа — JSON Pointer.\n\nОбщее правило страницы: limit, cursor, ответ {items, nextCursor?}; пустые items при живом nextCursor законны. Отличия: total — точное число записей, подходящих под q и ids (список — синхронный снимок, не оценка); offset — смещение первой записи страницы в отобранном наборе; страницы по номеру берут через offset (при cursor offset не задают — 422 VALIDATION_FAILED, field offset, params.reason withCursor). Смещение за концом — пустые items, не ошибка. Курсор держит версию списка: после синхронизации (новая version объекта) прежний курсор — 422 INVALID_CURSOR, читать с начала; offset версию не держит.\n\nq: запись подходит, если name содержит q без учёта регистра, или id равен q; у platelist ещё если plate содержит q после приведения обеих сторон: без пробелов и «-», в верхнем регистре, кириллические А В Е К М Н О Р С Т У Х заменены латинскими A B E K M H O P C T Y X. Пустой q или из пробелов — без отбора. ids — id записей через запятую, не больше 200 (больше — 422 VALIDATION_FAILED, field ids): только эти записи в порядке списка, неизвестные пропускаются без ошибки; пустой ids — без отбора, как пустой q. id записи без запятой.",
+        "parameters": [
+          {
+            "name": "uid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "uid списка (вид facelist или platelist)"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            },
+            "description": "Сколько записей на странице, по умолчанию 200"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "description": "Смещение первой записи в отобранном наборе, по умолчанию 0. Вместе с cursor — 422 VALIDATION_FAILED, field offset, params.reason withCursor"
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "nextCursor прошлой страницы как есть. Просроченный или чужой — 422 INVALID_CURSOR, читать с начала"
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Поиск по записям; правила — в описании операции"
+          },
+          {
+            "name": "ids",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "id записей через запятую, не больше 200; пустой — без отбора"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Готово",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListEntryPage"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
     },
     "/units/{uid}/bookmarks": {
       "get": {
@@ -20418,6 +20508,60 @@
             "type": "integer",
             "minimum": 0,
             "description": "Сколько камер круг не прочитал: больше 0 — интерфейс пишет «данные неполные». Нет поля — круг прочитал все"
+          }
+        }
+      },
+      "ListEntry": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name"
+        ],
+        "description": "С 0.42.0. Запись списка лиц или номеров",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Код записи в облаке"
+          },
+          "name": {
+            "type": "string"
+          },
+          "plate": {
+            "type": "string",
+            "description": "Номер; только в списке номеров"
+          }
+        }
+      },
+      "ListEntryPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "total",
+          "offset"
+        ],
+        "description": "С 0.42.0. Страница записей списка",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ListEntry"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Точное число записей, подходящих под q и ids (список — синхронный снимок)"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Смещение items[0] в отобранном наборе"
+          },
+          "nextCursor": {
+            "type": "string",
+            "description": "Есть — читать дальше. Нет — конец"
           }
         }
       }
