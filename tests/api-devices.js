@@ -39,6 +39,7 @@
     ["Свойства детектора и поддетектора", "profile:vms.detector/1"],
     ["Списки лиц и номеров у детектора", "profile:vms.detector/1"],
     ["Записи списков лиц и номеров", "mechanism"],
+    ["Счётчик посетителей", "profile:vms.detector/1"],
     ["Источник:", "profile:vms.pos/1"],
     ["Правило: событие text", "profile:vms.pos/1"],
     ["Единица СКУД", "profile:vms.acs/1"],
@@ -1157,6 +1158,43 @@
     }
     assert.eq(lists.map((l) => l.properties.entryCount), lists.map((l) => (l.properties.entries || []).length), "entryCount и в перечне /units");
   }, { needs: ["listUnitEntries", "kind:facelist", "kind:platelist"] });
+
+  // С профиля vms.detector/1 1.8 (пункт F121): счётчик посетителей — секторы zone (область 1) и zoneTo (область 2),
+  // счёт людей в помещении; события visitor.in, visitor.out, indoor.over из x-events
+  test("Счётчик посетителей (1.8): секторы zone и zoneTo, счёт людей в помещении; у другого семейства — 422 notCounter, зона линией — 422 shape; события входа и выхода", async () => {
+    const env = await makeEnv();
+    const ak = (await env.ok("GET", "/kinds/det")).schema.properties.analyticsKind;
+    assert.ok(ak.enum.includes("visitorsCounter") && ak["x-enum-labels"].visitorsCounter.text, "visitorsCounter — значение с подписью");
+    assert.eq(ak["x-events"].visitorsCounter, ["visitor.in", "visitor.out", "indoor.over"], "x-events: вход, выход, порог");
+    const camEv = new Set((await env.ok("GET", "/kinds/camera")).events.map((e) => e.id));
+    ["visitor.in", "visitor.out", "indoor.over"].forEach((e) => assert.ok(camEv.has(e), `${e} — событие вида camera`));
+    const a = { shape: "polygon", points: [[0.2, 0.2], [0.8, 0.2], [0.8, 0.5], [0.2, 0.5]] }, b = { points: [[0.2, 0.5], [0.8, 0.5], [0.8, 0.8], [0.2, 0.8]] };
+    const vc = await addDet(env, camU, "Счётчик", { detectorKind: "other", analyticsKind: "visitorsCounter", zone: a, zoneTo: b, indoorCount: true, indoorMax: 50, indoorStart: 3 });
+    assert.eq([vc.properties.zoneTo, vc.properties.indoorCount, vc.properties.indoorMax, vc.properties.indoorStart], [b, true, 50, 3], "создан с секторами и счётом");
+    // Смена секторов местами — обмен точками
+    const sw = await env.ok("PATCH", U(vc.uid), { properties: { zone: { shape: "polygon", points: b.points }, zoneTo: { points: a.points } } }, v(vc));
+    assert.eq([sw.properties.zone.points, sw.properties.zoneTo.points], [b.points, a.points], "секторы поменялись местами");
+    const line = await props(env, sw, { zone: { shape: "line", points: [[0.1, 0.5], [0.9, 0.5]] } });
+    field(line, "VALIDATION_FAILED", P("zone"), "зона счётчика линией");
+    assert.eq(line.body.params.reason, "shape", "reason: shape");
+    field(await props(env, sw, { zoneTo: { points: [[0, 0], [1, 1]] } }), "VALIDATION_FAILED", P("zoneTo/points"), "две точки — отказ схемы", 422);
+    field(await props(env, sw, { indoorMax: 100001 }), "VALIDATION_FAILED", P("indoorMax"), "порог выше 100000 — отказ схемы");
+    // Другое семейство
+    const mo = await addDet(env, camU, "Движение без секторов", { detectorKind: "motion", sensitivity: 10 });
+    for (const [name, val] of [["zoneTo", b], ["indoorCount", true], ["indoorMax", 10], ["indoorStart", 0]]) {
+      const r = await props(env, mo, { [name]: val });
+      field(r, "VALIDATION_FAILED", P(name), `${name} у детектора движения`);
+      assert.eq(r.body.params.reason, "notCounter", `${name}: reason notCounter`);
+    }
+    assert.eq(await failedOf(env, det(camU, "Трекер с сектором", { detectorKind: "other", analyticsKind: "tracker", zoneTo: b })), [["VALIDATION_FAILED", P("zoneTo")]], "и при создании");
+    // Смена семейства хранимые секторы не трогает
+    const moved = await env.ok("PATCH", U(sw.uid), { properties: { analyticsKind: "queue" } }, v(sw));
+    assert.eq(moved.properties.zoneTo, { points: a.points }, "семейство сменено, zoneTo на месте");
+    // События входа, выхода и порога; чужой код — 422
+    const vc2 = await addDet(env, camU, "Счётчик 2", { detectorKind: "other", analyticsKind: "visitorsCounter" });
+    for (const id of ["visitor.in", "visitor.out", "indoor.over", "other"]) assert.status(await env.call("POST", "/test/events", { type: "unit.event", deviceId: vc2.uid, eventId: id, match: {} }), 200, null, id);
+    assert.status(await env.call("POST", "/test/events", { type: "unit.event", deviceId: vc2.uid, eventId: "fire", match: {} }), 422, "VALIDATION_FAILED", "fire у счётчика — отказ");
+  }, { needs: ["createUnits", "patchUnit", "kind:det", "kind:camera", "prop:det.zoneTo", "testEvent"], layer: "profile:vms.detector/1", since: "1.8" });
 
   test("Поддетектор 0.15.0: stripe — линия или ломаная; свой objectSize; диапазон multi; lostObjectType; свои extraZones; direction у a2a", async () => {
     const env = await makeEnv();

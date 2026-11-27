@@ -8072,6 +8072,39 @@
      }
     },
     {
+     "id": "visitor.in",
+     "label": {
+      "key": "event.visitor.in",
+      "text": "Детектор: посетитель вошёл",
+      "lang": "ru"
+     },
+     "right": {
+      "level": "FULL"
+     }
+    },
+    {
+     "id": "visitor.out",
+     "label": {
+      "key": "event.visitor.out",
+      "text": "Детектор: посетитель вышел",
+      "lang": "ru"
+     },
+     "right": {
+      "level": "FULL"
+     }
+    },
+    {
+     "id": "indoor.over",
+     "label": {
+      "key": "event.indoor.over",
+      "text": "Детектор: людей в помещении больше порога",
+      "lang": "ru"
+     },
+     "right": {
+      "level": "FULL"
+     }
+    },
+    {
      "id": "alarm.raised",
      "label": {
       "key": "event.alarm.raised",
@@ -10311,7 +10344,8 @@
        "unattendedMoney",
        "floatingObjects",
        "operatorControl",
-       "humanTracker"
+       "humanTracker",
+       "visitorsCounter"
       ],
       "x-enum-labels": {
        "tracker": {
@@ -10418,9 +10452,14 @@
         "key": "enum.analyticsKind.humanTracker",
         "text": "Трекер людей",
         "lang": "ru"
+       },
+       "visitorsCounter": {
+        "key": "enum.analyticsKind.visitorsCounter",
+        "text": "Счётчик посетителей",
+        "lang": "ru"
        }
       },
-      "description": "С 0.12.0. Вид детектора вне перечня detectorKind; действует только при detectorKind: other. Незнакомое значение клиент показывает как other. С 0.17.0: meta — мета-детектор (поля meta…); faceVA, faceVL, faceTV — детекторы лиц из пакетов распознавания лиц VA, VL и TV. faceTV — старый DetectorPack: с DetectorPack 3.11.1 его заменил детектор лиц VA. С 0.21.0: детекторы лиц разных пакетов (faceTV, faceVA, faceVL) не работают вместе на одном сервере — x-conflicts этого свойства (с 0.30.0; прежнее место — reference.analyticsConflicts); включить такой детектор рядом с включённым несовместимым — 409 BUSY, params.reason: incompatible. С 0.40.0 (версия профиля 1.3): серверные семейства Axxon One — neuralCounter, pose, ppe, fight, fireSmoke, audio, queue, waterLevel, barcode, heatmap, sceneChange, unattendedMoney, floatingObjects, operatorControl. Какие события камеры поднимает детектор этого вида сверх other — расширение `x-events {значение: [коды событий камеры]}` у этого свойства; значения нет в x-events — только other. operatorControl принимает поддетекторы dwell, enter, line (vms.subdetector/1). С версии профиля 1.7: humanTracker — трекер людей (в Axxon One — Human tracker VL): ведёт только людей и принимает поддетекторы (vms.subdetector/1 1.3); событий сверх other не поднимает",
+      "description": "С 0.12.0. Вид детектора вне перечня detectorKind; действует только при detectorKind: other. Незнакомое значение клиент показывает как other. С 0.17.0: meta — мета-детектор (поля meta…); faceVA, faceVL, faceTV — детекторы лиц из пакетов распознавания лиц VA, VL и TV. faceTV — старый DetectorPack: с DetectorPack 3.11.1 его заменил детектор лиц VA. С 0.21.0: детекторы лиц разных пакетов (faceTV, faceVA, faceVL) не работают вместе на одном сервере — x-conflicts этого свойства (с 0.30.0; прежнее место — reference.analyticsConflicts); включить такой детектор рядом с включённым несовместимым — 409 BUSY, params.reason: incompatible. С 0.40.0 (версия профиля 1.3): серверные семейства Axxon One — neuralCounter, pose, ppe, fight, fireSmoke, audio, queue, waterLevel, barcode, heatmap, sceneChange, unattendedMoney, floatingObjects, operatorControl. Какие события камеры поднимает детектор этого вида сверх other — расширение `x-events {значение: [коды событий камеры]}` у этого свойства; значения нет в x-events — только other. operatorControl принимает поддетекторы dwell, enter, line (vms.subdetector/1). С версии профиля 1.7: humanTracker — трекер людей (в Axxon One — Human tracker VL): ведёт только людей и принимает поддетекторы (vms.subdetector/1 1.3); событий сверх other не поднимает. С профиля vms.detector/1 1.8: visitorsCounter — счётчик посетителей: зона zone (rect или polygon) — область 1, zoneTo — область 2; события visitor.in (из области 2 в область 1), visitor.out (из области 1 в область 2) и, при indoorCount, indoor.over",
       "x-conflicts": {
        "faceTV": [
         "faceVA",
@@ -10470,7 +10509,12 @@
         "floating"
        ],
        "operatorControl": [],
-       "humanTracker": []
+       "humanTracker": [],
+       "visitorsCounter": [
+        "visitor.in",
+        "visitor.out",
+        "indoor.over"
+       ]
       }
      },
      "builtin": {
@@ -11348,6 +11392,67 @@
       "maximum": 1800,
       "x-ui-unit": "с",
       "description": "С профиля vms.detector/1 1.6. Трекер объектов (analyticsKind: tracker), при longTimeUnattended: сколько секунд предмет лежит без движения, чтобы трекер счёл его надолго оставленным. Нет поля — 60"
+     },
+     "zoneTo": {
+      "x-label": {
+       "key": "field.detZoneTo",
+       "text": "Область 2",
+       "lang": "ru"
+      },
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "points"
+      ],
+      "properties": {
+       "points": {
+        "type": "array",
+        "minItems": 3,
+        "maxItems": 64,
+        "items": {
+         "type": "array",
+         "minItems": 2,
+         "maxItems": 2,
+         "items": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+         }
+        }
+       }
+      },
+      "description": "С профиля vms.detector/1 1.8. Счётчик посетителей (analyticsKind: visitorsCounter): второй сектор, многоугольник. Зона zone (rect или polygon) — область 1. Посетитель перешёл из области 1 в область 2 — «Выход» (visitor.out), из области 2 в область 1 — «Вход» (visitor.in). Области — два отдельных многоугольника: сервер не проверяет, что они касаются и не пересекаются. Поменять секторы местами — поменять точки zone и zoneTo. Нет поля — сектора 2 нет, детектор не считает"
+     },
+     "indoorCount": {
+      "x-label": {
+       "key": "field.indoorCount",
+       "text": "Считать людей в помещении",
+       "lang": "ru"
+      },
+      "type": "boolean",
+      "description": "С профиля vms.detector/1 1.8. Счётчик посетителей: вход прибавляет единицу к числу людей в помещении, выход отнимает; число выше indoorMax — событие indoor.over. Нет поля — false: только события входа и выхода"
+     },
+     "indoorMax": {
+      "x-label": {
+       "key": "field.indoorMax",
+       "text": "Порог людей в помещении",
+       "lang": "ru"
+      },
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100000,
+      "description": "С профиля vms.detector/1 1.8. Счётчик посетителей, при indoorCount: людей в помещении больше этого числа — событие indoor.over. Нет поля — 10000"
+     },
+     "indoorStart": {
+      "x-label": {
+       "key": "field.indoorStart",
+       "text": "Людей в помещении сейчас",
+       "lang": "ru"
+      },
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100000,
+      "description": "С профиля vms.detector/1 1.8. Счётчик посетителей, при indoorCount: число людей в помещении в момент настройки, от него идёт счёт. Любая правка настроек детектора сбрасывает счёт к этому числу. Нет поля — 0"
      }
     }
    }
@@ -16017,7 +16122,7 @@
     "text": "Детектор",
     "lang": "ru"
    },
-   "version": "1.7",
+   "version": "1.8",
    "uses": [
     {
      "id": "vms.camera/1",
@@ -16052,6 +16157,9 @@
     "extraZones",
     "frameWidth",
     "humanSize",
+    "indoorCount",
+    "indoorMax",
+    "indoorStart",
     "labels",
     "lists",
     "metaDiff",
@@ -16084,7 +16192,8 @@
     "zone",
     "autoSensitivity",
     "longTimeIdleSec",
-    "longTimeUnattended"
+    "longTimeUnattended",
+    "zoneTo"
    ]
   },
   {
@@ -37388,6 +37497,67 @@
      "30000309-0000-4000-8000-000000000000",
      "30000310-0000-4000-8000-000000000000"
     ]
+   },
+   "status": {
+    "link": "online"
+   }
+  },
+  {
+   "uid": "30000013-0074-4000-8000-000000000002",
+   "kind": "det",
+   "parentId": "30000013-0000-4000-8000-000000000000",
+   "domainId": "10000001-0000-4000-8000-000000000000",
+   "name": "Счётчик посетителей",
+   "version": "1",
+   "properties": {
+    "builtin": false,
+    "detectorKind": "other",
+    "enabled": true,
+    "analyticsKind": "visitorsCounter",
+    "zone": {
+     "shape": "polygon",
+     "points": [
+      [
+       0.22,
+       0.45
+      ],
+      [
+       0.38,
+       0.45
+      ],
+      [
+       0.38,
+       0.62
+      ],
+      [
+       0.22,
+       0.62
+      ]
+     ]
+    },
+    "zoneTo": {
+     "points": [
+      [
+       0.22,
+       0.62
+      ],
+      [
+       0.38,
+       0.62
+      ],
+      [
+       0.38,
+       0.76
+      ],
+      [
+       0.22,
+       0.76
+      ]
+     ]
+    },
+    "indoorCount": true,
+    "indoorMax": 20,
+    "indoorStart": 12
    },
    "status": {
     "link": "online"

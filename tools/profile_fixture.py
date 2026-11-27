@@ -81,7 +81,9 @@ DROP_PROPS = {"det": ["analyticsKind", "extraZones", "direction", "objectSize", 
   # Профиль vms.detector/1 1.5: сверка со списками лиц и номеров (пункт C17)
   "checkLists", "lists",
   # Профиль vms.detector/1 1.6: трекер для поддетектора «Оставленный предмет» (замечания det-760, det-761)
-  "autoSensitivity", "longTimeUnattended", "longTimeIdleSec"]}
+  "autoSensitivity", "longTimeUnattended", "longTimeIdleSec",
+  # Профиль vms.detector/1 1.8: секторы и счёт людей в помещении у счётчика посетителей (пункт F121)
+  "zoneTo", "indoorCount", "indoorMax", "indoorStart"]}
 # Виды, чьи события и действия правил система профиля объявляет, хотя объектов этих видов у неё нет (вход датчика io.input,
 # текст источника, событие и команда единицы СКУД, выход реле) — редактор правил их предлагает. Каталог правил — из описаний
 # видов, поэтому описания остаются, но завести такой объект нельзя: без create и createParents, без x-ui-category (в мастере их нет)

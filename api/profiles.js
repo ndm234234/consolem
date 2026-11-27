@@ -1523,17 +1523,30 @@
     }
     return null;
   };
+  // С профиля 1.8: счётчик посетителей (analyticsKind: visitorsCounter) — секторы zone (область 1) и zoneTo
+  // (область 2), счёт людей в помещении. У другого семейства этих полей нет; zone у счётчика — rect или polygon, не линия.
+  // Судим только поля, которые задаёт запрос: смена семейства хранимые значения не трогает. {field, params} или null
+  const COUNTER_FIELDS = ["zoneTo", "indoorCount", "indoorMax", "indoorStart"];
+  const isCounter = (p) => p.detectorKind === "other" && !p.builtin && p.analyticsKind === "visitorsCounter";
+  const counterErr = (whole, set) => {
+    const asked = COUNTER_FIELDS.filter((k) => set[k] != null);
+    if (!asked.length && !(isCounter(whole) && set.zone != null)) return null;
+    if (!isCounter(whole)) return asked.length ? { field: `/properties/${asked[0]}`, params: { reason: "notCounter" } } : null;
+    const shape = (whole.zone || {}).shape;
+    return shape === "line" || shape === "polyline" ? { field: "/properties/zone", params: { reason: "shape" } } : null;
+  };
   const settingsErr = (whole, set, ctx) => {
     if (!whole) return null;
     // Списки судим, только когда запрос их задаёт: смена семейства (старый клиент шлёт detectorKind и analyticsKind: null) хранимые lists не трогает
-    const bad = rangeErr(whole, "objectSize") || rangeErr(whole, "plateWidth") || rangeErr(whole, "objectSpeed") || frontEdgeErr(whole) || scanErr(whole.scanWindow) || (set && (set.lists != null || set.checkLists != null) ? listsErr(whole, ctx) : null);
+    const bad = rangeErr(whole, "objectSize") || rangeErr(whole, "plateWidth") || rangeErr(whole, "objectSpeed") || frontEdgeErr(whole) || scanErr(whole.scanWindow) || (set && (set.lists != null || set.checkLists != null) ? listsErr(whole, ctx) : null) || (set ? counterErr(whole, set) : null);
     if (bad) return bad;
     return set.analyticsKind != null && whole.detectorKind !== "other" ? { field: "/properties/analyticsKind", params: { reason: "notOther" } } : null;
   };
   const settingsProblem = (whole, set, ctx) => {
     const e = settingsErr(whole, set, ctx);
     const text = { minAboveMax: "Наименьшее значение выше наибольшего", frontEdge: "Передняя сторона: номер меньше числа точек зоны", stepAboveWindow: "Шаг окна больше самого окна",
-      notFamily: "Списки есть только у детектора лиц и детектора номеров", unknownList: "Такого списка нет", wrongKind: "Список не того вида: у детектора лиц — список лиц, у детектора номеров — список номеров" };
+      notFamily: "Списки есть только у детектора лиц и детектора номеров", unknownList: "Такого списка нет", wrongKind: "Список не того вида: у детектора лиц — список лиц, у детектора номеров — список номеров",
+      notCounter: "Секторы и счёт людей в помещении есть только у счётчика посетителей", shape: "Зона счётчика посетителей — прямоугольник или многоугольник, не линия" };
     return e ? ctx.problem(422, "VALIDATION_FAILED", text[e.params.reason] || "Вид аналитики задают только при detectorKind: other", e) : null;
   };
   const detProblem = (rec, patch, ctx) => (rec.type === "det" ? zoneProblem(patch.zone, ctx) || sensProblem(rec, patch.sensitivity, null, ctx) : null);
