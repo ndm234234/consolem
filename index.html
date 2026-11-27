@@ -18752,7 +18752,21 @@ const DW_CLS={person:"Человек",car:"Машина",bike:"Велосипе�
 const DW_SUBC=["#c084fc","#f59e0b","#22d3ee","#f472b6"];
 // ── Поддетекторы, как в Axxon One: детектор находит объекты, поддетектор решает, когда сработать ──
 // Поддетектор — объект вида subdet под детектором (профиль vms.subdetector/1): свой uid, версия, события и удаление
-const DW_SUBP=new Set(["motion","tracker","neural","operatorControl"]);
+// Виды окна (dwKindOf), у которых тонкая настройка ведёт поддетекторы: кто их принимает, решает dwHasSubs
+// Пункт F122: и лица (face), номера (lpr), серверные семейства (other: позы, СИЗ, штрихкод)
+const DW_SUBP=new Set(["motion","tracker","neural","operatorControl","face","lpr","other"]);
+// Родители поддетекторов по профилю vms.subdetector/1 1.2 — пока сервер не ответил GET /units/{uid}/creatable
+// humanTracker — трекер людей (Human tracker VL в Axxon One), профиль vms.detector/1 1.7 и vms.subdetector/1 1.3
+const DW_SUBH=new Set(["tracker","neural","operatorControl","pose","ppe","barcode","faceTV","faceVA","faceVL","humanTracker"]);
+// Сервер с профилем ниже 1.2 — прежние родители: движение, трекер, нейросетевой трекер, контроль оператора
+function dwSubHost(d){
+  const code=DET_KIND_CODE[d.kind],v=profileVer(KIND_PROFILES.get("vms.subdetector/1"));
+  if(code==="motion")return true;
+  if(v&&profileVerCmp(v,"1.2")<0)return code==="other"&&["tracker","neural","operatorControl"].includes(d.analyticsKind);
+  return code==="lpr"||(code==="other"&&DW_SUBH.has(d.analyticsKind));
+}
+// Без окна и сработок: вид окна other (семейство без своего окна), если у детектора нет поддетекторов
+function dwNoFrame(d,k){return k==="other"&&!dwHasSubs(d)}
 const DW_SUBK=[
   ["line","Пересечение линии","Объект пересёк линию в выбранном направлении."],
   ["enter","Вход в область","Объект вошёл в область."],
@@ -18767,22 +18781,33 @@ const DW_SUBK=[
 const DW_SUBN=Object.fromEntries(DW_SUBK.map(([k,n])=>[k,n]));
 LU["list-tree"]='<path d="M21 12h-8"/><path d="M21 6H8"/><path d="M21 18h-8"/><path d="M3 6v4c0 1.1.9 2 2 2h3"/><path d="M3 10v6c0 1.1.9 2 2 2h3"/>';
 // Виды поддетектора — из GET /units/{uid}/creatable (schema вида subdet, суженная под детектор, контракт 0.40.0).
-// Ответа ещё нет или сервер схему не сузил — прежнее правило: «Оставленный предмет» только у трекера
+// Ответа ещё нет или сервер схему не сузил — прежнее правило: «Оставленный предмет» только у трекера.
+// Строка subdet с allowed: false (профиль vms.subdetector/1 1.2) — пустой перечень: детектор поддетекторов не принимает
+// Ответ — по виду детектора в момент запроса: вид сменили — ответ устарел, его спрашивают снова (id → {key, en})
 const DW_SUB_OK=new Map();
-function dwSubKinds(k,id){const ok=DW_SUB_OK.get(id);return DW_SUBK.filter(([x])=>ok?ok.includes(x):x!=="abandoned"||k==="tracker")}
+function dwSubOkKey(d){return`${d.kind}|${d.analyticsKind||""}`}
+function dwSubOkOf(d){const e=d&&DW_SUB_OK.get(d.id);return e&&e.key===dwSubOkKey(d)?e.en:null}
+// До ответа — виды по профилю: у лиц и контроля оператора только линия, вход и пребывание
+const DW_SUB_ONLY={operatorControl:["line","enter","dwell"],face:["line","enter","dwell"]};
+function dwSubKinds(k,id){const ok=dwSubOkOf(detNodeOf(id));return DW_SUBK.filter(([x])=>ok?ok.includes(x):DW_SUB_ONLY[k]?DW_SUB_ONLY[k].includes(x):x!=="abandoned"||k==="tracker")}
 async function dwSubOkLoad(id){
-  if(!id||DW_SUB_OK.has(id))return;
+  const d=id&&detNodeOf(id);if(!d||dwSubOkOf(d))return;
+  const key=dwSubOkKey(d);
   try{
     const row=((await API.get(`/units/${id}/creatable`)).items||[]).find(x=>isSubdetKind(x.kind));
-    const en=row?.schema?.properties?.subdetectorKind?.enum;
-    if(Array.isArray(en)){DW_SUB_OK.set(id,en);if(dw.subNew&&sel===id)gear()}
+    const en=row&&row.allowed===false?[]:row?.schema?.properties?.subdetectorKind?.enum;
+    if(!Array.isArray(en))return;
+    const n=detNodeOf(id)||d,was=dwHasSubs(n);
+    DW_SUB_OK.set(id,{key,en});
+    if(sel===id&&(dw.subNew||was!==dwHasSubs(n)))gear();
   }catch(e){}
 }
-// Поддетекторы есть у видов из DW_SUBP, если сервер знает вид с vms.subdetector/1 и его можно создавать
+// Поддетекторы есть, если сервер знает вид с vms.subdetector/1 и его можно создавать, а детектор их принимает: по ответу
+// creatable, а до ответа — по профилю (dwSubHost)
 function dwSubsOk(){return profileKinds("vms.subdetector/1").some(k=>kindCan(k,"create"))}
 // Вид поддетектора — по профилю; описаний нет — по коду subdet
 function isSubdetKind(kind){return KINDS.size?profileKinds("vms.subdetector/1").includes(kind):kind==="subdet"}
-function dwHasSubs(d){return DW_SUBP.has(dwKindOf(d))&&dwSubsOk()}
+function dwHasSubs(d){const ok=dwSubOkOf(d);return(ok?ok.length>0:dwSubHost(d))&&dwSubsOk()}
 // Поддетекторы в кэше — дочерние узлы детектора вида с vms.subdetector/1 (узел по схеме вида: свойства в props)
 function dwSubUnits(d){return(d.devices||[]).filter(x=>isSubdetKind(nodeKind(x)))}
 function dwSubNew(kind,name,id){
@@ -19108,7 +19133,7 @@ function dwEval(c,k){
       let n=0;for(const o of sc){if(o.t0>t)break;if(o.cls!=="person"||t>o.t1)continue;const pos=dwAt(o,t);if(pos&&!dwWhy(c,k,o,pos))n++}
       if(n>=c.count){run++;if(armed&&run>=c.hold){armed=false;fires.push({t,n})}}else{run=0;armed=true}
     }
-  }else if(k!=="other")sc.forEach(o=>dwObjFires(c,k,o).forEach(f=>{f.o=o;fires.push(f);if(!byObj.has(o.id))byObj.set(o.id,[]);byObj.get(o.id).push(f)}));
+  }else if(k!=="other"||c.subs.length)sc.forEach(o=>dwObjFires(c,k,o).forEach(f=>{f.o=o;fires.push(f);if(!byObj.has(o.id))byObj.set(o.id,[]);byObj.get(o.id).push(f)}));
   // «Множество объектов» считает объекты всей сцены, а не один объект
   if(DW_SUBP.has(k))c.subs.filter(s=>s.on&&s.kind==="multi").forEach(s=>{
     let armed=true;
@@ -19301,7 +19326,7 @@ function dwPolySvg(){
     p.pts.map((q,i)=>`<circle class="dw-pd${i===0&&close?" first":""}" cx="${(q[0]*DW_X).toFixed(1)}" cy="${(q[1]*DW_Y).toFixed(1)}" r="${i===0&&close?2.2:1.3}" style="--c:${col}"/>`).join("");
 }
 function dwGeoSvg(d){
-  const k=dwKindOf(d);if(k==="other")return"";
+  const k=dwKindOf(d);if(dwNoFrame(d,k))return"";
   const c=dwC(d);let h="";
   // Фокус кадра: ярко и с ручками — объект, открытый в панели; остальные — бледно, без подписей, щелчок не ловят
   const fo=dwFocusKey(d,c),dd=fo!=="det";
@@ -19369,7 +19394,7 @@ function dwSilSvg(o,pos){
 // Сколько секунд подряд объект уже выполняет условие: для подписи «в зоне 8 с из 20»
 function dwRun(o,t,test,max){let n=0;for(let s=Math.floor(t);s>=o.t0&&n<=max;s--){const p=dwAt(o,s);if(!p||!test(p,s))break;n++}return n}
 function dwObjSvg(d,t){
-  const k=dwKindOf(d);if(k==="other")return"";
+  const k=dwKindOf(d);if(dwNoFrame(d,k))return"";
   const c=dwC(d),E=dwEval(c,k);let sil="",box="",inZone=0,nOk=0;
   for(const o of dwScene()){
     if(o.t0>t)break;if(t>o.t1)continue;
@@ -19436,7 +19461,7 @@ function dwFiresIn(c,k,A,B){
 function dwPv(v){dw.pv=v;const p=dwRoot()?.querySelector("[data-dw-prev]"),d=dwD();if(p&&d)p.innerHTML=dwPrevHtml(d)}
 function dwPrevHtml(d){
   const k=dwKindOf(d);
-  if(k==="other")return`<div class="dw-prev-h"><b>${i18n("Сработки")}</b></div><p class="sub">${i18n("Для этого вида превью пока нет.")}</p>`;
+  if(dwNoFrame(d,k))return`<div class="dw-prev-h"><b>${i18n("Сработки")}</b></div><p class="sub">${i18n("Для этого вида превью пока нет.")}</p>`;
   const pv=dw.pv||"cmp";
   const tabs=`<span class="dw-seg dw-pv">${[["cmp","Сработки до и после новых настроек"],["live","Лента сработок"]].map(([v,l])=>`<button type="button" class="${pv===v?"on":""}" ${onEv("click",["dwPv",v])}>${i18n(l)}</button>`).join("")}</span>`;
   if(pv==="live"){
@@ -19880,7 +19905,7 @@ function dwDiffRows(d){
 // Нижняя полоса карточки: та же, что у карточки объекта — «Не применено: N · Сбросить · Показать план»
 function dwFootHtml(){
   if(app!=="hw")return null;
-  const n=find(sel)?.n;if(!n||!handOf(n,"det")||dwKindOf(n)==="other")return null;
+  const n=find(sel)?.n;if(!n||!handOf(n,"det")||dwNoFrame(n,dwKindOf(n)))return null;
   // Правки полей контракта («Включён», «Дополнительно») идут прежним черновиком карточки (cardDiff) — их строки тоже здесь
   const d=[...dwDiffRows(n),...dwCardRows(n)];
   if(dw.sent[n.id])return`<div class="main-actions bk-foot card-foot" id="cardFoot"><span class="sub bk-foot-text">${i18n("Консоль применяет изменения. Править настройки можно после конца операции.")}</span></div>`;
@@ -20447,6 +20472,8 @@ function dwPanelHtml(cam,d,k,c){
   if(hasR)tl.push(["rules","Автоматизация",`<span class="dw-sec-n">${ruleUsersOfId(d.id).length}</span>`]);
   const tabs=tl.length>1?`<div class="tabs dw-ptabs" role="tablist">${tl.map(([v,l,x])=>`<button type="button" role="tab" class="tab${ptab===v?" on":""}" aria-selected="${ptab===v}" data-dw-ptab="${v}" ${onEv("click",["dwPtabSet",v])}>${i18n(l)}${x}</button>`).join("")}</div>`:"";
   if(ptab==="rules")return head+tabs+`<section class="dw-sec dw-rules">${ruleUsesCardHtml(d)}</section>`;
+  // Пункт F122: у лиц и серверных семейств (позы, СИЗ, штрихкод) своя вкладка «Детектор», а поддетекторы — как у трекера
+  if(hasS&&ptab==="sub"&&(k==="face"||k==="other"))return head+(k==="face"?faceClashHtml(d):"")+tabs+`<section class="dw-sec dw-subs-tab">${dwSubsHtml(id,k,c)}</section>`;
   if(k==="other")return head+tabs+dwSec("Параметры",detFieldsHtml(cam,d,"Имя"));
   if(k==="meta")return head+tabs+metaPanelHtml(d)+`<details class="dw-adv"><summary>${i18n("Дополнительно")}</summary><div class="dw-adv-b">${detFieldsHtml(cam,d,"Имя",true)}${cam?detServerNoteHtml(cam,d):""}</div></details>`;
   if(k==="face")return head+faceClashHtml(d)+tabs+dwSec("Зоны детектирования",dwAreasHtml(id,k,c))+dwListsSecHtml(d)+`<details class="dw-adv"><summary>${i18n("Дополнительно")}</summary><div class="dw-adv-b">${detFieldsHtml(cam,d,"Имя",true)}${cam?detServerNoteHtml(cam,d):""}</div></details>`;

@@ -4813,6 +4813,7 @@ window.I18N_EN={
 "Детектор оставленных денег":"Unattended money detector",
 "Детектор дрейфующих объектов":"Floating objects detector",
 "Контроль оператора":"Operator control",
+"Трекер людей":"Human tracker",
 "Детектор: число объектов вне порога":"Detector: the object count is out of the limit",
 "Детектор: опасная поза":"Detector: a dangerous pose",
 "Детектор: нет средств защиты":"Detector: no protective equipment",
