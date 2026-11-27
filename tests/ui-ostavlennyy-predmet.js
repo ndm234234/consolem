@@ -1,0 +1,82 @@
+/* Поддетектор «Оставленный предмет» под трекером (прототип 107, пробелы F118, F119, F120; замечания покрытия det-760,
+   det-761; Axxon One doc 292178): что искать (lostObjectType), классы, свои исключения (extraZones, type: ex),
+   предупреждение, если трекер не ищет оставленные предметы (detectUnattendedObjects), и поля трекера профиля
+   vms.detector/1 1.5 (autoSensitivity, longTimeUnattended, longTimeIdleSec). Запуск — tools/check_ui.py. */
+UiCheck(async ({ ok, until, sleep }) => {
+  // Только прототип 107: в index.html функции нет до переноса. При переносе охрана становится absent(...)
+  if (typeof dwSubLost !== "function") return;
+  const TRK = "30000027-0001-4000-8000-000000000000"; // трекер объектов набора demo
+  const main = () => document.getElementById("main");
+  const apply = async () => {
+    const was = bq;
+    dwPlan(TRK);
+    ok(!!document.querySelector("#bmodal.open .bk-table"), "план открылся");
+    document.querySelector("#bmodal.open .btn.pri").click();
+    await until(() => bq && bq !== was && bq.finished);
+    ok(bq.fail === 0, "операция прошла без отказов");
+    ok(await until(() => !document.getElementById("dwRight")?.inert), "после операции окно снова можно править");
+  };
+  goApp("hw");
+  await hwEnsure([TRK]);
+  pick(TRK);
+  ok(await until(() => main().querySelector(`[data-dw="${TRK}"]`)), "окно трекера открыто");
+  await until(() => !dwBusy.has(TRK) && dwLoaded.has(TRK));
+  const trk = () => find(TRK).n;
+
+  // F119: новый поддетектор ищет любой предмет, классы — чипы, как у других поддетекторов
+  dwSubAdd(TRK, "abandoned");
+  const s = dwC(trk()).subs.find((x) => x.kind === "abandoned");
+  ok(s && s.lost === "any", "новый «Оставленный предмет» ищет любой предмет");
+  ok(await until(() => main().querySelector("[data-dw-lost] button.on")), "выбор «Что искать» на экране");
+  ok(/Любой/.test(main().querySelector("[data-dw-lost] button.on").textContent), "выбран «Любой»");
+  ok(main().querySelectorAll(".dw-sub.sel .dw-chip").length === 3, "классы объектов — три чипа");
+  dwSubLost(TRK, s.id, "taken");
+  ok(/Сработать, если предмета нет дольше/.test(main().querySelector(".dw-sub.sel").textContent), "у «Унесённого» своя подпись времени");
+
+  // F120: исключение рисуется протяжкой по кадру
+  dwSubExTool(TRK, s.id);
+  const st = main().querySelector(".dw-stage"), r = st.getBoundingClientRect();
+  const at = (fx, fy) => ({ bubbles: true, button: 0, clientX: r.x + r.width * fx, clientY: r.y + r.height * fy });
+  (st.querySelector("svg") || st).dispatchEvent(new MouseEvent("mousedown", at(0.8, 0.7)));
+  window.dispatchEvent(new MouseEvent("mousemove", at(0.9, 0.8)));
+  window.dispatchEvent(new MouseEvent("mouseup", at(0.9, 0.8)));
+  await sleep(50);
+  ok(s.ex.length === 1 && s.ex[0].pts.length === 4, "исключение — прямоугольник из четырёх точек");
+  ok(await until(() => main().querySelector(`.dw-stage [data-b="subx:${s.id}~${s.ex[0].id}"]`)), "исключение на кадре");
+  ok(main().querySelector(`[data-dw-zone="subx:${s.id}~${s.ex[0].id}"]`), "строка исключения в списке областей");
+
+  // F118: трекер не ищет оставленные предметы — предупреждение; кнопка включает поиск в черновике
+  dwFinePut(trk(), "detectUnattendedObjects", false);
+  gear();
+  ok(await until(() => main().querySelector("[data-dw-unatt]")), "предупреждение: трекер не ищет оставленные предметы");
+  main().querySelector("[data-dw-unatt] button").click();
+  ok(await until(() => !main().querySelector("[data-dw-unatt]")), "кнопка убрала предупреждение");
+  ok(dwC(trk()).fine.detectUnattendedObjects !== false, "поиск у трекера включён в черновике (умолчание — поиск идёт)");
+
+  // det-760, det-761: поля трекера профиля 1.5 в «Тонкой настройке»
+  dwFinePut(trk(), "autoSensitivity", true);
+  dwFinePut(trk(), "longTimeUnattended", true);
+  dwFinePut(trk(), "longTimeIdleSec", 120);
+  dwPtabSet("det");
+  const fine = () => [...main().querySelectorAll("[data-dw-fine]")].map((e) => e.dataset.dwFine);
+  ok(await until(() => fine().includes("longTimeIdleSec")), "время покоя видно при «Надолго оставленных»");
+  ok(!fine().includes("abandonedSensitivity"), "при авточувствительности ручной чувствительности к оставленным нет");
+  ok(main().querySelector("[data-dw-auto-sens]"), "у чувствительности трекера — пояснение об авточувствительности");
+
+  await apply();
+  const t = await uiRec(TRK);
+  ok(t.autoSensitivity === true && t.longTimeUnattended === true && t.longTimeIdleSec === 120 && t.detectUnattendedObjects !== false, "на сервере поля трекера 1.5 и поиск не выключен");
+  const u = (await uiRecs({ parentId: TRK, kind: "subdet" })).find((x) => x.subdetectorKind === "abandoned");
+  ok(u && u.lostObjectType === "taken", "на сервере «Что искать» — унесённый");
+  ok(u && u.extraZones?.length === 1 && u.extraZones[0].type === "ex" && u.extraZones[0].points.length === 4, "на сервере своё исключение поддетектора");
+  ok(u && Array.isArray(u.classes) && u.classes.length === 3, "на сервере классы поддетектора");
+
+  // Удаление исключения уходит в план и снимает extraZones на сервере
+  // Поддетектор после «Применить» — объект сервера: id в черновике — его uid
+  await until(() => dwSaved(trk()).subs.find((x) => x.kind === "abandoned" && /^[0-9a-f]{8}-/.test(x.id))?.ex.length === 1);
+  const s2 = dwC(trk()).subs.find((x) => x.kind === "abandoned");
+  ok(s2 && /^[0-9a-f]{8}-/.test(s2.id) && s2.ex.length === 1, "после «Применить» исключение пришло из объекта");
+  dwSubExDel(TRK, s2.id, s2.ex[0].id);
+  await apply();
+  ok(!(await uiRec(s2.id)).extraZones, "исключение снято на сервере");
+});
