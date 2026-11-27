@@ -2703,16 +2703,10 @@ html[data-theme="light"] .busy-chip{background:var(--one-control-hover);color:va
 .dc-z3 .dc-z-main .live-frame{max-width:100%}
 .dc-z3>.dw-grip{min-height:0}
 @media(max-width:1180px){.dc-z3>.dw-grip{display:block}}
-.dc-set{min-width:0;min-height:0;overflow:auto;padding:0 4px 0 4px;scrollbar-width:thin}
-.dc-set-h{font-size:12px;font-weight:600;margin:0}
-.dc-set-n{font-size:11px;margin:2px 0 10px}
-.dc-set-g{font-size:11px;font-weight:600;color:var(--mu);margin:12px 0 8px}
-.dc-set .dw-f{margin-bottom:10px}
-.dc-set .dw-num>label{flex:1 1 140px}
-.dc-set .dw-seg{flex-wrap:wrap}
-.dc-set-ft{display:flex;align-items:center;gap:8px;margin-top:12px}
-.dc-set .dw-f>label.dw-swl{justify-content:flex-start;color:var(--tx);margin:0}
-.dc-set [data-dc-size]{margin:0 0 8px;flex-wrap:nowrap}.dc-set [data-dc-size]>label{flex:0 0 76px;color:var(--mu)}
+.dc-set{min-width:0;min-height:0;overflow:auto;scrollbar-width:thin}
+.dc-set>.dw-sec{padding:12px 4px}.dc-set>.dw-sec:first-child{padding-top:0}.dc-set>.dc-set-ft{padding:12px 4px}
+.dc-set-ft{display:flex;align-items:center;gap:8px}
+.dc-set-hd h4{margin-bottom:2px}.dc-set-hd .sub{margin:0}
 .dc-dock{position:fixed;right:16px;bottom:16px;z-index:40;display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--one-selected-indicator);border-radius:var(--one-radius-container);background:var(--p2);box-shadow:var(--one-shadow);max-width:min(480px,calc(100vw - 32px))}
 .dc-dock-t{min-width:0;font-size:12px}
 .dc-dock-t small{display:block;color:var(--mu);font-size:11px;margin-top:2px}
@@ -15265,6 +15259,7 @@ function tabKeep(n){
 // Вызывать до смены sel: flDomainTab смотрит, откуда пришли.
 function tabOpen(n){return archSliceTab(n)||(n?flDomainTab(n):null)||(slice==="det"&&handCam(n)?"det":tabKeep(n))}
 function gear(){
+  if(dc?._vAct){dc._vAct=0;renderDetCreate();return}
   ruleIdxDrop();
   if(bulkActive()&&!bulkPeek){paintMain(bulkCardHtml());return}
   if(detListOn()){paintMain(detListHtml());return}
@@ -18695,7 +18690,7 @@ function zoneShapeSvg(z){
 // Рисование: прямоугольник и линия — протяжкой, полигон — щелчками, замыкается кнопкой или щелчком в первую точку
 let zoneDraw=null;
 const ZONE_SHAPES=[["rect","Прямоугольник"],["polygon","Полигон"],["line","Линия"]];
-function detNodeOf(id){return find(id)?.n||null}
+function detNodeOf(id){if(typeof id==="string"&&id.startsWith(DC_V)){if(!dc)return null;dcVirtHit();return dcVirtNode(id.slice(DC_V.length))}return find(id)?.n||null}
 function zoneMode(id,shape){zoneDraw=zoneDraw?.id===id&&zoneDraw.shape===shape?null:{id,shape,pts:[]};if(String(id).startsWith("dc:"))renderDetCreate();else gear()}
 function zoneSave(id,z){
   if(String(id).startsWith("dc:")){dcZoneSet(id,z);return}
@@ -18968,7 +18963,7 @@ function dwPolyOf(z){if(!z||!z.points?.length)return null;if(z.shape==="rect"){c
 // Имя зоны на кадре и в списке: язык — на момент показа
 function dwAreaName(a){return a.sec?`${i18n("Область")} ${a.sec}`:`${i18n(a.type==="ex"?"Исключение":"Зона")} ${a.n}`}
 // Чувствительность, которую окно показывает, когда у объекта её нет: 50, у встроенного — в границах шаблона камеры
-function dwSensDef(d){const o=detOption(find(d.id)?.p,d);return Math.min(o?.sensitivityMax??100,Math.max(o?.sensitivityMin??1,50))}
+function dwSensDef(d){const o=d._opt||detOption(find(d.id)?.p,d);return Math.min(o?.sensitivityMax??100,Math.max(o?.sensitivityMin??1,50))}
 // Объект детектора → модель окна. Нет поля — прежнее поведение: без ограничения размера, все классы, умолчания сервера
 function dwFromUnit(d){
   const z=d.zone,line=z?.shape==="line"&&z.points?.length>1,lc=dwKindOf(d)==="linecross",vc=dwKindOf(d)==="visitors",poly=z&&!line&&!lc?dwPolyOf(z):null,areas=[];
@@ -19156,8 +19151,8 @@ async function dwSubsEnsure(id){
   treeMatchCache.clear();searchMatchCache.clear();renderTreeSoon();
   if(sel===id&&app==="hw")gear();
 }
-function dwC(d){dwSync(d);return dw.cfg[d.id]}
-function dwSaved(d){dwSync(d);return dw.saved[d.id]}
+function dwC(d){if(d._dcv)return dcVirtModel(d);dwSync(d);return dw.cfg[d.id]}
+function dwSaved(d){if(d._dcv)return dcVirtBase(d);dwSync(d);return dw.saved[d.id]}
 function dwChanged(d){return dwDiffRows(d).length>0}
 // ── Почему объект не считается: первая причина по порядку проверок ──
 // Проверки детектора по порядку: на них строятся причина на рамке (вариант A) и воронка отсева (вариант B)
@@ -19671,7 +19666,8 @@ function dwArcHtml(d,k,c){
   const m=k==="motion"&&dwArcHas(d,"recordMask"),a=c.arc,noRec=!a.recordTracks;
   const rec=dwArcSw(d.id,c,"recordMask","Сервер записывает маску движения в архив. Оператор видит сетку маски при просмотре архива.")+dwArcSw(d.id,c,"recordTracks","Поиск в архиве по объектам ищет по этим трекам. Сервер разбирает видео, поэтому нагрузка на сервер растёт.");
   const warn=noRec?`<div class="nt dw-arc-nt" role="status">${i18n("Детектор не записывает треки. Поиск в архиве не найдёт объекты этой камеры.")}</div>`:"";
-  const keep=`<p class="sub dw-arc-keep">${i18n("Сервер хранит метаданные")}: <b>${escHtml(dwArcDays(d))}</b>. ${i18n("Срок задаёт домен.")} <button type="button" class="lk" ${onEv("click",["dwArcGoKeep",`${d.id}`])}>${i18n("Срок хранения метаданных")}</button></p>`;
+  // Мастер детекторов: детектора ещё нет, домена у него нет — срока хранения не показываем
+  const keep=d._dcv?"":`<p class="sub dw-arc-keep">${i18n("Сервер хранит метаданные")}: <b>${escHtml(dwArcDays(d))}</b>. ${i18n("Срок задаёт домен.")} <button type="button" class="lk" ${onEv("click",["dwArcGoKeep",`${d.id}`])}>${i18n("Срок хранения метаданных")}</button></p>`;
   const show=dwArcSw(d.id,c,"showMask","Оператор видит сетку на кадре. Зелёная клетка показывает движение без сработки. Красная клетка показывает сработку.")
     +dwArcSw(d.id,c,"showTracks","Оператор видит рамку объекта и линию его пути. Эта линия называется трек.")
     +dwArcSw(d.id,c,"showTrackLifespan","Над рамкой объекта оператор видит число секунд с момента, когда детектор нашёл объект. Превью кадра показывает это число.",a.showTracks?"":"Сначала включить «Показывать треки объектов».");
@@ -19838,7 +19834,7 @@ function dwSizeHtml(id){
   const c=dwC(detNodeOf(id)),p=v=>Math.round(v*1000)/10;
   const row=(m,l)=>`<div class="dw-sz-r"><span>${i18n(l)}</span><span class="dw-in"><input type="number" min="0" max="100" step="0.5" value="${p(c[m][0])}" data-dw-size="${m}.0" ${onEv("input",["dwSet",id,m+".0",onEv.value,onEv.el])}><span>×</span><input type="number" min="0" max="100" step="0.5" value="${p(c[m][1])}" data-dw-size="${m}.1" ${onEv("input",["dwSet",id,m+".1",onEv.value,onEv.el])}><span>% ${i18n("кадра")}</span></span><span class="sub dw-nolim" data-dw-nolim="${m}"${(m==="min"?dwNoMin(c):dwNoMax(c))?"":" hidden"}>${i18n("без ограничения")}</span></div>`;
   return`<div class="dw-f">${row("min","Не меньше")}${row("max","Не больше")}
-    ${dwHelp(dw.lay.size?"Кадр показывает рамки размеров. Чтобы изменить размер, тянуть угол рамки мышью.":"Детектор не замечает объекты меньше и больше этих размеров. Консоль считает ширину и высоту в процентах кадра.")}</div>`;
+    ${dwHelp(dw.lay.size&&!id.startsWith(DC_V)?"Кадр показывает рамки размеров. Чтобы изменить размер, тянуть угол рамки мышью.":"Детектор не замечает объекты меньше и больше этих размеров. Консоль считает ширину и высоту в процентах кадра.")}</div>`;
 }
 function dwSizeSec(id){
   return dwSec("Размер объекта",dwSizeHtml(id),` <button type="button" class="btn s dw-sec-b${dw.lay.size?" on":""}" aria-pressed="${dw.lay.size}" ${onEv("click",["dwLay","size"])}>${i18n(dw.lay.size?"Скрыть на кадре":"Показать на кадре")}</button>`,` data-dw-size-sec`);
@@ -20478,7 +20474,7 @@ const DW_FINE=[
 // Только во «Все параметры»: редкое для всех семейств
 const DW_ALL_ONLY=[["labels","Метки серверов"],["alarmKinds","Что считать тревогой"],["params","Строка настроек детектора"]];
 // Встроенный детектор считает на камере: серверной тонкой настройки у него нет
-function dwFineList(d,k,basic){return d.builtin?[]:DW_FINE.filter(x=>!x.own&&x.fam.includes(k)&&!!x.basic===!!basic&&(x.t==="stream"?dwHas(d,"stream")&&!!find(d.id)?.p:dwHas(d,x.f)))}
+function dwFineList(d,k,basic){return d.builtin?[]:DW_FINE.filter(x=>!x.own&&!(d._dcv&&x.t==="quad")&&x.fam.includes(k)&&!!x.basic===!!basic&&(x.t==="stream"?dwHas(d,"stream")&&!!find(d.id)?.p:dwHas(d,x.f)))}
 function dwFineGet(d,x){
   if(x.t==="stream")return d.stream||"";
   const c=dwC(d),v=c.fine?.[x.f];
@@ -20575,7 +20571,7 @@ function dwFineFieldHtml(d,x){
 }
 // Сколько полей тонкой настройки не по умолчанию: число в заголовке группы видно и у свёрнутой группы
 function dwFineCount(d,k){return dwFineList(d,k).filter(x=>dwFineChanged(d,x)).length}
-function dwFineCountPaint(){const d=dwD();if(!d)return;const n=dwFineCount(d,dwKindOf(d));document.querySelectorAll("[data-dw-fine-n]").forEach(el=>{el.textContent=n?`${i18n("изменено")}: ${n}`:"";el.hidden=!n})}
+function dwFineCountPaint(){const d=dwD();if(!d)return;const n=dwFineCount(d,dwKindOf(d));(dwRoot()||document).querySelectorAll("[data-dw-fine-n]").forEach(el=>{el.textContent=n?`${i18n("изменено")}: ${n}`:"";el.hidden=!n})}
 const DW_FINE_KEY="cfg.dwFineOpen";
 function dwFineOpenGet(){try{return localStorage.getItem(DW_FINE_KEY)==="1"}catch(e){return false}}
 // Щелчок по заголовку: <details> ещё в прежнем состоянии, поэтому запоминается обратное (toggle onEv не слушает)
@@ -20600,6 +20596,26 @@ function dwAllGo(id,f){
   if(!f)return accFlash(()=>[document.querySelector("[data-base-head]")].filter(Boolean));
   accFlash(()=>{const el=document.querySelector(`[data-dw-fine="${f}"],[data-sf="${f}"],[data-sf-ro="${f}"]`);return el?[el.closest(".dw-f,div")]:[]});
 }
+// Условия срабатывания — общие для окна детектора и шага «Настройка» мастера (у вида в мастере камеры нет: границы чувствительности — из шаблона, d._opt)
+function dwSensUi(cam,d,k){const opt=d._opt||detOption(cam,d);return(k==="motion"||k==="tracker")&&!(opt&&opt.sensitivityMin==null)&&!nodeFieldOff(d,"sensitivity")}
+function dwWhenList(cam,d,k,c){
+  const id=d.id,when=[],opt=d._opt||detOption(cam,d),sensUi=dwSensUi(cam,d,k);
+  // Встроенный детектор: границы ползунка — из шаблона камеры, а без чувствительности в шаблоне ползунка нет
+  // Чувствительности у объекта нет — ползунок показывает умолчание (dwSensDef), а поле в «Дополнительно» не нужно
+  const auto=k==="tracker"&&dwHas(d,"autoSensitivity")&&c.fine?.autoSensitivity===true;
+  if(sensUi&&auto)when.push(`<div class="dw-f" data-dw-auto-sens><label>${i18n("Чувствительность")}</label><p class="sub">${i18n("Трекер сам подбирает чувствительность: включена «Авточувствительность» в «Тонкой настройке». Чтобы задать чувствительность вручную, выключить авточувствительность.")}</p></div>`);
+  else if(sensUi)when.push(dwRange(id,"sens","Чувствительность",opt?.sensitivityMin??1,opt?.sensitivityMax??100,1,"","Чем выше чувствительность, тем более слабое движение замечает детектор."));
+  if((k==="neural"||k==="lpr")&&dwHas(d,"confidence"))when.push(dwRange(id,"conf","Уверенность нейросети не ниже",10,99,1,"%","Детектор сработает, только если нейросеть уверена в объекте не меньше этого значения.","conf"));
+  if(k==="lpr"&&dwHas(d,"plateWidth"))when.push(`<div class="dw-f"><label>${i18n("Ширина номера")} <b data-dw-out="pw">${dwPwText(c)}</b></label>
+      <div class="dw-2r"><input type="range" min="0" max="100" step="0.5" value="${c.pw[0]*100}" ${onEv("input",["dwSet",id,"pw.0",onEv.value,onEv.el])}><input type="range" min="0" max="100" step="0.5" value="${c.pw[1]*100}" ${onEv("input",["dwSet",id,"pw.1",onEv.value,onEv.el])}></div>
+      ${dwHelp("Консоль показывает ширину номера в процентах от ширины кадра. Номера уже или шире детектор пропускает. Если ширина от 0 до 100 %, детектор не ограничивает номера по ширине.")}</div>`);
+  if(k==="linecross"&&dwHas(d,"direction"))when.push(`<div class="dw-f"><label>${i18n("Направление")}</label>${dwDirHtml(id,c.dir,"dwDir")}${dwHelp("Детектор сработает, только когда объект пересечёт линию в этом направлении.")}</div>`);
+  if(k==="motion"&&dwHas(d,"minDurationSec"))when.push(dwNum(id,"delay","Сработать, если движение длится не меньше",0,30,"с","Короткое движение, например блик или птица, детектор пропустит."));
+  if(k==="crowd"&&dwHas(d,"crowdMin")&&dwHas(d,"crowdHoldSec"))when.push(dwNum(id,"count","Людей в зоне не меньше",2,50,"чел."),dwNum(id,"hold","Дольше",1,600,"с","Детектор сработает, когда в зоне долго стоит группа людей. Следующая сработка — после того, как группа разойдётся."));
+  if(k==="abandoned"&&dwHas(d,"stillSec"))when.push(dwNum(id,"stay","Предмет лежит без движения дольше",5,1800,"с"));
+  dwFineList(d,k,true).forEach(x=>when.push(dwFineFieldHtml(d,x)));
+  return when;
+}
 function dwPanelHtml(cam,d,k,c){
   const id=d.id,on=d.enabled!==false;
   const head=`<section class="dw-sec dw-head"><div class="dw-name"><input type="text" value="${escHtml(locName(d))}" aria-label="${i18n("Имя")}" readonly><div class="sw ${on?"on":""}" role="switch" aria-checked="${on}" aria-label="${i18n("Включён")}"${pfa(d,"enabled")} ${onEv("click",["detEnable",`${id}`])}></div></div>
@@ -20621,23 +20637,7 @@ function dwPanelHtml(cam,d,k,c){
   if(k==="visitors")return head+tabs+dwSec("Области",dwVcAreasHtml(d,c))+dwSec("Счёт людей в помещении",dwVcCountHtml(d,c))+dwSec("Детектор",detFieldsHtml(cam,d,"Имя",false,true))+dwAllCardHtml(d);
   if(k==="face")return head+faceClashHtml(d)+tabs+dwSec("Зоны детектирования",dwAreasHtml(id,k,c))+dwListsSecHtml(d)+`<details class="dw-adv"><summary>${i18n("Дополнительно")}</summary><div class="dw-adv-b">${detFieldsHtml(cam,d,"Имя",true)}${cam?detServerNoteHtml(cam,d):""}</div></details>`;
   const what=(k==="linecross"||k==="neural")&&dwHas(d,"classes")?dwSec("Классы объектов",dwChips(id,["person","car","bike"],c.classes,"dwClass")+dwHelp("Детектор сработает только на объекты выбранных классов.")):"";
-  const when=[];
-  // Встроенный детектор: границы ползунка — из шаблона камеры, а без чувствительности в шаблоне ползунка нет
-  const opt=detOption(cam,d);
-  // Чувствительности у объекта нет — ползунок показывает умолчание (dwSensDef), а поле в «Дополнительно» не нужно
-  const sensUi=(k==="motion"||k==="tracker")&&!(opt&&opt.sensitivityMin==null)&&!nodeFieldOff(d,"sensitivity");
-  const auto=k==="tracker"&&dwHas(d,"autoSensitivity")&&c.fine?.autoSensitivity===true;
-  if(sensUi&&auto)when.push(`<div class="dw-f" data-dw-auto-sens><label>${i18n("Чувствительность")}</label><p class="sub">${i18n("Трекер сам подбирает чувствительность: включена «Авточувствительность» в «Тонкой настройке». Чтобы задать чувствительность вручную, выключить авточувствительность.")}</p></div>`);
-  else if(sensUi)when.push(dwRange(id,"sens","Чувствительность",opt?.sensitivityMin??1,opt?.sensitivityMax??100,1,"","Чем выше чувствительность, тем более слабое движение замечает детектор."));
-  if((k==="neural"||k==="lpr")&&dwHas(d,"confidence"))when.push(dwRange(id,"conf","Уверенность нейросети не ниже",10,99,1,"%","Детектор сработает, только если нейросеть уверена в объекте не меньше этого значения.","conf"));
-  if(k==="lpr"&&dwHas(d,"plateWidth"))when.push(`<div class="dw-f"><label>${i18n("Ширина номера")} <b data-dw-out="pw">${dwPwText(c)}</b></label>
-      <div class="dw-2r"><input type="range" min="0" max="100" step="0.5" value="${c.pw[0]*100}" ${onEv("input",["dwSet",id,"pw.0",onEv.value,onEv.el])}><input type="range" min="0" max="100" step="0.5" value="${c.pw[1]*100}" ${onEv("input",["dwSet",id,"pw.1",onEv.value,onEv.el])}></div>
-      ${dwHelp("Консоль показывает ширину номера в процентах от ширины кадра. Номера уже или шире детектор пропускает. Если ширина от 0 до 100 %, детектор не ограничивает номера по ширине.")}</div>`);
-  if(k==="linecross"&&dwHas(d,"direction"))when.push(`<div class="dw-f"><label>${i18n("Направление")}</label>${dwDirHtml(id,c.dir,"dwDir")}${dwHelp("Детектор сработает, только когда объект пересечёт линию в этом направлении.")}</div>`);
-  if(k==="motion"&&dwHas(d,"minDurationSec"))when.push(dwNum(id,"delay","Сработать, если движение длится не меньше",0,30,"с","Короткое движение, например блик или птица, детектор пропустит."));
-  if(k==="crowd"&&dwHas(d,"crowdMin")&&dwHas(d,"crowdHoldSec"))when.push(dwNum(id,"count","Людей в зоне не меньше",2,50,"чел."),dwNum(id,"hold","Дольше",1,600,"с","Детектор сработает, когда в зоне долго стоит группа людей. Следующая сработка — после того, как группа разойдётся."));
-  if(k==="abandoned"&&dwHas(d,"stillSec"))when.push(dwNum(id,"stay","Предмет лежит без движения дольше",5,1800,"с"));
-  dwFineList(d,k,true).forEach(x=>when.push(dwFineFieldHtml(d,x)));
+  const when=dwWhenList(cam,d,k,c),sensUi=dwSensUi(cam,d,k);
   const where=dwSec("Зоны детектирования",dwAreasHtml(id,k,c))+(DW_SIZE.has(k)&&dwHas(d,"objectSize")?dwSizeSec(id):""),wh=when.length?dwSec("Условия срабатывания",when.join("")):"";
   const arcH=dwArcHtml(d,k,c);
   const nnH=nnSecHtml(d,k);
@@ -20650,7 +20650,7 @@ function dwPanelHtml(cam,d,k,c){
   return head+tabs+(ptab==="det"?nnH+what+where+wh+lstH+arcH+fine:`<section class="dw-sec dw-subs-tab">${dwSubsHtml(id,k,c)}</section>`);
 }
 // ── Действия ──
-function dwRoot(){return document.querySelector("[data-dw]")}
+function dwRoot(){return dc?._vAct&&dcVirtRoot()||document.querySelector("[data-dw]:not([data-dw^='dcv~'])")}
 function dwD(){const r=dwRoot();return r?detNodeOf(r.dataset.dw):null}
 function dwRefresh(){
   const root=dwRoot(),d=dwD();if(!root||!d)return;
@@ -20665,7 +20665,7 @@ function dwRefresh(){
   dwPaintGeo();dwPaintObj();cardFootRefresh();
   const b=root.querySelector("[data-dw-bar]");if(b)b.innerHTML=dwBarHtml();
 }
-function dwSoon(){if(dw.soon)return;dw.soon=setTimeout(()=>{dw.soon=0;dwRefresh()},30)}
+function dwSoon(){if(dc?._vAct){dcVirtSoon();return}if(dw.soon)return;dw.soon=setTimeout(()=>{dw.soon=0;dwRefresh()},30)}
 function dwPaintGeo(){const g=dwRoot()?.querySelector("[data-dw-geo]"),d=dwD();if(g&&d)g.innerHTML=dwGeoSvg(d)}
 function dwPaintObj(){
   const root=dwRoot(),d=dwD();if(!root||!d)return;
@@ -21509,7 +21509,7 @@ function dcResume(){
     if(app==="rules"&&ruleDiffLive().length){toast("Сначала применить или сбросить изменения правила");return}
     if(!setApp("hw"))return;
   }
-  if(!dc){const x=dcPeek();if(!x)return;dc={...x,items:new Set(x.items),cams:new Set(x.cams),more:new Set(),ready:false}}
+  if(!dc){const x=dcPeek();if(!x)return;dc={...x,items:new Set((x.items||[]).slice(0,1)),cams:new Set(x.cams),more:new Set(),ready:false}}
   dc.min=false;dcDock();
   if(dc.ready)dcPrune();
   renderDetCreate();
@@ -21609,7 +21609,8 @@ function dcFiltered(cams){
     return[locName(c),c.ip,modelOf(c),serverNameOf(c)].join(" ").toLowerCase().includes(q);
   });
 }
-function dcItemToggle(key,on){if(on)dc.items.add(key);else dc.items.delete(key);renderDetCreate()}
+// Мастер создаёт детекторы одного вида — выбор вида заменяет прежний
+function dcItemToggle(key,on){if(on)dc.items=new Set([key]);else dc.items.delete(key);renderDetCreate()}
 function dcCamToggle(id,on){if(on)dc.cams.add(id);else dc.cams.delete(id);renderDetCreate()}
 function dcFacet(d,v){if(dc.f[d]===v)delete dc.f[d];else dc.f[d]=v;renderDetCreate()}
 function dcFacetClear(){dc.f={};renderDetCreate()}
@@ -21827,134 +21828,78 @@ function dcPlan(cams,tpl){
   });
 }
 function dcItemRow(key,name,small,tag,tagCls,off){
-  return`<label class="cp-det ${off?"dc-off":""}" ${off?`data-tip="${escHtml(off)}"`:""}><input type="checkbox" ${dc.items.has(key)?"checked":""} ${off?"disabled":""} ${onEv("change",["dcItemToggle",`${key}`,onEv.checked])}><span class="cp-det-nm">${escHtml(name)}${small?`<small>${escHtml(small)}</small>`:""}</span>${tag?`<span class="cp-det-tag ${tagCls}">${escHtml(tag)}</span>`:""}</label>`;
+  return`<label class="cp-det ${off?"dc-off":""}" ${off?`data-tip="${escHtml(off)}"`:""}><input type="radio" name="dc-kind" ${dc.items.has(key)?"checked":""} ${off?"disabled":""} ${onEv("change",["dcItemToggle",`${key}`,onEv.checked])}><span class="cp-det-nm">${escHtml(name)}${small?`<small>${escHtml(small)}</small>`:""}</span>${tag?`<span class="cp-det-tag ${tagCls}">${escHtml(tag)}</span>`:""}</label>`;
 }
-// ── Шаг «Настройка»: свойства новых детекторов (пробел F126) ──
-// Как шаг «Настройка детекторов» мастера Axxon One (web-configurator detector-step-factory): свойства вида детектора
-// задают до создания, и они уходят всем детекторам этого вида в плане. Поля — те же, что в окне детектора:
-// условия срабатывания, «Архив и показ» (DW_ARC_F) и тонкая настройка семейства (DW_FINE). Поле есть, только если
-// оно есть в схеме вида det и в версии профиля сервера. Свойство, равное умолчанию, не уходит
-const DC_SET_WHEN=[
-  {f:"sensitivity",l:"Чувствительность",fam:["motion"],t:"num",min:1,max:100,def:50,help:"Чем выше чувствительность, тем более слабое движение замечает детектор."},
-  {f:"sensitivity",l:"Чувствительность",fam:["tracker"],t:"num",min:1,max:100,def:50,off:"autoSensitivity",help:"Чем выше чувствительность, тем более слабое движение замечает детектор."},
-  {f:"minDurationSec",l:"Сработать, если движение длится не меньше",fam:["motion"],t:"num",min:0,max:30,def:0,unit:"с"},
-  {f:"confidence",l:"Уверенность нейросети не ниже",fam:["neural","lpr"],t:"num",min:10,max:99,def:60,unit:"%"},
-  {f:"direction",l:"Направление",fam:["linecross"],t:"seg",def:"both",opts:[["ab","A → B"],["ba","B → A"],["both","В обе стороны"]]},
-  {f:"classes",l:"Классы объектов",fam:["linecross","neural"],t:"cls"},
-  {f:"crowdMin",l:"Людей в зоне не меньше",fam:["crowd"],t:"num",min:2,max:50,def:4,unit:"чел."},
-  {f:"crowdHoldSec",l:"Дольше",fam:["crowd"],t:"num",min:1,max:600,def:10,unit:"с"},
-  {f:"stillSec",l:"Предмет лежит без движения дольше",fam:["abandoned"],t:"num",min:5,max:1800,def:60,unit:"с"},
-  {f:"objectSize",l:"Размер объекта",fam:[...DW_SIZE],t:"size",help:"Размер задан в процентах кадра. Объекты меньше минимального или больше максимального размера детектор пропускает."},
-  {f:"plateWidth",l:"Ширина номера",fam:["lpr"],t:"prng",unit:"%",help:"Ширина задана в процентах ширины кадра. Номера уже или шире детектор пропускает."},
-  {f:"metaThreshold",l:"Совпадение с запросом не ниже",fam:["meta"],t:"num",min:0.05,max:100,step:0.05,def:20,unit:"%"},
-  {f:"metaFrames",l:"Совпадение подряд не меньше",fam:["meta"],t:"num",min:10,max:100,def:15,unit:"кадров"},
-  {f:"metaFps",l:"Детектор проверяет",fam:["meta"],t:"num",min:0.016,max:100,step:0.001,def:1,unit:"кадров в секунду"},
-  {f:"metaSearch",l:"Сохранять описания кадров",fam:["meta"],t:"sw",def:false},
-  {f:"params",l:"Строка настроек детектора",fam:["other","face","operatorControl","visitors"],t:"text",def:""}
-];
-// Семейство окна детектора по выбору мастера: s:<тип>, a:<семейство>, t:<шаблон камеры>
+// ── Шаг «Настройка»: свойства нового детектора — блоки окна детектора ──
+// Как шаг «Настройка детекторов» мастера Axxon One (web-configurator detector-step-factory): свойства вида задают до
+// создания, и они уходят всем детекторам плана. Мастер создаёт детекторы одного вида. Столбец показывает те же блоки,
+// что вкладка «Детектор» окна этого вида: «Классы объектов», «Размер объекта», «Условия срабатывания», «Архив и показ»,
+// «Тонкая настройка». Чего нет: зоны (их рисуют для каждой камеры слева), поток, нейросеть и списки — они у каждой
+// камеры свои; калибровка, запросы мета-детектора и области счётчика — в окне детектора (решение владельца макета, 2026-11-27).
+// Блоки окна работают с детектором без камеры (dcVirtNode): id «dcv~<ключ вида>», модель окна — в dc.set[ключ]
+const DC_V="dcv~";
+const DC_SET_K=new Set(["motion","tracker","neural","linecross","lpr","crowd","abandoned"]);
+// Семейство окна детектора по ключу мастера: s:<тип>, a:<семейство>, t:<шаблон камеры>
 function dcKindOfKey(key){
   if(key.startsWith("s:")){const c=DET_KIND_CODE[key.slice(2)];return DW_CODES.has(c)?c:"other"}
   if(key.startsWith("a:"))return dwKindOf({kind:DET_KIND_RU.other,analyticsKind:key.slice(2)});
   return"builtin";
 }
-const dcSetHas=f=>kindHasProp("det",f)&&!kindFieldOff("det",f);
-// Поля вида: [группа, поля]. У встроенного детектора — только чувствительность в границах шаблона камеры
-function dcSetGroups(key,tpl){
-  const k=dcKindOfKey(key);
-  if(k==="builtin"){
-    const o=tpl.find(t=>t.key===key)?.o;
-    return o&&o.sensitivityMin!=null&&dcSetHas("sensitivity")?[["Условия срабатывания",[{f:"sensitivity",l:"Чувствительность",t:"num",min:o.sensitivityMin,max:o.sensitivityMax,def:o.sensitivityMin}]]]:[];
-  }
-  const when=DC_SET_WHEN.filter(x=>x.fam.includes(k)&&dcSetHas(x.f));
-  const arc=DW_ARC_K.has(k)?DW_ARC_F.filter(([f,,m])=>(m?k==="motion":true)&&dcSetHas(f)).map(([f,l,,def])=>({f,l,t:"sw",def})):[];
-  const fine=DW_FINE.filter(x=>!x.own&&!["stream","quad","lst"].includes(x.t)&&x.fam.includes(k)&&dcSetHas(x.f));
-  return[["Условия срабатывания",when],["Архив и показ",arc],["Тонкая настройка",fine]].filter(g=>g[1].length);
+function dcVirtNode(key){
+  if(!dc)return null;
+  dc._vn=dc._vn||{};const was=dc._vn[key];
+  // Встроенный: шаблон другой камеры (выбор камер изменился) — границы чувствительности другие, детектор и умолчания заново
+  if(was&&!(was.builtin&&was._opt!==(dc._tpl||[]).find(t=>t.key===key)?.o))return was;
+  if(was&&dc._vb)delete dc._vb[key];
+  const n={id:DC_V+key,type:"det",_dcv:key,enabled:true,devices:[]};
+  if(key.startsWith("s:"))n.kind=key.slice(2);
+  else if(key.startsWith("a:")){n.kind=DET_KIND_RU.other;n.analyticsKind=key.slice(2)}
+  else{const o=(dc._tpl||[]).find(t=>t.key===key)?.o;if(!o)return null;
+    // Встроенный: чувствительность — в границах шаблона камеры, и создаётся с нижней границей (dcCreateBody0)
+    Object.assign(n,{kind:DET_KIND_RU[o.kind]||o.kind,builtin:true,template:o.template,_opt:o},o.sensitivityMin!=null?{sens:o.sensitivityMin}:{})}
+  return dc._vn[key]=n;
 }
-function dcSetVals(key){dc.set=dc.set||{};return dc.set[key]||(dc.set[key]={})}
-function dcSetGet(key,x){const v=dc.set?.[key]?.[x.f];return v===undefined?x.def:v}
-// Поле зависит от другого (тонкая настройка): без него поле не показано и не уходит
-function dcSetShown(key,x,all){
-  for(let y=x,n=0;y.dep&&n<4;n++){const d=all.find(z=>z.f===y.dep);if(!d||!dcSetGet(key,d))return false;y=d}
-  if(x.off){const d=all.find(z=>z.f===x.off);if(d&&dcSetGet(key,d))return false}
-  return true;
-}
-function dcSetFieldHtml(key,x){
-  const v=dcSetGet(key,x),lab=`<label>${i18n(x.l)}</label>`,help=x.help?dwHelp(x.help):"",at=` data-dc-set="${x.f}"`,u=x.unit?`<span>${i18n(x.unit)}</span>`:"";
-  if(x.t==="num")return`<div class="dw-f dw-num"${at}>${lab}<span class="dw-in"><input type="number" min="${x.min}" max="${x.max}"${x.step?` step="${x.step}"`:""} value="${v??""}" ${onEv("input",["dcSetNum",key,x.f,onEv.el])}>${u}</span>${help}</div>`;
-  if(x.t==="sw"){const on=!!v;return`<div class="dw-f"${at}><label class="dw-swl"><span class="sw ${on?"on":""}" role="switch" aria-checked="${on}" ${onEv("click",["dcSetFlip",key,x.f])}></span>${i18n(x.l)}</label>${help}</div>`}
-  if(x.t==="sel")return`<div class="dw-f"${at}>${lab}<select ${onEv("change",["dcSetSel",key,x.f,onEv.value])}>${x.opts.map(([o,t])=>`<option value="${o}" ${o===String(v)?"selected":""}>${i18n(t)}</option>`).join("")}</select>${help}</div>`;
-  if(x.t==="seg")return`<div class="dw-f"${at}>${lab}<span class="dw-seg">${x.opts.map(([o,t])=>`<button type="button" class="${o===v?"on":""}" ${onEv("click",["dcSetSel",key,x.f,o])}>${i18n(t)}</button>`).join("")}</span>${help}</div>`;
-  if(x.t==="cls"){const cur=v||DW_ALL;return`<div class="dw-f"${at}>${lab}<div class="dw-chips">${DW_ALL.map(cl=>`<button type="button" class="dw-chip${cur.includes(cl)?" on":""}" aria-pressed="${cur.includes(cl)}" ${onEv("click",["dcSetCls",key,cl])}>${cur.includes(cl)?lu("check",12):""}${i18n(DW_CLS[cl])}</button>`).join("")}</div>${dwHelp("Детектор сработает только на объекты выбранных классов.")}</div>`}
-  if(x.t==="text")return`<div class="dw-f"${at}>${lab}<input type="text" value="${escHtml(v||"")}" ${onEv("input",["dcSetText",key,x.f,onEv.value])}>${help}</div>`;
-  // Пары чисел: правка не перерисовывает шаг, значение берётся из всех полей пары сразу
-  const pair=(a,b,min,max,step,l1,l2,sep)=>`<span class="dw-in"><input type="number" min="${min}" max="${max}" step="${step}" value="${a??""}" placeholder="—" aria-label="${i18n(l1)}" ${onEv("input",["dcSetPair",key,x.f])}><span>${sep}</span><input type="number" min="${min}" max="${max}" step="${step}" value="${b??""}" placeholder="—" aria-label="${i18n(l2)}" ${onEv("input",["dcSetPair",key,x.f])}>${u}</span>`;
-  const pc=n=>n==null?"":Math.round(n*1000)/10;
-  if(x.t==="rng"){const a=v?[v.min??x.def[0],v.max??x.def[1]]:x.def;return`<div class="dw-f dw-num"${at}>${lab}${pair(a[0],a[1],x.min,x.max,1,"Не меньше","Не больше","–")}${help}</div>`}
-  if(x.t==="wh"){const o=v||{};return`<div class="dw-f dw-num"${at}>${lab}${pair(o.width,o.height,1,10000,1,"Ширина","Высота","×")}${help}</div>`}
-  if(x.t==="whf"){const a=v||[null,null];return`<div class="dw-f dw-num"${at}>${lab}${pair(pc(a[0]),pc(a[1]),0,100,0.5,"Ширина","Высота","×")}${help}</div>`}
-  if(x.t==="prng"){const o=v||{};return`<div class="dw-f dw-num"${at}>${lab}${pair(pc(o.min??0),pc(o.max??1),0,100,0.5,"Не меньше","Не больше","–")}${help}</div>`}
-  if(x.t==="size"){const o=v||{},mn=o.min||[0,0],mx=o.max||[1,1];
-    return`<div class="dw-f"${at}>${lab}<div class="dw-f dw-num" data-dc-size="min"><label>${i18n("Не меньше")}</label>${pair(pc(mn[0]),pc(mn[1]),0,100,0.5,"Ширина","Высота","×")}</div><div class="dw-f dw-num" data-dc-size="max"><label>${i18n("Не больше")}</label>${pair(pc(mx[0]),pc(mx[1]),0,100,0.5,"Ширина","Высота","×")}</div>${help}</div>`}
-  return"";
+// Действие блока окна по детектору мастера: gear() и dwSoon() перерисовывают мастер, а не карточку (dcVirtHit)
+function dcVirtHit(){dc._vAct=1;queueMicrotask(()=>{if(dc)dc._vAct=0})}
+function dcVirtModel(n){const s=dc.set=dc.set||{};if(!s[n._dcv]?.arc)s[n._dcv]=dwClone(dcVirtBase(n));return s[n._dcv]}
+function dcVirtBase(n){dc._vb=dc._vb||{};return dc._vb[n._dcv]||(dc._vb[n._dcv]=dwFromUnit(n))}
+function dcVirtRoot(){return document.querySelector("#bmBody [data-dw^='dcv~']")}
+// Как dwRefresh окна: подписи ползунков, поля размера, «Изменено»
+function dcVirtSoon(){
+  const root=dcVirtRoot();if(!root)return;const d=detNodeOf(root.dataset.dw);if(!d)return;const c=dwC(d);
+  root.querySelectorAll("[data-dw-out]").forEach(el=>{const k=el.dataset.dwOut;el.textContent=k==="pw"?dwPwText(c):k==="conf"?c.conf+"%":String(c[k])});
+  root.querySelectorAll("[data-dw-nolim]").forEach(el=>{el.hidden=!(el.dataset.dwNolim==="min"?dwNoMin(c):dwNoMax(c))});
+  root.querySelectorAll("[data-dw-size]").forEach(el=>{if(el===document.activeElement)return;const[a,i]=el.dataset.dwSize.split(".");el.value=Math.round(c[a][+i]*1000)/10});
+  dcSetFtPaint(d._dcv);
 }
 function dcSetHtml(r,rows,tpl){
-  const gs=dcSetGroups(r.key,tpl),n=rows.filter(x=>x.key===r.key).length,all=gs.flatMap(g=>g[1]);
-  const head=`<div class="dc-set-h">${i18n("Свойства")}: ${escHtml(r.name)}</div><p class="sub dc-set-n">${i18n("Для всех детекторов этого вида в плане")}: ${n}. ${i18n("Зону рисовать для каждой камеры.")}</p>`;
-  if(!gs.length)return`<div class="dc-set" data-cp-scroll="s">${head}<p class="sub">${i18n("У этого вида нет свойств, кроме зоны.")}</p></div>`;
-  return`<div class="dc-set" data-cp-scroll="s">${head}${gs.map(([t,xs])=>`<div class="dc-set-g">${i18n(t)}</div>${xs.filter(x=>dcSetShown(r.key,x,all)).map(x=>dcSetFieldHtml(r.key,x)).join("")}`).join("")}
-    ${dcSetFtHtml(r.key,tpl)}</div>`;
+  const n=dcVirtNode(r.key),k=n?(n.builtin?dwKindOf(n):dcKindOfKey(r.key)):"other",cnt=rows.filter(x=>x.key===r.key).length;
+  const head=`<section class="dw-sec dc-set-hd"><h4>${i18n("Свойства")}: ${escHtml(r.name)}</h4><p class="sub">${i18n("Для всех детекторов этого вида в плане")}: ${cnt}. ${i18n("Зону рисовать для каждой камеры.")}</p></section>`;
+  const wrap=b=>`<div class="dc-set" data-cp-scroll="s"${n?` data-dw="${escHtml(n.id)}"`:""}>${head}${b}</div>`;
+  if(!n||!n.builtin&&!DC_SET_K.has(k))return wrap(`<section class="dw-sec"><p class="sub">${i18n("Свойства этого вида задают в окне детектора после создания.")}</p></section>`);
+  const c=dwC(n),id=n.id;
+  const what=(k==="linecross"||k==="neural")&&dwHas(n,"classes")?dwSec("Классы объектов",dwChips(id,["person","car","bike"],c.classes,"dwClass")+dwHelp("Детектор сработает только на объекты выбранных классов.")):"";
+  const size=DW_SIZE.has(k)&&dwHas(n,"objectSize")?dwSec("Размер объекта",dwSizeHtml(id)):"";
+  const when=dwWhenList(null,n,k,c),wh=when.length?dwSec("Условия срабатывания",when.join("")):"";
+  const body=what+size+wh+dwArcHtml(n,k,c)+dwFineHtml(n,k);
+  return wrap((body||`<section class="dw-sec"><p class="sub">${i18n("У этого вида нет свойств, кроме зоны.")}</p></section>`)+dcSetFtHtml(r.key));
 }
-function dcSetFtHtml(key,tpl){
-  const chg=dcSetChanged(key,tpl).length;
+// Изменения против умолчаний вида — строки плана окна детектора (dwDiffRows)
+function dcSetRows(key){const n=dcVirtNode(key);return n&&dc.set?.[key]?.arc?dwDiffRows(n):[]}
+function dcSetFtHtml(key){
+  const chg=dcSetRows(key).length;
   return`<div class="dc-set-ft"><button type="button" class="btn s" ${chg?"":"disabled"} ${onEv("click",["dcSetReset",key])}>${i18n("Вернуть умолчания")}</button>${chg?`<span class="sub">${i18n("Изменено")}: ${chg}</span>`:""}</div>`;
 }
-// Правка числа не перерисовывает шаг (фокус остаётся в поле): обновляется только счётчик изменений
-function dcSetFtPaint(key){const el=document.querySelector("#bmBody .dc-set-ft");if(el)el.outerHTML=dcSetFtHtml(key,dc._tpl||[]);dcSave()}
-function dcSetNum(key,f,el){
-  if(el.value==="")return;let n=+el.value;if(!Number.isFinite(n))return;
-  // Как dwFineNum в окне детектора: целое поле — целое, поле с шагом — с точностью шага; значение в границах поля
-  const st=el.step&&el.step!=="any"?+el.step:1,dp=st<1?Math.min(4,String(el.step).split(".")[1]?.length||0):0;
-  n=dp?+n.toFixed(dp):Math.round(n);
-  if(el.min!==""&&n<+el.min)n=+el.min;if(el.max!==""&&n>+el.max)n=+el.max;
-  dcSetVals(key)[f]=n;dcSetFtPaint(key);
-}
-function dcSetFlip(key,f){const x=dcSetSpec(key,f);dcSetVals(key)[f]=!dcSetGet(key,x);renderDetCreate()}
-function dcSetSel(key,f,v){const x=dcSetSpec(key,f);dcSetVals(key)[f]=typeof x?.def==="number"?Number(v):v;renderDetCreate()}
-function dcSetText(key,f,v){dcSetVals(key)[f]=v;dcSetFtPaint(key)}
-function dcSetCls(key,cl){const cur=(dcSetVals(key).classes||DW_ALL).slice(),i=cur.indexOf(cl);if(i<0)cur.push(cl);else if(cur.length>1)cur.splice(i,1);dcSetVals(key).classes=DW_ALL.filter(x=>cur.includes(x));renderDetCreate()}
-function dcSetPair(key,f){
-  const box=document.querySelector(`#bmBody .dc-set [data-dc-set="${f}"]`);if(!box)return;
-  const x=dcSetSpec(key,f),num=el=>el.value===""?null:+el.value,ins=[...box.querySelectorAll("input")].map(num),fr=n=>Math.min(1,Math.max(0,n/100));
-  if(x.t==="rng"){if(ins.some(n=>n==null))return;for(let i=0;i<2;i++)ins[i]=Math.max(x.min,Math.min(x.max,Math.round(ins[i])));if(ins[0]>ins[1])return;const o={...(ins[0]!==x.def[0]?{min:ins[0]}:{}),...(ins[1]!==x.def[1]?{max:ins[1]}:{})};dcSetVals(key)[f]=Object.keys(o).length?o:undefined}
-  else if(x.t==="wh"||x.t==="whf"){const[a,b]=ins;if(a==null&&b==null)dcSetVals(key)[f]=undefined;else if(a>0&&b>0)dcSetVals(key)[f]=x.t==="wh"?{width:Math.min(10000,Math.max(1,Math.round(a))),height:Math.min(10000,Math.max(1,Math.round(b)))}:[fr(a),fr(b)];else return}
-  else if(x.t==="prng"){if(ins.some(n=>n==null)||ins[0]>ins[1])return;const o={...(ins[0]>0?{min:fr(ins[0])}:{}),...(ins[1]<100?{max:fr(ins[1])}:{})};dcSetVals(key)[f]=Object.keys(o).length?o:undefined}
-  else if(x.t==="size"){if(ins.some(n=>n==null))return;const mn=[fr(ins[0]),fr(ins[1])],mx=[fr(ins[2]),fr(ins[3])];if(mn[0]>mx[0]||mn[1]>mx[1])return;
-    const o={...(mn[0]||mn[1]?{min:mn}:{}),...(mx[0]!==1||mx[1]!==1?{max:mx}:{})};dcSetVals(key)[f]=Object.keys(o).length?o:undefined}
-  dcSetFtPaint(key);
-}
+function dcSetFtPaint(key){const el=document.querySelector("#bmBody .dc-set-ft");if(el)el.outerHTML=dcSetFtHtml(key);dcSave()}
 function dcSetReset(key){if(dc.set)delete dc.set[key];renderDetCreate()}
-function dcSetSpec(key,f){return dcSetGroups(key,dc._tpl||[]).flatMap(g=>g[1]).find(x=>x.f===f)}
-// Изменённые свойства вида: [поле, значение]. Скрытое зависимое поле не уходит
-function dcSetChanged(key,tpl){
-  const all=dcSetGroups(key,tpl).flatMap(g=>g[1]),vals=dc.set?.[key]||{};
-  return all.filter(x=>vals[x.f]!==undefined&&dcSetShown(key,x,all)&&JSON.stringify(vals[x.f])!==JSON.stringify(x.t==="cls"?DW_ALL:x.def)).map(x=>[x,vals[x.f]]);
+// Тело создания: свойства окна детектора (dwDetProps), которые отличаются от умолчаний вида. Зоны — свои у каждой камеры
+function dcSetBody(key){
+  const n=dcVirtNode(key);if(!n||!dc.set?.[key]?.arc)return{};
+  const k=dwKindOf(n),ne=(a,b)=>JSON.stringify(a)!==JSON.stringify(b),o=dwDetProps(dc.set[key],k,n),b=dwDetProps(dcVirtBase(n),k,n);
+  return Object.fromEntries(Object.entries(o).filter(([f,v])=>!["zone","extraZones","zoneTo"].includes(f)&&v!=null&&ne(v,b[f])));
 }
-function dcSetBody(key,tpl){return Object.fromEntries(dcSetChanged(key,tpl).map(([x,v])=>[x.f,v]))}
-function dcSetText1(x,v){
-  const pc=n=>Math.round(n*1000)/10;
-  if(x.t==="sw")return i18n(v?"вкл":"выкл");
-  if(x.t==="sel"||x.t==="seg")return i18n(x.opts.find(o=>o[0]===String(v))?.[1]||String(v));
-  if(x.t==="cls")return v.map(c=>i18n(DW_CLS[c])).join(", ");
-  if(x.t==="rng")return`${v.min??x.def[0]}–${v.max??x.def[1]} ${i18n(x.unit||"")}`.trim();
-  if(x.t==="wh")return`${v.width} × ${v.height} ${i18n("пикс.")}`;
-  if(x.t==="whf")return`${pc(v[0])} × ${pc(v[1])} %`;
-  if(x.t==="prng")return`${pc(v.min??0)}–${pc(v.max??1)} %`;
-  if(x.t==="size")return[v.min?`${i18n("не меньше")} ${pc(v.min[0])} × ${pc(v.min[1])} %`:"",v.max?`${i18n("не больше")} ${pc(v.max[0])} × ${pc(v.max[1])} %`:""].filter(Boolean).join(", ");
-  return`${v} ${i18n(x.unit||"")}`.trim();
-}
-function dcSetPlanHtml(plan,tpl){
-  const ls=plan.filter(p=>p.fit.length).map(p=>{const c=dcSetChanged(p.key,tpl);return`<div class="dc-plan"><div>${escHtml(p.name)}</div><div class="dc-plan-s">${c.length?c.map(([x,v])=>`${escHtml(i18n(x.l))}: ${escHtml(dcSetText1(x,v))}`).join("; "):i18n("Свойства не изменены. Детекторы получат значения по умолчанию.")}</div></div>`});
+function dcSetPlanHtml(plan){
+  const ls=plan.filter(p=>p.fit.length).map(p=>{const rs=dcSetRows(p.key);return`<div class="dc-plan"><div>${escHtml(p.name)}</div><div class="dc-plan-s">${rs.length?rs.map(x=>`${escHtml(i18n(x.label))}: ${escHtml(x.toT)}`).join("; "):i18n("Свойства не изменены. Детекторы получат значения по умолчанию.")}</div></div>`});
   return ls.join("")||`<p class="sub dc-note">${i18n("Детекторов нет.")}</p>`;
 }
 // Пробел F126: формы зоны по виду детектора — как окно детектора (dwAreasHtml): детектору пересечения линии нужна
@@ -22003,7 +21948,8 @@ function renderDetCreate(){
   const lock=dc.lock?find(dc.lock)?.n:null;
   const cams=dc.ready?dcUniverse():[],tpl=dc.ready?dcTemplates(lock?[lock]:cams):[],list=dcFiltered(cams);
   // Шаблоны, мешающие выбранному: вместе на одном канале их не включить
-  const clash=key=>{const t=tpl.find(x=>x.key===key);if(!t)return"";const hit=tpl.find(x=>dc.items.has(x.key)&&x.key!==key&&((x.o.conflicts||[]).includes(t.o.template)||(t.o.conflicts||[]).includes(x.o.template)));return hit?`${i18n("Нельзя вместе с")} «${hit.o.name}»`:""};
+  // Вид один, выбор заменяет прежний — другой выбранный вид не мешает
+  const clash=()=>"";
   const lockWhy=key=>lock&&dc.ready?dcWhy(lock,key)||"":"";
   const plan=dcPlan(cams,tpl),total=plan.reduce((s,p)=>s+p.fit.length,0),camsHit=new Set(plan.flatMap(p=>p.fit.map(c=>c.id))).size;
   const gs=dcTrigs(plan,tpl);dc._tpl=tpl;
@@ -22023,7 +21969,7 @@ function renderDetCreate(){
   const okStep=x=>x.k==="what"?dc.items.size>0:x.k==="cams"?total>0:x.k==="rule"?dcRuleOk(gs):true;
   const secWhat=()=>{
     // Виды аналитики (C28, C29). Семейство, которое мешает выбранному здесь или работающему на сервере камеры из «Добавить к камере», недоступно; у остальных камер причина — в шаге камер (dcWhy)
-    const akOff=ak=>{const cl=lock?detAkClash(ak,null,false,detSrvOf(lock)):[];if(cl.length)return detAkClashText(ak,cl);const hit=Object.keys(DET_AK_CLASH).find(x=>x!==ak&&dc.items.has("a:"+x)&&(DET_AK_CLASH[ak]||[]).includes(x));return hit?`${i18n("Нельзя вместе с")} «${i18n(DET_AK[hit])}»`:""};
+    const akOff=ak=>{const cl=lock?detAkClash(ak,null,false,detSrvOf(lock)):[];if(cl.length)return detAkClashText(ak,cl);return"";};
     const akSmall={meta:"Ищет сцену по текстовому описанию",faceTV:"Пакет распознавания лиц TV",faceVA:"Пакет распознавания лиц VA",faceVL:"Пакет распознавания лиц VL"};
     const srvItems=[...DET_TYPES.map(k=>dcItemRow("s:"+k,i18n(k),"","","",lockWhy("s:"+k))),...(DET_TYPES.length?Object.keys(DET_AK).filter(ak=>detAkOn(ak,lock)):[]).map(ak=>{const off=akOff(ak)||lockWhy("a:"+ak);return dcItemRow("a:"+ak,i18n(DET_AK[ak]),akOff(ak)||(akSmall[ak]?i18n(akSmall[ak]):detAkEvText(ak)),"","",off)})];
     const noSrv=`<p class="sub">${i18n("Сервер не сообщил виды детекторов.")}</p>`;
@@ -22098,7 +22044,7 @@ function renderDetCreate(){
     return`<section class="cp-col"><div class="cp-scroll" data-cp-scroll="p"><p class="dc-total"><b>${total}</b> ${i18n(plural(total,"детектор|детектора|детекторов"))} ${i18n("на")} <b>${camsHit}</b> ${i18n(plural(camsHit,"камере|камерах|камерах"))}</p>${skips}
       <table class="bk-table"><thead><tr><th>#</th><th>${i18n("Камера")}</th><th>${i18n("Детектор")}</th><th>${i18n("Зона")}</th></tr></thead><tbody>${tr}</tbody></table>
       ${noLine?`<div class="nt bk-warn">${lu("triangle-alert")} ${noLine} ${i18n(plural(noLine,"детектору|детекторам|детекторам"))} ${i18n("пересечения линии нужна линия. Без линии детекторы не сработают.")}</div>`:""}
-      <div class="dc-sec" style="margin-top:12px">${i18n("Свойства детекторов")}</div>${dcSetPlanHtml(plan,tpl)}
+      <div class="dc-sec" style="margin-top:12px">${i18n("Свойства детекторов")}</div>${dcSetPlanHtml(plan)}
       <div class="dc-sec" style="margin-top:12px">${i18n("Правило по событию")}</div>${ruleLines}
       <label class="dc-on"><input type="checkbox" ${dc.on?"checked":""} ${onEv("change",["dcEnabled",onEv.checked])}><span>${i18n("Включить детекторы сразу")}</span></label></div></section>`;
   };
@@ -22119,6 +22065,8 @@ function renderDetCreate(){
   requestAnimationFrame(()=>{document.querySelectorAll("#bmBody [data-cp-scroll]").forEach(el=>{if(keep[el.dataset.cpScroll])el.scrollTop=keep[el.dataset.cpScroll]});document.querySelector("#bmBody .dc-z-row.on")?.scrollIntoView({block:"nearest"})});
   if(dc.wq&&st.k==="what")dcWhatFilter(dc.wq);
   dcSave();liveSync();dcFrzApply();
+  // Блоки окна детектора при отрисовке тоже зовут detNodeOf(«dcv~…»): флаг действия мастера после отрисовки не нужен
+  if(dc)dc._vAct=0;
 }
 // Поиск по видам детекторов на шаге «Что создать»: прячет строки, выбор и черновик не меняет
 function dcWhatType(v){dc.wq=v;typeLater("dcWhat",()=>dcWhatFilter(dc.wq),!String(v||"").trim())}
@@ -22141,7 +22089,7 @@ function dcFrz(){dc.frz=!dc.frz;renderDetCreate()}
 // Стоп-кадр останавливает видео кадра, «Продолжить» запускает снова
 function dcFrzApply(){const v=document.querySelector("#bmBody .live-frame video");if(!v)return;if(dc?.frz)v.pause();else if(v.paused)v.play().catch(()=>{})}
 function dcGeo(){dc.geoOff=!dc.geoOff;renderDetCreate()}
-function dcCreateBody(key,cam,tpl,zone){return Object.assign(dcCreateBody0(key,cam,tpl,zone),dcSetBody(key,tpl))}
+function dcCreateBody(key,cam,tpl,zone){return Object.assign(dcCreateBody0(key,cam,tpl,zone),dcSetBody(key))}
 function dcCreateBody0(key,cam,tpl,zone){
   const body={type:"det",enabled:dc.on,...(zone?{zone}:{})};
   if(key.startsWith("s:")){

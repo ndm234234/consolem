@@ -17,10 +17,13 @@ UiCheck(async ({ ok, until }) => {
   const before = (await dets()).length;
   const line = "s:" + DET_TYPES.find((t) => DET_KIND_CODE[t] === "linecross");
   const area = "s:" + DET_TYPES.find((t) => DET_KIND_CODE[t] === "motion");
-  dcItemToggle(line, true);
+  // Мастер создаёт детекторы одного вида: выбор вида заменяет прежний
   dcItemToggle(area, true);
-  const cams = detCams().filter((c) => !dcWhy(c, line) && !dcWhy(c, area)).slice(0, 2);
-  ok(cams.length === 2, "есть две подходящие камеры");
+  dcItemToggle(line, true);
+  ok(dc.items.size === 1 && dc.items.has(line), "вид один: выбор заменяет прежний");
+  ok(box().querySelectorAll('input[type=radio][name="dc-kind"]:checked').length === 1, "виды — переключатели, выбран один");
+  const cams = detCams().filter((c) => !dcWhy(c, line)).slice(0, 3);
+  ok(cams.length === 3, "есть три подходящие камеры");
   cams.forEach((c) => dcCamToggle(c.id, true));
   // Окно идёт за шагом: ширина от шага, высота не больше экрана, верх на месте
   const fitH = () => parseFloat(box().style.height);
@@ -42,13 +45,13 @@ UiCheck(async ({ ok, until }) => {
   dcStepGo(2);
   ok(dcStepKey() === "zones" && box().querySelector("[data-live] svg[data-zone]"), "кадр в окне мастера");
   const rows = dcRows();
-  ok(rows.length === 4 && rows[0].line && rows[1].line && !rows[2].line, "строки: сначала детекторы линии");
+  ok(rows.length === 3 && rows.every((r) => r.line), "строки: детектор линии на трёх камерах");
   ok(zoneDraw?.id === rows[0].id && zoneDraw.shape === "line", "первая строка сразу рисует линию");
   zoneSave(rows[0].id, { shape: "line", points: [[0.1, 0.1], [0.9, 0.9]] });
   ok(dcZoneOf(rows[0].id)?.shape === "line", "линия записана в черновик");
   const marks = () => box().querySelectorAll(".dc-z-mark.on").length;
   const counter = () => box().querySelector(".dc-z-cnt").textContent;
-  ok(marks() === 1 && counter() === "Настроено 1 из 4", "камера с зоной получила галочку, счётчик 1 из 4");
+  ok(marks() === 1 && counter() === "Настроено 1 из 3", "камера с зоной получила галочку, счётчик 1 из 3");
   // Детектору линии прямоугольник не подходит: галочки нет
   zoneSave(rows[0].id, { shape: "rect", points: [[0.1, 0.1], [0.5, 0.5]] });
   ok(marks() === 0, "прямоугольник у детектора линии галочки не даёт");
@@ -58,12 +61,15 @@ UiCheck(async ({ ok, until }) => {
   dcZonePick(rows[0].id);
   dcZoneCopy();
   ok(dcZoneOf(rows[1].id).points[0][0] === 0.2, "копия не заменила зону, нарисованную рукой");
-  ok(dc.zoneAt === rows[2].id && zoneDraw?.shape === "rect", "дальше — строки другой формы");
-  zoneSave(rows[2].id, { shape: "rect", points: [[0.1, 0.1], [0.5, 0.5]] });
-  dcZoneCopy();
-  ok(dc.zoneBy[rows[3].id]?.from && dcStepKey() === "rule", "копия помечена, мастер перешёл к правилу");
+  ok(dc.zoneBy[rows[2].id]?.from && dcStepKey() === "rule", "копия помечена, мастер перешёл к правилу");
   dcStepGo(dcSteps().findIndex((x) => x.k === "zones"));
-  ok(marks() === 4 && box().querySelectorAll(".dc-z-mark.copy").length === 1 && counter() === "Настроено 4 из 4", "у копии контурная галочка, счётчик 4 из 4");
+  ok(marks() === 3 && box().querySelectorAll(".dc-z-mark.copy").length === 1 && counter() === "Настроено 3 из 3", "у копии контурная галочка, счётчик 3 из 3");
+  // Свойства вида — блоки окна детектора: классы, размер, условия; значение уходит в create
+  const set = () => box().querySelector(".dc-set");
+  ok(set()?.dataset.dw === "dcv~" + line && [...set().querySelectorAll("h4")].some((h) => h.textContent.startsWith("Условия срабатывания")), "столбец свойств — блоки окна детектора");
+  dwDir("dcv~" + line, "ab");
+  ok(dcSetBody(line).direction === "ab" && !("zone" in dcSetBody(line)), "направление уходит в create, зона — нет");
+  dcStepGo(dcSteps().findIndex((x) => x.k === "rule"));
   dcStepGo(dcSteps().findIndex((x) => x.k === "rule"));
 
   // Правило: сначала простой вид — «Если» и один выбор «То»
@@ -146,19 +152,19 @@ UiCheck(async ({ ok, until }) => {
   dc = null;
   dcResume();
   ok(await until(() => dc && dc.ready), "камеры прочитаны заново");
-  ok(dc.items.size === 2 && dc.cams.size === 2 && dcZoneOf(rows[3].id) && dc.custom.cond.length === 1, "черновик восстановлен целиком");
+  ok(dc.items.size === 1 && dc.cams.size === 3 && dcZoneOf(rows[2].id) && dcSetBody(line).direction === "ab" && dc.custom.cond.length === 1, "черновик восстановлен целиком");
 
-  // Создание: зона уходит в create, правил по одному на вид
+  // Создание: зона и свойства уходят в create, правило одно
   dcStepGo(dcSteps().length - 1);
   ok((await dets()).length === before, "до «Создать» детекторов не прибавилось");
   dcRun();
   ok(!box() && !localStorage.getItem(KEY) && !dock(), "после «Создать» черновика нет");
   ok(await until(() => bq?.finished), "операция закончилась");
-  ok((await dets()).length === before + 4, `созданы четыре детектора: ${(await dets()).length - before}`);
+  ok((await dets()).length === before + 3, `созданы три детектора: ${(await dets()).length - before}`);
   const made = (await dets()).filter((x) => x.parentId === cams[0].id);
   const full = await Promise.all(made.map((x) => uiRec(x.uid)));
-  ok(full.some((x) => x.zone?.shape === "line") && full.some((x) => x.zone?.shape === "rect"), "зоны прочитаны с сервера");
-  ok(await until(() => rules.filter((r) => r.then[0]?.archive === archive).length === 2), "создано два правила с архивом");
+  ok(full.length === 1 && full[0].zone?.shape === "line" && full[0].direction === "ab", "зона и направление прочитаны с сервера");
+  ok(await until(() => rules.filter((r) => r.then[0]?.archive === archive).length === 1), "создано одно правило с архивом");
   ok(rules.filter((r) => r.then[0]?.archive === archive).every((r) => r.when.length === 1 && r.cond.length === 1), "правило: одно событие, условие на месте");
 
   // Только детектор движения: запись всё равно на 10 минут, а сервер правила — из домена камеры
@@ -178,7 +184,7 @@ UiCheck(async ({ ok, until }) => {
     dcItemToggle(line, true);
     ok(dc.custom.then[0].dur === "min" && dc.custom.then[0].minutes === 10 && !dc.custom.then[0].after, "вид без конца события вернул запись на 10 минут");
     ok(dcRuleOk(dcTrigs(dcPlan(dcUniverse(), []), [])), "правило осталось верным");
-    dcItemToggle(line, false);
+    dcItemToggle(area, true);
   }
   // Подробную настройку заменяют только с согласия
   ruleEdit((r) => { r.cond.push(condNew((COND_KINDS.find(condDeclared) || COND_KINDS[0]).kind)); });

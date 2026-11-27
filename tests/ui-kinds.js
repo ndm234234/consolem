@@ -145,12 +145,12 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   detCreateOpen(camT.id);
   ok(await until(() => dc && dc.ready), "мастер прочитал камеры");
   ok(!main().textContent.includes("Где работает"), "в карточке камеры выбора, где работает, больше нет: детекторы создаёт мастер");
-  dcItemToggle("t:tmpl.tamper", true);
+  // Мастер создаёт детекторы одного вида: «Вскрытие корпуса» — вторым проходом
   dcItemToggle("t:tmpl.line", true);
   dcStepGo(dcSteps().findIndex((x) => x.k === "zones"));
   const rows = dcRows();
   const lineRow = rows.find((r) => r.name === "Линия на камере");
-  ok(rows.length === 2 && lineRow?.line && zoneDraw?.id === lineRow.id && zoneDraw.shape === "line", "шаг зон: детектору линии сразу рисуется линия");
+  ok(rows.length === 1 && lineRow?.line && zoneDraw?.id === lineRow.id && zoneDraw.shape === "line", "шаг зон: детектору линии сразу рисуется линия");
   const svg = () => document.querySelector(`#bmodal [data-live] svg[data-zone="${lineRow.id}"]`);
   ok(!!svg(), "кадр с зоной в окне мастера");
   const at = (t, fx, fy, el = svg()) => {
@@ -171,6 +171,13 @@ UiCheck(async ({ ok, until, confirmWith }) => {
   const made = async () => (await uiDevices()).find((d) => d.parentId === camT.id && d.template === "tmpl.line" && d.zone?.shape === "line");
   const rec = await made();
   ok(!!rec && rec.builtin === true, "создан встроенный детектор с шаблоном и зоной");
+  detCreateOpen(camT.id);
+  ok(await until(() => dc && dc.ready), "мастер открыт для «Вскрытия корпуса»");
+  dcItemToggle("t:tmpl.tamper", true);
+  dcStepGo(dcSteps().length - 1);
+  dcRulePick("none");
+  dcRun();
+  await until(() => !bq || bq.finished);
   const tam = (await uiDevices()).find((d) => d.parentId === camT.id && d.template === "tmpl.tamper");
   ok(!!tam && tam.builtin === true, "и встроенный «Вскрытие корпуса» без зоны");
   // Карточка созданного: диапазон шаблона; у шаблона без чувствительности поля нет
