@@ -1613,7 +1613,8 @@
   // С 0.40.0 — и контроль оператора (operatorControl): у него только поддетекторы из SUB_ONLY
   // С профиля vms.subdetector/1 1.2 (пункт F122) — и номера (lpr), позы (pose), СИЗ (ppe), штрихкод (barcode), лица (faceTV,
   // faceVA, faceVL — один родитель face: только поддетекторы из SUB_ONLY)
-  const SUB_FAMILIES = ["tracker", "neural", "operatorControl", "pose", "ppe", "barcode"];
+  // С профиля 1.3 — и трекер людей (humanTracker, vms.detector/1 1.7)
+  const SUB_FAMILIES = ["tracker", "neural", "operatorControl", "pose", "ppe", "barcode", "humanTracker"];
   const SUB_FACES = ["faceTV", "faceVA", "faceVL"];
   const subHost = (p) => {
     if (p.detectorKind === "motion" || p.detectorKind === "lpr") return p.detectorKind;

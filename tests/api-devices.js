@@ -883,6 +883,22 @@
     assert.eq(row && [row.allowed, row.reason], [false, "NOT_SUPPORTED"], "creatable под дракой: subdet — allowed false, NOT_SUPPORTED");
   }, { needs: ["createUnits", "getCreatable", "kind:det", "kind:subdet", "prop:det.analyticsKind"], layer: "profile:vms.subdetector/1", since: "1.2" });
 
+  // С профиля vms.subdetector/1 1.3 (vms.detector/1 1.7, пункт F122): трекер людей (humanTracker, Human tracker VL в Axxon One) —
+  // значение analyticsKind с подписью, событий сверх other нет; принимает все виды поддетектора, кроме abandoned
+  test("Поддетектор: трекер людей (с 1.3) — значение analyticsKind humanTracker с подписью, x-events пуст; stop создан, abandoned — 422, creatable — все виды, кроме abandoned", async () => {
+    const env = await makeEnv();
+    const ak = (await env.ok("GET", "/kinds/det")).schema.properties.analyticsKind;
+    assert.ok(ak.enum.includes("humanTracker") && ak["x-enum-labels"]?.humanTracker?.text, "humanTracker — значение с подписью");
+    assert.eq((ak["x-events"] || {}).humanTracker || [], [], "событий сверх other нет");
+    const h = await addDet(env, camU, "Трекер людей", { detectorKind: "other", analyticsKind: "humanTracker" });
+    const s = await addSub(env, h, "stop", { timeSec: 5 });
+    assert.eq([s.parentId, s.properties.subdetectorKind], [h.uid, "stop"], "stop под трекером людей");
+    assert.eq(await failedOf(env, sub(h, "abandoned", { timeSec: 30 })), [["NOT_SUPPORTED", P("subdetectorKind")]], "abandoned под трекером людей");
+    const all = (await env.ok("GET", "/kinds/subdet")).schema.properties.subdetectorKind.enum;
+    const row = (await env.ok("GET", `/units/${h.uid}/creatable`)).items.find((x) => x.kind === "subdet") || {};
+    assert.eq(row.schema?.properties?.subdetectorKind?.enum, all.filter((k) => k !== "abandoned"), "creatable: все виды, кроме abandoned");
+  }, { needs: ["createUnits", "getCreatable", "kind:det", "kind:subdet", "prop:det.analyticsKind"], layer: "profile:vms.subdetector/1", since: "1.3" });
+
   test("Поддетектор: вид родителя сменили после создания — поддетектор правится; правило родителя — только при создании и при subdetectorKind в правке", async () => {
     const env = await makeEnv();
     const t = await addDet(env, camU, "Трекер", { detectorKind: "other", analyticsKind: "tracker" });
