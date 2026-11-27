@@ -3525,6 +3525,7 @@ body.dw-resizing,body.dw-resizing *{cursor:col-resize!important;user-select:none
 .dw-tools .btn,.dw-row .btn{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
 .dw .btn.on{border-color:var(--bl);background:var(--one-info-bg);color:var(--x-link)}
 .dw-tools-l{margin:0}
+.dw-drawing{display:inline-flex;align-items:center;gap:6px;font-weight:600}
 .dw-lay{margin-left:auto;display:flex;gap:4px;flex-wrap:wrap}
 .dw-sw{display:inline-block;width:10px;height:10px;border-radius:var(--one-radius-control);flex:none}
 .dw-stage{position:relative;aspect-ratio:16/9;width:100%;border-radius:var(--one-radius-container);overflow:hidden;background:#080b10;user-select:none}
@@ -19163,16 +19164,17 @@ function dwGripReset(g){dwRwSet(g,null,true)}
 // как будет с сервером. Время превью идёт ×1 (dw.tsp)
 function dwStubHtml(d,k){return""}
 function dwToolsHtml(d,k){
+  // Рисовать начинают только из панели: кнопка стоит у списка, куда идёт новая зона. Над кадром — что рисуем и «Отменить»
   if(k==="other"||k==="meta")return"";
-  const b=(t,l,ic)=>`<button type="button" class="btn s${dw.tool===t?" on":""}" ${onEv("click",["dwTool",t])}>${ic}${i18n(l)}</button>`;
-  const sw=c=>`<i class="dw-sw" style="background:${c}"></i>`;
-  const out=[];
-  if(k!=="linecross")out.push(b("in","Зона",sw("var(--dw-in)")));
-  if(dwHas(d,"extraZones"))out.push(b("ex","Исключение",sw("var(--dw-ex)")));
-  if(k==="linecross")out.push(b("line","Линия",sw("var(--dw-ln)")));
-  if(dwCalOn(d))out.push(`<button type="button" class="btn s${dw.tool==="cal"?" on":""}" data-dw-cal-tool ${onEv("click",["dwCalDraw",d.id,1])}>${sw("var(--dw-cal)")}${i18n("Калибровка скорости")}</button>`);
-  return`<span class="sub dw-tools-l">${i18n("Нарисовать")}:</span>`+out.join("");
+  const t=dw.poly?.type==="cal"?"cal":dw.tool;if(!t)return"";
+  const sub=t==="subx"?dwSubOf(d.id,dw.toolSub):null;
+  const what=t==="in"?i18n("зона детектора"):t==="ex"?i18n("исключение детектора"):t==="line"?i18n("линия A–B"):t==="cal"?i18n("область калибровки скорости")
+    :t==="subx"?`${i18n("исключение поддетектора")} «${escHtml(sub?.name||"")}»`:"";
+  if(!what)return"";
+  const c=t==="in"?"in":t==="line"?"ln":t==="cal"?"cal":"ex";
+  return`<span class="dw-drawing" data-dw-drawing="${t}"><i class="dw-sw" style="background:var(--dw-${c})"></i><span>${i18n("Рисуем")}: ${what}</span></span><button type="button" class="btn s" data-dw-draw-off ${onEv("click",["dwDrawOff"])}>${i18n("Отменить")}</button>`;
 }
+function dwDrawOff(){dw.poly=null;dw.tool=null;gear()}
 // Стоп-кадр (CX3): время превью стоит, кадр не меняется, пока рисуют зону
 function dwFreezeHtml(){return`<button type="button" class="btn s dw-frz${dw.freeze?" on":""}" aria-pressed="${dw.freeze}" data-tip="${i18n(dw.freeze?"Продолжить видео":"Остановить кадр, чтобы удобно рисовать зону")}" ${onEv("click",["dwFreeze"])}>${lu(dw.freeze?"play":"pause",14)}${i18n(dw.freeze?"Продолжить":"Стоп-кадр")}</button>`}
 function dwFreeze(){dw.freeze=!dw.freeze;gear()}

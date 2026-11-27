@@ -1,5 +1,11 @@
 // Английский прототипа 107 (docs/TEXTS.md, «Как менять текст безопасно»): подключён после assets/i18n-en.js
 Object.assign(window.I18N_EN,{
+"Рисуем":"Drawing",
+"зона детектора":"detector zone",
+"исключение детектора":"detector exclusion",
+"линия A–B":"line A–B",
+"область калибровки скорости":"speed calibration area",
+"исключение поддетектора":"sub-detector exclusion",
 "Авточувствительность":"Auto sensitivity",
 "Включить поиск у трекера":"Turn on search in the tracker",
 "Консоль включила поиск оставленных предметов у трекера в черновике. Чтобы применить, нажать «Показать план», затем «Применить».":"The console turned on the abandoned object search in the tracker draft. To apply it, click Show plan, then Apply.",
