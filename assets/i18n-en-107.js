@@ -1,5 +1,9 @@
 // Английский прототипа 107 (docs/TEXTS.md, «Как менять текст безопасно»): подключён после assets/i18n-en.js
 Object.assign(window.I18N_EN,{
+"Нарисовать линию":"Draw the line",
+"Линия не нарисована: детектор не сработает. Нажать «Нарисовать линию» и протянуть линию A–B по кадру.":"The line is not drawn: the detector does not trigger. Click Draw the line and drag the line A–B across the frame.",
+"Чьи зоны на кадре":"Whose zones are on the frame",
+"Детектор: зона и исключения":"Detector: zone and exclusions",
 "Рисуем":"Drawing",
 "зона детектора":"detector zone",
 "исключение детектора":"detector exclusion",

@@ -3755,7 +3755,6 @@ body.dw-resizing,body.dw-resizing *{cursor:col-resize!important;user-select:none
 .dw-arc-h{margin:12px 0 6px;font-size:12px;font-weight:600;color:var(--mu)}.dw-arc-h:first-of-type{margin-top:2px}
 .dw-arc-f .dw-swl{justify-content:flex-start;align-items:center;color:var(--tx);font-size:12px}.dw-arc-f .dw-help{margin-left:44px}.dw-arc-f.dis .dw-swl{cursor:not-allowed;opacity:.55}.dw-arc-nt{margin:4px 0 8px}.dw-arc-keep{margin:4px 0 0}
 .dw-sa.sel{fill-opacity:.24;stroke-width:1;stroke-dasharray:none}
-.dw-sa.dim{opacity:.45}
 .dw-sa.mask{fill:#0b0f14;fill-opacity:.6;stroke-dasharray:1 1}
 .dw-new{border:1px dashed var(--ln);border-radius:var(--one-radius-container);padding:10px;margin-top:6px}
 .dw-new-h{display:flex;flex-direction:column;gap:2px;margin-bottom:8px}
@@ -19173,21 +19172,28 @@ function dwGripReset(g){dwRwSet(g,null,true)}
 // как будет с сервером. Время превью идёт ×1 (dw.tsp)
 function dwStubHtml(d,k){return""}
 // Фокус кадра — объект, открытый в панели: детектор, поддетектор или список поддетекторов («subs»)
-function dwFocusKey(d,c){if(dw.subSel&&c.subs.some(s=>s.id===dw.subSel))return dw.subSel;return dwPtab()==="sub"?"subs":"det"}
+function dwFocusKey(d,c){if(!dwHasSubs(d)||!c.subs.length)return"det";if(dw.subSel&&c.subs.some(s=>s.id===dw.subSel))return dw.subSel;return dwPtab()==="sub"?"subs":"det"}
 // Чипы над кадром: чьи зоны на кадре яркие. Щелчок открывает объект в панели; щелчок в панели переключает чип
 function dwFocusHtml(d,k,c){
-  if(!DW_SUBP.has(k)||!c.subs.length)return"";
+  if(!dwHasSubs(d)||!c.subs.length)return"";
   const fo=dwFocusKey(d,c);
-  const chip=(on,col,name,ev,off,tip)=>`<button type="button" class="dw-fc${on?" on":""}${off?" off":""}" aria-pressed="${on}" data-tip="${escHtml(tip)}" ${onEv("click",ev)} ${onEv("mouseenter",["dwFocusHov",ev[2]||"det"])} ${onEv("mouseleave",["dwFocusHov",""])}>${on?lu("check",12):`<i class="dw-tdot" style="background:${col}"></i>`}<span>${escHtml(name)}</span>${off?`<span class="sub">${i18n("выкл")}</span>`:""}</button>`;
-  return`<div class="dw-focus" role="group" aria-label="${i18n("Чьи зоны на кадре")}"><span class="sub dw-tools-l">${i18n("Зоны на кадре")}:</span>`
+  const chip=(on,col,name,ev,off,tip)=>`<button type="button" role="radio" class="dw-fc${on?" on":""}${off?" off":""}" aria-checked="${on}" tabindex="${on||fo==="subs"&&ev[2]===c.subs[0]?.id?0:-1}" data-fo="${escHtml(ev[2]||"det")}" data-tip="${escHtml(tip)}" ${onEv("click",ev)} ${onEv("keydown",["dwFocusNav",d.id,onEv.event])} ${onEv("mouseenter",["dwFocusHov",ev[2]||"det"])} ${onEv("mouseleave",["dwFocusHov",""])}>${on?lu("check",12):`<i class="dw-tdot" style="background:${col}"></i>`}<span>${escHtml(name)}</span>${off?`<span class="sub">${i18n("выкл")}</span>`:""}</button>`;
+  return`<div class="dw-focus" role="radiogroup" aria-label="${i18n("Чьи зоны на кадре")}"><span class="sub dw-tools-l">${i18n("Зоны на кадре")}:</span>`
     +chip(fo==="det","var(--dw-in)",detTitle(d),["dwFocus",d.id,""],false,i18n("Детектор: зона и исключения"))
     +c.subs.map((s,i)=>chip(fo===s.id,DW_SUBC[i%DW_SUBC.length],s.name,["dwFocus",d.id,s.id],!s.on,`${i18n("Поддетектор")} · ${i18n(DW_SUBN[s.kind]||s.kind)}`)).join("")+`</div>`;
 }
 // Наведение на чип подсвечивает бледные зоны этого объекта на кадре: видно, что он даёт, без смены фокуса
-function dwFocusHov(k){dwRoot()?.querySelectorAll(".dw-ov .dim.hov").forEach(e=>e.classList.remove("hov"));if(k)dwRoot()?.querySelectorAll(`.dw-ov .dim[data-fo="${CSS.escape(k)}"]`).forEach(e=>e.classList.add("hov"))}
+function dwFocusHov(k){dw.foHov=k||null;dwRoot()?.querySelectorAll(".dw-ov .dim.hov").forEach(e=>e.classList.remove("hov"));if(k)dwRoot()?.querySelectorAll(`.dw-ov .dim[data-fo="${CSS.escape(k)}"]`).forEach(e=>e.classList.add("hov"))}
+// Клавиатура чипов — как у радиогруппы (WAI-ARIA APG): стрелки двигают фокус и выбирают объект
+function dwFocusNav(id,e){
+  const st={ArrowRight:1,ArrowDown:1,ArrowLeft:-1,ArrowUp:-1}[e.key];if(!st&&e.key!=="Home"&&e.key!=="End")return;
+  e.preventDefault();const bs=[...(dwRoot()?.querySelectorAll(".dw-fc")||[])],i=bs.indexOf(e.target.closest(".dw-fc"));if(i<0)return;
+  const n=e.key==="Home"?0:e.key==="End"?bs.length-1:(i+st+bs.length)%bs.length,k=bs[n].dataset.fo;
+  dwFocus(id,k==="det"?"":k);dwRoot()?.querySelector(`.dw-fc[data-fo="${CSS.escape(k)}"]`)?.focus();
+}
 function dwFocus(id,sid){
   if(dwRoRefuse(id))return;
-  dw.sel=null;dw.pt=null;dw.tool=null;dw.poly=null;
+  dw.sel=null;dw.pt=null;dw.tool=null;dw.poly=null;dw.foHov=null;
   if(!sid)dwPtabSet("det");
   else{dw.ptab="sub";dw.subSel=sid;dw.subNew=false;dw.subAdv=false;dwSubToolDrop();gear();renderTree();const r=document.getElementById("dwRight");if(r)r.scrollTop=0}
   // Панель плавно показывает выбранный объект; при prefers-reduced-motion — без движения
@@ -19275,6 +19281,8 @@ function dwGeoSvg(d){
   const c=dwC(d);let h="";
   // Фокус кадра: ярко и с ручками — объект, открытый в панели; остальные — бледно, без подписей, щелчок не ловят
   const fo=dwFocusKey(d,c),dd=fo!=="det";
+  // Подсветку наведения на чип держит dw.foHov: перерисовка кадра её не теряет
+  setTimeout(()=>{if(dw.foHov)dwFocusHov(dw.foHov)},0);
   // Правило 2 версии профиля: зону детектора, зону и направление поддетектора, которых нет в версии сервера, кадр не рисует
   const zOff=nodeFieldOff(d,"zone"),sOff=(x,f)=>{if(!profHideSet.size)return false;const u=dwSubUnits(d).find(y=>y.id===x.id);return kindFieldOff(u?nodeKind(u):"subdet",f)};
   if(!zOff)c.areas.forEach(a=>{
@@ -19302,20 +19310,22 @@ function dwGeoSvg(d){
     if(!lit){const cl=`dw-sa${s.kind==="mask"?" mask":""} dim`;
       if(s.kind==="line")h+=`<line class="dw-l dim" data-fo="${escHtml(s.id)}" x1="${s.line[0][0]*DW_X}" y1="${s.line[0][1]*DW_Y}" x2="${s.line[1][0]*DW_X}" y2="${s.line[1][1]*DW_Y}" stroke="${col}"/>`;
       else[s.area,...(s.kind==="a2a"?[s.area2]:[])].forEach(a=>h+=`<polygon class="${cl}" data-fo="${escHtml(s.id)}" points="${a.pts.map(dwP).join(" ")}" style="--c:${col}"/>`);
+      (s.ex||[]).forEach(x=>h+=`<polygon class="dw-a ex dim" data-fo="${escHtml(s.id)}" points="${x.pts.map(dwP).join(" ")}"/>`);
       return}
     const cls=`dw-sa${s.kind==="mask"?" mask":""}${on?" sel":""}`;
     const poly=(pts,b,lb)=>{h+=`<polygon class="${cls}${dw.sel===`${b}:${s.id}`?" zf":""}" data-b="${b}:${s.id}" points="${pts.map(dwP).join(" ")}" style="--c:${col}"/><text class="dw-tx" x="${(pts[0][0]*DW_X+1).toFixed(1)}" y="${(pts[0][1]*DW_Y-1.2).toFixed(1)}" style="fill:${col}">${escHtml(lb)}</text>`;
       if(hd){if(dw.sel===`${b}:${s.id}`)h+=dwMidSvg(pts,`${b}:${s.id}`,col);pts.forEach((p,j)=>h+=dwHdSvg(`${b}:${s.id}`,j,p,col,1.5))}};
     if(s.kind==="line")h+=dwLineSvg(s.line,sOff(s,"direction")?"off":s.dir,`subl:${s.id}`,col,s.name);
     else{poly(s.area.pts,"sub",s.kind==="a2a"?`1 · ${s.name}`:s.name);if(s.kind==="a2a")poly(s.area2.pts,"sub2","2")}
-    // Пробел F120: свои исключения поддетектора — штриховка, как у исключений детектора; видны, когда поддетектор открыт или ничего не открыто
+    // Пробел F120: свои исключения поддетектора — штриховка, как у исключений детектора; яркие, когда поддетектор в фокусе; иначе бледные (ветка !lit)
     if(s.ex?.length)s.ex.forEach((x,j)=>{const zid=`${s.id}~${x.id}`,b=`subx:${zid}`;
       h+=`<polygon class="dw-a ex${dw.sel===b?" sel":""}" data-b="${b}" points="${x.pts.map(dwP).join(" ")}"/>${(()=>{const lx=Math.min(...x.pts.map(q=>q[0])),rx=Math.max(...x.pts.map(q=>q[0])),ly=Math.max(...x.pts.map(q=>q[1])),end=lx>.5;
         // Справа подпись выровнена по правому краю исключения: длинное имя поддетектора не уходит за кадр
         return`<text class="dw-tx" x="${(end?rx*DW_X:lx*DW_X+1).toFixed(1)}"${end?' text-anchor="end"':""} y="${(Math.min(ly*DW_Y+3.6,DW_Y-1)).toFixed(1)}" style="fill:var(--dw-ex)">${escHtml(i18n("Исключение")+" "+(j+1)+" · "+s.name)}</text>`})()}`;
       if(hd){if(dw.sel===b)h+=dwMidSvg(x.pts,b,"var(--dw-ex)");x.pts.forEach((q,k2)=>h+=dwHdSvg(b,k2,q,"var(--dw-ex)",1.5))}});
   });
-  if(dw.lay.size&&DW_SIZE.has(k)&&!dd)["min","max"].forEach(m=>{
+  // Рамки размеров — свой слой «Показать»: видны при любом фокусе чипов
+  if(dw.lay.size&&DW_SIZE.has(k))["min","max"].forEach(m=>{
     const[w,hh]=c[m],[x,y]=c[m+"At"],X=(x-w/2)*DW_X,Y=(y-hh)*DW_Y;
     h+=`<rect class="dw-sz" data-b="${m}" x="${X.toFixed(1)}" y="${Y.toFixed(1)}" width="${(w*DW_X).toFixed(1)}" height="${(hh*DW_Y).toFixed(1)}"/>
       <text class="dw-tx" x="${(X+1).toFixed(1)}" y="${(Y-1.2).toFixed(1)}">${i18n(m==="min"?"мин.":"макс.")}</text>
@@ -19709,8 +19719,9 @@ function dwAreasHtml(id,k,c){
   const rows=c.areas.map(a=>`<div class="dw-ar${dw.sel===a.id?" sel":""}" data-dw-zone="${escHtml(a.id)}">${dwArToggle(dw.sel===a.id,["dwSelect",a.id],`var(--dw-${a.type})`,escHtml(dwAreaName(a)),`${i18n(a.type==="ex"?"детектор не смотрит":"детектор смотрит")} · ${a.pts.length} ${i18n(plural(a.pts.length,"точка|точки|точек"))}`)}
       <button type="button" class="btn s dw-del" aria-label="${i18n("Удалить")}" ${onEv("click",["dwAreaDel",id,a.id])}>${lu("trash",14)}</button></div>${dw.sel===a.id?dwPtsHtml(id,"area",a.id,a.pts):""}`).join("");
   const line=c.line?`<div class="dw-ar"><span class="tw"></span><i class="dw-sw" style="background:var(--dw-ln)"></i><span>${i18n("Линия")} A–B</span><span class="sub">${i18n("детектор ждёт пересечения")}</span></div>`:"";
-  const empty=!c.areas.some(a=>a.type==="in")&&k!=="linecross"?`<p class="sub">${i18n("Зоны нет: детектор смотрит на весь кадр.")}</p>`:"";
-  return rows+line+empty+`<div class="dw-row">${k!=="linecross"?`<button type="button" class="btn s" ${onEv("click",["dwTool","in"])}>${lu("plus",14)}${i18n("Зона")}</button>`:""}${dwHas(detNodeOf(id),"extraZones")?`<button type="button" class="btn s" ${onEv("click",["dwTool","ex"])}>${lu("plus",14)}${i18n("Исключение")}</button>`:""}${k==="linecross"?`<button type="button" class="btn s" ${onEv("click",["dwTool","line"])}>${i18n("Нарисовать линию заново")}</button>`:""}</div>`;
+  const empty=!c.areas.some(a=>a.type==="in")&&k!=="linecross"?`<p class="sub">${i18n("Зоны нет: детектор смотрит на весь кадр.")}</p>`
+    :k==="linecross"&&!c.line?`<p class="sub">${i18n("Линия не нарисована: детектор не сработает. Нажать «Нарисовать линию» и протянуть линию A–B по кадру.")}</p>`:"";
+  return rows+line+empty+`<div class="dw-row">${k!=="linecross"?`<button type="button" class="btn s" ${onEv("click",["dwTool","in"])}>${lu("plus",14)}${i18n("Зона")}</button>`:""}${dwHas(detNodeOf(id),"extraZones")?`<button type="button" class="btn s" ${onEv("click",["dwTool","ex"])}>${lu("plus",14)}${i18n("Исключение")}</button>`:""}${k==="linecross"?`<button type="button" class="btn s" ${onEv("click",["dwTool","line"])}>${c.line?i18n("Нарисовать линию заново"):lu("plus",14)+i18n("Нарисовать линию")}</button>`:""}</div>`;
 }
 function dwDirHtml(id,cur,fn,sid=""){
   const o=[["ab","A → B"],["ba","B → A"],["both","В обе стороны"]];
@@ -20496,10 +20507,11 @@ function dwCtx(st,e){
   if(mid){const[kd,id,i]=mid.split(":"),pts=dwPtsOf(c,kd,id);if(pts){const j=dwPtIns(pts,+i);if(j>=0){dwZoneFocus(kd,id);dw.pt={b:`${kd}:${id}`,i:j};gear()}}return}
   // Ближайшая сторона в пределах 2,5 единицы кадра (кадр — 160 × 90): сначала выбранная зона, потом остальные
   const q=dwXY(st,e);if(!q)return;
-  const cand=[];
-  c.areas.forEach(a=>cand.push(["area",a.id,a.pts,dw.sel===a.id]));
+  const cand=[],fo=dwFocusKey(d,c);
+  // Бледные зоны (не в фокусе чипов) правый щелчок не правит
+  if(fo==="det")c.areas.forEach(a=>cand.push(["area",a.id,a.pts,dw.sel===a.id]));
   const zs=(kd,sid)=>dw.sel===`${kd}:${sid}`;
-  if(DW_SUBP.has(dwKindOf(d)))c.subs.forEach(s=>{if(!s.on||s.kind==="line")return;if(dw.subSel&&dw.subSel!==s.id)return;
+  if(DW_SUBP.has(dwKindOf(d)))c.subs.forEach(s=>{if(!s.on||s.kind==="line")return;if(fo!=="subs"&&fo!==s.id)return;
     cand.push(["sub",s.id,s.area.pts,zs("sub",s.id)]);if(s.kind==="a2a")cand.push(["sub2",s.id,s.area2.pts,zs("sub2",s.id)]);
     (s.ex||[]).forEach(x=>cand.push(["subx",`${s.id}~${x.id}`,x.pts,zs("subx",`${s.id}~${x.id}`)]))});
   cand.sort((a,b)=>b[3]-a[3]);

@@ -110,11 +110,19 @@ UiCheck(async ({ ok, until, sleep }) => {
   await until(() => main().querySelector(`.dw-sa[data-b="sub:${SUB}"]`));
   dwPtabSet("det");
   await until(() => dwPtab() === "det");
-  const sa = main().querySelector(`.dw-sa[data-b="sub:${SUB}"]`);
   const pts = dwC(d()).subs.find((s) => s.id === SUB).area.pts, cx = pts.reduce((s, p) => s + p[0], 0) / pts.length, cy = pts.reduce((s, p) => s + p[1], 0) / pts.length;
+  // Прототип 107: зоны не в фокусе бледные и щелчок не ловят — к поддетектору ведёт чип «Зоны на кадре», затем щелчок по его яркой области
+  const chips = typeof dwFocusHtml === "function";
+  if (chips) {
+    ok(!main().querySelector(`.dw-sa[data-b="sub:${SUB}"]`) && main().querySelector(`.dw-ov .dim[data-fo="${SUB}"]`), "при фокусе на детекторе область поддетектора бледная");
+    main().querySelector(`.dw-fc[data-fo="${SUB}"]`).click();
+    ok(await until(() => dwPtab() === "sub" && dw.subSel === SUB && main().querySelector(`.dw-sa[data-b="sub:${SUB}"]`)), "чип открыл поддетектор, его область яркая");
+  }
+  const sa = main().querySelector(`.dw-sa[data-b="sub:${SUB}"]`);
   down(sa, cx, cy); up(cx, cy);
   ok(await until(() => dwPtab() === "sub" && dw.subSel === SUB && dw.sel === `sub:${SUB}`), "щелчок по области поддетектора: вкладка «Поддетекторы», его карточка, фокус области");
   ok(await until(() => main().querySelector(`[data-dw-zone="sub:${SUB}"]`) && main().querySelectorAll(".dw-sub-b .dw-pts .dw-pt").length === pts.length), "в карточке поддетектора — список точек области");
+  if (chips) { main().querySelector('.dw-fc[data-fo="det"]').click(); await until(() => dwPtab() === "det"); }
   down(main().querySelector('.dw-a[data-b="area:z0"]'), 0.5, 0.5); up(0.5, 0.5);
   ok(await until(() => dwPtab() === "det" && dw.sel === "z0"), "щелчок по зоне детектора возвращает вкладку «Детектор»");
 

@@ -53,6 +53,52 @@ UiCheck(async ({ ok, until, sleep }) => {
   ok(!/^subx:/.test(dw.sel || "") && dw.tool !== "subx", "другой поддетектор: фокус исключения и инструмент сняты");
   dwSubSel(s.id);
 
+  // Раунд 2: над кадром нет кнопок «Нарисовать»; во время рисования — что рисуем и «Отменить»
+  ok(!main().querySelector(".dw-tools [data-dw-cal-tool]") && !/Нарисовать:/.test(main().querySelector(".dw-tools").textContent), "над кадром нет кнопок «Нарисовать»");
+  dwSubExTool(TRK, s.id);
+  ok(await until(() => main().querySelector('[data-dw-drawing="subx"]')), "над кадром: рисуем исключение поддетектора");
+  ok(/исключение поддетектора «/.test(main().querySelector("[data-dw-drawing]").textContent), "строка называет поддетектор");
+  main().querySelector("[data-dw-draw-off]").click();
+  ok(await until(() => !main().querySelector("[data-dw-drawing]")) && !dw.tool, "«Отменить» снимает рисование");
+
+  // Раунд 3: чипы «Зоны на кадре» — фокус совпадает с объектом в панели; остальные зоны бледные и щелчок не ловят
+  const fc = () => main().querySelector('.dw-fc[aria-checked="true"]');
+  ok(await until(() => fc()?.dataset.fo === s.id), "чип в фокусе — открытый поддетектор");
+  ok(main().querySelector('.dw-ov polygon.dim[data-fo="det"]'), "зона детектора бледная");
+  ok(getComputedStyle(main().querySelector(".dw-ov .dim")).pointerEvents === "none", "бледные зоны щелчок не ловят");
+  main().querySelector('.dw-fc[data-fo="det"]').click();
+  ok(await until(() => dwPtab() === "det" && fc()?.dataset.fo === "det"), "чип детектора открыл детектор в панели");
+  ok(main().querySelector(".dw-ov polygon[data-b^='area:']:not(.dim)"), "зона детектора яркая");
+  main().querySelector('.dw-fc[data-fo="det"]').dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true }));
+  ok(await until(() => dw.subSel === s.id && document.activeElement?.dataset.fo === s.id), "End на чипах: последний поддетектор, фокус клавиатуры на его чипе");
+  const dimS = main().querySelector('.dw-ov .dim[data-fo]:not([data-fo="det"])') || main().querySelector('.dw-ov .dim[data-fo="det"]');
+  dwFocusHov(dimS.dataset.fo);
+  ok(dimS.isConnected && main().querySelector(`.dw-ov .dim.hov[data-fo="${CSS.escape(dimS.dataset.fo)}"]`), "наведение на чип подсвечивает зоны объекта");
+  dwFocusHov("");
+  // Ревью: правый щелчок по краю бледной зоны детектора её не правит
+  {
+    const z = dwC(trk()).areas[0], n0 = z.pts.length, st2 = main().querySelector(".dw-stage"), r2 = st2.getBoundingClientRect();
+    const m = [(z.pts[0][0] + z.pts[1][0]) / 2, (z.pts[0][1] + z.pts[1][1]) / 2];
+    st2.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: r2.x + r2.width * m[0], clientY: r2.y + r2.height * m[1] }));
+    await sleep(50);
+    ok(dwC(trk()).areas[0].pts.length === n0 && dw.subSel === s.id, "правый щелчок по бледной зоне не добавил точку и не сменил фокус");
+  }
+
+  // Ревью: вкладка «Поддетекторы» трекера не бледнит зоны детектора другого вида (пересечение линии)
+  {
+    dwPtabSet("sub");
+    const LC = "30000017-0000-4000-8000-000000000000";
+    if (find(LC)) {
+      pick(LC);
+      ok(await until(() => main().querySelector(`[data-dw="${LC}"] .dw-ov [data-h^="line:"]`)), "у пересечения линии ручки линии на месте");
+      ok(!main().querySelector(".dw-ov .dim") && !main().querySelector(".dw-fc"), "у пересечения линии нет бледных зон и чипов");
+      pick(TRK);
+      ok(await until(() => main().querySelector(`[data-dw="${TRK}"]`)), "окно трекера снова открыто");
+      await until(() => !dwBusy.has(TRK) && dwLoaded.has(TRK));
+    }
+    dwSubSel(s.id);
+  }
+
   // F118: трекер не ищет оставленные предметы — предупреждение; кнопка включает поиск в черновике
   dwFinePut(trk(), "detectUnattendedObjects", false);
   gear();
