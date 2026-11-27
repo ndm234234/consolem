@@ -19271,7 +19271,9 @@ function dwGeoSvg(d){
     else{poly(s.area.pts,"sub",s.kind==="a2a"?`1 · ${s.name}`:s.name);if(s.kind==="a2a")poly(s.area2.pts,"sub2","2")}
     // Пробел F120: свои исключения поддетектора — штриховка, как у исключений детектора; видны, когда поддетектор открыт или ничего не открыто
     if(s.ex?.length&&(on||!subSel))s.ex.forEach((x,j)=>{const zid=`${s.id}~${x.id}`,b=`subx:${zid}`;
-      h+=`<polygon class="dw-a ex${dw.sel===b?" sel":""}" data-b="${b}" points="${x.pts.map(dwP).join(" ")}"/>${(()=>{const lx=Math.min(...x.pts.map(q=>q[0])),ly=Math.max(...x.pts.map(q=>q[1]));return`<text class="dw-tx" x="${(Math.min(lx,.66)*DW_X+1).toFixed(1)}" y="${(Math.min(ly*DW_Y+3.6,DW_Y-1)).toFixed(1)}" style="fill:var(--dw-ex)">${escHtml(i18n("Исключение")+" "+(j+1)+" · "+s.name)}</text>`})()}`;
+      h+=`<polygon class="dw-a ex${dw.sel===b?" sel":""}" data-b="${b}" points="${x.pts.map(dwP).join(" ")}"/>${(()=>{const lx=Math.min(...x.pts.map(q=>q[0])),rx=Math.max(...x.pts.map(q=>q[0])),ly=Math.max(...x.pts.map(q=>q[1])),end=lx>.5;
+        // Справа подпись выровнена по правому краю исключения: длинное имя поддетектора не уходит за кадр
+        return`<text class="dw-tx" x="${(end?rx*DW_X:lx*DW_X+1).toFixed(1)}"${end?' text-anchor="end"':""} y="${(Math.min(ly*DW_Y+3.6,DW_Y-1)).toFixed(1)}" style="fill:var(--dw-ex)">${escHtml(i18n("Исключение")+" "+(j+1)+" · "+s.name)}</text>`})()}`;
       if(hd){if(dw.sel===b)h+=dwMidSvg(x.pts,b,"var(--dw-ex)");x.pts.forEach((q,k2)=>h+=dwHdSvg(b,k2,q,"var(--dw-ex)",1.5))}});
   });
   if(dw.lay.size&&DW_SIZE.has(k))["min","max"].forEach(m=>{
