@@ -845,6 +845,43 @@
     assert.ok(under.every((x) => !("schema" in x)), "под камерой схему не сужают");
   }, { needs: ["createUnits", "getCreatable", "kind:det", "kind:subdet", "prop:det.analyticsKind"], layer: "profile:vms.subdetector/1", since: "1.1" });
 
+  // С профиля vms.subdetector/1 1.2 (пункт F122): поддетекторы принимают номера, позы, СИЗ и штрихкод — все виды, кроме abandoned;
+  // детекторы лиц — только line, enter, dwell. creatable сужает subdetectorKind под каждым
+  test("Поддетектор: номера, позы, СИЗ, штрихкод и лица (с профиля 1.2) — созданы; у лиц только line, enter, dwell, другой вид — 422 NOT_SUPPORTED /properties/subdetectorKind; creatable сужает subdetectorKind", async () => {
+    const env = await makeEnv();
+    const kindsUnder = async (u) => {
+      const row = (await env.ok("GET", `/units/${u.uid}/creatable`)).items.find((x) => x.kind === "subdet") || {};
+      return row.schema?.properties?.subdetectorKind?.enum;
+    };
+    const all = (await env.ok("GET", "/kinds/subdet")).schema.properties.subdetectorKind.enum;
+    const full = [["Номера", { detectorKind: "lpr" }], ["Позы", { detectorKind: "other", analyticsKind: "pose" }],
+      ["СИЗ", { detectorKind: "other", analyticsKind: "ppe" }], ["Штрихкод", { detectorKind: "other", analyticsKind: "barcode" }]];
+    for (const [name, p] of full) {
+      const d = await addDet(env, camU, name, p);
+      const s = await addSub(env, d, "stop", { timeSec: 5 });
+      assert.eq([s.parentId, s.properties.subdetectorKind], [d.uid, "stop"], `stop под «${name}»`);
+      assert.eq(await kindsUnder(d), all.filter((k) => k !== "abandoned"), `«${name}»: все виды, кроме abandoned`);
+      assert.eq(await failedOf(env, sub(d, "abandoned", { timeSec: 30 })), [["NOT_SUPPORTED", P("subdetectorKind")]], `abandoned под «${name}»`);
+    }
+    for (const ak of ["faceTV", "faceVA", "faceVL"]) {
+      const env2 = await makeEnv();
+      // Выключен: на сервере набора уже есть детектор лиц, а виды лиц несовместимы (x-conflicts)
+      const f = await addDet(env2, camU, "Лица", { detectorKind: "other", analyticsKind: ak, enabled: false });
+      for (const k of ["line", "enter", "dwell"]) {
+        const s = await addSub(env2, f, k, k === "dwell" ? { timeSec: 20 } : {});
+        assert.eq([s.parentId, s.properties.subdetectorKind], [f.uid, k], `${k} под ${ak}`);
+      }
+      const res = await create(env2, sub(f, "exit"));
+      assert.eq(res.failed.map((x) => [x.code, x.field]), [["NOT_SUPPORTED", P("subdetectorKind")]], `exit под ${ak} — отказ`);
+      assert.eq(await kindsUnder(f), ["line", "enter", "dwell"], `creatable под ${ak}: только допустимые, в порядке схемы вида`);
+    }
+    const fight = await addDet(env, camU, "Драка", { detectorKind: "other", analyticsKind: "fight" });
+    const res = await create(env, sub(fight, "enter"));
+    assert.eq(res.failed.map((x) => [x.code, x.field, x.params.reason]), [["NOT_SUPPORTED", "/parentId", "noSubdetectors"]], "драка поддетекторов не принимает, как раньше");
+    const row = (await env.ok("GET", `/units/${fight.uid}/creatable`)).items.find((x) => x.kind === "subdet");
+    assert.eq(row && [row.allowed, row.reason], [false, "NOT_SUPPORTED"], "creatable под дракой: subdet — allowed false, NOT_SUPPORTED");
+  }, { needs: ["createUnits", "getCreatable", "kind:det", "kind:subdet", "prop:det.analyticsKind"], layer: "profile:vms.subdetector/1", since: "1.2" });
+
   test("Поддетектор: вид родителя сменили после создания — поддетектор правится; правило родителя — только при создании и при subdetectorKind в правке", async () => {
     const env = await makeEnv();
     const t = await addDet(env, camU, "Трекер", { detectorKind: "other", analyticsKind: "tracker" });

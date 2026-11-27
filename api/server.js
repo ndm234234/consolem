@@ -3489,6 +3489,9 @@
       return kinds.creatable(u.kind).map((kind) => {
         const no = (reason) => ({ kind, allowed: false, reason });
         if (options && unitType(kind) && !options.some((o) => o.type === kind)) return no("NOT_SUPPORTED");
+        // С профиля vms.subdetector/1 1.2: родитель вида не примет — поддетектор под детектором, который их не принимает
+        const refused = hooksOf(kind).map((h) => h.refuseUnder && h.refuseUnder(kind, u, pctx)).find(Boolean);
+        if (refused) return no(refused);
         // С 0.40.0: схема вида, суженная под этого родителя — поддетектор под детектором: только допустимые subdetectorKind
         const schema = hooksOf(kind).map((h) => h.schemaUnder && h.schemaUnder(kind, u, pctx)).find(Boolean) || null;
         return Object.assign({ kind, allowed: true }, schema ? { schema } : {});

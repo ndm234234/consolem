@@ -1611,9 +1611,18 @@
 
   // Что принимает поддетекторы: движение, трекер объектов, нейросетевой трекер. null — не принимает
   // С 0.40.0 — и контроль оператора (operatorControl): у него только поддетекторы из SUB_ONLY
-  const subHost = (p) => (p.detectorKind === "motion" ? "motion" : p.detectorKind === "other" && ["tracker", "neural", "operatorControl"].includes(p.analyticsKind) ? p.analyticsKind : null);
+  // С профиля vms.subdetector/1 1.2 (пункт F122) — и номера (lpr), позы (pose), СИЗ (ppe), штрихкод (barcode), лица (faceTV,
+  // faceVA, faceVL — один родитель face: только поддетекторы из SUB_ONLY)
+  const SUB_FAMILIES = ["tracker", "neural", "operatorControl", "pose", "ppe", "barcode"];
+  const SUB_FACES = ["faceTV", "faceVA", "faceVL"];
+  const subHost = (p) => {
+    if (p.detectorKind === "motion" || p.detectorKind === "lpr") return p.detectorKind;
+    if (p.detectorKind !== "other") return null;
+    if (SUB_FAMILIES.includes(p.analyticsKind)) return p.analyticsKind;
+    return SUB_FACES.includes(p.analyticsKind) ? "face" : null;
+  };
   // Какие виды поддетектора принимает родитель вида host (null — любые из схемы вида subdet, кроме правил subProblem)
-  const SUB_ONLY = { operatorControl: ["dwell", "enter", "line"] };
+  const SUB_ONLY = { operatorControl: ["dwell", "enter", "line"], face: ["line", "enter", "dwell"] };
   // Допустимые subdetectorKind под родителем вида host: перечень схемы вида subdet без запрещённых родителем
   const subKindsFor = (host, kind, ctx) => {
     const all = ((((ctx.kinds.get(kind) || {}).schema || {}).properties || {}).subdetectorKind || {}).enum || [];
@@ -1655,6 +1664,12 @@
       const out = JSON.parse(JSON.stringify(sc));
       out.properties.subdetectorKind.enum = subKindsFor(host, kind, ctx);
       return out;
+    },
+    // С профиля 1.2: GET /units/{uid}/creatable — под детектором, который поддетекторов не принимает, строка вида subdet —
+    // allowed: false, reason NOT_SUPPORTED (как отказ noSubdetectors при создании)
+    refuseUnder(kind, parent, ctx) {
+      if (!ctx.kinds.profileOf(kind, "vms.subdetector/1") || !parent || !ctx.kinds.profileOf(parent.kind, "vms.detector/1")) return null;
+      return subHost(props(parent)) ? null : "NOT_SUPPORTED";
     },
     beforeCreate(u, parent, ctx) {
       const host = parent ? subHost(parent.fresh ? parent.properties || {} : props(parent)) : null;
