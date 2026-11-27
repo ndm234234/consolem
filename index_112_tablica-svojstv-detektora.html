@@ -1160,6 +1160,12 @@ html[data-theme="light"] .cp.done{border-color:var(--one-success-icon);color:var
 .cs-cq{container-type:inline-size}
 .tabs-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px}.nt.base-head{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap}.nt.base-head>span{flex:1 1 280px}.tabs-row>.tabs{flex:0 1 auto;min-width:0}
 .cs-hint{display:block;margin-top:3px}
+/* Таблица свойств детектора (прототип 112, F125): отметка «Не задано» и строка над таблицей */
+.sf-manual,.sf-manual-n{color:var(--one-warning-icon)}
+.sf-manual,.sf-manual-n{display:inline-flex;align-items:center;gap:4px}
+.sf-manual-n{display:flex;margin-top:4px}
+.sf-manual svg,.sf-manual-n svg{flex:none}
+.det-sheet-lead{margin:0 0 10px}
 .cs-hide{display:none!important}
 .cs-ro :is(input:not([type=checkbox]):not([type=radio]),select,textarea):disabled{opacity:1;color:var(--tx);background:transparent;border-color:transparent;box-shadow:none;appearance:none;-webkit-appearance:none;padding-left:0;cursor:default}
 .cs-ro :is(input[type=checkbox],input[type=radio]):disabled{opacity:.7}
@@ -3901,6 +3907,7 @@ body:has(.ttu) #tst:not(.in-fs){bottom:144px}
 <!-- ONE PSIM: мост по ONE.PSIM.PrototypeKit, подключён после стилей прототипа -->
 <link rel="stylesheet" href="assets/one-psim/bridge.css">
 <script src="assets/i18n-en.js"></script>
+<script src="assets/i18n-en-112.js"></script>
 <!-- API: контракт, эталонный набор, встроенный сервер и клиент (api/README.md) -->
 <script src="api/openapi.js"></script>
 <script src="api/fixture.js"></script>
@@ -5684,7 +5691,9 @@ function sfFieldHtml(scope,owner,f,p,v,o={}){
   if(p["x-ui-advanced"])notes.push(i18n("для опытных"));
   if(o.only)notes.push(`<span data-only-here>${i18n("сверх профиля")}</span>`);
   if(o.newer)notes.push(`<span data-prof-newer>${i18n("новое в версии профиля")} ${escHtml(o.newer)}</span>`);
-  const hint=notes.length?`<small class="sub">${notes.join(" · ")}</small>`:"";
+  if(o.manual)notes.unshift(`<span class="sf-manual">${lu("triangle-alert",12)} ${i18n("Не задано. Задайте значение вручную.")}</span>`);
+  const desc=o.desc&&p.description?`<small class="sub cs-hint">${escHtml(i18n(p.description))}</small>`:"";
+  const hint=desc+(notes.length?`<small class="sub">${notes.join(" · ")}</small>`:"");
   const w=sfWidget(p),t=sfType(p);
   if(o.ro){
     const txt=typeof v==="object"&&v!==null?JSON.stringify(v):sfText(p,v,o.set);
@@ -6177,6 +6186,80 @@ function kindNewerProps(kind){
 }
 function nodeNewerProps(n){return n&&!isSchemaNode(n)?kindNewerProps(nodeKind(n)):{}}
 // Базовая форма есть у объекта с ручным экраном, у вида которого есть схема со свойствами
+// ── Таблица свойств детектора (прототип 112, пробел F125): заглушка схемы объекта ──
+// Заглушка вместо GET /units/{uid}/schema вида det со schemaPerUnit: по семейству детектора — его поля, группа поля
+// (x-ui-group), подсказка (description) и обязательные поля (required). Обязательное поле без значения форма отмечает
+// «Не задано»: так таблица свойств Axxon Next отмечает параметр, который надо задать вручную. Семейство вне таблицы
+// (other без известного analyticsKind) — все свойства вида, как раньше
+const DET_SHEET_G={main:"Основные",zone:"Зоны",fire:"Условия срабатывания",obj:"Объекты",frame:"Обработка кадра",calib:"Калибровка",lists:"Списки",show:"Показ и запись",more:"Дополнительно"};
+const DET_SHEET_F={
+  detectorKind:["main"],analyticsKind:["main"],builtin:["main"],template:["main"],serverId:["main","Сервер, на котором работает детектор."],
+  stream:["main","Поток камеры, который детектор получает. Поток с меньшим разрешением снижает нагрузку на сервер."],enabled:["main"],
+  labels:["main","Метки серверов, на которых детектор может работать."],alarmKinds:["main","Какие события детектора консоль считает тревогой."],
+  zone:["zone","Часть кадра, в которой детектор ищет объекты. Нет зоны — весь кадр."],extraZones:["zone","Ещё зоны детектирования и зоны, которые детектор не проверяет."],
+  zoneTo:["zone","Вторая область счётчика. Переход из первой области во вторую — вход, обратно — выход."],
+  sensitivity:["fire","Чем выше чувствительность, тем более слабое движение детектор замечает."],minDurationSec:["fire","Движение короче этого времени детектор пропускает."],
+  alarmEndSec:["fire","Сколько секунд тревога длится после того, как событие кончилось."],crowdMin:["fire","Детектор срабатывает, когда людей в зоне не меньше этого числа."],
+  crowdHoldSec:["fire","Сколько секунд скопление должно держаться до тревоги."],stillSec:["fire","Сколько секунд предмет лежит без движения до тревоги."],
+  direction:["fire","Детектор срабатывает, только когда объект пересекает линию в этом направлении."],confidence:["fire","Детектор срабатывает, только когда нейросеть уверена в объекте не меньше этого значения."],
+  minTriggers:["fire","Сколько раз подряд нейросеть должна найти объект, чтобы трекер завёл трек."],autoSensitivity:["fire","Трекер сам подбирает чувствительность."],
+  abandonedSensitivity:["fire"],detectUnattendedObjects:["fire","Трекер ищет оставленные и унесённые предметы."],longTimeUnattended:["fire"],longTimeIdleSec:["fire"],
+  metaQueries:["fire","Описания сцены словами. Детектор сравнивает кадр с ними."],metaThreshold:["fire"],metaFrames:["fire"],
+  indoorCount:["fire"],indoorMax:["fire"],indoorStart:["fire"],
+  classes:["obj","Детектор замечает только объекты этих классов. Нет классов — все объекты."],objectSize:["obj","Объекты меньше и больше этих размеров детектор пропускает."],
+  objectSpeed:["obj"],plateWidth:["obj","Ширина номера в долях ширины кадра. Номера уже или шире детектор пропускает."],
+  analysisFps:["frame","Сколько кадров в секунду детектор проверяет. Меньше кадров — меньше нагрузка на сервер."],frameWidth:["frame","Ширина кадра в пикселях, до которой сервер сжимает кадр перед анализом."],
+  scanWindow:["frame"],metaFps:["frame"],similarSearch:["frame"],similarTrackSec:["frame"],metaSearch:["frame"],metaSkipSimilar:["frame"],metaDiff:["frame"],
+  cameraPosition:["calib","Как висит камера: на стене или на потолке."],humanSize:["calib","Размер среднего человека в кадре. Без него детектор не может посчитать людей."],
+  speedCalibArea:["calib","Четырёхугольник на дороге. По нему детектор считает скорость машины."],
+  checkLists:["lists"],lists:["lists","Списки, по которым детектор сверяет лица или номера."],
+  showMask:["show"],recordMask:["show"],showTracks:["show"],showTrackLifespan:["show"],recordTracks:["show"],
+  params:["more","Настройки серверного детектора строкой. Режим для опытных."]
+};
+// Подписи свойств, у которых в схеме вида подписи нет
+const DET_SHEET_L={builtin:"Встроенный",template:"Шаблон камеры",params:"Строка настроек детектора"};
+const DET_SHEET_BASE=["detectorKind","builtin","template","serverId","stream","enabled","labels","alarmKinds","zone","extraZones"];
+const DET_SHEET={
+  motion:{f:["sensitivity","minDurationSec","alarmEndSec","objectSize","analysisFps","frameWidth","showMask","recordMask","showTracks","showTrackLifespan","recordTracks"]},
+  linecross:{f:["direction","classes","objectSize","objectSpeed","recordTracks"]},
+  tracker:{f:["analyticsKind","sensitivity","autoSensitivity","abandonedSensitivity","detectUnattendedObjects","longTimeUnattended","longTimeIdleSec","alarmEndSec","objectSize","objectSpeed","analysisFps","frameWidth","cameraPosition","humanSize","showTracks","showTrackLifespan","recordTracks"],req:["cameraPosition"]},
+  neural:{f:["analyticsKind","classes","confidence","minTriggers","objectSize","objectSpeed","scanWindow","analysisFps","frameWidth","similarSearch","similarTrackSec","cameraPosition","showTracks","showTrackLifespan","recordTracks"]},
+  lpr:{f:["plateWidth","confidence","speedCalibArea","checkLists","lists","recordTracks"],req:["plateWidth"]},
+  crowd:{f:["crowdMin","crowdHoldSec","alarmEndSec","humanSize"],req:["humanSize"]},
+  abandoned:{f:["stillSec","sensitivity","alarmEndSec","objectSize"]},
+  disappeared:{f:["stillSec","sensitivity","alarmEndSec","objectSize"]},
+  meta:{f:["analyticsKind","metaQueries","metaThreshold","metaFrames","metaFps","metaSearch","metaSkipSimilar","metaDiff"],req:["metaQueries"]},
+  face:{f:["analyticsKind","confidence","checkLists","lists","recordTracks"]},
+  operatorControl:{f:["analyticsKind"]},
+  visitorsCounter:{f:["analyticsKind","zoneTo","indoorCount","indoorMax","indoorStart","alarmEndSec"],req:["zoneTo"]}
+};
+// Семейство детектора для таблицы: счётчик посетителей — other с analyticsKind visitorsCounter
+// и «Исчезновение предмета» (disappeared), которой окно детектора своего раздела не даёт
+function detSheetFam(n){const k=dwKindOf(n);return DET_KIND_CODE[n.kind]==="disappeared"?"disappeared":k==="other"&&n.analyticsKind==="visitorsCounter"?"visitorsCounter":k}
+// Схема объекта по заглушке: поля семейства в порядке групп; null — семейства нет в таблице, форма берёт схему вида
+function detSheetSchema(n){
+  if(nodeKind(n)!=="det")return null;
+  const ks=KINDS.get("det")?.schema,fam=DET_SHEET[detSheetFam(n)];if(!ks?.properties||!fam)return null;
+  const want=new Set([...DET_SHEET_BASE,...fam.f]),order=Object.keys(DET_SHEET_G),props={};
+  Object.keys(ks.properties).filter(f=>want.has(f)).sort((a,b)=>order.indexOf(DET_SHEET_F[a]?.[0]||"more")-order.indexOf(DET_SHEET_F[b]?.[0]||"more")).forEach(f=>{
+    const [g,h]=DET_SHEET_F[f]||["more"],p={...ks.properties[f],"x-ui-group":DET_SHEET_G[g],"x-ui-order":order.indexOf(g)*100+Object.keys(props).length};
+    if(!p["x-label"]&&DET_SHEET_L[f])p["x-label"]=DET_SHEET_L[f];
+    if(h)p.description=h;else delete p.description;
+    props[f]=p;
+  });
+  return{...ks,properties:props,required:(fam.req||[]).filter(f=>props[f])};
+}
+// Схема «Все параметры»: у детектора — схема объекта (заглушка), у других — схема вида
+function baseSchemaOf(n){return detSheetSchema(n)||KINDS.get(nodeKind(n))?.schema}
+// Строка над таблицей: семейство, число полей и сколько полей ждут ручной настройки
+function detSheetLeadHtml(n,schema,vals){
+  const fam=detSheetFam(n),kt=fam==="visitorsCounter"?"Счётчик посетителей":fam==="disappeared"?"Исчезновение предмета":DW_KINDS.find(x=>x[0]===fam)?.[1]||detKindText(n,find(n.id)?.p),all=Object.keys(KINDS.get("det")?.schema?.properties||{}).length;
+  const nf=Object.keys(schema.properties).length,miss=(schema.required||[]).filter(f=>sfEmpty(vals[f]));
+  const m=miss.length?`<span class="sf-manual-n">${lu("triangle-alert",13)} ${i18n("Не заданы")}: ${miss.map(f=>"«"+escHtml(propLabel(schema.properties[f],f))+"»").join(", ")}</span>`:"";
+  return`<p class="sub det-sheet-lead" data-det-sheet>${i18n("Свойства детектора")} «${escHtml(i18n(kt))}»: ${nf} ${i18n("из")} ${all}. ${i18n("Сервер называет поля, группы и подсказки для этого вида детектора.")}${m}</p>`;
+}
+// Значения нет: поле с отметкой «Не задано»
+const sfEmpty=v=>v==null||v===""||Array.isArray(v)&&!v.length||typeof v==="object"&&!Array.isArray(v)&&!Object.keys(v).length;
 function hasBaseForm(n){
   if(!n||isSchemaNode(n)||n._row)return false;
   const ps=KINDS.get(nodeKind(n))?.schema?.properties;
@@ -6248,7 +6331,7 @@ function baseNameHtml(n){
 }
 function baseTabs(n){
   const labels=[];
-  sfEntries(KINDS.get(nodeKind(n))?.schema).forEach(([,p])=>{if(p["x-transient"])return;const l=sfTab(p);if(!labels.includes(l))labels.push(l)});
+  sfEntries(baseSchemaOf(n)).forEach(([,p])=>{if(p["x-transient"])return;const l=sfTab(p);if(!labels.includes(l))labels.push(l)});
   if(!labels.length)labels.push(i18n(SF_MAIN));
   return labels.map((l,i)=>[i?"sf"+i:"gen",l]);
 }
@@ -6256,13 +6339,13 @@ function baseTabs(n){
 // неприменённые изменения, вернуться нельзя (у объекта по схеме черновик общий со страницей, запрета нет)
 function baseHeadHtml(n,first,extra,newer){
   const back=baseChanged(n).length;
-  return`<div class="nt base-head" data-base-head><span>${i18n("Все параметры вида")} «${escHtml(kindText(nodeKind(n)))}». ${i18n("Режим для опытных.")}${first?` ${i18n("Здесь все свойства вида по его схеме. Сервер проверяет правку до плана.")}${extra?` ${i18n("Метка «сверх профиля» стоит у свойств, которых нет в профиле вида.")}`:""}${newer?` ${i18n("Метка «новое в версии профиля» стоит у свойств, которые сервер добавил в профиль после версии, которую знает консоль. Настройка эти свойства не показывает.")}`:""}`:""}</span>`+
+  return`<div class="nt base-head" data-base-head><span>${i18n("Все параметры вида")} «${escHtml(kindText(nodeKind(n)))}». ${i18n("Режим для опытных.")}${first?` ${i18n(detSheetSchema(n)?"Здесь свойства этого детектора по его схеме. Сервер проверяет правку до плана.":"Здесь все свойства вида по его схеме. Сервер проверяет правку до плана.")}${extra?` ${i18n("Метка «сверх профиля» стоит у свойств, которых нет в профиле вида.")}`:""}${newer?` ${i18n("Метка «новое в версии профиля» стоит у свойств, которые сервер добавил в профиль после версии, которую знает консоль. Настройка эти свойства не показывает.")}`:""}`:""}</span>`+
     `<button type="button" class="btn s" data-form-back${back?` disabled data-tip="${escHtml(i18n(FORM_BACK_WHY))}"`:""} ${onEv("click",["formAllSet",false])}>${lu("arrow-left",14)}${i18n("Вернуться к настройке")}</button></div>`;
 }
 function baseFormHtml(n,tabId){
   // Объект по схеме со своей страницей: форма по схеме на n.props — черновик тот же, что у страницы
   if(isSchemaNode(n)){const tabs=schemaTabs(n);return baseHeadHtml(n,(tabs.find(([id])=>id===tabId)||tabs[0])[0]===tabs[0][0],false)+schemaFormHtml(n,tabId)}
-  const kind=nodeKind(n),k=KINDS.get(kind),schema=k?.schema;
+  const kind=nodeKind(n),k=KINDS.get(kind),schema=baseSchemaOf(n),sheet=!!detSheetSchema(n);
   const tabs=baseTabs(n),cur=(tabs.find(([id])=>id===tabId)||tabs[0])[1],first=cur===tabs[0][1];
   const newer=nodeNewerProps(n),extra=new Set(nodeExtraProps(n).filter(f=>!newer[f])),own=ownDraftRows(n).length,groups=new Map();
   sfEntries(schema).forEach(([f,p])=>{
@@ -6273,11 +6356,12 @@ function baseFormHtml(n,tabId){
   const err=schemaErrs.get(n.id)||{},req=new Set(schema?.required||[]),vals=xpropsVals(n);
   const nameH=first?baseNameHtml(n):"";
   let out=baseHeadHtml(n,first,extra.size>0,Object.keys(newer).some(f=>schema?.properties?.[f]&&!schema.properties[f]["x-transient"]));
+  if(sheet&&first)out+=detSheetLeadHtml(n,schema,vals);
   if(own)out+=`<div class="nt bk-warn" data-base-lock>${lu("lock",13)} ${i18n("В настройке есть неприменённые изменения. Здесь свойства только для просмотра. Чтобы править их здесь, применить или сбросить изменения.")}</div>`;
   let lead=nameH;
   if(!groups.size)groups.set(i18n(SF_GROUP),[]);
   groups.forEach((fs,g)=>{
-    const body=fs.map(([f,p])=>sfFieldHtml("xcard",n.id,f,p,vals[f],{ro:!!n.derived||sfReadOnly(p)||!!own,err:err[f],req:req.has(f),schema,only:extra.has(f),newer:newer[f]})).join("");
+    const body=fs.map(([f,p])=>sfFieldHtml("xcard",n.id,f,p,vals[f],{ro:!!n.derived||sfReadOnly(p)||!!own,err:err[f],req:req.has(f),schema,only:extra.has(f),newer:newer[f],desc:sheet,manual:sheet&&req.has(f)&&sfEmpty(vals[f])})).join("");
     out+=`<div class="card" data-schema-card><div class="ch">${escHtml(g)}</div><div class="cb"><div class="g">${lead}${body||(lead?"":`<span class="sub">${i18n("Полей нет")}</span>`)}</div></div></div>`;
     lead="";
   });
