@@ -1162,8 +1162,8 @@ html[data-theme="light"] .cp.done{border-color:var(--one-success-icon);color:var
 .cs-hint{display:block;margin-top:3px}
 /* Таблица свойств детектора (прототип 112, F125): отметка «Не задано» и строка над таблицей */
 .sf-manual,.sf-manual-n{color:var(--one-warning-icon)}
-.sf-manual,.sf-manual-n{display:inline-flex;align-items:center;gap:4px}
-.sf-manual-n{display:flex;margin-top:4px}
+.sf-manual{display:inline-flex;align-items:center;gap:4px}
+.sf-manual-n{display:flex;align-items:center;gap:4px;margin-top:4px}
 .sf-manual svg,.sf-manual-n svg{flex:none}
 .det-sheet-lead{margin:0 0 10px}
 .cs-hide{display:none!important}
@@ -5691,7 +5691,8 @@ function sfFieldHtml(scope,owner,f,p,v,o={}){
   if(p["x-ui-advanced"])notes.push(i18n("для опытных"));
   if(o.only)notes.push(`<span data-only-here>${i18n("сверх профиля")}</span>`);
   if(o.newer)notes.push(`<span data-prof-newer>${i18n("новое в версии профиля")} ${escHtml(o.newer)}</span>`);
-  if(o.manual)notes.unshift(`<span class="sf-manual">${lu("triangle-alert",12)} ${i18n("Не задано. Задайте значение вручную.")}</span>`);
+  if(o.manual)notes.unshift(`<span class="sf-manual">${lu("triangle-alert",12)} ${i18n(o.ro?"Не задано. Задать значение в окне детектора.":"Не задано. Задать значение вручную.")}</span>`);
+  if(o.kindNote)notes.push(i18n("Вид детектора меняют в настройке"));
   const desc=o.desc&&p.description?`<small class="sub cs-hint">${escHtml(i18n(p.description))}</small>`:"";
   const hint=desc+(notes.length?`<small class="sub">${notes.join(" · ")}</small>`:"");
   const w=sfWidget(p),t=sfType(p);
@@ -6196,8 +6197,8 @@ const DET_SHEET_F={
   detectorKind:["main"],analyticsKind:["main"],builtin:["main"],template:["main"],serverId:["main","Сервер, на котором работает детектор."],
   stream:["main","Поток камеры, который детектор получает. Поток с меньшим разрешением снижает нагрузку на сервер."],enabled:["main"],
   labels:["main","Метки серверов, на которых детектор может работать."],alarmKinds:["main","Какие события детектора консоль считает тревогой."],
-  zone:["zone","Часть кадра, в которой детектор ищет объекты. Нет зоны — весь кадр."],extraZones:["zone","Ещё зоны детектирования и зоны, которые детектор не проверяет."],
-  zoneTo:["zone","Вторая область счётчика. Переход из первой области во вторую — вход, обратно — выход."],
+  zone:["zone","Часть кадра, в которой детектор ищет объекты. Если зоны нет, детектор проверяет весь кадр."],extraZones:["zone","Ещё зоны детектирования и зоны, которые детектор не проверяет."],
+  zoneTo:["zone","Вторая область счётчика. Если человек переходит из первой области во вторую, счётчик считает вход. Обратный переход счётчик считает выходом."],
   sensitivity:["fire","Чем выше чувствительность, тем более слабое движение детектор замечает."],minDurationSec:["fire","Движение короче этого времени детектор пропускает."],
   alarmEndSec:["fire","Сколько секунд тревога длится после того, как событие кончилось."],crowdMin:["fire","Детектор срабатывает, когда людей в зоне не меньше этого числа."],
   crowdHoldSec:["fire","Сколько секунд скопление должно держаться до тревоги."],stillSec:["fire","Сколько секунд предмет лежит без движения до тревоги."],
@@ -6206,11 +6207,11 @@ const DET_SHEET_F={
   abandonedSensitivity:["fire"],detectUnattendedObjects:["fire","Трекер ищет оставленные и унесённые предметы."],longTimeUnattended:["fire"],longTimeIdleSec:["fire"],
   metaQueries:["fire","Описания сцены словами. Детектор сравнивает кадр с ними."],metaThreshold:["fire"],metaFrames:["fire"],
   indoorCount:["fire"],indoorMax:["fire"],indoorStart:["fire"],
-  classes:["obj","Детектор замечает только объекты этих классов. Нет классов — все объекты."],objectSize:["obj","Объекты меньше и больше этих размеров детектор пропускает."],
+  classes:["obj","Детектор замечает только объекты этих классов. Если классов нет, детектор замечает все объекты."],objectSize:["obj","Объекты меньше и больше этих размеров детектор пропускает."],
   objectSpeed:["obj"],plateWidth:["obj","Ширина номера в долях ширины кадра. Номера уже или шире детектор пропускает."],
-  analysisFps:["frame","Сколько кадров в секунду детектор проверяет. Меньше кадров — меньше нагрузка на сервер."],frameWidth:["frame","Ширина кадра в пикселях, до которой сервер сжимает кадр перед анализом."],
+  analysisFps:["frame","Сколько кадров в секунду детектор проверяет. Если кадров меньше, нагрузка на сервер тоже меньше."],frameWidth:["frame","Ширина кадра в пикселях, до которой сервер сжимает кадр перед анализом."],
   scanWindow:["frame"],metaFps:["frame"],similarSearch:["frame"],similarTrackSec:["frame"],metaSearch:["frame"],metaSkipSimilar:["frame"],metaDiff:["frame"],
-  cameraPosition:["calib","Как висит камера: на стене или на потолке."],humanSize:["calib","Размер среднего человека в кадре. Без него детектор не может посчитать людей."],
+  cameraPosition:["calib","Как установлена камера: на стене или на потолке."],humanSize:["calib","Размер среднего человека в кадре. Без него детектор не может посчитать людей."],
   speedCalibArea:["calib","Четырёхугольник на дороге. По нему детектор считает скорость машины."],
   checkLists:["lists"],lists:["lists","Списки, по которым детектор сверяет лица или номера."],
   showMask:["show"],recordMask:["show"],showTracks:["show"],showTrackLifespan:["show"],recordTracks:["show"],
@@ -6218,7 +6219,7 @@ const DET_SHEET_F={
 };
 // Подписи свойств, у которых в схеме вида подписи нет
 const DET_SHEET_L={builtin:"Встроенный",template:"Шаблон камеры",params:"Строка настроек детектора"};
-const DET_SHEET_BASE=["detectorKind","builtin","template","serverId","stream","enabled","labels","alarmKinds","zone","extraZones"];
+const DET_SHEET_BASE=["detectorKind","builtin","template","serverId","stream","enabled","labels","alarmKinds","zone","extraZones","params"];
 const DET_SHEET={
   motion:{f:["sensitivity","minDurationSec","alarmEndSec","objectSize","analysisFps","frameWidth","showMask","recordMask","showTracks","showTrackLifespan","recordTracks"]},
   linecross:{f:["direction","classes","objectSize","objectSpeed","recordTracks"]},
@@ -6241,7 +6242,9 @@ function detSheetSchema(n){
   if(nodeKind(n)!=="det")return null;
   const ks=KINDS.get("det")?.schema,fam=DET_SHEET[detSheetFam(n)];if(!ks?.properties||!fam)return null;
   const want=new Set([...DET_SHEET_BASE,...fam.f]),order=Object.keys(DET_SHEET_G),props={};
-  Object.keys(ks.properties).filter(f=>want.has(f)).sort((a,b)=>order.indexOf(DET_SHEET_F[a]?.[0]||"more")-order.indexOf(DET_SHEET_F[b]?.[0]||"more")).forEach(f=>{
+  // Порядок: по группе, внутри группы — по таблице DET_SHEET_F
+  const pos=Object.keys(DET_SHEET_F);
+  Object.keys(ks.properties).filter(f=>want.has(f)).sort((a,b)=>order.indexOf(DET_SHEET_F[a]?.[0]||"more")-order.indexOf(DET_SHEET_F[b]?.[0]||"more")||pos.indexOf(a)-pos.indexOf(b)).forEach(f=>{
     const [g,h]=DET_SHEET_F[f]||["more"],p={...ks.properties[f],"x-ui-group":DET_SHEET_G[g],"x-ui-order":order.indexOf(g)*100+Object.keys(props).length};
     if(!p["x-label"]&&DET_SHEET_L[f])p["x-label"]=DET_SHEET_L[f];
     if(h)p.description=h;else delete p.description;
@@ -6249,6 +6252,8 @@ function detSheetSchema(n){
   });
   return{...ks,properties:props,required:(fam.req||[]).filter(f=>props[f])};
 }
+// Вид детектора в таблице только для просмотра: таблица строится по виду, его меняют в настройке
+const DET_SHEET_RO=new Set(["detectorKind","analyticsKind"]);
 // Схема «Все параметры»: у детектора — схема объекта (заглушка), у других — схема вида
 function baseSchemaOf(n){return detSheetSchema(n)||KINDS.get(nodeKind(n))?.schema}
 // Строка над таблицей: семейство, число полей и сколько полей ждут ручной настройки
@@ -6361,7 +6366,7 @@ function baseFormHtml(n,tabId){
   let lead=nameH;
   if(!groups.size)groups.set(i18n(SF_GROUP),[]);
   groups.forEach((fs,g)=>{
-    const body=fs.map(([f,p])=>sfFieldHtml("xcard",n.id,f,p,vals[f],{ro:!!n.derived||sfReadOnly(p)||!!own,err:err[f],req:req.has(f),schema,only:extra.has(f),newer:newer[f],desc:sheet,manual:sheet&&req.has(f)&&sfEmpty(vals[f])})).join("");
+    const body=fs.map(([f,p])=>sfFieldHtml("xcard",n.id,f,p,vals[f],{ro:!!n.derived||sfReadOnly(p)||!!own||sheet&&DET_SHEET_RO.has(f),kindNote:sheet&&DET_SHEET_RO.has(f),err:err[f],req:req.has(f),schema,only:extra.has(f),newer:newer[f],desc:sheet,manual:sheet&&req.has(f)&&sfEmpty(vals[f])})).join("");
     out+=`<div class="card" data-schema-card><div class="ch">${escHtml(g)}</div><div class="cb"><div class="g">${lead}${body||(lead?"":`<span class="sub">${i18n("Полей нет")}</span>`)}</div></div></div>`;
     lead="";
   });
@@ -20532,7 +20537,7 @@ function dwFineHtml(d,k){
 // Карточка входа во «Все параметры»: видна всегда, в одном месте — в конце столбца настроек
 function dwAllCardHtml(d){
   const has=DW_ALL_ONLY.filter(([f])=>f==="alarmKinds"||!d.builtin).map(([,l])=>i18n(l).toLowerCase());
-  const what=`${i18n("Форма «Все параметры» показывает")} ${has.join(", ")} ${i18n("и все свойства вида по схеме.")}`;
+  const what=`${i18n("Форма «Все параметры» показывает")} ${has.join(", ")} ${i18n(DET_SHEET[detSheetFam(d)]?"и свойства этого вида детектора по схеме.":"и все свойства вида по схеме.")}`;
   return`<section class="dw-sec dw-all" data-dw-all><div class="dw-all-t"><b>${i18n("Все параметры детектора")}</b><p class="sub">${escHtml(what)} ${i18n("Это режим для опытных.")}</p></div>
     <button type="button" class="btn s" data-dw-all-go ${onEv("click",["dwAllGo",d.id,""])}>${lu("list",14)}${i18n("Все параметры")}</button></section>`;
 }
