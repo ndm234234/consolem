@@ -3777,6 +3777,20 @@ body.dw-resizing,body.dw-resizing *{cursor:col-resize!important;user-select:none
 .dw-fine[open]>summary::before{transform:rotate(45deg)}
 .dw-fine>summary h4{margin:0}
 .dw-fine-lead{margin:8px 0 12px}
+/* Списки лиц и номеров (прототип 107) */
+.lst-lead{margin:0 0 12px;max-width:72ch}
+.lst-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:900px){.lst-grid{grid-template-columns:minmax(0,1fr)}}
+.lst-col{display:grid;gap:16px;min-width:0}
+.lst-row{cursor:pointer}
+
+.lst-row .tag{margin-left:auto;font-variant-numeric:tabular-nums}
+.lst-use{margin:8px 0}
+.dw-lst-mode{display:grid;gap:4px}
+.dw-lst-mode label,.dw-lst-pick label{display:flex;align-items:center;gap:8px;font:var(--one-type-body-sm)}
+.dw-lst-pick{display:grid;gap:4px;margin:8px 0 0 24px}
+.dw-lst-pick small{color:var(--mu);margin-left:6px}
+.dw-lst-f .dw-swl{justify-content:flex-start;color:var(--tx);font-size:12px}.dw-lst-f .dw-help{margin-left:44px}
 .dw-fine-n{margin-left:8px;font:var(--one-type-caption);color:var(--bl);font-weight:400}
 .dw-all{display:flex;align-items:center;gap:12px;border:1px solid var(--ln);border-radius:var(--one-radius-container);margin:12px 0 0;padding:12px 16px}
 .dw-all-t{flex:1;min-width:0}.dw-all-t p{margin:4px 0 0}
@@ -15091,10 +15105,10 @@ function tabsFor(n){
 }
 function tabsForHand(n){
   if(archScope(n))return edgeOn()?[["stor","Хранилища"],["edges","Встроенные хранилища"],["gen","Общие"]]:[["stor","Хранилища"],["gen","Общие"]];
-  if(handOf(n,"domain"))return[["flds","Папки"],["gen","Общие"],["cams","Устройства"],["srvs","Серверы"],["lic","Лицензии"],["topo","Топология"]].filter(([id])=>needsMet(DOMAIN_TAB_NEEDS[id]));
+  if(handOf(n,"domain"))return[["flds","Папки"],["gen","Общие"],["cams","Устройства"],["srvs","Серверы"],["lists","Списки"],["lic","Лицензии"],["topo","Топология"]].filter(([id])=>id==="lists"?lstOn():needsMet(DOMAIN_TAB_NEEDS[id]));
   if(n.type==="unalloc")return[];
   if(handOf(n,"server")&&isUnallocated(n.id))return[["gen","Общие"],["topo","Топология"]];
-  if(handOf(n,"server"))return[["gen","Общие"],["cams","Устройства"],["svc","Службы"],["disk","Хранилище"]].concat(can("feature:serverNetwork")?[["net","Сеть"]]:[],webHas(n)?[["web","Веб, RTSP, ONVIF"]]:[],[["topo","Топология"]]);
+  if(handOf(n,"server"))return[["gen","Общие"],["cams","Устройства"],["svc","Службы"],["disk","Хранилище"]].concat(lstOn()?[["lists","Детекторы: списки"]]:[],can("feature:serverNetwork")?[["net","Сеть"]]:[],webHas(n)?[["web","Веб, RTSP, ONVIF"]]:[],[["topo","Топология"]]);
   // Хранилище открывают ради камер, что в него пишут: «Устройства» — первая
   // вкладка и открывается по умолчанию, параметры и тома — во второй.
   // Вид, на который камеры не привязываются (карта сервера, инциденты), — только параметры и тома.
@@ -18848,7 +18862,7 @@ function dwFromUnit(d){
     count:d.crowdMin??4,hold:d.crowdHoldSec??10,stay:d.stillSec??60,pw:[pw.min??0,pw.max??1],arc:dwArcOf(d),
     subs:dwSubUnits(d).filter(s=>DW_SUBN[s.props?.subdetectorKind]).map(dwSubFromUnit),
     // Тонкая настройка: поля схемы как есть; нет поля — undefined
-    fine:Object.fromEntries(["cameraPosition","detectUnattendedObjects","minTriggers","scanWindow","similarSearch","similarTrackSec","humanSize","speedCalibArea","analysisFps","alarmEndSec","frameWidth","abandonedSensitivity","objectSpeed"].map(f=>[f,d[f]==null?undefined:JSON.parse(JSON.stringify(d[f]))]))};
+    fine:Object.fromEntries(["cameraPosition","detectUnattendedObjects","minTriggers","scanWindow","similarSearch","similarTrackSec","humanSize","speedCalibArea","analysisFps","alarmEndSec","frameWidth","abandonedSensitivity","objectSpeed","checkLists","lists"].map(f=>[f,d[f]==null?undefined:JSON.parse(JSON.stringify(d[f]))]))};
 }
 // Поддетектор: объект → модель. Нет поля — без группы, направление в обе стороны, скорость 0–500, смещение 15 × 10 %
 function dwSubFromUnit(n){
@@ -19957,6 +19971,98 @@ function faceClashHtml(d){
   const fix=!me&&on.length?`${i18n("Чтобы включить этот детектор, сначала выключить или удалить детекторы")} «${other}».`:me&&on.length?`${i18n("Оставить одно семейство: выключить или удалить детекторы")} «${other}» ${i18n("или этот детектор.")}`:`${i18n("Детектор")} «${other}» ${i18n("сейчас не работает. Консоль не даст включить его, пока работает этот детектор.")}`;
   return`<div class="nt bk-warn fam-nt" role="status"><b>${head}</b><p>${body}</p><p>${fix}</p><p>${i18n("Детекторы")} «${other}»: ${links}</p></div>`;
 }
+// ── Списки лиц и номеров (прототип 107, пробел C17; контракт 0.41.0) ──
+// Списки ведут в облаке (AxxonNet, AxxonData, Axxon Datacenter), облако синхронизирует их с доменом. Консоль их только
+// показывает: виды facelist и platelist без create, rename, delete, все свойства — только для чтения. В дереве списков нет
+// (раскладка by: none): их читает GET /units?kind=, один раз за загрузку страницы
+const LST_KINDS=["facelist","platelist"];
+const LST_T={facelist:{title:"Списки лиц",one:"Список лиц",ent:"лицо|лица|лиц",det:"Детектор лиц"},platelist:{title:"Списки номеров",one:"Список номеров",ent:"номер|номера|номеров",det:"Детектор номеров"}};
+const LST_SRC={axxonnet:"AxxonNet",axxondata:"AxxonData",datacenter:"Axxon Datacenter"};
+const lstStore={load:null,done:false,failed:false,items:{facelist:[],platelist:[]},sel:null};
+function lstOn(){return LST_KINDS.some(k=>KINDS.has(k))}
+function lstEnsure(){
+  if(lstStore.load||!lstOn())return lstStore.load;
+  lstStore.load=Promise.all(LST_KINDS.filter(k=>KINDS.has(k)).map(k=>unitsAll({kind:k}).then(r=>{lstStore.items[k]=r})))
+    .then(()=>{lstStore.done=true;ruleIdxDrop();paint()}).catch(()=>{lstStore.failed=true;paint()});
+  return lstStore.load;
+}
+// dom — только списки этого домена: облако синхронизирует список с доменом
+function lstOf(kind,dom){lstEnsure();const a=lstStore.items[kind]||[];return dom?a.filter(u=>u.domainId===dom):a}
+function lstById(uid){for(const k of LST_KINDS){const u=(lstStore.items[k]||[]).find(x=>x.uid===uid);if(u)return u}return null}
+function lstEntText(kind,e){return kind==="platelist"?`${e.plate||""}${e.name?` · ${e.name}`:""}`:e.name||e.id}
+// Записи для выбора: одного списка или всех списков вида (подпись выбранного в тексте правила)
+function lstEntryOpts(kind,listId){
+  const ls=listId?[lstById(listId)].filter(Boolean):LST_KINDS.filter(k=>!kind||k===kind).flatMap(k=>lstOf(k));
+  return ls.flatMap(u=>(u.properties?.entries||[]).map(e=>[e.id,lstEntText(u.kind,e)]));
+}
+// Вид списков детектора: лица — face (analyticsKind faceTV, faceVA, faceVL), номера — lpr
+function lstKindOfDet(d){const k=dwKindOf(d);return k==="lpr"?"platelist":k==="face"?"facelist":null}
+// Детекторы, которые сверяют со списком: выбран явно или «все списки своего вида» (checkLists без lists)
+function lstUsers(u){
+  const out=[];
+  walkAll(n=>{if(!handOf(n,"det")||n.checkLists!==true||lstKindOfDet(n)!==u.kind)return;const ls=n.lists||[];if(!ls.length||ls.includes(u.uid))out.push(n)});
+  return out;
+}
+function lstWhen(iso){const ms=Date.parse(iso||"");return Number.isFinite(ms)?expTimeText(ms):i18n("нет данных")}
+function lstPick(uid){lstStore.sel=uid;paint()}
+function lstRowHtml(u){
+  const p=u.properties||{},n=(p.entries||[]).length,us=lstUsers(u).length,on=lstStore.sel===u.uid;
+  return`<div class="it lst-row${on?" on":""}" data-lst="${escHtml(u.uid)}" ${onEv("click",["lstPick",u.uid])}><span>${lu("list",16)}</span><span>${escHtml(u.name||u.uid)}<small>${n} ${i18n(plural(n,LST_T[u.kind].ent))} · ${escHtml(LST_SRC[p.source]||p.source||"")}</small></span><span class="tag">${i18n("детекторы")}: ${us}</span></div>`;
+}
+function lstEntriesCard(u){
+  const p=u.properties||{},ents=p.entries||[],kind=u.kind,link=p.manageUrl?`<a class="btn s" href="${escHtml(p.manageUrl)}" target="_blank" rel="noopener">${lu("external-link",14)}${i18n("Открыть в")} ${escHtml(LST_SRC[p.source]||i18n("облаке"))}</a>`:"";
+  const us=lstUsers(u);
+  const usT=us.length?us.map(d=>`<a href="#" ${onEv("click",["openNode",d.id,{app:"hw"}])}>${escHtml(locName(d))}</a>`).join(", "):i18n("ни один детектор не сверяет с этим списком");
+  return listCard({key:"lstent:"+u.uid,title:`${i18n(LST_T[kind].one)} «${u.name||u.uid}»`,head:link,items:ents,
+    text:e=>[e.name,e.plate,e.id],
+    row:e=>`<div class="it lst-ent"><span>${lu(kind==="platelist"?"car":"user",16)}</span><span>${escHtml(kind==="platelist"?e.plate||e.id:e.name||e.id)}${kind==="platelist"&&e.name?`<small>${escHtml(e.name)}</small>`:""}</span></div>`,
+    mid:()=>`<p class="sub lst-use">${i18n("Синхронизирован")}: ${escHtml(lstWhen(p.syncedAt))}<br>${i18n("Сверяют")}: ${usT}</p>`,
+    empty:"В списке нет записей",ph:kind==="platelist"?"Номер или владелец…":"Имя…",unit:LST_T[kind].ent});
+}
+// Вкладка «Списки» у домена (вариант A) и у сервера (вариант B, как вкладка «Детекторы» Axxon One)
+function listsTabHtml(n){
+  lstEnsure();
+  const dom=handOf(n,"domain")?n:find(nodeDomainId(n))?.n;
+  const lead=`<p class="sub lst-lead">${i18n("Списки лиц и номеров создают в облаке: AxxonNet, AxxonData или Axxon Datacenter. Облако синхронизирует их с доменом. Консоль показывает списки и не меняет их.")}${handOf(n,"server")?` ${i18n("Списки — общие для всех серверов домена")}${dom?` «${escHtml(locName(dom))}»`:""}.`:""}</p>`;
+  if(!lstStore.done&&!lstStore.failed)return lead+`<p class="sub">${i18n("Консоль читает списки…")}</p>`;
+  if(lstStore.failed)return lead+`<p class="sub">${i18n("Консоль не прочитала списки. Чтобы повторить, обновить страницу.")}</p>`;
+  const did=dom?.id||nodeDomainId(n),all=LST_KINDS.flatMap(k=>lstOf(k,did));
+  if(!lstStore.sel||!lstById(lstStore.sel))lstStore.sel=all[0]?.uid||null;
+  const cards=LST_KINDS.filter(k=>KINDS.has(k)).map(k=>listCard({key:"lst:"+k,title:LST_T[k].title,items:lstOf(k,did),text:u=>[u.name,(u.properties?.entries||[]).map(e=>e.name+" "+(e.plate||"")).join(" ")],
+    row:lstRowHtml,empty:`${i18n("Списков пока нет. Чтобы добавить список, создать его в облаке и синхронизировать с доменом.")}`,ph:"Имя списка или запись…",unit:"список|списка|списков"})).join("");
+  const sel=lstById(lstStore.sel);
+  return lead+`<div class="lst-grid"><div class="lst-col">${cards}</div><div class="lst-col">${sel?lstEntriesCard(sel):""}</div></div>`;
+}
+// Окно детектора: «Проверять по спискам» и какие списки (пусто — все списки своего вида)
+function dwListsSecHtml(d){
+  const lk=lstKindOfDet(d);if(!lk||!dwHas(d,"checkLists"))return"";
+  const c=dwC(d),on=c.fine?.checkLists===true,sel=c.fine?.lists||[],ls=lstOf(lk,nodeDomainId(d)),id=d.id;
+  const sw=`<div class="dw-f dw-lst-f" data-dw-fine="checkLists"><label class="dw-swl"><span class="sw ${on?"on":""}" role="switch" aria-checked="${on}" ${onEv("click",["dwListsSw",id])}></span>${i18n("Проверять по спискам")}</label>${dwHelp(lk==="platelist"?"Детектор сверяет каждый номер со списками номеров. Правило автоматизации реагирует на номер из списка или на номер не из списка.":"Детектор сверяет каждое лицо со списками лиц. Правило автоматизации реагирует на лицо из списка или на лицо не из списка.")}</div>`;
+  if(!on)return dwSec("Проверка по спискам",sw);
+  if(!lstStore.done)return dwSec("Проверка по спискам",sw+`<p class="sub">${i18n("Консоль читает списки…")}</p>`);
+  if(!ls.length)return dwSec("Проверка по спискам",sw+`<p class="sub">${i18n("В домене нет списков этого вида. Списки создают в облаке, затем облако синхронизирует их с доменом.")}</p>`);
+  const some=sel.length>0;
+  const mode=`<div class="dw-f" data-dw-fine="lists"><label>${i18n("С какими списками сверять")}</label>
+    <div class="dw-lst-mode"><label><input type="radio" name="dwlm-${escHtml(id)}" ${some?"":"checked"} ${onEv("change",["dwListsMode",id,"all"])}>${i18n(lk==="platelist"?"Со всеми списками номеров":"Со всеми списками лиц")} (${ls.length})</label>
+    <label><input type="radio" name="dwlm-${escHtml(id)}" ${some?"checked":""} ${onEv("change",["dwListsMode",id,"some"])}>${i18n("Только с выбранными")}</label></div>
+    ${some?`<div class="dw-lst-pick">${ls.map(u=>`<label><input type="checkbox" ${sel.includes(u.uid)?"checked":""} ${onEv("change",["dwListsPick",id,u.uid])}><span>${escHtml(u.name||u.uid)}<small>${(u.properties?.entries||[]).length} ${i18n(plural((u.properties?.entries||[]).length,LST_T[lk].ent))}</small></span></label>`).join("")}</div>`:""}
+    ${dwHelp(some?"Новый список из облака детектор не возьмёт, пока его не отметить здесь.":"Новый список из облака детектор возьмёт сам.")}</div>`;
+  return dwSec("Проверка по спискам",sw+mode);
+}
+function dwListsSw(id){const d=detNodeOf(id);if(!d||dwRoRefuse(id))return;const on=dwC(d).fine?.checkLists===true;dwFinePut(d,"checkLists",!on);if(on)dwFinePut(d,"lists",null);gear()}
+function dwListsMode(id,m){const d=detNodeOf(id);if(!d)return;const lk=lstKindOfDet(d),first=lstOf(lk,nodeDomainId(d))[0]?.uid;dwFinePut(d,"lists",m==="all"?null:first?[first]:null);gear()}
+function dwListsPick(id,uid){
+  const d=detNodeOf(id);if(!d)return;const cur=(dwC(d).fine?.lists||[]).slice(),i=cur.indexOf(uid);
+  if(i>=0)cur.splice(i,1);else cur.push(uid);
+  // Сняли последний: остаются «все списки своего вида» — так же сервер понимает пустой lists
+  dwFinePut(d,"lists",cur.length?cur:null);gear();
+}
+function dwListsText(d,x){
+  const c=dwC(d);
+  if(x.f==="checkLists")return i18n(c.fine?.checkLists===true?"вкл":"выкл");
+  const ls=c.fine?.lists||[];return ls.length?ls.map(u=>lstById(u)?.name||u).join(", "):i18n("все списки своего вида");
+}
+
 // ── Тонкая настройка детектора и вход во «Все параметры» (пробел C1) ──
 // Окно детектора показывает сразу частые поля семейства. Глубокие поля семейства — в группе «Тонкая настройка»:
 // свёрнутая группа в окне с правкой на месте (как «Дополнительные настройки» в Axxon One), а не список с
@@ -19979,12 +20085,15 @@ const DW_FINE=[
   {f:"similarSearch",l:"Поиск похожих",fam:["neural"],t:"sw",def:false,help:"Трекер собирает признаки людей для поиска похожих. Нагрузка на сервер растёт."},
   {f:"similarTrackSec",l:"Время обработки похожих треков",fam:["neural"],t:"num",min:0,max:3600,def:0,unit:"с",dep:"similarSearch"},
   {f:"humanSize",l:"Размер человека",fam:["crowd"],t:"whf",unit:"% кадра",help:"Средний размер человека в кадре. По нему детектор считает людей в группе. Пустые поля выключают калибровку."},
+  // Списки (прототип 107): свой раздел окна «Проверка по спискам», не «Тонкая настройка»
+  {f:"checkLists",l:"Проверять по спискам",fam:["face","lpr"],t:"lst",own:true,def:false},
+  {f:"lists",l:"Списки",fam:["face","lpr"],t:"lst",own:true},
   {f:"speedCalibArea",l:"Область калибровки скорости",fam:["lpr"],t:"quad",help:"Четырёхугольник на дороге. По нему сервер оценивает скорость машины. Без области скорость не оценивается."}
 ];
 // Только во «Все параметры»: редкое для всех семейств
 const DW_ALL_ONLY=[["labels","Метки серверов"],["alarmKinds","Что считать тревогой"],["params","Строка настроек детектора"]];
 // Встроенный детектор считает на камере: серверной тонкой настройки у него нет
-function dwFineList(d,k,basic){return d.builtin?[]:DW_FINE.filter(x=>x.fam.includes(k)&&!!x.basic===!!basic&&(x.t==="stream"?dwHas(d,"stream")&&!!find(d.id)?.p:dwHas(d,x.f)))}
+function dwFineList(d,k,basic){return d.builtin?[]:DW_FINE.filter(x=>!x.own&&x.fam.includes(k)&&!!x.basic===!!basic&&(x.t==="stream"?dwHas(d,"stream")&&!!find(d.id)?.p:dwHas(d,x.f)))}
 function dwFineGet(d,x){
   if(x.t==="stream")return d.stream||"";
   const c=dwC(d),v=c.fine?.[x.f];
@@ -19999,6 +20108,7 @@ function dwFineChanged(d,x){
   return JSON.stringify(v)!==JSON.stringify(x.def);
 }
 function dwFineText(d,x){
+  if(x.t==="lst")return dwListsText(d,x);
   const v=dwFineGet(d,x),pc=n=>Math.round(n*1000)/10;
   if(x.t==="stream")return v||i18n("основной");
   if(v===undefined||v===null){
@@ -20120,7 +20230,7 @@ function dwPanelHtml(cam,d,k,c){
   if(ptab==="rules")return head+tabs+`<section class="dw-sec dw-rules">${ruleUsesCardHtml(d)}</section>`;
   if(k==="other")return head+tabs+dwSec("Параметры",detFieldsHtml(cam,d,"Имя"));
   if(k==="meta")return head+tabs+metaPanelHtml(d)+`<details class="dw-adv"><summary>${i18n("Дополнительно")}</summary><div class="dw-adv-b">${detFieldsHtml(cam,d,"Имя",true)}${cam?detServerNoteHtml(cam,d):""}</div></details>`;
-  if(k==="face")return head+faceClashHtml(d)+tabs+dwSec("Зоны детектирования",dwAreasHtml(id,k,c))+`<details class="dw-adv"><summary>${i18n("Дополнительно")}</summary><div class="dw-adv-b">${detFieldsHtml(cam,d,"Имя",true)}${cam?detServerNoteHtml(cam,d):""}</div></details>`;
+  if(k==="face")return head+faceClashHtml(d)+tabs+dwSec("Зоны детектирования",dwAreasHtml(id,k,c))+dwListsSecHtml(d)+`<details class="dw-adv"><summary>${i18n("Дополнительно")}</summary><div class="dw-adv-b">${detFieldsHtml(cam,d,"Имя",true)}${cam?detServerNoteHtml(cam,d):""}</div></details>`;
   const what=(k==="linecross"||k==="neural")&&dwHas(d,"classes")?dwSec("Классы объектов",dwChips(id,["person","car","bike"],c.classes,"dwClass")+dwHelp("Детектор сработает только на объекты выбранных классов.")):"";
   const when=[];
   // Встроенный детектор: границы ползунка — из шаблона камеры, а без чувствительности в шаблоне ползунка нет
@@ -20143,9 +20253,10 @@ function dwPanelHtml(cam,d,k,c){
   // «Дополнительно» уступает «Тонкой настройке» семейства и карточке «Все параметры»
   // «Детектор»: имя, размещение, тип и чувствительность без ползунка — сразу, как было в «Дополнительно»
   const fine=dwSec("Детектор",detFieldsHtml(cam,d,"Имя",sensUi,true))+dwFineHtml(d,k)+dwAllCardHtml(d);
-  if(!hasS)return head+tabs+nnH+what+where+wh+arcH+fine;
+  const lstH=dwListsSecHtml(d);
+  if(!hasS)return head+tabs+nnH+what+where+wh+lstH+arcH+fine;
   // Вкладки: настройки детектора отдельно от поддетекторов, столбец короче
-  return head+tabs+(ptab==="det"?nnH+what+where+wh+arcH+fine:`<section class="dw-sec dw-subs-tab">${dwSubsHtml(id,k,c)}</section>`);
+  return head+tabs+(ptab==="det"?nnH+what+where+wh+lstH+arcH+fine:`<section class="dw-sec dw-subs-tab">${dwSubsHtml(id,k,c)}</section>`);
 }
 // ── Действия ──
 function dwRoot(){return document.querySelector("[data-dw]")}
@@ -26077,6 +26188,7 @@ function form(n){
   if(suiPage(n)&&tab==="gen")return suiCardHtml(n);
   if(n.type==="camera"&&!isSchemaNode(n))return`<div class="cs-cq">${csModeLine(n,tab)}${csTabWrap(n,formBase(n)+(tab==="gen"?"":drvSecsHtml(n,tab)+(tab==="vid"?pmSecHtml(n)+otSecHtml(n):tab==="ptz"&&ptzHas(n)?ttSecHtml(n):"")+ruleUsesFor(n)))}</div>`;
   if(handOf(n,"ipsrv")&&!isSchemaNode(n))return`<div class="cs-cq">${ipsModeLine(n,tab)}${csTabWrap(n,formBase(n)+(tab==="gen"?ruleUsesFor(n):""))}</div>`;
+  if(tab==="lists"&&(handOf(n,"domain")||handOf(n,"server")))return listsTabHtml(n);
   return tab==="topo"&&(handOf(n,"domain")||handOf(n,"server"))?g7Html(n):formBase(n)+ruleUsesFor(n)}
 // Переключатель карточки: вид меняется сразу, значение уходит с «Применить»
 function swToggle(el){el.classList.toggle("on");setD(true)}
@@ -26978,7 +27090,7 @@ function ruleCatFromKinds(){
     if(TRIGGER_KINDS.some(k=>!k.stray&&k.kind===code))return;
     TRIGGER_KINDS.push({sub:"unit",kind:code,gen:true,label:lb,unitLabel:kindText(x.kinds[0]),kinds:x.kinds,devTypes:types(x.kinds),
       ends:!!x.desc.ends,endsWord:lb.toLowerCase(),endsOf:lb.toLowerCase(),
-      match:Object.entries(x.desc.params?.properties||{}).map(([id,p])=>({id,label:propLabel(p,id),opts:p.enum||[],pre:propLabel(p,id),...names(p),...(ruleIsDetRef(p)?{dyn:ruleDetOf(code),det:true}:{})}))});
+      match:Object.entries(x.desc.params?.properties||{}).map(([id,p])=>({id,label:propLabel(p,id),opts:p.enum||[],pre:propLabel(p,id),...names(p),...(ruleIsDetRef(p)?{dyn:ruleDetOf(code),det:true}:ruleLstField(id,p,x.desc.params?.properties))}))});
   });
   ACTION_KINDS.forEach(k=>{
     if(!k.unit||k.stray)return;
@@ -27303,6 +27415,22 @@ function ruleDetOf(code){return ref=>{
   return out;
 }}
 const ruleIsDetRef=p=>(p?.["x-ref"]?.implements||[]).includes("vms.detector/1");
+// ── Списки лиц и номеров в условии правила (прототип 107, пробел C17; контракт 0.41.0) ──
+// listId — список своего вида (x-ref.kinds: facelist или platelist), entryId — запись выбранного списка. «Нет ни в одном
+// списке» (presence: none) — без списка и записи: сервер отказывает, если их задать вместе (noneWithList)
+const ruleLstKind=p=>(p?.["x-ref"]?.kinds||[]).find(k=>LST_KINDS.includes(k))||null;
+function ruleLstField(id,p,ps){
+  const lk=ruleLstKind(p);
+  if(lk)return{dyn:()=>lstOf(lk).map(u=>[u.uid,u.name||u.uid]),lst:lk,any:"любой",off:mm=>mm.presence==="none"};
+  if(id==="entryId"){const lp=Object.values(ps||{}).map(ruleLstKind).find(Boolean);if(lp)return{dyn:(ref,mm)=>lstEntryOpts(lp,mm?.listId),lst:lp,ent:true,any:"любая",off:mm=>mm.presence==="none"||!mm.listId}}
+  return{};
+}
+// После правки поля: «нет ни в одном» снимает список и запись; запись другого списка снимается
+function ruleLstPrune(mm){
+  if(!mm)return;
+  if(mm.presence==="none"){delete mm.listId;delete mm.entryId}
+  if(mm.entryId&&(!mm.listId||!lstEntryOpts(null,mm.listId).some(x=>x[0]===mm.entryId)))delete mm.entryId;
+}
 function ruleDetServerKinds(){return refDetKinds.filter(k=>k!=="other"&&!DET_TRIG_OWN.includes(k)).map(k=>[k,detKindRu(k)])}
 function matchPhrase(k,match){
   return k.match.filter(m=>(match||{})[m.id]).map(m=>matchOptLabel(m,match[m.id])).join(" ");
@@ -28346,7 +28474,7 @@ function setTriggerKind(i,v){
   ruleEdit(r=>{const k=TRIGGER_KINDS[+v],old=r.when[i];
     r.when[i]={sub:k.sub,kind:k.kind,ref:refFits(old.ref,k.devTypes,"when")?old.ref:"",match:{}}});
 }
-function setTriggerField(i,f,v){ruleEdit(r=>{const t=r.when[i];t.match=t.match||{};if(v)t.match[f]=v;else delete t.match[f]})}
+function setTriggerField(i,f,v){ruleEdit(r=>{const t=r.when[i];t.match=t.match||{};if(v)t.match[f]=v;else delete t.match[f];ruleLstPrune(t.match)})}
 function addTrigger(){ruleEdit(r=>{const k=ruleTrigAdd();r.when.push({sub:k.sub,kind:k.kind,ref:"",match:{}});if(r.when.length>1&&!r.within&&!r.whenAny){if(ruleFeat("whenAny"))r.whenAny=true;else r.within=30}})}
 function delTrigger(i){ruleEdit(r=>{r.when.splice(i,1);if(r.when.length<2){r.within=0;r.whenAny=false}})}
 // «Или» и «и» между событиями и между условиями: связка одна на весь блок
@@ -28397,7 +28525,7 @@ function setWevKind(ps,v){
   ruleEdit(r=>{const c=ruleThenAt(r,ps);if(!c||!c.ev)return;const k=TRIGGER_KINDS[+v],old=c.ev;
     c.ev={sub:k.sub,kind:k.kind,ref:refFits(old.ref,k.devTypes,"when")?old.ref:"",match:{}}});
 }
-function setWevField(ps,f,v){ruleEdit(r=>{const c=ruleThenAt(r,ps);if(!c||!c.ev)return;c.ev.match=c.ev.match||{};if(v)c.ev.match[f]=v;else delete c.ev.match[f]})}
+function setWevField(ps,f,v){ruleEdit(r=>{const c=ruleThenAt(r,ps);if(!c||!c.ev)return;c.ev.match=c.ev.match||{};if(v)c.ev.match[f]=v;else delete c.ev.match[f];ruleLstPrune(c.ev.match)})}
 // Одна кнопка на уровень: добавляет пункт и ставит фокус на выбор его вида (там же выбирается действие или шаг).
 function addItem(lp){
   let ps="";
@@ -28496,7 +28624,7 @@ function setTriggerExtra(i,text){const t=curRule().when[i],m=matchExtraParse(tri
 function setWevExtra(ps,text){ruleEdit(r=>{const c=ruleThenAt(r,ps);if(!c||!c.ev)return;const m=matchExtraParse(triggerKind(c.ev),c.ev.match,text);if(m)c.ev.match=m})}
 // Уточнения события («Вход №», «Состояние»): on(id) — обработчик выбора.
 function matchSelsHtml(k,match,on,ref){
-  return k.match.filter(m=>!m.off?.(match||{})).map(m=>`<div class="rl-f">${selHtml([["",m.dyn&&(m.off||m.det)?`${i18n(m.label)}: ${i18n("любой")}`:k.gen&&m.label!==m.id?`${i18n(m.label)}: ${i18n("любое")}`:""+i18n("любое")]].concat(m.dyn?m.dyn(ref):m.opts.map(o=>[o,m.names?matchOptLabel(m,o):`${i18n(m.pre).replace(/^./,c=>c.toUpperCase())} ${o}`])),(match||{})[m.id]||"",on(m.id),m.pre||m.id)}</div>`).join("");
+  return k.match.filter(m=>!m.off?.(match||{})).map(m=>`<div class="rl-f">${selHtml([["",m.any?`${i18n(m.label)}: ${i18n(m.any)}`:m.dyn&&(m.off||m.det)?`${i18n(m.label)}: ${i18n("любой")}`:k.gen&&m.label!==m.id?`${i18n(m.label)}: ${i18n("любое")}`:""+i18n("любое")]].concat(m.dyn?m.dyn(ref,match||{}):m.opts.map(o=>[o,m.names?matchOptLabel(m,o):`${i18n(m.pre).replace(/^./,c=>c.toUpperCase())} ${o}`])),(match||{})[m.id]||"",on(m.id),m.pre||m.id)}</div>`).join("");
 }
 // ── «При условии» ──
 function condRowHtml(c,i){
