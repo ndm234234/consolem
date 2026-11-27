@@ -2691,9 +2691,12 @@ html[data-theme="light"] .busy-chip{background:var(--one-control-hover);color:va
 .dc-z-main .live-frame{max-width:min(100%,calc((92vh - 400px)*16/9))}
 .dc-z-acts{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px}
 /* Прототип 113 (F126): шаг «Настройка» — список камер, кадр с зоной и свойства вида детектора */
-.dc-z.dc-z3{grid-template-columns:minmax(180px,220px) minmax(0,1fr) minmax(260px,300px)}
-.dc-z3 .dc-z-main .live-frame{max-width:min(100%,calc((92vh - 330px)*16/9))}
-.dc-set{min-width:0;min-height:0;overflow:auto;border-left:1px solid var(--ln);padding:0 4px 0 16px;scrollbar-width:thin}
+/* Столбцы: список | граница | кадр | граница | свойства. По умолчанию кадр — по высоте окна (16:9), свойства берут остальное.
+   Границы тянут мышью (dcGripDown), ширину консоль помнит в браузере (cfg.dcCols) */
+.dc-z.dc-z3{gap:0;grid-template-columns:var(--dc-l,220px) 12px minmax(240px,var(--dc-v,calc((92vh - 330px)*16/9))) 12px minmax(280px,1fr)}
+.dc-z3 .dc-z-main .live-frame{max-width:100%}
+.dc-z3>.dw-grip{min-height:0}
+.dc-set{min-width:0;min-height:0;overflow:auto;padding:0 4px 0 4px;scrollbar-width:thin}
 .dc-set-h{font-size:12px;font-weight:600;margin:0}
 .dc-set-n{font-size:11px;margin:2px 0 10px}
 .dc-set-g{font-size:11px;font-weight:600;color:var(--mu);margin:14px 0 8px}
@@ -21906,6 +21909,46 @@ function dcSetPlanHtml(plan,tpl){
   const ls=plan.filter(p=>p.fit.length).map(p=>{const c=dcSetChanged(p.key,tpl);return`<div class="dc-plan"><div>${escHtml(p.name)}</div><div class="dc-plan-s">${c.length?c.map(([x,v])=>`${escHtml(i18n(x.l))}: ${escHtml(dcSetText1(x,v))}`).join("; "):i18n("Свойства не изменены. Детекторы получат значения по умолчанию.")}</div></div>`});
   return ls.join("")||`<p class="sub dc-note">${i18n("Детекторов нет.")}</p>`;
 }
+// Прототип 113: формы зоны по виду детектора — как окно детектора (dwAreasHtml): детектору пересечения линии нужна
+// линия, остальным — область (прямоугольник или полигон)
+function dcShapes(r,tpl){
+  const o=tpl.find(t=>t.key===r.key)?.o,lc=r.key.startsWith("t:")?o?.kind==="linecross":dcKindOfKey(r.key)==="linecross";
+  return lc?["line"]:["rect","polygon"];
+}
+// Прототип 113: ширина столбцов шага «Настройка» — граница тянется мышью и стрелками, двойной щелчок возвращает умолчание
+const DC_COLS_KEY="cfg.dcCols";
+function dcCols(){try{return JSON.parse(localStorage.getItem(DC_COLS_KEY)||"{}")||{}}catch(e){return{}}}
+function dcColsStyle(){const c=dcCols(),v=[c.l?`--dc-l:${c.l}px`:"",c.v?`--dc-v:${c.v}px`:""].filter(Boolean).join(";");return v?` style="${v}"`:""}
+function dcColsSave(c){try{if(c.l||c.v)localStorage.setItem(DC_COLS_KEY,JSON.stringify(c));else localStorage.removeItem(DC_COLS_KEY)}catch(e){}}
+function dcGripHtml(w,l){return`<div class="dw-grip" role="separator" aria-orientation="vertical" tabindex="0" aria-label="${i18n(l)}" data-dc-grip="${w}" data-tip="${i18n(l)}: ${i18n("тянуть край мышью или нажать стрелки. Двойной щелчок возвращает ширину по умолчанию.")}" ${onEv("pointerdown",["dcGripDown",onEv.el,onEv.event])} ${onEv("keydown",["dcGripKey",onEv.el,onEv.event])} ${onEv("dblclick",["dcGripReset",onEv.el])}></div>`}
+// Ширина столбца слева от границы: список (l) или кадр (v)
+function dcGripSet(g,px,save){
+  const w=g.dataset.dcGrip,box=g.closest(".dc-z"),prev=g.previousElementSibling;if(!box||!prev)return;
+  // Список шире — кадр уже (до 240 пикс.); кадр шире — свойства уже (до 280 пикс.)
+  const total=box.getBoundingClientRect().width,other=w==="l"?240:(box.querySelector(".dc-z-list")?.getBoundingClientRect().width||220);
+  const min=w==="l"?160:240,max=Math.max(min,Math.min(w==="l"?420:Infinity,total-other-24-280));
+  const v=Math.round(Math.min(max,Math.max(min,px)));
+  box.style.setProperty(w==="l"?"--dc-l":"--dc-v",v+"px");
+  if(save){const c=dcCols();c[w]=v;dcColsSave(c)}
+}
+function dcGripDown(g,e){
+  if(e.button!==0)return;e.preventDefault();g.focus();
+  try{g.setPointerCapture(e.pointerId)}catch(x){}
+  g.classList.add("on");document.body.classList.add("dw-resizing");
+  const left=g.previousElementSibling.getBoundingClientRect().left,off=g.getBoundingClientRect().left-e.clientX;let moved=false,last=0;
+  const mv=ev=>{if(!g.isConnected)return up();moved=true;last=ev.clientX+off-left;dcGripSet(g,last,false)};
+  const up=()=>{
+    g.classList.remove("on");document.body.classList.remove("dw-resizing");
+    ["pointermove","pointerup","pointercancel","lostpointercapture"].forEach((t,i)=>g.removeEventListener(t,i?up:mv));
+    if(moved&&g.isConnected)dcGripSet(g,last,true);
+  };
+  g.addEventListener("pointermove",mv);["pointerup","pointercancel","lostpointercapture"].forEach(t=>g.addEventListener(t,up));
+}
+function dcGripKey(g,e){
+  const d={ArrowLeft:-20,ArrowRight:20}[e.key];if(!d)return;e.preventDefault();
+  dcGripSet(g,g.previousElementSibling.getBoundingClientRect().width+d,true);
+}
+function dcGripReset(g){const c=dcCols();delete c[g.dataset.dcGrip];dcColsSave(c);g.closest(".dc-z")?.style.removeProperty(g.dataset.dcGrip==="l"?"--dc-l":"--dc-v")}
 function renderDetCreate(){
   if(!dc||dc.min)return;
   const keep={};document.querySelectorAll("#bmBody [data-cp-scroll]").forEach(el=>keep[el.dataset.cpScroll]=el.scrollTop);
@@ -21976,14 +22019,14 @@ function renderDetCreate(){
     }).join("");
     const doneN=rows.filter(isDone).length;
     const svg=`<svg class="zone-svg${draw?" on":""}" data-zone="${escHtml(r.id)}" viewBox="0 0 100 100" preserveAspectRatio="none" ${onEv("mousedown",["zoneDown",onEv.el,onEv.event,`${r.id}`])}><g>${draw?"":zoneShapeSvg(z)}</g><g data-zone-draft></g></svg>`;
-    return`<section class="cp-col"><div class="dc-z dc-z3"><div class="dc-z-list" data-cp-scroll="z"><div class="dc-z-cnt">${i18n("Настроено")} ${doneN} ${i18n("из")} ${rows.length}</div>${list}</div><div class="dc-z-main">
+    return`<section class="cp-col"><div class="dc-z dc-z3"${dcColsStyle()}><div class="dc-z-list" data-cp-scroll="z"><div class="dc-z-cnt">${i18n("Настроено")} ${doneN} ${i18n("из")} ${rows.length}</div>${list}</div>${dcGripHtml("l","Ширина списка камер")}<div class="dc-z-main">
       <div class="dc-z-head"><b>${escHtml(locName(r.cam))}</b> · ${escHtml(r.name)}</div>
       <div class="dc-z-frz">${dcFrzHtml(draw)}</div>
       <div class="lf-wrap${dc.frz?" frz":""}${dc.geoOff&&!draw?" geo-off":""}">${liveFrameHtml(r.cam,svg)}${dc.frz?`<span class="lf-frz-tag">${lu("pause",12)}${i18n("Стоп-кадр")}</span>`:""}</div>
       ${dcNeedsLine(r)?`<div class="nt">${i18n("Детектору линии нужна линия. Без линии детектор не сработает.")}</div>`:""}
       <p class="sub">${draw?i18n(draw.shape==="polygon"?"Нажимать на кадр, чтобы поставить точки. Чтобы замкнуть контур, нажать на первую точку или на кнопку.":"Проведите мышью по кадру."):`${i18n("Зона")}: ${escHtml(zoneText(z))}`}</p>
       <div class="dc-z-acts">
-        ${ZONE_SHAPES.map(([x,l])=>`<button type="button" class="btn s${draw?.shape===x?" pri":""}" data-zone-shape="${x}" ${onEv("click",["zoneMode",`${r.id}`,`${x}`])}>${i18n(l)}</button>`).join("")}
+        ${ZONE_SHAPES.filter(([x])=>dcShapes(r,tpl).includes(x)).map(([x,l])=>`<button type="button" class="btn s${draw?.shape===x?" pri":""}" data-zone-shape="${x}" ${onEv("click",["zoneMode",`${r.id}`,`${x}`])}>${i18n(l)}</button>`).join("")}
         ${draw?.shape==="polygon"?`<button type="button" class="btn s" data-zone-close disabled ${onEv("click",["zoneClose",`${r.id}`])}>${i18n("Замкнуть")}</button>`:""}
         <button type="button" class="btn s" ${z?"":"disabled"} ${onEv("click",["zoneClear",`${r.id}`])}>${i18n("Сбросить")}</button>
         <span class="tfoot-gap"></span>
@@ -21991,7 +22034,7 @@ function renderDetCreate(){
         ${more?`<button type="button" class="btn s ${z?"pri":""}" ${onEv("click",["dcZoneNext"])}>${i18n(z?"Следующая камера":"Пропустить камеру")}</button>`:""}
       </div>
       ${same?`<p class="sub dc-note">${i18n("У камер разные кадры. Консоль поставит зону на то же место кадра, а не на тот же объект. Консоль не заменит зоны, нарисованные вручную.")}</p>`:""}
-    </div>${dcSetHtml(r,rows,tpl)}</div></section>`;
+    </div>${dcGripHtml("v","Ширина кадра")}${dcSetHtml(r,rows,tpl)}</div></section>`;
   };
   const secRule=()=>`<section class="cp-col"><div class="cp-scroll" data-cp-scroll="r">${dc.ready&&!gs.length?`<p class="sub"><b>${i18n("Не поддерживается")}.</b> ${i18n("Выбранные детекторы не поднимают событий для правил. Консоль не создаст правило.")}</p>`:dc.ready?dcRuleHtml(gs):`<p class="sub">${i18n("Читаю, что умеют камеры…")}</p>`}</div></section>`;
   // Последний шаг и есть план: ничего ещё не записано, здесь видно всё, что произойдёт

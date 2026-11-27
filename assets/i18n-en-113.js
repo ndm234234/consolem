@@ -1,5 +1,8 @@
 // Английский прототипа 113 (docs/TEXTS.md, «Как менять текст безопасно»): подключён после assets/i18n-en.js
 Object.assign(window.I18N_EN,{
+"Ширина списка камер":"Camera list width",
+"Ширина кадра":"Frame width",
+"тянуть край мышью или нажать стрелки. Двойной щелчок возвращает ширину по умолчанию.":"drag the edge with the mouse or press the arrow keys. A double click restores the default width.",
 "Свойства":"Properties",
 "Для всех детекторов этого вида в плане":"For all detectors of this type in the plan",
 "Зону рисовать для каждой камеры.":"Draw the zone for each camera.",
