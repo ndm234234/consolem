@@ -41,7 +41,7 @@
 
 | Версия | Что |
 |---|---|
-| 1.3 | Пункт отчёта о пробелах F122: поддетекторы принимает и трекер людей (analyticsKind: humanTracker, vms.detector/1 1.6) — все виды, кроме abandoned. Поля и типы не менялись |
+| 1.3 | Пункт отчёта о пробелах F122: поддетекторы принимает и трекер людей (analyticsKind: humanTracker, vms.detector/1 1.7) — все виды, кроме abandoned. Поля и типы не менялись |
 | 1.2 | Пункт отчёта о пробелах F122: поддетекторы принимают и детектор номеров (detectorKind: lpr), детектор поз (analyticsKind: pose), детектор СИЗ (ppe) и детектор штрихкодов (barcode) — все виды, кроме abandoned; детекторы лиц (faceTV, faceVA, faceVL) — только line, enter, dwell. GET /units/{uid}/creatable сужает subdetectorKind и под ними, а под детектором, который поддетекторов не принимает, отдаёт строку subdet с allowed: false, reason NOT_SUPPORTED (до 1.2 — allowed: true, а создание давало 422 noSubdetectors). Поля и типы не менялись |
 | 1.1 | Контракт 0.40.0, пункт отчёта о пробелах F223: поддетекторы принимает и детектор контроля оператора (analyticsKind: operatorControl) — только dwell, enter, line; GET /units/{uid}/creatable у детектора отдаёт в schema вида subdet перечень subdetectorKind, суженный под этот детектор. Поля и типы не менялись |
 | 1.0 | Профиль перенесён в файл из api/fixtures/demo.json и api/BACKEND.md, контракт 0.25.0. Поля до переноса — с 1.0; когда какое поле появилось в контракте — api/README.md, «Что добавлено в …» |
