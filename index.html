@@ -18819,7 +18819,7 @@ function dwSubNew(kind,name,id){
     area:{pts:kind==="mask"?r(.02,.3,.18,.62):kind==="stop"||kind==="abandoned"?r(.72,.66,.97,.88):kind==="multi"?r(.05,.6,.95,.98):r(.55,.6,.75,.8)},area2:kind==="a2a"?{pts:r(.78,.6,.96,.8)}:null,
     line:kind==="line"?[[.6,.6],[.6,.95]]:null,dir:"both",
     time:kind==="dwell"?30:kind==="stop"||kind==="abandoned"?10:0,mode:"gt",count:3,
-    spd:[0,500],grp:false,gn:2,gh:2,off:[15,10]};
+    spd:[0,500],grp:false,gn:2,gh:2,off:[15,10],size:null};
 }
 function dwMasked(c,[x,y]){return c.subs.some(s=>s.on&&s.kind==="mask"&&dwIn(s.area.pts,x,y))}
 const DW_PIX=new Set(["motion","tracker","abandoned"]);
@@ -18932,6 +18932,8 @@ function dwSubFromUnit(n){
     line:ln?(z?.shape==="line"&&z.points?.length>1?dwCopy(z.points):def.line):null,dir:p.direction||"both",
     time:p.timeSec??0,mode:p.timeMode||"gt",count:p.minObjects??3,
     spd:[p.speed?.min??0,p.speed?.max??500],grp:!!p.group,gn:p.group?.count??2,gh:p.group?.waitSec??2,off:[p.offset?.x??15,p.offset?.y??10],
+    // Пробел F123: свой размер объекта (objectSize поддетектора); нет поля — размер детектора (size: null)
+    size:p.objectSize?{min:(p.objectSize.min||[0,0]).slice(),max:(p.objectSize.max||[1,1]).slice()}:null,
     // Пробелы F119 и F120: что искать (нет поля — оставленный, как в контракте) и свои исключения; зоны in окно не правит и сохраняет
     // Другие виды поддетекторов extraZones не правят и не отправляют: ex и xin пусты
     lost:p.lostObjectType||"left",ex:kind!=="abandoned"?[]:(p.extraZones||[]).filter(x=>x.type==="ex").map((x,j)=>({id:"x"+(j+1),pts:dwCopy(x.points),raw:JSON.parse(JSON.stringify(x))})),
@@ -18988,7 +18990,8 @@ function dwSubProps(s,k){
   if(s.kind==="dwell"||s.kind==="a2a")o.timeMode=s.mode;
   if(["dwell","a2a","stop","abandoned"].includes(s.kind))o.timeSec=s.time;
   if(s.kind==="multi")o.minObjects=s.count;
-  if(k!=="motion"&&s.kind!=="mask")o.classes=s.classes.slice();
+  // Пробел F123: классы объектов — и у поддетектора детектора движения, как в Axxon One
+  if(s.kind!=="mask")o.classes=s.classes.slice();
   if(s.kind==="abandoned"){
     o.lostObjectType=s.lost;
     const xz=[...(s.xin||[]),...(s.ex||[]).map(x=>({...(x.raw||{}),type:"ex",points:dwCopy(x.pts)}))];if(xz.length)o.extraZones=xz;
@@ -18997,6 +19000,7 @@ function dwSubProps(s,k){
     if(s.spd[0]!==0||s.spd[1]!==500)o.speed={min:s.spd[0],max:s.spd[1]};
     if(s.off[0]!==15||s.off[1]!==10)o.offset={x:s.off[0],y:s.off[1]};
     if(s.grp)o.group={count:s.gn,waitSec:s.gh};
+    if(s.size)o.objectSize={min:s.size.min.slice(),max:s.size.max.slice()};
   }
   return o;
 }
@@ -19130,8 +19134,9 @@ function dwSubStep(c,k,o,t,pos,prev,ss,out){
   const[x,y]=pos,v=prev?Math.hypot(x-prev[0],y-prev[1])*100:0;
   c.subs.forEach(s=>{
     if(!s.on||s.kind==="mask"||s.kind==="multi")return;
-    if(s.kind==="abandoned"?DW_ALL.includes(o.cls)&&!s.classes.includes(o.cls)||c.fine?.detectUnattendedObjects===false||s.lost==="taken"||s.ex?.some(q=>dwIn(q.pts,x,y)):k!=="motion"&&!s.classes.includes(o.cls))return;
+    if(s.kind==="abandoned"?DW_ALL.includes(o.cls)&&!s.classes.includes(o.cls)||c.fine?.detectUnattendedObjects===false||s.lost==="taken"||s.ex?.some(q=>dwIn(q.pts,x,y)):DW_ALL.includes(o.cls)&&!s.classes.includes(o.cls))return;
     if(prev&&(v<s.spd[0]||v>s.spd[1]))return;
+    if(s.size&&(o.w<s.size.min[0]||o.h<s.size.min[1]||o.w>s.size.max[0]||o.h>s.size.max[1]))return;
     const st=ss[s.id]||(ss[s.id]={in:null,run:0,done:false,a1:null,in2:false});
     const fire=()=>out.push({t,sub:s.id});
     if(s.kind==="line"){if(prev&&dwDirOk(dwCross(s.line,prev,pos),s.dir))fire();return}
@@ -19847,10 +19852,38 @@ function dwSubsHtml(id,k,c){
   const empty=c.subs.length?"":`<p class="sub">${i18n(k==="tracker"?"У трекера нет поддетекторов. Трекер сам не создаёт событий: чтобы получать события, создать поддетектор.":"Поддетекторов нет. Поддетектор добавляет к событиям детектора событие по своему условию: линия, область, время.")}</p>`;
   if(one)return rows;
   const add=dw.subNew?dwSubNewHtml(id,k):`<div class="dw-row"><button type="button" class="btn s" ${onEv("click",["dwSubNewOpen"])}>${lu("plus",14)}${i18n("Создать поддетектор")}</button></div>`;
-  return rows+empty+add+dwHelp("Детектор находит объекты, а поддетектор решает, когда сработать. Зоны детектирования и размер объекта детектора действуют на все его поддетекторы.");
+  return rows+empty+add+dwHelp("Детектор находит объекты, а поддетектор решает, когда сработать. Зоны детектирования и размер объекта детектора действуют на все его поддетекторы. Свой размер поддетектора пропускает только часть объектов детектора.");
 }
 // Правило 2 версии профиля: метка поля поддетектора — по виду его объекта (subdet или вид плагина с vms.subdetector/1)
 function dwSubPf(id,s,f){const u=dwSubUnits(detNodeOf(id)||{}).find(x=>x.id===s.id);return pfa(u?nodeKind(u):"subdet",f)}
+// Пробел F123: свой размер объекта поддетектора — «как у детектора» (нет поля objectSize) или свой (поле objectSize).
+// Поле есть у вида поддетектора, и сервер его не прячет
+function dwSubSzOk(s){const u=dwSubUnits(dwD()||{}).find(x=>x.id===s.id);const kk=u?nodeKind(u):"subdet";return kindHasProp(kk,"objectSize")&&!kindFieldOff(kk,"objectSize")}
+function dwSubSizeHtml(id,k,s){
+  const c=dwC(detNodeOf(id)),own=!!s.size,pc=v=>Math.round(v*1000)/10,p=a=>`${pc(a[0])} × ${pc(a[1])} %`;
+  const seg=`<span class="dw-seg" data-dw-subsz>${[[false,"Как у детектора"],[true,"Свой"]].map(([v,l])=>`<button type="button" class="${own===v?"on":""}" aria-pressed="${own===v}" ${onEv("click",["dwSubSzMode",id,s.id,v])}>${i18n(l)}</button>`).join("")}</span>`;
+  const det=DW_SIZE.has(k)&&dwHas(detNodeOf(id),"objectSize");
+  if(!own)return`<div class="dw-f"${dwSubPf(id,s,"objectSize")}><label>${i18n("Размер объекта")}</label>${seg}
+    ${det?`<div class="dw-sz-r"><span>${i18n("Не меньше")}</span><b>${dwNoMin(c)?i18n("без ограничения"):p(c.min)}</b></div><div class="dw-sz-r"><span>${i18n("Не больше")}</span><b>${dwNoMax(c)?i18n("без ограничения"):p(c.max)}</b></div>`:`<p class="sub">${i18n("Детектор не ограничивает размер объекта.")}</p>`}
+    ${dwHelp("Поддетектор получает объекты с размером детектора. Чтобы поддетектор пропускал только часть этих объектов, выбрать «Свой».")}
+    ${det?`<div class="dw-row"><button type="button" class="btn s" ${onEv("click",["dwSizeGo"])}>${i18n("Изменить размер у детектора")}</button></div>`:""}</div>`;
+  const row=(m,l)=>`<div class="dw-sz-r"><span>${i18n(l)}</span><span class="dw-in"><input type="number" min="0" max="100" step="0.5" value="${pc(s.size[m][0])}" data-dw-subsz="${m}.0" aria-label="${i18n(l)}: ${i18n("ширина")}" ${onEv("input",["dwSubSz",id,s.id,m,0,onEv.value])}><span>×</span><input type="number" min="0" max="100" step="0.5" value="${pc(s.size[m][1])}" data-dw-subsz="${m}.1" aria-label="${i18n(l)}: ${i18n("высота")}" ${onEv("input",["dwSubSz",id,s.id,m,1,onEv.value])}><span>% ${i18n("кадра")}</span></span></div>`;
+  return`<div class="dw-f"${dwSubPf(id,s,"objectSize")}><label>${i18n("Размер объекта")}</label>${seg}${row("min","Не меньше")}${row("max","Не больше")}
+    ${dwHelp(det?"Поддетектор получает только объекты, которые нашёл детектор. Из них поддетектор не замечает объекты меньше и больше этих размеров. Консоль считает ширину и высоту в процентах кадра.":"Поддетектор не замечает объекты меньше и больше этих размеров. Консоль считает ширину и высоту в процентах кадра.")}</div>`;
+}
+// «Свой» начинает с размера детектора; «Как у детектора» убирает поле objectSize
+function dwSubSzMode(id,sid,own){
+  const s=dwSubOf(id,sid);if(!s||dwRoRefuse(id))return;
+  if(!own)s.size=null;else if(!s.size){const d=detNodeOf(id),c=dwC(d),det=DW_SIZE.has(dwKindOf(d))&&dwHas(d,"objectSize");s.size={min:det?c.min.slice():[0,0],max:det?c.max.slice():[1,1]}}
+  gear();
+}
+// Ввод в процентах кадра (0–100, шаг 0,5). Меньшее не выше большего: второе значение идёт за первым
+function dwSubSz(id,sid,m,i,v){
+  const s=dwSubOf(id,sid);if(!s?.size||v===""||v==null||dwRoRefuse(id))return;v=+v;if(!Number.isFinite(v))return;
+  v=Math.min(1,Math.max(0,Math.round(v*10)/1000));s.size[m][i]=v;
+  const o=m==="min"?"max":"min";if(m==="min"?s.size.max[i]<v:s.size.min[i]>v){s.size[o][i]=v;const el=dwRoot()?.querySelector(`[data-dw-subsz="${o}.${i}"]`);if(el)el.value=Math.round(v*1000)/10}
+  dwSoon();
+}
 function dwSubBodyHtml(id,k,s){
   const num=(key,l,min,max,unit,help)=>`<div class="dw-f dw-num"${key==="time"?dwSubPf(id,s,"timeSec"):""}><label>${i18n(l)}</label><span class="dw-in"><input type="number" min="${min}" max="${max}" value="${s[key]}" ${onEv("input",["dwSubSet",id,s.id,key,onEv.value,onEv.el])}>${unit?`<span>${i18n(unit)}</span>`:""}</span>${help?dwHelp(help):""}</div>`;
   const seg=o=>`<span class="dw-seg"${dwSubPf(id,s,"timeMode")}>${o.map(([v,l])=>`<button type="button" class="${s.mode===v?"on":""}" ${onEv("click",["dwSubMode",id,s.id,v])}>${i18n(l)}</button>`).join("")}</span>`;
@@ -19872,14 +19905,8 @@ function dwSubBodyHtml(id,k,s){
   }
   if(s.kind==="a2a")f.push(`<div class="dw-f"><label>${i18n("Время перехода из области 1 в область 2")}</label>${seg([["gt","дольше"],["lt","меньше"]])}</div>`,num("time","Время",0,172800,"с","Если время 0, поддетектор не проверяет время перехода."));
   if(s.kind==="multi")f.push(num("count","Объектов в области не меньше",1,100,"","Поддетектор сработает, когда в области одновременно находится столько объектов."));
-  if(k!=="motion"&&s.kind!=="mask")f.push(`<div class="dw-f"${dwSubPf(id,s,"classes")}><label>${i18n("Классы объектов")}</label>${dwChips(id,["person","car","bike"],s.classes,"dwSubClass",s.id)}</div>`);
-  if(s.kind!=="mask"&&DW_SIZE.has(k)){
-    const c=dwC(detNodeOf(id)),p=a=>`${Math.round(a[0]*1000)/10} × ${Math.round(a[1]*1000)/10} %`;
-    f.push(`<div class="dw-f"><label>${i18n("Размер объекта")} <span class="sub">${i18n("как у детектора")}</span></label>
-      <div class="dw-sz-r"><span>${i18n("Не меньше")}</span><b>${p(c.min)}</b></div><div class="dw-sz-r"><span>${i18n("Не больше")}</span><b>${p(c.max)}</b></div>
-      ${dwHelp("Поддетектор получает только объекты, которые нашёл детектор. Поэтому размер объекта у поддетектора всегда такой же, как у детектора.")}
-      <div class="dw-row"><button type="button" class="btn s" ${onEv("click",["dwSizeGo"])}>${i18n("Изменить размер у детектора")}</button></div></div>`);
-  }
+  if(s.kind!=="mask")f.push(`<div class="dw-f"${dwSubPf(id,s,"classes")}><label>${i18n("Классы объектов")}</label>${dwChips(id,["person","car","bike"],s.classes,"dwSubClass",s.id)}</div>`);
+  if(s.kind!=="mask"&&dwSubSzOk(s))f.push(dwSubSizeHtml(id,k,s));
   if(s.kind!=="mask"){
     const inp=(key,i,min,max,l)=>`<input type="number" min="${min}" max="${max}" value="${s[key][i]}" aria-label="${i18n(l)}" ${onEv("input",["dwSubSet",id,s.id,`${key}.${i}`,onEv.value,onEv.el])}>`;
     f.push(`<details class="dw-adv"${dw.subAdv?" open":""}><summary>${i18n("Дополнительно")}</summary><div class="dw-adv-b">
