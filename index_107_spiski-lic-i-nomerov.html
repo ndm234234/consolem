@@ -3779,9 +3779,12 @@ body.dw-resizing,body.dw-resizing *{cursor:col-resize!important;user-select:none
 .dw-fine-lead{margin:8px 0 12px}
 /* Списки лиц и номеров (прототип 107) */
 .lst-lead{margin:0 0 12px;max-width:72ch}
-.lst-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr));gap:16px;align-items:start}
+.lst-grid{display:grid;grid-template-columns:minmax(240px,320px) minmax(0,1fr);gap:16px;align-items:start}
 .lst-grid .card,.lst-grid .tfoot{min-width:0}.lst-grid .tfoot{flex-wrap:wrap}
-@media (max-width:900px){.lst-grid{grid-template-columns:minmax(0,1fr)}}
+.lst-wrap{container-type:inline-size}
+.lst-seg{margin:0 0 10px}
+.lst-ent{padding:5px 9px;margin:0 0 2px;cursor:default}.it.lst-ent span.lst-ent-m{flex:0 0 auto;min-width:9em;font-variant-numeric:tabular-nums}.lst-ent .lst-ent-s{flex:1;min-width:0;color:var(--mu);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@container (max-width:680px){.lst-grid{grid-template-columns:minmax(0,1fr)}}
 .lst-col{display:grid;gap:16px;min-width:0}
 .lst-row{cursor:pointer}
 
@@ -19984,7 +19987,8 @@ function faceClashHtml(d){
 const LST_KINDS=["facelist","platelist"];
 const LST_T={facelist:{title:"Списки лиц",one:"Список лиц",ent:"лицо|лица|лиц",det:"Детектор лиц"},platelist:{title:"Списки номеров",one:"Список номеров",ent:"номер|номера|номеров",det:"Детектор номеров"}};
 const LST_SRC={axxonnet:"AxxonNet",axxondata:"AxxonData",datacenter:"Axxon Datacenter"};
-const lstStore={load:null,done:false,failed:false,items:{facelist:[],platelist:[]},sel:null};
+const lstStore={load:null,done:false,failed:false,items:{facelist:[],platelist:[]},sel:{},kind:"facelist"};
+function lstKindSet(k){lstStore.kind=k;paint()}
 function lstOn(){return LST_KINDS.some(k=>KINDS.has(k))}
 function lstEnsure(){
   if(lstStore.load||!lstOn())return lstStore.load;
@@ -20051,34 +20055,40 @@ function lstUsers(u){
   return out;
 }
 function lstWhen(iso){const ms=Date.parse(iso||"");return Number.isFinite(ms)?expTimeText(ms):i18n("нет данных")}
-function lstPick(uid){lstStore.sel=uid;paint()}
+function lstPick(uid){const u=lstById(uid);if(u)lstStore.sel[u.kind]=uid;paint()}
 function lstRowHtml(u){
-  const p=u.properties||{},n=(p.entries||[]).length,us=lstUsers(u).length,on=lstStore.sel===u.uid;
-  return`<div class="it lst-row${on?" on":""}" data-lst="${escHtml(u.uid)}" ${onEv("click",["lstPick",u.uid])}><span>${lu("list",16)}</span><span>${escHtml(u.name||u.uid)}<small>${lstNum(n)} ${i18n(plural(n,LST_T[u.kind].ent))} · ${escHtml(LST_SRC[p.source]||p.source||"")}</small></span><span class="tag">${i18n("детекторы")}: ${us}</span></div>`;
+  const p=u.properties||{},n=(p.entries||[]).length,us=lstUsers(u).length,on=lstStore.sel[u.kind]===u.uid;
+  return`<div class="it lst-row${on?" on":""}" data-lst="${escHtml(u.uid)}" ${onEv("click",["lstPick",u.uid])}><span>${lu("list",16)}</span><span>${escHtml(u.name||u.uid)}<small>${lstNum(n)} ${i18n(plural(n,LST_T[u.kind].ent))} · ${escHtml(LST_SRC[p.source]||p.source||"")} · ${i18n("детекторов")}: ${us}</small></span></div>`;
 }
 function lstEntriesCard(u){
   const p=u.properties||{},ents=p.entries||[],kind=u.kind,link="";
   const us=lstUsers(u);
   const usT=us.length?us.map(d=>`<a href="#" ${onEv("click",["openNode",d.id,{app:"hw"}])}>${escHtml(locName(d))}</a>`).join(", "):i18n("ни один детектор не сверяет с этим списком");
-  return listCard({key:"lstent:"+u.uid,title:`${i18n(LST_T[kind].one)} «${u.name||u.uid}»`,head:link,items:ents,
+  return listCard({key:"lstent:"+u.uid,title:`«${escHtml(u.name||u.uid)}» · ${lstNum(ents.length)} ${i18n(plural(ents.length,LST_T[kind].ent))}`,head:link,items:ents,
     text:e=>[e.name,...(kind==="platelist"?lstPlateKeys(e.plate):[]),e.id],
-    row:e=>`<div class="it lst-ent"><span>${lu(kind==="platelist"?"car":"user",16)}</span><span>${escHtml(kind==="platelist"?e.plate||e.id:e.name||e.id)}${kind==="platelist"&&e.name?`<small>${escHtml(e.name)}</small>`:""}</span></div>`,
-    mid:()=>`<p class="sub lst-use">${i18n("Записей")}: ${lstNum(ents.length)} · ${i18n("синхронизирован")}: ${escHtml(lstWhen(p.syncedAt))}<br>${i18n("Сверяют")}: ${usT}</p>`,
+    row:e=>`<div class="it lst-ent"><span>${lu(kind==="platelist"?"car":"user",16)}</span><span class="lst-ent-m">${escHtml(kind==="platelist"?e.plate||e.id:e.name||e.id)}</span>${kind==="platelist"?`<span class="lst-ent-s">${escHtml(e.name||"—")}</span>`:""}</div>`,
+    mid:()=>`<p class="sub lst-use">${escHtml(LST_SRC[p.source]||p.source||"")} · ${i18n("синхронизирован")}: ${escHtml(lstWhen(p.syncedAt))}<br>${i18n("Сверяют")}: ${usT}</p>`,
     empty:"В списке нет записей",ph:kind==="platelist"?"Номер или владелец: А123ВС, a123bc…":"Фамилия или имя…",unit:LST_T[kind].ent});
 }
-// Вкладка «Списки» у домена (вариант A) и у сервера (вариант B, как вкладка «Детекторы» Axxon One)
+// Вкладка домена «Списки»: переключатель вида «Списки лиц | Списки номеров» (уровень ниже вкладок карточки, не второй
+// ряд вкладок), под ним — список и записи (list–detail): слева узкий перечень списков вида с поиском, справа записи
+// выбранного списка. Виды не смешиваются. Выбор списка помнится по виду
 function listsTabHtml(n){
   lstEnsure();
-  const dom=handOf(n,"domain")?n:find(nodeDomainId(n))?.n;
-  const lead=`<p class="sub lst-lead">${i18n("Списки лиц и номеров создают в облаке: AxxonNet, AxxonData или Axxon Datacenter. Облако синхронизирует их с доменом. Консоль показывает списки и не меняет их.")}</p>`;
+  const kinds=LST_KINDS.filter(k=>KINDS.has(k));if(!kinds.includes(lstStore.kind))lstStore.kind=kinds[0];
+  const kind=lstStore.kind;
+  const dom=handOf(n,"domain")?n:find(nodeDomainId(n))?.n,T=LST_T[kind];
+  let lead=`<p class="sub lst-lead">${i18n(kind==="platelist"?"Списки номеров создают в облаке: AxxonNet, AxxonData или Axxon Datacenter. Облако синхронизирует их с доменом. Консоль показывает списки и не меняет их.":"Списки лиц создают в облаке: AxxonNet, AxxonData или Axxon Datacenter. Облако синхронизирует их с доменом. Консоль показывает списки и не меняет их.")}</p>`;
   if(!lstStore.done&&!lstStore.failed)return lead+`<p class="sub">${i18n("Консоль читает списки…")}</p>`;
   if(lstStore.failed)return lead+`<p class="sub">${i18n("Консоль не прочитала списки. Чтобы повторить, обновить страницу.")}</p>`;
-  const did=dom?.id||nodeDomainId(n),all=LST_KINDS.flatMap(k=>lstOf(k,did));
-  if(!lstStore.sel||!lstById(lstStore.sel))lstStore.sel=all[0]?.uid||null;
-  const cards=LST_KINDS.filter(k=>KINDS.has(k)).map(k=>listCard({key:"lst:"+k,title:LST_T[k].title,items:lstOf(k,did),text:u=>[u.name],
-    row:lstRowHtml,empty:`${i18n("Списков пока нет. Чтобы добавить список, создать его в облаке и синхронизировать с доменом.")}`,ph:"Имя списка…",unit:"список|списка|списков"})).join("");
-  const sel=lstById(lstStore.sel);
-  return lead+`<div class="lst-grid"><div class="lst-col">${cards}</div><div class="lst-col">${sel?lstEntriesCard(sel):""}</div></div>`;
+  const did=dom?.id||nodeDomainId(n),ls=lstOf(kind,did);
+  const seg=kinds.length>1?`<div class="rl-seg lst-seg" role="radiogroup" aria-label="${i18n("Вид списков")}">${kinds.map(k=>`<button type="button" role="radio" aria-checked="${k===kind}" class="${k===kind?"on":""}" ${onEv("click",["lstKindSet",k])}>${i18n(LST_T[k].title)} · ${lstOf(k,did).length}</button>`).join("")}</div>`:"";
+  lead=seg+lead;
+  if(!ls.length)return lead+card(T.title,`<p class="sub">${i18n("Списков пока нет. Чтобы добавить список, создать его в облаке и синхронизировать с доменом.")}</p>`);
+  if(!ls.some(u=>u.uid===lstStore.sel[kind]))lstStore.sel[kind]=ls[0].uid;
+  const left=listCard({key:"lst:"+kind,title:i18n(T.title),items:ls,text:u=>[u.name],row:lstRowHtml,ph:"Имя списка…",unit:"список|списка|списков"});
+  const sel=lstById(lstStore.sel[kind]);
+  return lead+`<div class="lst-wrap"><div class="lst-grid"><div class="lst-col">${left}</div><div class="lst-col">${sel?lstEntriesCard(sel):card(T.one,`<p class="sub">${i18n("Выберите список слева.")}</p>`)}</div></div></div>`;
 }
 // Окно детектора: «Проверять по спискам» и какие списки (пусто — все списки своего вида)
 function dwListsSecHtml(d){
